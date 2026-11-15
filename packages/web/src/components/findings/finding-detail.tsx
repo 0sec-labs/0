@@ -150,7 +150,7 @@ function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onN
       ) : null}
       <CopyButton text={shareUrl} label="link" />
       {variant === "panel" ? (
-        <Button variant="ghost" size="icon-sm" className={iconButton} render={<Link to={`/findings/${encodeURIComponent(fingerprint)}`} aria-label="Open finding page" />}><ExternalLink /></Button>
+        <Button variant="ghost" size="icon-sm" tooltip="Open finding page" className={iconButton} render={<Link to={`/findings/${encodeURIComponent(fingerprint)}`} aria-label="Open finding page" />}><ExternalLink /></Button>
       ) : exportId ? (
         <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(exportId)}`} />
       ) : null}

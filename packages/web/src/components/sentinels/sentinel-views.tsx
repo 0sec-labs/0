@@ -83,7 +83,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <div className="grid gap-3 sm:grid-cols-3">
         {DEFAULT_FILES.map(path => {
           const file = files.data?.files.find(item => item.path === path);
-          return <Link key={path} to="?view=files" className="flex h-36 flex-col gap-2 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
+          return <Link key={path} to="?view=files" className="flex h-36 flex-col gap-2 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3 outline-none ui-row-hover focus-visible:outline-ring-inset">
             <span className="text-sm font-medium">{path}</span>
             <span className="flex-1 text-xs text-muted-foreground-1">{file ? `${file.bytes.toLocaleString()} bytes, revision ${file.revision}, edited ${ago(file.updatedAt) || "now"} by ${file.authorKind === "agent" ? v("the {sentinel}") : "you"}` : "Empty"}</span>
           </Link>;
@@ -170,7 +170,7 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
         ? <EmptyState title="No automations yet" action={readOnly ? undefined : <Button size="sm" variant="secondary" render={<Link to="/automations" />}>Open Automations</Button>} />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
-          {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none hover:bg-card-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
+          {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
         </ul>}
     </Section>
     {(owned.data ?? []).length > 0 && <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />}

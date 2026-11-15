@@ -154,7 +154,7 @@ function Card({ group, overlay = false, ...props }: { group: FindingGroup; overl
         if (!overlay) listeners?.onKeyDown?.(event);
       }}
       className={cn(
-        "flex cursor-pointer flex-col gap-1.5 rounded-lg border-[0.5px] border-border-2 bg-card p-2.5 text-left outline-none transition-colors duration-100 hover:bg-card-hover focus-visible:outline-ring-inset motion-reduce:transition-none",
+        "flex cursor-pointer flex-col gap-1.5 rounded-lg border-[0.5px] border-border-2 bg-card p-2.5 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset motion-reduce:transition-none",
         (props.activeFingerprint === fingerprint || selected) && "bg-section",
         props.cursorFingerprint === fingerprint && "outline-ring-inset",
         isDragging && !overlay && "opacity-30",

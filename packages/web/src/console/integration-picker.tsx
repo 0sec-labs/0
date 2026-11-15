@@ -273,7 +273,7 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
                   aria-selected={index === picker.index}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => picker.select(item)}
-                  className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left leading-5 outline-none text-[13px] font-[450] tracking-[-0.01em] focus-visible:outline-ring-inset ${index === picker.index ? "bg-secondary" : "hover:bg-secondary/60"}`}
+                  className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left leading-5 outline-none text-[13px] font-[450] tracking-[-0.01em] focus-visible:outline-ring-inset ${index === picker.index ? "bg-secondary" : "hover:bg-popover-hover"}`}
                 >
                   <Icon className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} aria-hidden="true" />
                   <span className="min-w-0 flex-1">

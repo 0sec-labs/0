@@ -122,7 +122,7 @@ function CardList({ className, ...props }: React.ComponentProps<"div">) {
 const cardListItemVariants = cva("px-4 py-3 text-sm transition-colors duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none", {
   variants: {
     interactive: {
-      true: "hover:bg-muted/60 hover:text-foreground",
+      true: "ui-row-hover hover:text-foreground",
       false: "",
     },
     selected: {

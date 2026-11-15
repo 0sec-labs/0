@@ -85,7 +85,7 @@ export function WorkerTree({
                         onSelect(worker.id);
                       }
                     }}
-                    className="flex items-start gap-2 rounded-[var(--radius-control)] px-2 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-ring-inset"
+                    className="flex items-start gap-2 rounded-[var(--radius-control)] px-2 py-2 transition-colors ui-row-hover focus-visible:outline-ring-inset"
                   />
                 }
               >

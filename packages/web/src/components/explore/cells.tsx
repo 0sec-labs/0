@@ -27,7 +27,7 @@ export function Tile({ logo, avatar, name, verified, verifiedLabel, verifiedHint
 
 /** One compact grid cell: tile, name and a single truncated line. The whole cell is a link; an action sits above it. */
 export function Cell({ to, tile, name, description, trailing, interactive = true }: { to: string; tile: ReactNode; name: string; description: string; trailing?: ReactNode; interactive?: boolean }) {
-  return <li className="relative flex min-w-0 items-center gap-3 rounded-(--radius-card) p-2 hover:bg-secondary/40 focus-within:bg-secondary/40">
+  return <li className="relative flex min-w-0 items-center gap-3 rounded-(--radius-card) p-2 ui-row-hover focus-within:bg-secondary/40">
     {tile}
     <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium text-foreground"><Link to={to} className="outline-none after:absolute after:inset-0 focus-visible:after:outline-ring-inset focus-visible:after:outline-2">{name}</Link></h3><p className="truncate text-sm text-muted-foreground-2">{description}</p></div>
     {trailing && <span className={`relative shrink-0 ${interactive ? "z-10" : "pointer-events-none"}`}>{trailing}</span>}

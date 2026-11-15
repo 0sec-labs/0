@@ -49,6 +49,12 @@
   @media (prefers-reduced-motion: reduce) { transition: none; }
   &:active:not(:disabled):not([aria-disabled="true"]) { filter: brightness(var(--press-brightness, .97)); }
 }
+/* Capy list/card/table rows: a 3.5% overlay over 100ms, colour only (no border, shadow or transform). */
+@utility ui-row-hover {
+  transition: background-color 100ms;
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+  &:hover { background-color: var(--row-hover); }
+}
 @utility scroll-fade-x {
   mask-image: linear-gradient(to right, transparent 0, #000 var(--sf-left, 0px), #000 calc(100% - var(--sf-right, 16px)), transparent 100%);
 }
@@ -137,7 +143,7 @@
   /* Shared geometry: controls nest inside menus and panel surfaces. */
   --workspace-panel: var(--card);
   --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground));
-  --surface-hover: color-mix(in srgb, var(--workspace-panel) 94%, var(--foreground));
+  --surface-hover: var(--row-hover);
   color-scheme: light;
   --background: oklch(96.2% .0025 290);
   --foreground: oklch(23.5% .0038 290);
@@ -193,6 +199,7 @@
   --secondary-hover: oklch(0% 0 0 / .08);
   --section: oklch(0% 0 0 / .04);
   --popover-hover: oklch(0% 0 0 / .04);
+  --row-hover: oklch(0% 0 0 / .03);
   --primary-soft: color-mix(in srgb, var(--primary) 8%, transparent);
   --primary-soft-hover: color-mix(in srgb, var(--primary) 12%, transparent);
   --text-link: var(--primary-ink);
@@ -303,6 +310,7 @@
   --secondary-hover: oklch(100% 0 0 / .11);
   --section: oklch(100% 0 0 / .035);
   --popover-hover: oklch(100% 0 0 / .065);
+  --row-hover: oklch(100% 0 0 / .035);
   --primary-soft: color-mix(in srgb, var(--primary) 20%, transparent);
   --primary-soft-hover: color-mix(in srgb, var(--primary) 24%, transparent);
   --destructive-background: oklch(55% .185 27);

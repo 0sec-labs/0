@@ -1086,7 +1086,7 @@ export function Composer({
                             type="button"
                             role="option"
                             aria-selected={index === commandIndex}
-                            className={`flex min-h-[var(--h-menu-row,28px)] w-full flex-col justify-center rounded-md px-2 py-1 text-left text-[13px] leading-5 font-[450] tracking-[-0.01em] text-foreground outline-none focus-visible:outline-ring-inset ${index === commandIndex ? "bg-secondary" : "hover:bg-secondary/60"}`}
+                            className={`flex min-h-[var(--h-menu-row,28px)] w-full flex-col justify-center rounded-md px-2 py-1 text-left text-[13px] leading-5 font-[450] tracking-[-0.01em] text-foreground outline-none focus-visible:outline-ring-inset ${index === commandIndex ? "bg-secondary" : "hover:bg-popover-hover"}`}
                             onMouseDown={(event) => event.preventDefault()}
                             onMouseEnter={() => setCommandIndex(index)}
                             onClick={() => selectCommand(command.name)}
@@ -1115,7 +1115,7 @@ export function Composer({
               {curated.hidden > 0 && (
                 <button
                   type="button"
-                  className="flex min-h-[var(--h-menu-row,28px)] w-full items-center rounded-md px-2 py-1 text-left text-[13px] font-[450] text-muted-foreground-1 outline-none hover:bg-secondary/60 hover:text-foreground focus-visible:outline-ring-inset"
+                  className="flex min-h-[var(--h-menu-row,28px)] w-full items-center rounded-md px-2 py-1 text-left text-[13px] font-[450] text-muted-foreground-1 outline-none hover:bg-popover-hover hover:text-foreground focus-visible:outline-ring-inset"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setShowAllCommands(true)}
                 >

@@ -121,7 +121,7 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
                   return (
                     <li
                       key={fingerprint}
-                      className="group/row relative flex min-h-9 items-center gap-2 rounded-md px-2 hover:bg-secondary/50"
+                      className="group/row relative flex min-h-9 items-center gap-2 rounded-md px-2 ui-row-hover"
                     >
                       <button
                         type="button"

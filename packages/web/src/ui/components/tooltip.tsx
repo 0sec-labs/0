@@ -4,6 +4,8 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 const TOOLTIP_DELAY = 300;
 const TOOLTIP_SKIP_WINDOW = 1000;
 const ProviderMounted = createContext(false);
+/** True while rendering the trigger of a Tooltip, so a Button inside does not derive a second tooltip from its aria-label. */
+export const InsideTooltip = createContext(false);
 
 /** App-level tooltip provider: 300ms open delay, then neighbours open instantly for a 1s skip window. */
 export function TooltipProvider({ children, delay = TOOLTIP_DELAY, closeDelay, timeout = TOOLTIP_SKIP_WINDOW }: { children?: ReactNode; delay?: number; closeDelay?: number; timeout?: number }) {
@@ -16,7 +18,7 @@ export function TooltipProvider({ children, delay = TOOLTIP_DELAY, closeDelay, t
 export function Tooltip({ children, content, preview = false, side = "top", delay, shortcut }: { children: ReactElement; content: ReactNode; shortcut?: ReactNode; preview?: boolean; delay?: number; side?: "top" | "bottom" | "left" | "right" }) {
   const mounted = useContext(ProviderMounted);
   const tooltip = <TooltipPrimitive.Root>
-    <TooltipPrimitive.Trigger render={children} delay={delay} />
+    <InsideTooltip.Provider value><TooltipPrimitive.Trigger render={children} delay={delay} /></InsideTooltip.Provider>
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner side={side} sideOffset={4} collisionPadding={12} className="z-[70]">
         <TooltipPrimitive.Popup data-slot="tooltip-content"

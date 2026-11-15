@@ -54,12 +54,12 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
 
   return <>
     <SettingsCard>
-      <button type="button" onClick={setUpWithZero} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset">
+      <button type="button" onClick={setUpWithZero} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset">
         <LogoTile><Sparkles aria-hidden="true" className="size-4" /></LogoTile>
         <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Set up with 0</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
-      <button type="button" onClick={openExplore} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset">
+      <button type="button" onClick={openExplore} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset">
         <LogoTile><Store aria-hidden="true" className="size-4" /></LogoTile>
         <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} to install` : "Registry plugins"}</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
@@ -86,7 +86,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       {loading && <div className="p-4"><LoadingState label="Loading plugins…" variant="cards" /></div>}
       {error && <div className="flex flex-col items-start gap-3 p-4"><Feedback error={error} /><Button variant="outline" onClick={refetchAll}>Try again</Button></div>}
       {!loading && !error && shown.length === 0 && <div className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground-2"><span>{needle ? "Nothing matches your search." : "No plugins yet."}</span>{needle && <Button variant="ghost" size="sm" onClick={() => setFilter("")}>Clear search</Button>}</div>}
-      {shown.map(entry => <button key={entry.key} type="button" aria-label={entry.name} onClick={() => navigate(pluginPath(entry.selection))} className="group/row flex w-full items-center gap-3 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset">
+      {shown.map(entry => <button key={entry.key} type="button" aria-label={entry.name} onClick={() => navigate(pluginPath(entry.selection))} className="group/row flex w-full items-center gap-3 p-4 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset">
         <EntryLogo logo={entry.logo} fallback={entry.icon} />
         <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-foreground">{entry.name}</span>{entry.version && <span className="shrink-0 rounded-full border-[0.5px] border-border-2 px-1.5 text-xs text-muted-foreground-1">{entry.version}</span>}</span><span className="block truncate text-sm text-muted-foreground-2">{entry.subtitle}</span></span>
         <StatusBadge appearance="outline" tone={entry.tone}>{entry.status}</StatusBadge>

@@ -76,6 +76,9 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const [sort, setSort] = usePersistentState<"updated" | "name">(STORAGE_KEYS.sidebarSort, "updated");
   const [collapsed, setCollapsed] = usePersistentState(STORAGE_KEYS.sidebarChatsCollapsed, false);
   const [slices, setSlices] = useState<Record<string, HostSlice>>({});
+  /* Row actions are mounted (not faded) while a row is hovered or holds focus; touch has no hover, so they stay mounted. */
+  const [actionsFor, setActionsFor] = useState<string | null>(null);
+  const touchOnly = useMemo(() => typeof matchMedia === "function" && matchMedia("(hover: none)").matches, []);
   const navigationVersion = useRef(0);
   const suppressClickUntil = useRef(0);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,7 +136,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const Icon = host.id === "local" ? LaptopIcon : ServerIcon;
           const showIcon = true;
           const age = formatRelativeAge(row.timestamp, now);
-          return <div key={id} role="listitem" data-ui-selected={selected || undefined} className="group relative mx-0.5 flex min-w-0 items-center rounded-(--radius-button) transition-colors duration-100 hover:bg-secondary data-[ui-selected]:bg-secondary">
+          return <div key={id} role="listitem" data-ui-selected={selected || undefined} onPointerEnter={event => { if (event.pointerType !== "touch") setActionsFor(id); }} onPointerLeave={event => { if (!event.currentTarget.contains(document.activeElement)) setActionsFor(current => current === id ? null : current); }} onFocus={() => setActionsFor(id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActionsFor(current => current === id ? null : current); }} className="group relative mx-0.5 flex min-w-0 items-center rounded-(--radius-button) transition-colors duration-100 hover:bg-secondary data-[ui-selected]:bg-secondary">
             <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => slice.actions.prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => slice.actions.prefetch(session.id, isSaved)} aria-busy={slice.openingId === session.id || undefined} aria-current={selected ? "page" : undefined} href={backendRouteHref(host.id, `/chats/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true}
               onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }}
               onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }}
@@ -145,8 +148,8 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
                 <span className={cn("min-w-0 truncate text-sm font-normal", sidebarChatTitlePending(row) && "ui-text-shimmer")}>{title}</span>
                 <span className="ml-auto flex min-w-6 shrink-0 items-center justify-end">
                   {working
-                    ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
-                    : <span className={cn("block text-2xs leading-none font-normal text-muted-foreground-2 tabular-nums", !readOnly && "group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</span>}
+                    ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
+                    : <span className={cn("block text-2xs leading-none font-normal text-muted-foreground-2 tabular-nums", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</span>}
                 </span>
               </span>
               {(tag || sub) && <span className={cn(showIcon ? "col-start-2" : "col-start-1", "flex min-w-0 items-center gap-1 text-2xs font-normal whitespace-nowrap text-muted-foreground-2")}>
@@ -155,8 +158,8 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
                 {sub && <span className={cn("min-w-0 shrink truncate", attention ? "text-primary-ink" : "text-muted-foreground-2")}>{sub}</span>}
               </span>}
             </a>
-            {!readOnly && <div className="pointer-events-none absolute inset-y-0 right-0 flex origin-right scale-[.98] items-start rounded-r-(--radius-button) bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pt-1 pr-1 pl-9 opacity-0 transition-[opacity,scale] duration-100 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)] group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:scale-100 group-has-[:focus-visible]:opacity-100 motion-reduce:transition-none [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:scale-100 [@media(hover:none)]:opacity-100">
-              <Button variant="ghost" size="icon-xs" disabled={slice.busy || slice.unavailable} className="size-5.5 p-1 text-muted-foreground hover:bg-transparent hover:text-destructive" aria-label={`Delete ${title}`} onClick={() => slice.actions.requestDelete(session.id, title, isSaved)}><Trash2 className="size-(--icon-sm)" /></Button>
+            {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute inset-y-0 right-0 flex items-start rounded-r-(--radius-button) bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pt-1 pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
+              <Button variant="ghost" size="icon-xs" disabled={slice.busy || slice.unavailable} tooltip={`Delete ${VOCAB.mission.singular}`} className="size-5.5 p-1 text-muted-foreground hover:bg-transparent hover:text-destructive" aria-label={`Delete ${title}`} onClick={() => slice.actions.requestDelete(session.id, title, isSaved)}><Trash2 className="size-(--icon-sm)" /></Button>
             </div>}
           </div>;
         })}

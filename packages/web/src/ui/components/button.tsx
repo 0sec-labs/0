@@ -5,13 +5,13 @@ import { cn } from "../lib/utils.js"
 import { useRender } from "@base-ui/react/use-render"
 import { useIntrinsicWidthMotion } from "../motion.js"
 import { Loader } from "./loader.js"
-import { Tooltip } from "./tooltip.js"
+import { InsideTooltip, Tooltip } from "./tooltip.js"
 
 /* Variant recipes. Colour arrives through --intent-* variables; the fallback after each comma is the neutral value. */
 const SOLID = "border-[color:var(--intent-border-solid,var(--intent-border,var(--border-2)))] bg-[color:var(--intent-bg,var(--button))] text-[color:var(--intent-text-on-bg,var(--foreground))] [--focus-ring:var(--intent-text-on-bg,var(--ring))] shadow-[inset_0_1px_var(--intent-highlight,var(--highlight-top)),var(--sh-plate)] hover:bg-[color:var(--intent-bg-solid-hover,var(--button-hover))] aria-expanded:bg-[color:var(--intent-bg-solid-hover,var(--button-hover))] active:shadow-none"
 const SOFT = "bg-[color:var(--intent-bg-soft,var(--secondary))] text-[color:var(--intent-text,var(--foreground))] hover:bg-[color:var(--intent-bg-soft-hover,var(--secondary-hover))] aria-expanded:bg-[color:var(--intent-bg-soft-hover,var(--secondary-hover))]"
 const GHOST = "bg-transparent text-[color:var(--intent-text,var(--muted-foreground-1))] hover:bg-[color:var(--intent-bg-hover,var(--secondary))] hover:text-[color:var(--intent-text-hover,var(--foreground))] data-[popup-open]:bg-[color:var(--intent-bg-hover,var(--secondary))] data-[popup-open]:text-[color:var(--intent-text-hover,var(--foreground))] aria-expanded:bg-[color:var(--intent-bg-hover,var(--secondary))] aria-expanded:text-[color:var(--intent-text-hover,var(--foreground))]"
-const OUTLINE = "border-[color:var(--intent-border,var(--border-2))] bg-[var(--button)] text-[color:var(--intent-text,var(--foreground))] hover:bg-[color:var(--intent-bg-hover,var(--secondary))] aria-expanded:bg-[color:var(--intent-bg-hover,var(--secondary))]"
+const OUTLINE = "border-[color:var(--intent-border,var(--border-2))] bg-[var(--button)] text-[color:var(--intent-text,var(--foreground))] hover:bg-[color:var(--intent-bg-hover,var(--button-hover))] aria-expanded:bg-[color:var(--intent-bg-hover,var(--button-hover))]"
 const LINK = "text-[color:var(--text-link)] underline-offset-2 hover:underline"
 const BARE = "bg-transparent text-[color:var(--intent-text,var(--muted-foreground-1))] hover:text-[color:var(--intent-text-hover,var(--foreground))] data-[popup-open]:text-[color:var(--intent-text-hover,var(--foreground))]"
 const INVERSE = "bg-[color:var(--intent-bg,var(--inverse))] text-[color:var(--intent-text-on-bg,var(--inverse-text))] [--focus-ring:var(--intent-text-on-bg,var(--inverse-text))] active:brightness-95"
@@ -100,8 +100,11 @@ function Button({
     render?: React.ReactElement
     /** Animate an intrinsic label/content change; ordinary controls remain observer-free. */
     animateWidth?: boolean
-    /** Label shown in the shared tooltip (300ms hover intent, instant between neighbours); use on icon-only buttons that are not menu triggers. */
-    tooltip?: React.ReactNode
+    /**
+     * Label shown in the shared tooltip (300ms hover intent, instant between neighbours). Icon-sized buttons with a string `aria-label`
+     * derive it automatically unless they open a menu/popup (Capy shows no tooltip on triggers); pass `false` to opt out.
+     */
+    tooltip?: React.ReactNode | false
   }) {
   // A changed element kind must rebind the observer to the replacement node.
   const motionRef = React.useMemo<React.RefObject<HTMLElement | null>>(() => ({ current: null }), [render?.type])
@@ -119,6 +122,10 @@ function Button({
   }, [ref, motionRef])
   useIntrinsicWidthMotion(motionRef, animateWidth)
 
+  const nested = React.useContext(InsideTooltip)
+  const ariaLabel = props["aria-label"]
+  const label = tooltip === false ? undefined : tooltip ?? (!nested && size?.startsWith("icon") && typeof ariaLabel === "string" && !props["aria-haspopup"] && !props.disabled ? ariaLabel : undefined)
+
   const element = useRender({
     defaultTagName: "button",
     render,
@@ -132,7 +139,7 @@ function Button({
       children,
     },
   })
-  return tooltip ? <Tooltip content={tooltip}>{element}</Tooltip> : element
+  return label ? <Tooltip content={label}>{element}</Tooltip> : element
 }
 
 export { Button, ButtonIcon, buttonVariants }

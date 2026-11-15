@@ -114,7 +114,7 @@ function LivePane({
             </Button>
           )}
           {external && (
-            <Button variant="ghost" size="icon-xs" render={<a href={external} target="_blank" rel="noopener noreferrer" aria-label="Open page in a new tab" />}>
+            <Button variant="ghost" size="icon-xs" tooltip="Open page in a new tab" render={<a href={external} target="_blank" rel="noopener noreferrer" aria-label="Open page in a new tab" />}>
               <ExternalLink className="size-3" />
             </Button>
           )}
@@ -167,7 +167,7 @@ function CapturePane({ capture, onUrl }: { capture: BrowserPreview; onUrl: (url:
       <footer className="flex h-7 shrink-0 items-center gap-1.5 border-t-[0.5px] border-border-1 px-2 text-2xs text-muted-foreground-2">
         <span className="truncate">Captured screenshot · {capture.owner}</span>
         {external && (
-          <Button variant="ghost" size="icon-xs" className="ml-auto" render={<a href={external} target="_blank" rel="noopener noreferrer" aria-label="Open page in a new tab" />}>
+          <Button variant="ghost" size="icon-xs" tooltip="Open page in a new tab" className="ml-auto" render={<a href={external} target="_blank" rel="noopener noreferrer" aria-label="Open page in a new tab" />}>
             <ExternalLink className="size-3" />
           </Button>
         )}

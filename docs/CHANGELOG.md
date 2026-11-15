@@ -15,6 +15,7 @@ on the GitHub Release tag.
 ### Changed
 
 - Explore and Skills rows show real brand logos: each connector mark sits on its brand colour in a 48 px tile (white or black glyph, whichever reads better), skills show the publisher's avatar with stars and the owner's name at the right, and none of it is fetched from a third-party site. Slack and Teams stay a brand-coloured letter tile.
+- Hover and focus now follow one language across the app: list, card and table rows get a 3.5% overlay over 100 ms (no border or shadow change), bordered chips and selects step from button to button-hover, text fields and switches draw a 1px inset focus ring, sidebar thread row actions mount only on hover or focus (always on touch), and icon-only buttons show a tooltip taken from their label (menu triggers stay untitled).
 - The sidebar has seven items and no More menu: New thread, Findings, Automations, Skills, Memory, Computers and Explore. Computers is always listed and no longer appears under Settings.
 - Skills has its own sidebar entry with **Installed** and **Browse** tabs. The GitHub skills directory moved from Explore to Skills > Browse, and Explore keeps Plugins and Themes. Old `/plugins/explore?tab=skills` links redirect to Skills > Browse.
 - The thread composer dock is tighter and cleaner: the transcript no longer dims its last lines above the composer, there is less empty space under the footer row, and the Scroll to latest pill is smaller and sits clear of the card.
