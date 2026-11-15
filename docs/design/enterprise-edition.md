@@ -46,10 +46,10 @@ mapped to what `0` already has:
   plugins. `ZERO_REGISTRY_URL` points the CLI at another registry index.
 - **Scope injection.** The scanner already accepts an in-memory scope.
 
-## Seams added to the open-source engine (superseded by the gateway decision below)
+## Seams that were added, then mostly reverted (see the gateway decision below)
 
-All five landed as separate PRs with no behavior change by default (2026-11-15). The gateway decision below means
-most are not needed; the table there says which to keep.
+All five landed as separate PRs and shipped in v0.30.0. Four were then reverted (see the changelog, Unreleased, Removed); only registry signature
+verification (5) remains. The descriptions below are kept as history.
 
 1. **Permissions, not route regexes** (#359, `team-permissions.ts`). Replace the regex lists in `authorizeTeamApi`
    with named permissions and a `PermissionPolicy` that maps role to permissions. The
@@ -97,19 +97,20 @@ What that means for us:
   model keys held by us. This is promptfoo's "on-prem" shape.
 - The licence check lives in the gateway. The open-source engine never needs to know about licences.
 
-### What this does to the seams already merged
+### What happened to the seams already merged
 
-The five seams (#359 to #363) were built before checking this. With the gateway approach:
+Five seams (#359 to #363) were built before checking how promptfoo does it. With the gateway approach only one is
+needed, so the other four were reverted to keep the engine simple:
 
-| Seam | Still useful? |
+| Seam | Outcome |
 |---|---|
-| Registry signature verification (#363) | Yes. Independent supply-chain hardening for the public plugin registry |
-| Named permissions and policy (#359) | Harmless refactor; not needed by the gateway. Keep unless it becomes a maintenance cost |
-| Identity provider interface (#360) | Not needed by the gateway. Keep unless it becomes a maintenance cost |
-| Audit sink (#361) | Not needed by the gateway. Keep unless it becomes a maintenance cost |
-| Entitlements (#362) | Not needed in the open-source engine. The licence check belongs in the gateway |
+| Registry signature verification (#363) | **Kept.** Independent supply-chain hardening for the public plugin registry (`ZERO_REGISTRY_PUBLIC_KEY_FILE`) |
+| Named permissions and policy (#359) | Reverted. The gateway enforces roles in front of the engine |
+| Identity provider interface (#360) | Reverted. The gateway handles SSO and SAML |
+| Audit sink (#361) | Reverted. The gateway keeps its own audit trail |
+| Entitlements (#362) | Reverted. The licence check belongs in the gateway |
 
-None change default behavior. Do not build the plugin hooks protocol or the extension bridge.
+Do not build the plugin hooks protocol or the extension bridge.
 
 ### Work this implies
 
@@ -146,7 +147,7 @@ Targets and commitments are for Fabian (commercial) and Feza (contracts) to set.
 
 ## Build order
 
-1. **Done:** the five open-source seams (see the table above for which are still useful) and the private repository.
+1. **Done:** the private repository, and registry signature verification in the open-source engine.
 2. Confirm the engine API covers the gateway's needs; fill only generic gaps in the open-source API.
 3. Build the gateway skeleton: authenticate in front of the engine, then roles, then audit. Ship the first
    integration the first customer asks for (candidates: Slack or Jira notifications, SAML), picked by demand.

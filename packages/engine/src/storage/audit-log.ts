@@ -83,35 +83,14 @@ export function closeAuditLog(dbPath?: string): void {
   for (const path of paths) { try { handles.get(path)?.db.close(); } catch { /* already closed */ } handles.delete(path); }
 }
 
-/** An event as stored: already redacted and truncated. Sinks never see raw input. */
-export type AuditSinkEvent = Omit<AuditEvent, "id">;
-/** Receives every audit event after it is written to the local log (for example to stream it to a SIEM). */
-export type AuditSink = (event: AuditSinkEvent) => void;
-const sinks = new Set<AuditSink>();
-/** Register a sink. Returns a function that removes it. The local log is unaffected either way. */
-export function addAuditSink(sink: AuditSink): () => void { sinks.add(sink); return () => { sinks.delete(sink); }; }
-/** A throwing sink never breaks auditing or the other sinks. */
-function deliverToSinks(event: AuditSinkEvent): void {
-  for (const sink of [...sinks]) { try { sink({ ...event, detail: { ...event.detail } }); } catch { /* never surface */ } }
-}
-
 /** Appends one audit event. Never throws: auditing must not break the action it records. */
 export function recordAudit(input: AuditInput, target?: AuditTarget): void {
   try {
     const entry = open(resolvePath(target));
     const maxRows = Math.max(1, target?.maxRows ?? AUDIT_MAX_ROWS);
     const outcome: AuditOutcome = input.outcome === "denied" || input.outcome === "error" ? input.outcome : "ok";
-    const record = {
-      ts: input.ts ?? new Date().toISOString(),
-      actor: scrub(String(input.actor ?? "system")),
-      action: scrub(String(input.action ?? "unknown")),
-      subject: scrub(String(input.subject ?? "")),
-      outcome,
-      detail: redactAuditDetail(input.detail),
-    };
     entry.db.prepare("INSERT INTO audit_events (ts, actor, action, subject, outcome, detail_json) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(record.ts, record.actor, record.action, record.subject, record.outcome, JSON.stringify(record.detail));
-    deliverToSinks(record);
+      .run(input.ts ?? new Date().toISOString(), scrub(String(input.actor ?? "system")), scrub(String(input.action ?? "unknown")), scrub(String(input.subject ?? "")), outcome, JSON.stringify(redactAuditDetail(input.detail)));
     entry.inserts += 1;
     if (entry.inserts % Math.min(100, maxRows) === 0) entry.db.prepare("DELETE FROM audit_events WHERE id <= (SELECT MAX(id) FROM audit_events) - ?").run(maxRows);
   } catch { /* never surface */ }

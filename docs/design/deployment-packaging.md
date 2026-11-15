@@ -45,8 +45,8 @@ All verified by reading origin/main (0 repo) on 2026-11-14; the image was not ru
 Exists:
 - Image `ghcr.io/0sec-labs/0security` (alias `0`), amd64 only, ENTRYPOINT `node /app/dist/0.js`, uid 1000, built by `scripts/docker/Dockerfile`, published by `.github/workflows/docker-publish.yml` (tags: SHA, `main`, `latest`; no semver, no cosign, SBOM or provenance). Docs page `/docker/` covers only one-shot `scan` runs.
 - Server: `0 web` (`packages/cli/src/commands/dashboard.ts`) with team mode, scrypt accounts and OIDC, engine bearer token, caps, Findings API.
-- Seams landed (#359-#363): permission policy, identity provider, audit sink, entitlements, plugin signature key. Licence verification exists (`packages/engine/src/entitlements/license.ts`) but `PINNED_LICENSE_KEYS` is empty, so it is inert.
-- State under `~/.0`; `ZERO_DB_PATH`, `ZERO_RUN_DIR`, `ZERO_TEAM_CONFIG`, `ZERO_LICENSE_FILE`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`, `ZERO_REQUIRE_SCOPE` exist.
+- Seams: only plugin registry signature verification (#363, `ZERO_REGISTRY_PUBLIC_KEY_FILE`) remains. The permission policy, identity provider, audit sink and entitlements seams (#359-#362) were reverted in favour of a gateway.
+- State under `~/.0`; `ZERO_DB_PATH`, `ZERO_RUN_DIR`, `ZERO_TEAM_CONFIG`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`, `ZERO_REQUIRE_SCOPE` exist.
 
 Missing (status after P0: items 1 to 3 and the semver part of 8 are fixed, see sections 4 and 5; items 4 to 7 remain and are documented as limits):
 1. No compose file, `helm/`, `terraform/` or systemd unit anywhere.

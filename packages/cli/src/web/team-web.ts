@@ -3,16 +3,26 @@ import { z } from "zod";
 import { TeamAuth, TeamAuthError, getSessionId, type TeamIdentity } from "./team-auth.js";
 import { CollaborationService, type CollaborationResourceKind } from "./collaboration.js";
 import type { ConsoleGateway } from "./console-gateway.js";
-import { assertTeamPermissions } from "./team-permissions.js";
 
 type Reply = { status: number; data?: unknown; headers?: Record<string, string | string[]>; redirect?: string };
+const readOnly = (method: string) => method === "GET" || method === "HEAD";
 
 /** The browser control token authorizes the transport, never a team identity. */
 export function authorizeTeamApi(auth: TeamAuth, req: IncomingMessage, path: string): TeamIdentity | null {
   if (!auth.enabled) return null;
   const actor = auth.resolveSession(req);
   if (!actor) throw new TeamAuthError("Sign in to this workspace.");
-  assertTeamPermissions(actor, req.method ?? "GET", path);
+  const method = req.method ?? "GET";
+  // Registered remote engines carry machine credentials rather than browser account credentials.
+  // Until a delegated team bridge exists, only the workspace owner may use them.
+  if (/^\/api\/backends\/[^/]+\/proxy/.test(path) && !path.startsWith("/api/backends/local/proxy") && actor.role !== "owner") throw new TeamAuthError("Remote engine access requires a workspace owner.", 403);
+  const ownerResource = /^\/api\/(?:control|workflow-engine|backends\/[^/]+\/proxy|console\/(?:checks|connections|credentials|auth|github|settings|plugins|mcp|services|processes|environment|execution|models|project|doctor|tools|learning))(?:\/|$)/;
+  if (!readOnly(method) && actor.role === "viewer") throw new TeamAuthError("This account has read-only workspace access.", 403);
+  if (!readOnly(method) && ownerResource.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can change engine settings.", 403);
+  if (!readOnly(method) && /^\/api\/skills\/mounts(?:\/|$)/.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can mount host folders.", 403);
+  const editorResource = /^\/api\/(?:skills|engagements|findings|finding-family|console\/(?:sessions|workflows|workflow-definitions|workflow-executions|workflow-triggers))(?:\/|$)/;
+  const resumeRead = method === "POST" && /^\/api\/console\/saved\/[^/]+\/resume$/.test(path);
+  if (!readOnly(method) && actor.role !== "owner" && !editorResource.test(path) && !resumeRead) throw new TeamAuthError("This action requires a workspace owner.", 403);
   return actor;
 }
 

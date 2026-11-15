@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { addAuditSink, closeAuditLog, listAudit, recordAudit, redactAuditDetail, type AuditSinkEvent } from "./audit-log.js";
+import { closeAuditLog, listAudit, recordAudit, redactAuditDetail } from "./audit-log.js";
 
 const dirs: string[] = [];
 const fresh = () => { const dir = mkdtempSync(join(tmpdir(), "zero-audit-")); dirs.push(dir); return { dbPath: join(dir, "audit.db") }; };
@@ -53,33 +53,5 @@ describe("recordAudit", () => {
     expect(listAudit({ q: "s3" }, target).events).toHaveLength(1);
     expect(listAudit({ q: "engine" }, target).events).toHaveLength(1);
     expect(listAudit({ q: "%" }, target).events).toHaveLength(0);
-  });
-});
-
-describe("audit sinks", () => {
-  it("receive each stored event after redaction, matching the local log", () => {
-    const target = fresh(); const seen: AuditSinkEvent[] = [];
-    const remove = addAuditSink(event => { seen.push(event); });
-    recordAudit({ actor: "alex", action: "settings.change", subject: "theme", detail: { key: "theme", new: "light", apiKey: "sk-abcdefghijklmnopqrstuvwx" } }, target);
-    remove();
-    expect(seen).toHaveLength(1);
-    const [stored] = listAudit({}, target).events;
-    expect(seen[0]).toEqual({ ts: stored!.ts, actor: "alex", action: "settings.change", subject: "theme", outcome: "ok", detail: stored!.detail });
-    expect(JSON.stringify(seen[0])).not.toContain("sk-abcdefghijklmnopqrstuvwx");
-  });
-  it("never break auditing, and removal stops delivery", () => {
-    const target = fresh(); const seen: string[] = [];
-    const removeBad = addAuditSink(() => { throw new Error("sink down"); });
-    const removeGood = addAuditSink(event => { seen.push(event.action); });
-    expect(() => recordAudit({ actor: "a", action: "one" }, target)).not.toThrow();
-    removeGood(); recordAudit({ actor: "a", action: "two" }, target); removeBad();
-    expect(seen).toEqual(["one"]);
-    expect(listAudit({}, target).events.map(event => event.action)).toEqual(["two", "one"]);
-  });
-  it("cannot alter the stored event by mutating what they receive", () => {
-    const target = fresh();
-    const remove = addAuditSink(event => { event.detail["key"] = "tampered"; });
-    recordAudit({ actor: "a", action: "x", detail: { key: "theme" } }, target); remove();
-    expect(listAudit({}, target).events[0]!.detail).toEqual({ key: "theme" });
   });
 });

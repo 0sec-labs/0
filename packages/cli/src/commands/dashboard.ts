@@ -166,7 +166,7 @@ export function registerDashboardCommand(program: Command): void {
       if (serverMode) {
         const configured = validateAccessToken(process.env[opts.accessTokenEnv ?? "ZERO_ACCESS_TOKEN"], opts.accessTokenEnv ?? "ZERO_ACCESS_TOKEN");
         if (opts.accessTokenEnv && !process.env[opts.accessTokenEnv]) throw new Error(`--access-token-env ${opts.accessTokenEnv} is not set.`);
-        // Team accounts (or an external identity provider) are the credential when configured; otherwise a strong shared access token.
+        // Team accounts are the credential when configured; otherwise a strong shared access token.
         let accessToken: string | undefined;
         if (!teamAuth.enabled) {
           const secret = resolveAccessSecret({ configured, stateDir: homeStateDir() });
