@@ -26,7 +26,7 @@ import { errorText } from "@/lib/api-error";
 const SEARCH_THRESHOLD = 8;
 const STARTER_ICONS: Record<SecurityWorkflowStarterIcon, LucideIcon> = { "shield-search": ShieldCheck, microscope: Microscope, package: Package, "key-round": KeyRound, "file-code": FileCode, cpu: Cpu, globe: Globe, "lock-keyhole": LockKeyhole };
 const STARTER_GROUPS = [{ id: "code", label: "Code" }, { id: "web", label: "Web" }] as const;
-const starterChip = (item: SecurityWorkflowTemplate) => item.starter?.scope === "url" ? "Needs a URL" : "This project";
+const starterChip = (item: SecurityWorkflowTemplate) => item.starter?.scope === "url" ? "Needs a URL" : "";
 
 export function WorkflowLibrary({ readOnly = false, shared = false, presenceById = {}, definitions, busy, onSelect, onBlank, onTemplate, onImport, onRun, onDuplicate, onDelete }: {
   readOnly?: boolean; shared?: boolean; presenceById?: Record<string, TeamPresence[]>; definitions: SecurityWorkflow[]; busy: boolean;
@@ -117,12 +117,11 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       </div>
       {!visible.length && (scope === "scheduled" || search) && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
     </>}
-    {empty && templates.length > 0 && <section aria-label="Starting points" className="space-y-4">
-      <h2 className="px-2 text-sm text-muted-foreground">Starting points</h2>
-      {STARTER_GROUPS.map(group => { const items = templates.filter(item => item.starter?.group === group.id); return items.length > 0 && <div key={group.id} className="space-y-2"><h3 className="px-2 text-xs text-muted-foreground">{group.label}</h3>
+    {empty && templates.length > 0 && <section aria-label="Templates" className="space-y-4">
+      <h2 className="px-2 text-sm text-muted-foreground">Templates</h2>
         <ul className="grid gap-2 md:grid-cols-2">
-          {items.map(item => { const Icon = STARTER_ICONS[item.starter!.icon]; return <li key={item.id} className="min-w-0"><button type="button" disabled={busy || readOnly} onClick={() => { void onTemplate(item.id).catch(() => {}); }} className="flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-55"><span className="flex w-full items-center gap-2 text-sm"><Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.name}</span></span><span className="truncate text-xs text-muted-foreground">{item.description}</span><StatusBadge appearance="outline">{starterChip(item)}</StatusBadge></button></li>; })}
-        </ul></div>; })}
+          {STARTER_GROUPS.flatMap(group => templates.filter(item => item.starter?.group === group.id)).map(item => { const Icon = STARTER_ICONS[item.starter!.icon]; return <li key={item.id} className="min-w-0"><button type="button" disabled={busy || readOnly} onClick={() => { void onTemplate(item.id).catch(() => {}); }} className="flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-55"><span className="flex w-full items-center gap-2 text-sm"><Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.name}</span></span><span className="truncate text-xs text-muted-foreground">{item.description}</span>{starterChip(item) && <StatusBadge appearance="outline">{starterChip(item)}</StatusBadge>}</button></li>; })}
+        </ul>
     </section>}
     <FormDialog open={importOpen} onOpenChange={setImportOpen} pending={busy} cancelDisabled={busy || readOnly} className="sm:max-w-2xl" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(errorText(cause, "Unable to import definition."))); } catch (cause) { setImportError(errorText(cause, "Invalid automation definition.")); } }}
       title="Import definition"

@@ -16,7 +16,7 @@ export const RELEASES: readonly Release[] = [
     highlights: [
       { icon: "ListChecks", title: "A shorter sidebar", text: "New mission, Findings, Automations and Explore, with Skills and Plugins inside Explore and Lessons under More." },
       { icon: "KeyRound", title: "Connect GitHub your way", text: "Reuse your GitHub CLI login, sign in with a code, or follow a guided token. You see what permissions are missing." },
-      { icon: "Wrench", title: "Eight Automations to start from", text: "Pick a starting point such as a code review or a secrets check. Code reviews use your current project." },
+      { icon: "Wrench", title: "Eight Automations to start from", text: "Pick a starting point such as a code review or a secrets check. Code reviews use your current folder." },
       { icon: "Cloud", title: "One Models page", text: "Providers and models live together at Models, and a switch hides cost and usage if you prefer." },
     ],
   },
@@ -39,7 +39,7 @@ export const RELEASES: readonly Release[] = [
     title: "Safer parallel work",
     summary: "Parallel workers no longer step on each other, and model costs are more accurate.",
     highlights: [
-      { icon: "ShieldCheck", title: "Protected shared checkouts", text: "Workers that run side by side can read the same project without overwriting each other's changes." },
+      { icon: "ShieldCheck", title: "Protected shared checkouts", text: "Workers that run side by side can read the same folder without overwriting each other's changes." },
       { icon: "Gauge", title: "Accurate model prices", text: "Together models keep their own prices, and incomplete usage receipts are rejected instead of guessed." },
       { icon: "RefreshCw", title: "Reliable live reload", text: "Development servers reload on the ports you choose and shut down cleanly when you stop them." },
       { icon: "Wrench", title: "Security updates", text: "Hono and its Node server adapter are updated for current security advisories." },

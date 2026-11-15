@@ -12,6 +12,10 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Automation templates no longer mention projects; automations run in the current folder.
+
 ## [0.30.0] - 2026-11-14
 
 This release reorganises the web console around a shorter sidebar and a Models page, adds a guided GitHub connection and a What's new dialog, and gives Automations eight ready-made starting points. It also adds hooks for enterprise add-ons and faster, safer releases.

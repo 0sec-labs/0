@@ -52,7 +52,7 @@ export function AgentOnboarding() {
         variant="ghost"
         size="sm"
         onClick={copyPrompt}
-        className="inline-flex h-8 max-w-full gap-2 rounded-full border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
+        className="inline-flex h-8 max-w-full gap-2 rounded-md border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
         aria-label={
           copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"
         }

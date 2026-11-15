@@ -48,15 +48,15 @@ export function homeSuggestions(
     const path = project?.path || workspace;
     const git = project?.git.root && !project.git.error ? project.git : undefined;
     const repoChanges = Boolean(git?.dirty && comparablePath(git.root!) === comparablePath(path));
-    const scope = `the selected project ${JSON.stringify(path)}`;
+    const scope = `the selected folder ${JSON.stringify(path)}`;
     return [
       {
         icon: "code",
-        label: git ? "Whitebox pentest" : "Explore this project",
+        label: git ? "Whitebox pentest" : "Explore this folder",
         hint: git ? `${project?.name} · ${git.branch || "Git repository"}` : path,
         prompt: git
           ? `Run a whitebox pentest of ${scope}. First inspect its structure, trust boundaries and existing checks; trace exploitable code paths, keep the work scoped to this folder and report evidence separately from hypotheses.`
-          : `Inspect ${scope} and summarize what is present before proposing a focused security review. Do not assume its language, project type or available tools.`,
+          : `Inspect ${scope} and summarize what is present before proposing a focused security review. Do not assume its language, type or available tools.`,
       },
       repoChanges
         ? {
@@ -67,7 +67,7 @@ export function homeSuggestions(
           }
         : {
             icon: "shield",
-            label: git ? "Explain this project" : "Find project context",
+            label: git ? "Explain this folder" : "Find context",
             hint: "Inspect documentation and manifests where present",
             prompt: `Explain ${scope} from its README, documentation and project manifests where present. Identify entry points and how it is built or run; state what could not be determined.`,
           },
@@ -82,7 +82,7 @@ export function homeSuggestions(
             icon: "plan",
             label: "Plan a focused review",
             hint: "Choose useful checks before running them",
-            prompt: `Propose a focused security review of ${scope}. Identify useful checks from the observed project structure and keep time and cost limits explicit before execution.`,
+            prompt: `Propose a focused security review of ${scope}. Identify useful checks from the observed structure and keep time and cost limits explicit before execution.`,
           },
     ];
   }
@@ -114,7 +114,7 @@ export function homeSuggestions(
       label: "Whitebox pentest",
       hint: "Choose a source repository",
       prompt:
-        "Help me start a whitebox pentest. First ask me to choose the source repository or project folder.",
+        "Help me start a whitebox pentest. First ask me to choose the source repository or folder.",
     },
     {
       icon: "shield",

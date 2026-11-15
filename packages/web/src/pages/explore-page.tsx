@@ -74,7 +74,7 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
 type SkillRow = BrowsableSkill & { origin?: unknown };
 /** Per-category icon tile; categories without a dedicated Capy icon fall back to the document icon. */
 const SKILL_ICON: Record<string, typeof Document> = { Web: Globe, Injection: Terminal, Identity: ApiKey, LLM: SparkleFour, "Native & crypto": Chip, "Code review": Branch, "Supply chain": Puzzle, Reporting: Presentation, Development: Settings };
-const SCOPE: Record<string, string> = { workspace: "Project", personal: "Solo", project: "Project" };
+const SCOPE: Record<string, string> = { workspace: "Folder", personal: "Solo", project: "Folder" };
 function SkillsTab({ query, category, page, onCategories, onCategory, onPage }: { query: string; category: string; page: number; onCategories: (categories: Array<{ value: string; label: string }>) => void; onCategory: (category: string) => void; onPage: (page: number) => void }) {
   const { webFetchJson, client } = useBackendApi();
   const team = useTeamAccess();
