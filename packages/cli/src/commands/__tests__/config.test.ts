@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   runConfigExport,
   runConfigImport,
+  runConfigSet,
   runConfigShow,
   type ConfigCommandDeps,
 } from "../config.js";

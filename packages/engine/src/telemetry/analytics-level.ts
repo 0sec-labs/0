@@ -9,6 +9,13 @@
  * lives in `@0/cli`, which core must not depend on, so the names and the
  * "set and not explicitly falsy" semantics are re-declared here — keep them in
  * sync.
+ *
+ * DEFAULT: usage-tier analytics are ON for a fresh install (anonymous counters
+ * only; see analytics-pipeline.ts for where they may go). That default is the
+ * product decision that 0security's telemetry is automatic; it is bounded by
+ * the hard opt-outs below, which always win, and by an explicit saved
+ * `analyticsLevel: off`, which is preserved. `commands` and `full` are never
+ * a default and are never sent to the direct PostHog destination.
  */
 
 /** Consent tiers, in increasing order of what may be transmitted. */
@@ -57,7 +64,9 @@ export function analyticsOptedOut(env: NodeJS.ProcessEnv = process.env): boolean
 
 /**
  * Resolve the effective analytics tier. Any opt-out env forces "off"; when
- * `ZERO_ANALYTICS_LEVEL` is unset the default is usage metrics only. An unknown/invalid
+ * `ZERO_ANALYTICS_LEVEL` is unset the default is usage metrics only (automatic,
+ * anonymous counters; an explicit saved `off` is applied by the CLI settings
+ * store before this env is bridged). An unknown/invalid
  * value still fails closed to "off".
  */
 export function resolveAnalyticsLevel(env: NodeJS.ProcessEnv = process.env): AnalyticsLevel {

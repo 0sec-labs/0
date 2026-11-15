@@ -504,13 +504,14 @@ import { dirname } from "node:path";
 
 
 describe("public analytics consent", () => {
-  it("defaults fresh installations to usage metrics and reviewed diagnostics", () => {
+  it("defaults fresh installations to usage metrics and automatic crash reports", () => {
     const home = makeHome();
     const project = makeProjectDir();
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(DEFAULT_SETTINGS.analyticsLevel).toBe("usage");
     expect(settings.analyticsLevel).toBe("usage");
-    expect(settings.diagnosticReporting).toBe("ask");
+    expect(DEFAULT_SETTINGS.diagnosticReporting).toBe("automatic");
+    expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(sources.analyticsLevel).toBe("default");
     expect(sources.diagnosticReporting).toBe("default");
@@ -531,6 +532,80 @@ describe("public analytics consent", () => {
     const optedOut = toggleSetting(migrated.settings, "analyticsLevel");
     expect(optedOut.analyticsLevel).toBe("off");
     expect(toggleSetting(optedOut, "analyticsLevel").analyticsLevel).toBe("usage");
+  });
+});
+describe("diagnosticReporting default migration", () => {
+  const writeGlobal = (home: string, raw: unknown) => {
+    mkdirSync(dirname(settingsFilePath(home)), { recursive: true });
+    writeFileSync(settingsFilePath(home), JSON.stringify(raw));
+  };
+
+  it("keeps an explicit stored off", () => {
+    const home = makeHome();
+    writeGlobal(home, { diagnosticReporting: "off" });
+    expect(loadLayeredSettings({ homeDir: home }).settings.diagnosticReporting).toBe("off");
+    expect(loadGlobalSettings(home).diagnosticReporting).toBe("off");
+  });
+
+  it("keeps an explicit stored automatic", () => {
+    const home = makeHome();
+    writeGlobal(home, { diagnosticReporting: "automatic" });
+    expect(loadLayeredSettings({ homeDir: home }).settings.diagnosticReporting).toBe("automatic");
+  });
+
+  it("keeps a stored ask that is marked as an explicit choice (diagnosticReportingPrompted true)", () => {
+    const home = makeHome();
+    writeGlobal(home, { diagnosticReporting: "ask", diagnosticReportingPrompted: true });
+    const { settings, sources } = loadLayeredSettings({ homeDir: home });
+    expect(settings.diagnosticReporting).toBe("ask");
+    expect(sources.diagnosticReporting).toBe("global");
+    expect(loadGlobalSettings(home).diagnosticReporting).toBe("ask");
+  });
+
+  it("migrates a stored ask from the old default (no explicit-choice marker) to the new default", () => {
+    const home = makeHome();
+    writeGlobal(home, { diagnosticReporting: "ask", diagnosticReportingPrompted: false, showCost: false });
+    const { settings, sources } = loadLayeredSettings({ homeDir: home });
+    expect(settings.diagnosticReporting).toBe("automatic");
+    expect(sources.diagnosticReporting).toBe("default");
+    expect(loadGlobalSettings(home).diagnosticReporting).toBe("automatic");
+    expect(settings.showCost).toBe(false);
+    writeGlobal(home, { diagnosticReporting: "ask" });
+    expect(loadLayeredSettings({ homeDir: home }).settings.diagnosticReporting).toBe("automatic");
+  });
+
+  it("a fresh install and a file without the key both resolve to automatic", () => {
+    const home = makeHome();
+    expect(loadSettings(home).diagnosticReporting).toBe("automatic");
+    writeGlobal(home, { showCost: true });
+    expect(loadSettings(home).diagnosticReporting).toBe("automatic");
+  });
+
+  it("choosing ask is persisted as explicit and survives the next load and save", () => {
+    const home = makeHome();
+    expect(saveSettings({ ...loadGlobalSettings(home), diagnosticReporting: "ask" }, home)).toBe(true);
+    const onDisk = JSON.parse(readFileSync(settingsFilePath(home), "utf8"));
+    expect(onDisk.diagnosticReporting).toBe("ask");
+    expect(onDisk.diagnosticReportingPrompted).toBe(true);
+    expect(loadSettings(home).diagnosticReporting).toBe("ask");
+    saveSettings({ ...loadGlobalSettings(home), showCost: false }, home);
+    expect(loadSettings(home).diagnosticReporting).toBe("ask");
+  });
+
+  it("saving unrelated settings on a migrated install does not resurrect ask", () => {
+    const home = makeHome();
+    writeGlobal(home, { diagnosticReporting: "ask" });
+    saveSettings({ ...loadGlobalSettings(home), showCost: false }, home);
+    expect(loadSettings(home).diagnosticReporting).toBe("automatic");
+    expect(JSON.parse(readFileSync(settingsFilePath(home), "utf8")).diagnosticReporting).toBe("automatic");
+  });
+
+  it("an explicit analyticsLevel off is preserved while crash reports migrate", () => {
+    const home = makeHome();
+    writeGlobal(home, { analyticsLevel: "off", diagnosticReporting: "ask" });
+    const settings = loadSettings(home);
+    expect(settings.analyticsLevel).toBe("off");
+    expect(settings.diagnosticReporting).toBe("automatic");
   });
 });
 describe("operator-only privacy and updates", () => {

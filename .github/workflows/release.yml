@@ -106,6 +106,9 @@ jobs:
           # Release-only. Empty when the secret is unset (treated as unprovisioned).
           # A malformed value fails scripts/built-in-sentry-dsn.mjs before compiling.
           ZERO_RELEASE_SENTRY_DSN: ${{ secrets.ZERO_RELEASE_SENTRY_DSN }}
+          # Release-only public PostHog ingestion key; same rules (unset = no analytics,
+          # malformed fails scripts/built-in-posthog-key.mjs before compiling).
+          ZERO_RELEASE_POSTHOG_KEY: ${{ secrets.ZERO_RELEASE_POSTHOG_KEY }}
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
       - name: Smoke the binary
         # Dashboard embed, host console worker, plugin execution and web setup.

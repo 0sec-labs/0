@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
@@ -205,6 +205,27 @@ describe("config get/set/reset through the embedded operator transport", () => {
     const client = await openConsoleClient({ dbPath: join(home, "osec.db"), homeDir: home }, { attach: async () => null });
     return { out, err, codes, client, deps: { client, out: (l: string) => out.push(l), err: (l: string) => err.push(l), setExitCode: (c: number) => codes.push(c), homeDir: home } };
   }
+
+  it("the telemetry opt-out commands named by the first-run notice work without --yes, and ask is an explicit choice", async () => {
+    const home = mkdtempSync(join(tmpdir(), "config-home-")); temp.push(home);
+    const h = await embeddedDeps(home);
+    try {
+      await runConfigSet("analyticsLevel", "off", {}, h.deps);
+      expect(last(h.codes)).toBe(0);
+      await runConfigSet("diagnosticReporting", "off", {}, h.deps);
+      expect(last(h.codes)).toBe(0);
+      const read: string[] = [];
+      const reader = { homeDir: home, out: (l: string) => read.push(l), err: (l: string) => read.push(l) };
+      runConfigGet("analyticsLevel", reader);
+      runConfigGet("diagnosticReporting", reader);
+      expect(read).toEqual(["off", "off"]);
+      await runConfigSet("diagnosticReporting", "ask", {}, h.deps);
+      expect(last(h.codes)).toBe(0);
+      const saved = JSON.parse(readFileSync(join(home, ".0", "tui-settings.json"), "utf8")) as Record<string, unknown>;
+      expect(saved.diagnosticReporting).toBe("ask");
+      expect(saved.diagnosticReportingPrompted).toBe(true);
+    } finally { await h.client.dispose(); }
+  });
 
   it("sets, reads and resets a setting, enforcing the web's validation", async () => {
     const home = mkdtempSync(join(tmpdir(), "config-home-")); temp.push(home);

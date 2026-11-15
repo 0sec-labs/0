@@ -9,6 +9,8 @@ import chalk from "chalk";
 import { VERSION } from "@0/engine/shared";
 import {
   analyticsPipeline,
+  analyticsOptedOut,
+  TOOL_DEFINITIONS,
   createHerdrEventSink,
   configureRunContributionsFromEnvironment,
   eventBus,
@@ -26,6 +28,9 @@ import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
 import { commandPathsOf, setCrashCommandPaths } from "./crash-capture.js";
+import { surfaceFromArgv } from "./surface.js";
+import { getReleaseChannel } from "./state/runtime.js";
+import { maybePrintTelemetryNotice } from "./telemetry-notice.js";
 
 // Private session workers must not rediscover host accounts or execution profiles.
 if (process.argv.includes("--host-console-worker")) {
@@ -62,7 +67,18 @@ if (!isWorkbenchManagement && !isRemoteBackendClient) maybeLoadCodexAuth();
 // The settings store initializes the pipeline and preserves explicit environment
 // restrictions. Do not overwrite the tier env or reinitialize from env alone.
 try {
-  getSettings();
+  // Usage events carry the same surface label as crash reports (one shared function).
+  analyticsPipeline.configure({
+    surface: surfaceFromArgv(process.argv),
+    releaseChannel: getReleaseChannel(),
+    knownToolNames: Object.values(TOOL_DEFINITIONS).map((tool) => tool.name),
+  });
+  const settings = getSettings();
+  // Telemetry is automatic by default: say so once, on stderr, for interactive runs only.
+  maybePrintTelemetryNotice({
+    args: process.argv.slice(2),
+    telemetryActive: !analyticsOptedOut() && (settings.analyticsLevel !== "off" || settings.diagnosticReporting === "automatic"),
+  });
 } catch {
   analyticsPipeline.setLevel("off");
 }

@@ -2,6 +2,6 @@
 // exist before the engine and command modules evaluate (a crash while loading
 // them is captured too). `0 web` and no-argument launches are the web surface.
 import { installCrashCapture } from "./crash-capture.js";
+import { surfaceFromArgv } from "./surface.js";
 
-const first = process.argv[2];
-installCrashCapture({ surface: first === undefined || first === "web" ? "web" : "cli" });
+installCrashCapture({ surface: surfaceFromArgv(process.argv) });
