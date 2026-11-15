@@ -40,10 +40,10 @@ export function useTeamOverview(client: TeamClient, { enabled }: { enabled: bool
         const all = "all" in change;
         if (all || change.kind === "report") {
           void cache.invalidateQueries({ queryKey: queryKeys.engagements(client.backendId) });
-          void cache.invalidateQueries({ queryKey: all ? ["engagement-report", client.backendId] : ["engagement-report", client.backendId, change.id] });
+          void cache.invalidateQueries({ queryKey: all ? queryKeys.engagementReport(client.backendId) : queryKeys.engagementReport(client.backendId, change.id) });
         }
         if (all || change.kind === "workflow") {
-          for (const prefix of ["workflow-definitions", "workflow-versions", "workflow-executions"]) void cache.invalidateQueries({ queryKey: [prefix] });
+          for (const queryKey of [queryKeys.workflowDefinitions(), queryKeys.workflowVersions(), queryKeys.workflowExecutions()]) void cache.invalidateQueries({ queryKey });
         }
         if (all || change.kind === "conversation") {
           void cache.invalidateQueries({ queryKey: queryKeys.consoleSessions() });

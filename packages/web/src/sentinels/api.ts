@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { describeApiFailure } from "@/lib/api-error";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
+import { queryKeys } from "@/queries";
 import {
   SENTINEL_RUN_APPROVAL, SENTINEL_TRIGGER_APPROVAL, SentinelApiError,
   type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
@@ -64,62 +65,62 @@ export function createSentinelClient(webFetch: Fetch) {
 }
 export type SentinelClient = ReturnType<typeof createSentinelClient>;
 
-export function useSentinelClient(): { client: SentinelClient; scope: readonly [string, string] } {
+export function useSentinelClient(): { client: SentinelClient; backendId: string } {
   const api = useBackendApi();
-  return useMemo(() => ({ client: createSentinelClient(api.webFetch), scope: ["sentinels", api.client.backendId] as const }), [api.webFetch, api.client.backendId]);
+  return useMemo(() => ({ client: createSentinelClient(api.webFetch), backendId: api.client.backendId }), [api.webFetch, api.client.backendId]);
 }
 
-const invalidateAll = (cache: QueryClient, scope: readonly string[]) => cache.invalidateQueries({ queryKey: scope });
+const invalidateAll = (cache: QueryClient, backendId: string) => cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId) });
 
 /** List of Sentinels. `supported` is false on old servers, so callers can hide the whole feature. */
 export function useSentinels(options: { enabled?: boolean; poll?: boolean } = {}) {
-  const { client, scope } = useSentinelClient();
-  const query = useQuery({ queryKey: [...scope, "list"], queryFn: ({ signal }) => client.list(signal), enabled: options.enabled ?? true, staleTime: 5_000, refetchInterval: options.poll === false ? false : 10_000, retry: false });
+  const { client, backendId } = useSentinelClient();
+  const query = useQuery({ queryKey: queryKeys.sentinels(backendId, "list"), queryFn: ({ signal }) => client.list(signal), enabled: options.enabled ?? true, staleTime: 5_000, refetchInterval: options.poll === false ? false : 10_000, retry: false });
   return { ...query, supported: query.data?.supported !== false, sentinels: query.data?.sentinels ?? [] };
 }
 export function useSentinel(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "one", sentinelId], queryFn: ({ signal }) => client.get(sentinelId, signal), enabled: Boolean(sentinelId), refetchInterval: 10_000, retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "one", sentinelId), queryFn: ({ signal }) => client.get(sentinelId, signal), enabled: Boolean(sentinelId), refetchInterval: 10_000, retry: false });
 }
 export function useSentinelPresets(enabled = true) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "presets"], queryFn: ({ signal }) => client.presets(signal), enabled, staleTime: 5 * 60_000, retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "presets"), queryFn: ({ signal }) => client.presets(signal), enabled, staleTime: 5 * 60_000, retry: false });
 }
 export function useSentinelActivations(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "activations", sentinelId], queryFn: ({ signal }) => client.activations(sentinelId, signal), refetchInterval: 5_000, retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "activations", sentinelId), queryFn: ({ signal }) => client.activations(sentinelId, signal), refetchInterval: 5_000, retry: false });
 }
 export function useSentinelAutomations(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "automations", sentinelId], queryFn: ({ signal }) => client.automations(sentinelId, signal), retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "automations", sentinelId), queryFn: ({ signal }) => client.automations(sentinelId, signal), retry: false });
 }
 export function useSentinelBudget(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "budget", sentinelId], queryFn: ({ signal }) => client.budget(sentinelId, signal), refetchInterval: 30_000, retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "budget", sentinelId), queryFn: ({ signal }) => client.budget(sentinelId, signal), refetchInterval: 30_000, retry: false });
 }
 export function useSentinelTriggers(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "triggers", sentinelId], queryFn: ({ signal }) => client.triggers(sentinelId, signal), retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "triggers", sentinelId), queryFn: ({ signal }) => client.triggers(sentinelId, signal), retry: false });
 }
 export function useSentinelFiles(sentinelId: string) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "files", sentinelId], queryFn: ({ signal }) => client.files(sentinelId, signal), retry: false });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "files", sentinelId), queryFn: ({ signal }) => client.files(sentinelId, signal), retry: false });
 }
 export function useSentinelFile(sentinelId: string, path: string | null) {
-  const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "file", sentinelId, path], queryFn: ({ signal }) => client.file(sentinelId, path!, signal), enabled: path !== null, retry: false, staleTime: 0, gcTime: 0 });
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "file", sentinelId, path), queryFn: ({ signal }) => client.file(sentinelId, path!, signal), enabled: path !== null, retry: false, staleTime: 0, gcTime: 0 });
 }
 
 export function useSentinelMutations() {
-  const { client, scope } = useSentinelClient();
+  const { client, backendId } = useSentinelClient();
   const cache = useQueryClient();
-  const refresh = () => invalidateAll(cache, scope);
+  const refresh = () => invalidateAll(cache, backendId);
   return {
     create: useMutation({ mutationFn: (input: Record<string, unknown>) => client.create(input), onSuccess: refresh }),
     update: useMutation({ mutationFn: (input: { id: string; version: number; fields: Record<string, unknown> }) => client.update(input.id, input.version, input.fields), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (input: { id: string; version: number }) => client.remove(input.id, input.version), onSuccess: (_result, input) => {
-      for (const part of ["one", "files", "file", "activations", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: [...scope, part, input.id] });
-      void cache.invalidateQueries({ queryKey: [...scope, "list"] });
+      for (const part of ["one", "files", "file", "activations", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: queryKeys.sentinels(backendId, part, input.id) });
+      void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "list") });
     } }),
     setPaused: useMutation({ mutationFn: (input: { id: string; paused: boolean; version: number }) => client.setPaused(input.id, input.paused, input.version), onSuccess: refresh }),
     run: useMutation({ mutationFn: (input: { id: string; version: number; task?: string }) => client.run(input.id, input.version, input.task), onSuccess: refresh }),
@@ -127,7 +128,7 @@ export function useSentinelMutations() {
     createTrigger: useMutation({ mutationFn: (input: { id: string; automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string; commentOnPr?: boolean; includeForks?: boolean } }) => client.createTrigger(input.id, { automationId: input.automationId, kind: input.kind, ...(input.schedule ? { schedule: input.schedule } : {}), ...(input.github ? { github: input.github } : {}) }), onSuccess: refresh }),
     updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled: boolean }) => client.updateTrigger(input.id, input.triggerId, input.version, { enabled: input.enabled }), onSuccess: refresh }),
     removeTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string }) => client.removeTrigger(input.id, input.triggerId), onSuccess: refresh }),
-    deleteFile: useMutation({ mutationFn: (input: { id: string; path: string; revision: number }) => client.deleteFile(input.id, input.path, input.revision), onSuccess: (_result, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),
-    saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); void cache.invalidateQueries({ queryKey: [...scope, "file", input.id, input.path] }); } }),
+    deleteFile: useMutation({ mutationFn: (input: { id: string; path: string; revision: number }) => client.deleteFile(input.id, input.path, input.revision), onSuccess: (_result, input) => { void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "files", input.id) }); } }),
+    saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "files", input.id) }); void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "file", input.id, input.path) }); } }),
   };
 }

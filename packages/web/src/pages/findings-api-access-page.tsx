@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyCopyIcon as Copy, CapyApiKeyIcon as KeyRound, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { localControlFetch } from "@/api";
+import { queryKeys } from "@/queries";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ export function FindingsApiAccessPage() {
   const team = useTeamAccess();
   const canManage = !team.enabled || team.user?.role === "owner";
   const cache = useQueryClient();
-  const queryKey = ["findings-api-credentials", team.workspace?.id ?? "personal"];
+  const queryKey = queryKeys.findingsApiCredentials(team.workspace?.id ?? "personal");
   const credentials = useQuery({
     queryKey, enabled: canManage,
     queryFn: async ({ signal }): Promise<{ credentials: ApiCredential[] }> => {

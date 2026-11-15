@@ -58,7 +58,7 @@ import { resumeSavedOnce } from "@/lib/lazy-resume";
 
 /** Host/account-scoped snapshots can be prefetched by history before navigation. */
 export function consoleSnapshotKey(backendId: string, sessionId: string, workspaceId?: string, userId?: string) {
-  return ["console-snapshot", chatHostScopeKey(backendId, workspaceId, userId), sessionId] as const;
+  return queryKeys.consoleSnapshot(chatHostScopeKey(backendId, workspaceId, userId), sessionId);
 }
 
 export interface ConsoleWorkspace {

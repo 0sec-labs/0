@@ -1,4 +1,5 @@
 import { ControlDisclosure } from "./control-disclosure";
+import { queryKeys } from "@/queries";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
@@ -17,7 +18,7 @@ function PendingReports() {
   const [reviewed, setReviewed] = useState(false);
   const [active, setActive] = useState<{ id: string; staged: FeedbackResponse } | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const list = useQuery({ queryKey: ["diagnostics-pending"], queryFn: () => webFetchJson<{ reports: PendingReport[] }>("/api/console/diagnostics/pending") });
+  const list = useQuery({ queryKey: queryKeys.diagnosticsPending(), queryFn: () => webFetchJson<{ reports: PendingReport[] }>("/api/console/diagnostics/pending") });
   const act = useMutation({ mutationFn: async (input: { id: string; action: "preview" | "send" | "discard" }) => {
     if (input.action === "send" && (!active?.staged.previewId || active.id !== input.id || !reviewed)) throw new Error("Preview the report and confirm sending first.");
     const data = await webFetchJson<FeedbackResponse & { discarded?: boolean }>(`/api/console/diagnostics/pending/${input.id}`, jsonBody({ action: input.action, ...(input.action === "send" ? { previewId: active?.staged.previewId } : {}) }));
@@ -27,7 +28,7 @@ function PendingReports() {
     if (action === "preview") { setActive({ id, staged: data }); setNote(null); return; }
     setActive(null);
     setNote(action === "send" ? "Report sent." : "Report discarded. Nothing was sent.");
-    void queryClient.invalidateQueries({ queryKey: ["diagnostics-pending"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.diagnosticsPending() });
   } });
   const reports = list.data?.reports ?? [];
   if (reports.length === 0 && !note) return null;

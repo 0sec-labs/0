@@ -76,6 +76,16 @@ export const queryKeys = {
   teamSession: key("team-session"),
   teamUsers: key("team-users"),
   teamWorkspacePresence: key("team-workspace-presence"),
+  // Sentinels: ["sentinels", backendId, "list" | "one" | ...]
+  sentinels: key("sentinels"),
+  // Command palette and console instructions
+  appSearch: key("app-search"),
+  searchChats: key("search-chats"),
+  diagnosticsPending: key("diagnostics-pending"),
+  consoleInstructions: key("console-instructions"),
+  consoleInstructionsProject: key("console-instructions-project"),
+  consoleSnapshot: key("console-snapshot"),
+  findingsApiCredentials: key("findings-api-credentials"),
   // Hosts
   chatHostHandshake: key("chat-host-handshake"),
   hostSidebarConnection: key("host-sidebar-connection"),

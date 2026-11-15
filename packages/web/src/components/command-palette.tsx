@@ -91,7 +91,7 @@ export function CommandPalette({
   }, [query]);
   // Each source is fetched only while its own tab is active, or on All once a term is typed.
   const sourceEnabled = (own: SearchTab) => open && (tab === own || (tab === "all" && Boolean(searchQuery)));
-  const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: ["app-search", ...scope, name], queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
+  const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: queryKeys.appSearch(...scope, name), queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "automations"));
   const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
   const pluginsQuery = useQuery(lazyList<PluginsResponse>("plugins", "/api/console/plugins", "plugins"));
@@ -115,7 +115,7 @@ export function CommandPalette({
   type ChatSearchResult = { id: string; title: string; preview: string; updatedAt: string; archived: boolean; source: "live" | "saved" };
   type ChatSearchPage = { results: ChatSearchResult[]; hasMore: boolean; nextOffset: number | null; truncated: boolean; previewOnly?: boolean };
   const chatsQuery = useInfiniteQuery({
-    queryKey: ["search-chats", ...scope, searchQuery],
+    queryKey: queryKeys.searchChats(...scope, searchQuery),
     initialPageParam: 0,
     queryFn: async ({ signal, pageParam }): Promise<ChatSearchPage> => {
       const response = await webFetch(`/api/console/search?q=${encodeURIComponent(searchQuery)}&limit=30&offset=${pageParam}`, { signal });

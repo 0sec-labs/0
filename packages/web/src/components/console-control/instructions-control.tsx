@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { queryKeys } from "@/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,8 @@ function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: Instru
   const state = instructionDraftState(file.content, draft, file.maxChars || INSTRUCTIONS_MAX_CHARS);
   const save = useMutation({
     mutationFn: () => webFetchJson<InstructionFile>(instructionsUrl(kind), { method: "PUT", body: instructionSaveBody(kind, draft, file.revision, workspacePath) }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["console-instructions"] }); onClose(); },
-    onError: () => { void queryClient.invalidateQueries({ queryKey: ["console-instructions"] }); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: queryKeys.consoleInstructions() }); onClose(); },
+    onError: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.consoleInstructions() }); },
   });
   return <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
     <SheetContent className="w-full data-[side=right]:sm:max-w-[640px]">
@@ -48,7 +49,7 @@ function InstructionRow({ kind, workspacePath }: { kind: InstructionKind; worksp
   const [open, setOpen] = useState(false);
   const enabled = kind === "global" || Boolean(workspacePath);
   const file = useQuery({
-    queryKey: ["console-instructions", kind, workspacePath ?? null],
+    queryKey: queryKeys.consoleInstructions(kind, workspacePath ?? null),
     enabled,
     queryFn: ({ signal }) => webFetchJson<InstructionFile>(instructionsUrl(kind, workspacePath), { signal }),
   });
@@ -64,7 +65,7 @@ function InstructionRow({ kind, workspacePath }: { kind: InstructionKind; worksp
 /** Operator-owned instructions. Files inside a target repository are never loaded. */
 export function InstructionsSettings() {
   const { webFetchJson } = useBackendApi();
-  const project = useQuery({ queryKey: ["console-instructions-project"], queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), retry: false });
+  const project = useQuery({ queryKey: queryKeys.consoleInstructionsProject(), queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), retry: false });
   return <div className="flex flex-col gap-10">
     <SettingsSection id="settings-instructions" title="Instructions">
       <InstructionRow kind="global" />
