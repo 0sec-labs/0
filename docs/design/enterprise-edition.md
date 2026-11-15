@@ -42,22 +42,22 @@ mapped to what `0` already has:
   plugins. `ZERO_REGISTRY_URL` points the CLI at another registry index.
 - **Scope injection.** The scanner already accepts an in-memory scope.
 
-## Seams that are missing (small, generic open-source changes)
+## Seams added to the open-source engine
 
-Each is useful on its own and should land in `0` as a separate PR:
+All five landed as separate PRs with no behavior change by default (2026-11-15):
 
-1. **Permissions, not route regexes.** Replace the regex lists in `authorizeTeamApi`
+1. **Permissions, not route regexes** (#359, `team-permissions.ts`). Replace the regex lists in `authorizeTeamApi`
    with named permissions and a `PermissionPolicy` that maps role to permissions. The
    default policy reproduces owner / editor / viewer exactly. Enterprise supplies a
    policy with custom roles.
-2. **Identity provider interface.** Put OIDC behind an `IdentityProvider` interface so
+2. **Identity provider interface** (#360, `team-identity-provider.ts`). An installed provider handles `beginSSO` and `callback`; built-in OIDC is untouched when none is installed. Put OIDC behind an `IdentityProvider` interface so
    SAML and SCIM can be supplied by an enterprise plugin without touching the auth core.
-3. **Audit sink.** Route audit writes through a registry so a plugin can mirror or
+3. **Audit sink** (#361, `addAuditSink`). Route audit writes through a registry so a plugin can mirror or
    stream every event. Keep the local log as the default and its scrubbing unchanged.
-4. **Entitlements.** A small `entitlements` module: read a signed license file, verify
+4. **Entitlements** (#362, `entitlements/license.ts`; inert until a public key is pinned in `PINNED_LICENSE_KEYS`). A small `entitlements` module: read a signed license file, verify
    it offline against a pinned public key, expose `has("sso")`-style checks. Without
    a license nothing enterprise loads and nothing in open source changes behavior.
-5. **Plugin signatures.** The plugin docs say registry entries are `unverified` because no
+5. **Plugin signatures** (#363, `ZERO_REGISTRY_PUBLIC_KEY_FILE`). The plugin docs said registry entries are `unverified` because no
    signature verifier is configured. A paid plugin channel needs one before it can be
    trusted. This is the prerequisite for distributing enterprise code as plugins.
 
@@ -104,9 +104,9 @@ Targets and commitments are for Fabian (commercial) and Feza (contracts) to set.
 
 ## Build order
 
-1. Open-source seams, one PR each: permissions, identity provider interface, audit sink,
+1. **Done:** open-source seams, one PR each: permissions, identity provider interface, audit sink,
    entitlements, plugin signature verification.
-2. Create the private repository with the license package and CI.
+2. **Started:** the private repository `0sec-labs/0security-enterprise` exists; first package is the license issuing tool. Still open: generate the signing keys (company decision) and pin the public key.
 3. Ship the first enterprise plugin the first customer actually asks for. Likely
    candidates: audit export, Slack and Jira sinks, SAML. Pick by demand, not by this list.
 4. Support and release process, in parallel with step 3.
