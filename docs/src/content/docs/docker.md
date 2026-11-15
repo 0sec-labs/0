@@ -3,28 +3,18 @@ title: Docker
 description: Run 0 from the ghcr.io/0sec-labs/0 container image.
 ---
 
-Run 0 without installing it. The image is Linux amd64 only and starts the `0` CLI, so arguments after the image name are `0` arguments.
+The image is Linux amd64 only and starts the `0` CLI, so arguments after the image name are `0` arguments.
 
 ```bash
 docker run --rm -e ANTHROPIC_API_KEY=$KEY -v "$PWD:/work" -w /work \
   ghcr.io/0sec-labs/0:latest scan source . --runtime api --depth quick --cost-ceiling 2
 ```
 
-Tags:
-
-```
-ghcr.io/0sec-labs/0:latest
-ghcr.io/0sec-labs/0:<sha>
-ghcr.io/0sec-labs/0:main
-```
-
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/scripts/docker/Dockerfile),
-[`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
-Use a digest or a short-SHA tag when you need repeatable runs. `latest` follows eligible main builds, not a stable release.
+Tags are `latest`, `main` and the short commit SHA. `latest` follows eligible main builds, not a stable release. Pin a digest or a SHA tag for repeatable runs. Sources: [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/scripts/docker/Dockerfile) and [`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
 
 ## Image contents
 
-The runtime image (based on `ubuntu:24.04`) includes:
+The image is based on `ubuntu:24.04` and includes:
 
 | Category | Tools |
 |----------|-------|
@@ -38,15 +28,9 @@ The runtime image (based on `ubuntu:24.04`) includes:
 | **Scripting** | python3, python3-requests, python3-bs4 |
 | **Optional** | SecLists wordlists (`INSTALL_SECLISTS=1` build arg, ~1GB extra) |
 
-## Usage
+## Mounts and state
 
 ```bash
-# Scan source
-docker run --rm \
-  -e ANTHROPIC_API_KEY=$KEY \
-  -v "$PWD:/work" -w /work \
-  ghcr.io/0sec-labs/0:latest scan source .
-
 # Scan a web target
 docker run --rm \
   -e OPENAI_API_KEY=$KEY \
@@ -57,17 +41,14 @@ docker run --rm \
 ```
 
 The container runs as the `ubuntu` user (uid 1000). Mount your working directory
-at `/work` so the container can read source and write reports. Scanning a web target needs a [scope file](/scope/). The image has no state volume, so mount `~/.0` somewhere if you want findings to outlive the container.
+at `/work` so the container can read source and write reports. Scanning a web target needs a [scope file](/scope/). The image has no state volume, so mount a volume at `/home/ubuntu/.0` if you want findings to outlive the container.
 
-## Security model
+## Supply chain
 
-- The image drops privileges to the `ubuntu` user before executing commands
-- `INSTALL_SECLISTS=1` adds optional wordlists. AzureHound is included by default;
-  changing `AZUREHOUND_VERSION` also requires matching recorded checksums
-- Ubuntu packages follow the configured apt repositories; the Dockerfile pins
-  the listed AD Python package versions and verifies AzureHound/FoxGuard downloads
-- The AD tools venv is deliberately not on `PATH` to avoid shadowing system
-  Python packages
+- Commands run as the `ubuntu` user.
+- Ubuntu packages follow the configured apt repositories. The Dockerfile pins the AD Python packages and verifies the AzureHound and FoxGuard downloads.
+- Changing `AZUREHOUND_VERSION` also needs matching checksums in the Dockerfile.
+- The AD tools venv is not on `PATH`, so it cannot shadow system Python packages.
 
 ## Build your own
 
@@ -75,3 +56,5 @@ at `/work` so the container can read source and write reports. Scanning a web ta
 docker build -f scripts/docker/Dockerfile -t 0:local .
 docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
+
+Next: [CI/CD](/ci/github-action/), [Scan web and APIs](/scan-web/).

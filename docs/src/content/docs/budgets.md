@@ -3,7 +3,7 @@ title: Costs and budgets
 description: Cost ceilings, turn limits and price estimates for 0 runs.
 ---
 
-0 has three separate limits: estimated model cost, agent turns and request timeouts. The software is free. Provider, subscription and infrastructure costs still apply.
+0 has three separate limits: estimated model cost, agent turns and request timeouts. Provider and infrastructure costs are yours.
 
 ## Set a cost ceiling
 
@@ -19,7 +19,7 @@ When the estimate passes the ceiling, 0 stops, keeps partial findings and exits 
 
 Commands that take `--cost-ceiling`: `scan web`, `scan source`, `scan package`, `scan deep`, `scan campaign`, `secure`, `bench` and `ingest`.
 
-Limits:
+Gotchas:
 
 - It is a soft stop on estimated usage, not an invoice cap. Calls in flight finish, so each active session can overshoot by one turn.
 - Source and package scans share one ledger across research, per-file sessions and verification. `scan deep` shares one across its planner and finders.
@@ -34,7 +34,7 @@ A turn is one model round trip. It can hold several tool calls.
 | --- | --- |
 | Web and deep scan attack stage | 20 (`quick`), 40 (`default`), 100 (`deep`) |
 | Source and package research and verification | No limit. The agent stops when the work is done. |
-| Browser app chats | No limit per message. `0 console --max-tool-calls <n>` sets one. |
+| Browser app missions | No limit per message. `0 console --max-tool-calls <n>` sets one. |
 
 A larger limit raises the ceiling on work, not the floor. A run that finishes early does not use the rest.
 
@@ -58,22 +58,24 @@ Near the end of a session the agent gets two one-time warnings, at 85% of the li
 
 ## When a budget runs out
 
-0 keeps partial findings and records an incomplete session. An exhausted attack stage can still feed verification and reporting. Read the incomplete-run reason before you trust a partial report. Do not assume every saved finding was reproduced.
+0 keeps partial findings and records an incomplete session. An exhausted attack stage can still feed verification and reporting. Read the incomplete-run reason before you trust a partial report, and do not assume every saved finding was reproduced.
 
-With a database attached, loops checkpoint every two turns. Resume does not replay requests that were in flight.
+Loops checkpoint every two turns when a database is attached. Resume does not replay requests that were in flight.
 
 ## Cost estimates
 
 The estimator prices input, output, cached-input and cache-write tokens from a bundled rate table. An unknown model price is unknown, not zero.
 
-- Gateway prices can differ from direct-provider prices. A matching model name does not mean a matching bill.
+- Gateway prices can differ from direct-provider prices, even for the same model name.
 - Subscription routes (ChatGPT Codex, coding plans) have their own allowances. Token-dollar estimates do not show remaining quota.
 - Failed or cancelled requests can use provider capacity without usage reaching the CLI. Check your provider invoice.
 
 ## Choosing a depth
 
-Use `quick` for a short pass, `default` for routine work and `deep` when the target warrants more. Set a dollar ceiling and a provider-side spending limit as separate controls.
+Use `quick` for a short pass, `default` for routine work and `deep` when the target needs more. Set a dollar ceiling and a provider-side spending limit as separate controls.
 
-A repeated run can take a different path and repeats the spend. A run with no findings does not prove the target is secure.
+A repeated run can take another path and spends again. A run with no findings does not prove the target is secure.
 
-Provider retry settings are on [Configuration](/configuration/#retries-and-timeouts).
+## Next
+
+[Configuration](/configuration/#retries-and-timeouts) for retry settings, [Models and keys](/models/), [CI/CD](/ci/github-action/).

@@ -1,15 +1,11 @@
 ---
 title: Third-party notices
-description: Attribution and licences for the colour palettes bundled in the web console.
+description: Attribution and licenses for the color palettes bundled in the browser app.
 ---
 
-The web console ships ten colour themes under Settings, Appearance, Theme. Only
-the palette colour values (a handful of hex codes per theme) are used. Each
-upstream project is licensed under the MIT licence, and its copyright line is
-reproduced below as that licence requires. The full licence text is in the
-`LICENSE` file at the linked source.
+The browser app has ten color themes under Settings, Appearance. Zero is our own. The other nine use palette color values (a few hex codes each) from the projects below. Each is MIT licensed, and its copyright line is reproduced here as the license requires. The full text is in the `LICENSE` file at each source.
 
-| Theme | Copyright | Licence | Source |
+| Theme | Copyright | License | Source |
 |---|---|---|---|
 | Dracula (and Alucard) | Copyright (c) 2023 Dracula Theme | MIT | [dracula/dracula-theme](https://github.com/dracula/dracula-theme/blob/main/LICENSE) |
 | Nord | Copyright (c) 2016-present Sven Greb | MIT | [nordtheme/nord](https://github.com/nordtheme/nord/blob/develop/license) |
@@ -22,9 +18,9 @@ reproduced below as that licence requires. The full licence text is in the
 | Gruvbox | Copyright (c) 2018 Pavel Pertsev | MIT | [gruvbox-community/gruvbox](https://github.com/gruvbox-community/gruvbox/blob/master/LICENSE.md) |
 
 Gruvbox is credited to the MIT-licensed community fork; the original
-(morhetz/gruvbox) states MIT/X11 in its README but has no licence file.
+(morhetz/gruvbox) states MIT/X11 in its README but has no license file.
 
-## MIT licence
+## MIT license
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 the palettes and associated documentation files (the "Software"), to deal in the

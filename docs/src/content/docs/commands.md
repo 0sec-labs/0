@@ -6,12 +6,9 @@ tableOfContents:
   maxHeadingLevel: 2
 ---
 
-Find the command, arguments, and options for your task. This reference covers
-**27 top-level commands** and their registered subcommands.
+Pick your task below, or search for a command name.
 
-New to 0? Start with the [Quickstart](/), then [Scan code](/scan-code/) or
-[Scan web and APIs](/scan-web/). Settings and environment variables are on
-[Configuration](/configuration/).
+New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan web and APIs](/scan-web/). Settings and environment variables are on [Configuration](/configuration/).
 
 ## Start by task
 
@@ -36,7 +33,7 @@ New to 0? Start with the [Quickstart](/), then [Scan code](/scan-code/) or
   </section>
   <section class="docs-task-card">
     <h3>Automate</h3>
-    <p>Run saved automations, drive 0 from CI, and connect coding agents.</p>
+    <p>Run saved automations, use 0 in CI, and connect coding agents.</p>
     <p><a href="#automation">automation</a> · <a href="#mcp-server">mcp-server</a> · <a href="#api">api</a></p>
     <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">Agents and MCP</a></p>
   </section>

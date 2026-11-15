@@ -3,11 +3,11 @@ title: Remote engines and teams
 description: Run a 0 engine on a server or VM, connect to it from the browser, CLI or MCP, and share a workspace with teammates.
 ---
 
-An engine owns missions, automation runs, workspace paths and execution. Selecting another engine changes where work runs. It does not select a model, copy a repository or turn a model provider into a remote execution service.
+An engine owns missions, automation runs, workspace paths and execution. Choosing another engine changes where work runs. It does not pick a model or copy a repository.
 
 ## Deploy a worker
 
-The fastest way to get a remote engine is `0 worker deploy`. It installs 0 on a Linux host, starts an engine, opens a tunnel and registers it.
+`0 worker deploy` installs 0 on a Linux host, starts an engine, opens a tunnel and registers it.
 
 ```bash
 0 worker hosts                         # SSH hosts from ~/.ssh/config
@@ -36,9 +36,9 @@ The browser app also deploys workers from its engine selector.
 
 ## Run an engine by hand
 
-Install 0 on the server. Give the server its own model connection (see [Models and keys](/models/)) and prepare its repositories, scope and any VM, Docker or replay prerequisites there.
+Install 0 on the server. Give it its own model connection (see [Models and keys](/models/)) and prepare its repositories, scope and any VM or Docker prerequisites there.
 
-Set one secret of 32 to 4096 non-whitespace characters in `ZERO_REMOTE_ENGINE_TOKEN` (any variable name works) on the server and on the machine that connects. It is separate from the browser control token. Start an engine admitted to one repository:
+Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start an engine admitted to one repository:
 
 ```bash
 0 web --host 127.0.0.1 --port 48123 --no-open \
@@ -63,7 +63,7 @@ Keep the listener on loopback and reach it through an SSH tunnel:
 ssh -N -L 48124:127.0.0.1:48123 user@server
 ```
 
-HTTPS endpoints work too. Plain HTTP is accepted only for loopback. The endpoint must speak the versioned engine handshake and authenticated control API. A model provider URL or arbitrary HTTP service does not qualify.
+HTTPS endpoints work too. Plain HTTP is accepted only for loopback. The endpoint must speak the versioned engine handshake and authenticated control API. A model provider URL or other HTTP service does not qualify.
 
 ## Register the engine
 
@@ -149,7 +149,7 @@ For a direct call to an engine API, use `0 api`:
 
 ## Team workspaces
 
-Local use needs no account. Turn on team mode when several people should share one engine and its missions.
+Local use needs no account. Use team mode when several people share one engine and its missions.
 
 In the browser app, choose **Team**, enter a workspace name, your display name, account ID and password, and you are signed in as owner. Add editors and viewers from **Team settings** in the account menu. Only owners add accounts.
 
@@ -189,6 +189,6 @@ Add an `oidc` object and give each member the provider's verified `oidcSub`. Nam
 
 Register the exact callback URL with your provider. Omit `clientSecretEnv` for a public client. Sign-in uses the authorization code flow with PKCE and checks issuer, audience, nonce and signature. Session cookies are HTTP-only and last eight hours.
 
-## Related
+## Next
 
 [Architecture](/architecture/#execution-ownership-and-engine-connections), [Automations](/automations/), [Agents and MCP](/mcp/), [Reports and disclosure](/reports/).

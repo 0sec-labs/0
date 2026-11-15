@@ -3,13 +3,27 @@ title: Verification result schema
 description: The JSON that deterministic replay verifiers emit.
 ---
 
-The replay paths of `0 verify` emit the canonical `VerificationResult` from
-`packages/engine/src/shared/verification.ts`. This is separate from human triage,
-research evidence envelopes, kernel-finding verification and the aggregate
-reproduction-bundle result. It describes what the selected runner observed;
-it does not imply that every finding in a scan was replayed.
+`0 verify` replay paths write a `VerificationResult`, defined in `packages/engine/src/shared/verification.ts`. It records what the selected runner observed. It does not mean every finding in a scan was replayed, and it is separate from triage state and kernel-finding verification.
 
-## Result schema
+## Run a replay
+
+```bash
+# Run a reviewed finding's PoC on the host and keep the replay directory
+0 verify ./finding.json --runner local --out ./replay --output ./verification.json
+
+# Isolated container replay; provision the images first
+0 verify ./finding.json --runner docker --out ./replay-docker
+```
+
+`--out` is the replay directory. `--output` is the result JSON.
+
+- `local` runs shell steps on the host. A temporary working directory is not an OS sandbox.
+- `docker` uses fresh restricted containers with no network. Networked HTTP replay needs `--scope` and `--docker-network`. Shell commands never get that network.
+- `qemu` needs a kernel and static BusyBox and runs shell steps in an offline guest.
+
+Exit codes: `0` reproduced, `1` not reproduced, `2` skipped, `3` error.
+
+## Schema
 
 ```typescript
 type VerificationStatus = "reproduced" | "not_reproduced" | "error" | "skipped";
@@ -54,47 +68,30 @@ interface VerificationResult {
 }
 ```
 
-`agent_assisted` is a schema-reserved mode, not an automatic fallback promised
-by the deterministic runner. Import `VerificationResultSchema` from
-`@0/engine/shared` for runtime validation. Artifact SHA-256 values are 64 hex
-characters; paths alone are not integrity evidence.
+`agent_assisted` is reserved. The deterministic runner never falls back to it. Import `VerificationResultSchema` from `@0/engine/shared` to validate a result at runtime.
 
-## Status semantics
+## Status
 
 | Status | Meaning |
 |--------|---------|
-| `reproduced` | The producer's required assertions passed. Review whether those assertions actually establish the exploit. |
-| `not_reproduced` | The exploit condition was not established. The general replay runner also uses this when steps run but no assertions were declared. |
-| `skipped` | No replay was performed, such as a finding without `pocSteps`. |
-| `error` | An execution/setup failure prevented a reliable result, such as an unsupported executable step or timeout. |
+| `reproduced` | The producer's required assertions passed. Check that they establish the exploit. |
+| `not_reproduced` | The exploit condition was not established. Also used when steps ran but no assertions were declared. |
+| `skipped` | No replay ran, for example a finding without `pocSteps`. |
+| `error` | A setup or execution failure, such as an unsupported step or a timeout, prevented a result. |
 
-**`status` is not the finding's human triage state.** It's an automated proof signal; a maintainer can still accept, suppress, or reopen after reviewing the evidence.
+`status` is an automated proof signal, not the finding's triage state. A maintainer can still accept, suppress or reopen the finding after reading the evidence.
 
-The canonical statuses do **not** include `inconclusive`. The older fixture
-helper uses that status internally; the CLI converts it to `skipped`. Other
-verification families can legitimately use `inconclusive` in their own schemas.
-Replay CLI exits are `0` reproduced, `1` not reproduced, `2` skipped and `3` error.
+`inconclusive` is not a canonical status. The CLI converts it to `skipped`.
 
-`evidence_kind` and `oast_confirmed` are optional provenance signals. An
-out-of-band callback is different from an in-band replay assertion; absence of
-these fields is not a negative verdict. A consumer must validate the producing
-path and retained evidence rather than trusting user-authored JSON as proof.
+`evidence_kind` and `oast_confirmed` are optional provenance. An out-of-band callback differs from an in-band assertion, and a missing field is not a negative verdict. Validate the producing path and the retained evidence. Do not treat user-written JSON as proof.
 
 ## Commands
 
-Each record captures the real command the verifier ran:
+Each entry records a command the verifier ran:
 
 ```json
 {
-  "argv": [
-    "paperclip",
-    "company",
-    "export",
-    "--api",
-    "http://127.0.0.1:50345",
-    "--output",
-    "/tmp/0-verify-a1b2/export"
-  ],
+  "argv": ["paperclip", "company", "export", "--api", "http://127.0.0.1:50345", "--output", "/tmp/0-verify-a1b2/export"],
   "exit_code": 0,
   "stdout_excerpt": "wrote /tmp/0-verify-a1b2/escaped-marker\n",
   "stderr_excerpt": "",
@@ -102,58 +99,19 @@ Each record captures the real command the verifier ran:
 }
 ```
 
-`argv` must point at the implementation under test. A fixture may provide servers, files, directories, and placeholders, but it must not synthesize the vulnerable behavior the finding is supposed to verify.
+`argv` must run the implementation under test. A fixture can provide servers, files and placeholders. It must not fake the vulnerable behavior.
 
 ## Assertions
 
-Assertions are machine-checkable observations, not model confidence scores.
-The general runner evaluates each `pocSteps[].expect` and any SDK-supplied
-assertions. No assertions means no reproduced verdict, even for exit code zero.
-
-The older CLI path-traversal fixture evaluates these additional internal
-predicates before the CLI converts them to the shared assertion shape:
-
-| Kind | Purpose |
-|------|---------|
-| `filesystem_exists` | A marker file exists at the escaped path. |
-| `filesystem_not_exists` | The marker was not written inside the selected export root. |
-| `path_outside_export_root` | The escaped marker realpath is outside the export directory. |
-| `path_inside_sandbox` | The escaped marker stayed inside the verifier sandbox. |
-| `no_home_profile_touch` | The replay didn't write to the home directory or shell profile files. |
-
-Deterministic code evaluates the final assertions.
+Assertions are machine-checkable observations, not model confidence. The runner evaluates each `pocSteps[].expect` and any SDK-supplied assertions. With no assertions there is no `reproduced` verdict, even when the exit code is zero.
 
 ## Artifacts
 
-The current JSON contract uses `evidence_artifacts`, not an `artifacts` map.
-Each descriptor has a kind, path and SHA-256; retained stream captures from the
-general runner live under `<runDir>/artifacts/`. Command excerpts are capped at
-8 KiB and captures at 1 MiB per stream, so a saved capture is not necessarily
-unbounded output.
+`evidence_artifacts` lists each retained file with its kind, path and SHA-256. The general runner keeps stream captures under `<runDir>/artifacts/`. Command excerpts are capped at 8 KiB and captures at 1 MiB per stream. A path alone is not integrity evidence. Check the hash.
 
-Choose the invocation and storage contract deliberately:
+## Fixture example
 
-```bash
-# Execute a reviewed finding's PoC on the host and retain the replay directory
-0 verify ./finding.json --runner local --out ./replay --output ./verification.json
-
-# Isolated container replay; provision the required images beforehand
-0 verify ./finding.json --runner docker --out ./replay-docker
-```
-
-`local` runs shell steps on the host; a temporary working directory is **not**
-an OS sandbox. Docker uses fresh restricted containers and no network by default.
-Explicit networked Docker HTTP replay requires `--scope` and `--docker-network`;
-arbitrary shell commands do not receive that network access. QEMU requires a
-kernel and static BusyBox and runs shell steps in an offline guest.
-
-The fixture path cleans its temporary sandbox by default. Its
-`--retain-artifacts` / `--artifact-dir` flags apply **only to `--fixture`**.
-For the general replay runner use `--out`; use `--output` for the result JSON.
-
-## CLI path traversal example
-
-The `cli-path-traversal` fixture starts a malicious local API, creates a sandboxed export directory, and runs the real CLI argv from `--fixture-command`.
+The `cli-path-traversal` fixture starts a malicious local API, creates a sandboxed export directory and runs the argv you pass in `--fixture-command`.
 
 ```bash
 0 verify --fixture cli-path-traversal \
@@ -161,64 +119,10 @@ The `cli-path-traversal` fixture starts a malicious local API, creates a sandbox
   --retain-artifacts
 ```
 
-Historical fixture-helper example (engine `0.7.13`, 2026-05-06), retained below
-as an example of the **legacy internal fixture shape**, not a new run or the
-current CLI schema. The CLI now adds duration/engine metadata, converts
-assertions and hashes surviving fixture files into `evidence_artifacts`.
-
-```json
-{
-  "status": "reproduced",
-  "mode": "deterministic_replay",
-  "finding_id": "fixture:cli-path-traversal",
-  "engine_version": "0.7.13",
-  "started_at": "2026-05-06T07:23:02.223Z",
-  "completed_at": "2026-05-06T07:23:02.510Z",
-  "commands": [
-    {
-      "argv": [
-        "paperclip",
-        "company",
-        "export",
-        "--api",
-        "http://127.0.0.1:50345",
-        "--output",
-        "/tmp/0-verify-a1b2/export"
-      ],
-      "exit_code": 0,
-      "stdout_excerpt": "wrote /tmp/0-verify-a1b2/escaped-marker\n",
-      "stderr_excerpt": ""
-    }
-  ],
-  "assertions": [
-    {
-      "kind": "filesystem_exists",
-      "passed": true,
-      "detail": "escaped marker exists at /tmp/0-verify-a1b2/escaped-marker"
-    },
-    {
-      "kind": "path_outside_export_root",
-      "passed": true,
-      "detail": "escaped marker realpath /tmp/0-verify-a1b2/escaped-marker is outside export root /tmp/0-verify-a1b2/export"
-    },
-    {
-      "kind": "path_inside_sandbox",
-      "passed": true,
-      "detail": "escaped marker stayed inside sandbox /tmp/0-verify-a1b2"
-    }
-  ],
-  "artifacts": {
-    "sandbox_ref": "/tmp/0-verify-a1b2",
-    "harness_ref": "/tmp/0-verify-a1b2/harness/harness.json",
-    "stdout_ref": "/tmp/0-verify-a1b2/stdout.log",
-    "stderr_ref": "/tmp/0-verify-a1b2/stderr.log",
-    "export_ref": "/tmp/0-verify-a1b2/export"
-  },
-  "summary": "CLI path traversal replay wrote a marker outside the selected export directory inside the sandbox.",
-  "error_reason": null
-}
-```
+`--retain-artifacts` and `--artifact-dir` apply only to `--fixture`. The fixture cleans its temporary sandbox by default.
 
 ## Consuming results
 
-The result and its retained artifacts are local files. Validate the JSON against the schema above before you store it. Scheduling, authorization and storage belong to your own tooling. Emitting JSON locally does not upload or publish anything.
+The result and its artifacts are local files. Validate the JSON against the schema before you store it. Emitting it uploads nothing. Scheduling, authorization and storage are up to your tooling.
+
+Next: [Verify and fix](/verify-and-fix/), [Findings](/findings/).

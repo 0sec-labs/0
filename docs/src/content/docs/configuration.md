@@ -5,7 +5,7 @@ description: Execution profile, runtime modes, state directory, 0 config, enviro
 
 Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models and keys](/models/).
 
-## Quick reference
+## Quick start
 
 ```bash
 0 config show                    # effective settings, each labelled default, global or project
@@ -33,7 +33,7 @@ Set up the workbench, then start the app:
 0
 ```
 
-Setup downloads the pinned VM runtime and approves a digest-pinned local image archive. It never trusts a mutable registry tag. The native runtime is qualified for Apple Silicon macOS.
+Setup downloads the pinned VM runtime and approves a digest-pinned local image archive. It never trusts a mutable registry tag. The native runtime is qualified on Apple Silicon macOS.
 
 | `setup` option | Default | Effect |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Setup downloads the pinned VM runtime and approves a digest-pinned local image a
 | `--cpus`, `--memory <MiB>`, `--storage <GiB>` | `2`, `4096`, `20` | Guest resources. |
 | `--sandbox-image <reference=archive>` | none | Approve a `repository@sha256:<64 hex>` image for isolated container actions. Repeat for more. |
 
-Other commands:
+Change it later:
 
 ```bash
 0 workbench configure --provider openai,anthropic --no-github   # replace grants
@@ -76,9 +76,9 @@ Rules:
 | `gemini` | Runs the signed-in Gemini CLI. |
 | `ollama` | Local Ollama for source review. Needs a tool-calling model. |
 
-`--model` does not select a runtime. Pass `--runtime api` when you want the provider rules from [Models and keys](/models/) rather than workflow-based selection.
+`--model` does not select a runtime. Pass `--runtime api` to use the provider rules in [Models and keys](/models/) instead of workflow-based selection.
 
-The CLI runtimes need the CLI installed and signed in first (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`):
+The `claude`, `codex` and `gemini` runtimes need that CLI installed and signed in (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`):
 
 ```bash
 0 scan source ./my-repo --runtime claude --depth deep
@@ -94,11 +94,11 @@ The model is `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`. A remote `O
 
 ## Common flags
 
-Full flags are in the [CLI reference](/commands/). These are the ones that change behavior most.
+The full list is in the [CLI reference](/commands/). These change behavior most.
 
 | Flag | Values | Notes |
 | --- | --- | --- |
-| `--depth` | `quick`, `default`, `deep` | A larger or smaller investigation budget. Not a test count. See [Costs and budgets](/budgets/). |
+| `--depth` | `quick`, `default`, `deep` | Sets the investigation budget, not a test count. See [Costs and budgets](/budgets/). |
 | `--format` | `terminal`, `json`, `md`, `html`, `sarif`, `pdf` | `html` and `pdf` are saved to a temporary file. |
 | `--diff-base <ref>` | git ref | Diff-aware source review. Add `--changed-only` to limit leads to changed files. |
 | `--cost-ceiling <usd>` | number | Stop when estimated cost passes the limit. |
@@ -130,7 +130,7 @@ Project settings live in `<project>/.0/tui-settings.json`.
 
 Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
 
-Mission transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. Protection is file permissions (`0600` files, `0700` directory).
+Mission transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
 
 ## The `0 config` command
 
@@ -152,7 +152,7 @@ Two conversation settings are worth knowing. `titleInstructions` (up to 500 char
 
 ### Development engine updates
 
-Turn on **Development engine updates** in global settings only for a source checkout you trust. The loaded code runs with the host permissions of the console process, including credential access. Run a development console from a checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
+Enable **Development engine updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed engine code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
 
 ## Environment variables
 
@@ -233,7 +233,7 @@ Three separate switches. Each is global to your computer. Project settings canno
 
 | Setting | Default | Values |
 | --- | --- | --- |
-| **Data sharing** (`analyticsLevel`) | `usage` | `off`, `usage` |
+| **Usage metrics** (`analyticsLevel`) | `usage` | `off`, `usage` |
 | **Problem reports** (`diagnosticReporting`) | `ask` | `off`, `ask`, `automatic` |
 | **Updates** (`updatePolicy`) | `automatic` | `off`, `notify`, `automatic` |
 
@@ -247,7 +247,7 @@ These variables force everything off when set to a non-empty value other than `0
 env ZERO_ANALYTICS_LEVEL=off 0
 ```
 
-Change the settings in the browser app under Settings, **Privacy**. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
+Change them in the browser app under Settings, Agents. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
 
 `/feedback <message>` in a mission saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 

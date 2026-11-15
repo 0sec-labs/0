@@ -3,47 +3,34 @@ title: Kernel VM verification
 description: Build and configure the QEMU guest used by 0 research ingest --verify.
 ---
 
-`0 research ingest --verify` runs C reproducers inside a local QEMU guest and compares
-the guest `dmesg` against the imported kernel crash report. Without the VM,
-kernel verification is static-only.
+`0 research ingest --verify` runs C reproducers in a local QEMU guest and compares the guest `dmesg` with the imported kernel crash report. Without the VM, kernel verification is static only.
 
-For choosing between `ingest --verify`, `research linux`,
-`research linux-matrix`, dynamic-witness hunting, and weaponization, see
-[Research Workflows](/research-workflows/). Importing an external boot matrix
-does not execute the boots; a source checkout alone does not provision the guest.
+To choose between `ingest --verify`, `research linux`, `research linux-matrix`, dynamic-witness hunting and weaponization, see [Specialist research](/research-workflows/). Importing an external boot matrix does not run the boots, and a source checkout does not provision the guest.
 
 ## What the repo provides
 
-A maintained build recipe at `packages/engine/src/triage/kernel-vm/` builds:
+The build recipe in `packages/engine/src/triage/kernel-vm/` produces:
 
-- `bzImage` — Linux 6.8.12 for x86_64. The recipe requests KASAN, UBSAN,
-  KCSAN, lock debugging, RCU stall detection, and virtio/9p/ext4/NFS/Bluetooth/WiFi/SCTP
-  support; inspect the generated config rather than assuming every requested
-  option survives `olddefconfig`. Tree builds use separate `kasan` and `kcsan` profiles.
-- `rootfs.img` — 512 MB Debian Bookworm ext4 with `gcc`, `binutils`, `make`,
-  `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0-init`.
-- `kernel.config` — the exact config used for the build.
-- `osec_vm_key[.pub]` — root SSH keypair for manual debugging only (the verifier
-  uses a QEMU 9p share, not SSH).
+- `bzImage`: Linux 6.8.12 for x86_64. The recipe requests KASAN, UBSAN, KCSAN, lock debugging, RCU stall detection and virtio, 9p, ext4, NFS, Bluetooth, WiFi and SCTP support. Read the generated config, because not every requested option survives `olddefconfig`. Tree builds use separate `kasan` and `kcsan` profiles.
+- `rootfs.img`: a 512 MB Debian Bookworm ext4 image with `gcc`, `binutils`, `make`, `procps`, `kmod`, `strace`, `gdb`, OpenSSH and `/sbin/0-init`.
+- `kernel.config`: the exact config used.
+- `osec_vm_key[.pub]`: a root SSH keypair for manual debugging. The verifier uses a 9p share, not SSH.
 
-Prebuilt artifacts are not committed. Build locally; the earlier kernel-validator
-GitHub Actions workflows are not present in this checkout.
+Prebuilt artifacts are not committed. Build them locally.
 
 ## Requirements
 
 - Docker (reproducible guest build)
 - QEMU (`qemu-system-x86_64`)
 - ~20 GB free disk for the build cache
-- Enough guest memory (default 2048 MB)
-- Optional KVM acceleration on Linux; macOS/CI run without it, but may need
-  higher boot/reproducer timeouts.
+- 2048 MB of guest memory by default
+- Optional KVM on Linux. Without it (macOS, CI) raise the boot and reproducer timeouts.
 
 ## Build recipe
 
-From the repo root:
+From the repo root. Docker builds the guest. Running it needs the 0 CLI and QEMU.
 
 ```bash
-# Docker builds the guest; the published 0 CLI and QEMU are needed to run it.
 cd packages/engine/src/triage/kernel-vm
 env ZERO_KERNEL_VM_MAKE_JOBS=4 \
   ./build.sh "$HOME/.0/kernel-vm/linux-6.8.12-kasan"
@@ -60,14 +47,12 @@ $HOME/.0/kernel-vm/linux-6.8.12-kasan/
   osec_vm_key.pub
 ```
 
-Treat the output directory as a local cache; regenerate it when the Dockerfile,
-kernel version, or guest package list changes.
+Treat the output directory as a cache. Rebuild it when the Dockerfile, kernel version or guest package list changes.
 
 <span id="configure-0"></span>
 ## Configure 0
 
-Required values must be passed with `env`: `ZERO_*` names begin with a digit and
-cannot be exported by POSIX shells.
+`ZERO_*` names start with a digit, so POSIX shells cannot export them. Pass them with `env`:
 
 ```bash
 env \
@@ -76,42 +61,25 @@ env \
   ZERO_KERNEL_QEMU_DISK="$HOME/.0/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
   ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
   ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
-  0 research ingest --verify ./crashes
-```
-
-Recommended local defaults can be added to the same command:
-
-```bash
-env \
-  ZERO_KERNEL_QEMU=1 \
-  ZERO_KERNEL_QEMU_KERNEL="$HOME/.0/kernel-vm/linux-6.8.12-kasan/bzImage" \
-  ZERO_KERNEL_QEMU_DISK="$HOME/.0/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
-  ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
-  ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
-  ZERO_KERNEL_QEMU_MEMORY_MB=2048 \
-  ZERO_KERNEL_QEMU_SMP=2 \
-  ZERO_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
-  ZERO_KERNEL_QEMU_TIMEOUT_SEC=60 \
   ZERO_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0/kernel-vm/runs" \
   0 research ingest --verify ./crashes
 ```
 
-On Linux hosts with KVM, add `ZERO_KERNEL_QEMU_ACCEL=kvm` to that `env` invocation.
+The settings apply to that one command only. Memory, CPU count and timeouts have defaults, listed under [Environment variables](#environment-variables).
 
-Leave `ZERO_KERNEL_QEMU_APPEND` unset unless using a custom guest. Default:
+On Linux with KVM, add `ZERO_KERNEL_QEMU_ACCEL=kvm`.
+
+Leave `ZERO_KERNEL_QEMU_APPEND` unset unless you use a custom guest. Default:
 
 ```text
 console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0-init
 ```
 
-The release above applies only to the unmodified 6.8.12 recipe. For custom
-images, supply the exact built release, including any local-version suffix.
-Direct VM execution requires the expected release and a real config for receipt
-binding; a filename is not provenance.
+The release above fits only the unmodified 6.8.12 recipe. For custom images, give the exact built release, including any local-version suffix. Direct VM execution needs the expected release and the config for receipt binding. A filename is not provenance.
 
 ## Run verification
 
-Place crash reports and reproducers in one directory; file stems are matched:
+Put crash reports and reproducers in one directory. File stems are matched:
 
 ```text
 crashes/
@@ -125,17 +93,16 @@ crashes/
 0 research ingest ./crashes --verify --output json
 ```
 
-Run this with the same `env` settings as above; they apply only to that one
-command and are not saved by the first invocation.
+Run it with the same `env` settings as above.
 
-For a standalone reproducer, use a source tree and the current profile flag:
+For one reproducer and a source tree:
 
 ```bash
 0 research ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
   --kernel-config kasan --output json
 ```
 
-This resolves/builds cached artifacts (default `~/.0/kernel-cache`, override
+This builds and caches artifacts (default `~/.0/kernel-cache`, override
 with `--kernel-cache-dir` or `ZERO_KERNEL_BUILD_CACHE`). Built-in profiles are
 `kasan`, `kcsan`, and `plain`. Existing `ZERO_KERNEL_QEMU_KERNEL`/`DISK` overrides
 take precedence unless `--force-kernel-build` is used, so unset those overrides
@@ -157,8 +124,7 @@ capabilities, sets `no_new_privs`, and binds a hashed receipt to a nonce and the
 reproducer digest; missing or inconsistent evidence falls back to privileged.
 
 Schema-v2 receipts also bind a staged copy of the `bzImage`, its config SHA-256,
-and the expected kernel release; QEMU boots the staged image and the host
-re-hashes it before and after. The guest supplies its runtime release
+and the expected kernel release; QEMU boots the staged image, and the host re-hashes it before and after. The guest supplies its runtime release
 (`/proc/sys/kernel/osrelease`) and boot UUID; a release mismatch, malformed or
 repeated UUID, or staged-image change invalidates the gate. This catches
 ordinary label/artifact mixups but is **not** hardware attestation (no TPM /
@@ -206,12 +172,9 @@ SSH is not part of the contract; the keypair is only for manual debugging.
 | `ZERO_KERNEL_QEMU_SHARE_TAG` | No | `osecshare` | 9p mount tag |
 | `ZERO_KERNEL_QEMU_ARTIFACT_DIR` | No | - | Where per-run artifacts are preserved |
 
-## Troubleshooting
+## Troubleshoot
 
-If the VM exits early, inspect `serial.log` in the configured artifact directory.
-The retained manual smoke script is `scripts/kernel-validator-e2e.sh`; it expects
-built `packages/cli/dist/index.js`, downloads a syzbot report/reproducer, and uses
-your configured VM artifacts. It is not a current GitHub Actions workflow.
+If the VM exits early, read `serial.log` in the artifact directory. The manual smoke script `scripts/kernel-validator-e2e.sh` needs a built `packages/cli/dist/index.js`, downloads a syzbot report and reproducer, and uses your VM artifacts.
 
 ## Batch validation
 
@@ -222,4 +185,6 @@ Supply the VM configuration above and a built CLI for actual execution.
 `--dry-run` writes skipped summaries without QEMU and is not reproduction proof.
 Outputs include `summary.json`, `summary.md`, per-case results, raw CLI output,
 and retained VM artifacts. Inspect `verified`, `crashMatch`, and `reason`:
-`reproduced` alone can mean execution occurred without a recognized crash.
+`reproduced` alone can mean the run executed without a recognized crash.
+
+Next: [Specialist research](/research-workflows/), [Verification result schema](/verification-result/).
