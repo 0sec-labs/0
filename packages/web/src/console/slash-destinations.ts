@@ -13,7 +13,6 @@ export const SLASH_DESTINATIONS: Record<string, string> = {
   ops: "/dashboard",
   skills: "/plugins/skills",
   plugins: "/plugins",
-  scope: "/project",
   doctor: "/doctor",
   fix: "/fix",
 };

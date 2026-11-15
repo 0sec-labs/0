@@ -553,7 +553,6 @@ const COMMAND_SUMMARIES: Record<string, string> = {
   connect: "Connect a provider",
   usage: "Check usage and cost",
   back: "Go back",
-  scope: "Manage approved scope",
   doctor: "Check your setup",
   exit: v("Close this {mission}"),
 };
