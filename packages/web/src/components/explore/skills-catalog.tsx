@@ -49,7 +49,7 @@ export function CatalogRow({ skill, publishers }: { skill: CatalogSkill; publish
   const publisher = publishers[skill.publisher];
   return <Cell to={catalogSkillPath(skill.id)} interactive={false} name={skill.title} description={catalogSummary(skill.summary)}
     tile={<CatalogTile skill={skill} publisher={publisher} />}
-    trailing={<span className="flex flex-col items-end gap-0.5 text-sm"><StarCount count={skill.stars} />{skill.installed ? <span className="inline-flex items-center gap-1 text-muted-foreground-1"><Check aria-hidden="true" className="size-3.5" />Added</span> : <span className="max-w-28 truncate text-muted-foreground-2">{publisher?.name ?? skill.publisher}</span>}</span>} />;
+    trailing={<span className="flex flex-col items-end gap-0.5 text-sm"><StarCount count={skill.stars} /><span className="inline-flex max-w-32 items-center gap-1 text-muted-foreground-2">{skill.installed && <Check role="img" aria-label="Added" className="size-3.5 shrink-0 text-muted-foreground-1" />}<span className="truncate">{publisher?.name ?? skill.publisher}</span></span></span>} />;
 }
 
 /** The ranked "From GitHub" list in two columns of rows. */
@@ -62,7 +62,7 @@ export function GithubSkillsSection({ query }: { query: string }) {
     {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {data && rows.length === 0 && !query.trim() && <p className="text-sm text-muted-foreground-2">No skills are listed in this view.</p>}
-    {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
+    {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
   </section>;
 }
 

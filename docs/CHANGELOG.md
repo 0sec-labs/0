@@ -14,6 +14,7 @@ on the GitHub Release tag.
 
 ### Changed
 
+- Explore and Skills rows show real brand logos: each connector mark sits on its brand colour in a 48 px tile (white or black glyph, whichever reads better), skills show the publisher's avatar with stars and the owner's name at the right, and none of it is fetched from a third-party site. Slack and Teams stay a brand-coloured letter tile.
 - The sidebar has seven items and no More menu: New thread, Findings, Automations, Skills, Memory, Computers and Explore. Computers is always listed and no longer appears under Settings.
 - Skills has its own sidebar entry with **Installed** and **Browse** tabs. The GitHub skills directory moved from Explore to Skills > Browse, and Explore keeps Plugins and Themes. Old `/plugins/explore?tab=skills` links redirect to Skills > Browse.
 - The thread composer dock is tighter and cleaner: the transcript no longer dims its last lines above the composer, there is less empty space under the footer row, and the Scroll to latest pill is smaller and sits clear of the card.

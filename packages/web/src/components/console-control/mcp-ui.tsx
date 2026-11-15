@@ -8,7 +8,7 @@ import { safeLogo, type KeyValueRow } from "./mcp-model";
 /** Logo tile that only ever renders a same-origin image; anything else falls back to the supplied icon. */
 export function EntryLogo({ logo, fallback, className = "size-9" }: { logo?: string; fallback: ReactNode; className?: string }) {
   const src = safeLogo(logo);
-  return <LogoTile className={className}>{src ? <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-[60%] rounded-[3px] object-contain" /> : fallback}</LogoTile>;
+  return <LogoTile className={className}>{src ? <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-contain" /> : fallback}</LogoTile>;
 }
 
 /** Name/value rows. `secret` masks values and keeps them write-only: existing values are never read back, only their keys are shown. */

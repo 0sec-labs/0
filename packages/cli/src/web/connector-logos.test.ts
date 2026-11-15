@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SERVICE_PLUGIN_CATALOG } from "@0/engine/shared";
-import { IconCache, connectorLogo, fetchMarketplaceIcon, monogramLogo, sanitizeIcon } from "./connector-logos.js";
+import { IconCache, connectorLogo, contrastInk, contrastRatio, fetchMarketplaceIcon, monogramLogo, sanitizeIcon } from "./connector-logos.js";
 import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
 
 function png(width: number, height: number, extra = 0): Buffer {
@@ -18,7 +18,7 @@ describe("connector logos", () => {
   it("generates escaped monograms as same-origin data URIs", () => {
     const uri = monogramLogo("github", "GitHub");
     expect(uri).toMatch(/^data:image\/svg\+xml;base64,/);
-    expect(decode(uri)).toContain("#24292f");
+    expect(decode(uri)).toContain("#181717");
     const hostile = decode(monogramLogo("x", '<script>alert(1)</script>"'));
     expect(hostile).not.toContain("<script");
   });
@@ -32,6 +32,29 @@ describe("connector logos", () => {
     }
     expect(connectorLogo("unknown-thing", "Unknown")).toBe(monogramLogo("unknown-thing", "Unknown"));
     expect(connectorLogo("__proto__", "x")).toBe(monogramLogo("__proto__", "x"));
+  });
+  it("puts every real mark on its brand colour with a glyph that reads (WCAG contrast of at least 3)", () => {
+    for (const [id, logo] of Object.entries(BRAND_LOGOS)) {
+      const text = decode(connectorLogo(id, logo.title));
+      const background = `#${logo.hex.toLowerCase()}`;
+      expect(text, id).toContain(`<rect width="64" height="64" fill="${background}"/>`);
+      const ink = contrastInk(background);
+      expect(text, id).toContain(`fill="${ink}"`);
+      expect(contrastRatio(background, ink), id).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrastInk("#000000")).toBe("#ffffff");
+    expect(contrastInk("#ffffff")).toBe("#000000");
+    expect(contrastInk("#f38020")).toBe("#000000");
+    expect(contrastInk("#5e6ad2")).toBe("#ffffff");
+  });
+  it("makes a letter tile on the brand colour (never a fake mark) for Slack, Teams and unknown ids", () => {
+    for (const [id, name, colour] of [["slack", "Slack", "#4a154b"], ["teams", "Microsoft Teams", "#5059c9"]] as const) {
+      const text = decode(connectorLogo(id, name));
+      expect(text).toContain(`fill="${colour}"`); expect(text).toContain("<text"); expect(text).not.toContain("<path");
+    }
+    const unknown = decode(connectorLogo("some-new-plugin", "Some New"));
+    expect(unknown).toContain(">SN</text>");
+    expect(unknown).toMatch(/<rect width="64" height="64" fill="#[0-9a-f]{6}"\/>/);
   });
   it("only embeds safe generated brand data", () => {
     for (const [id, logo] of Object.entries(BRAND_LOGOS)) {

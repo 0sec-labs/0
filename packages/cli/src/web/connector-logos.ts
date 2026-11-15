@@ -16,7 +16,7 @@ import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
  * validated + cached.
  */
 const BRAND_COLORS: Readonly<Record<string, string>> = {
-  github: "#24292f", elastic: "#0b64dd", semgrep: "#1b9e77", snyk: "#4c4a73", linear: "#5e6ad2",
+  github: "#181717", elastic: "#0b64dd", semgrep: "#1b9e77", snyk: "#4c4a73", linear: "#5e6ad2",
   jira: "#0052cc", cloudflare: "#f38020", slack: "#4a154b", teams: "#5059c9",
 };
 const MAX_ICON_BYTES = 32 * 1024;
@@ -31,30 +31,51 @@ function initials(name: string): string {
   const letters = words.length > 1 ? words[0]![0]! + words[1]![0]! : (words[0] ?? "?").slice(0, 2);
   return letters.toUpperCase();
 }
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const k = (n: number) => (n + hue / 30) % 12;
+  const a = saturation * Math.min(lightness, 1 - lightness);
+  const channel = (n: number) => Math.round(255 * (lightness - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return `#${[channel(0), channel(8), channel(4)].map(value => value.toString(16).padStart(2, "0")).join("")}`;
+}
 function colorFor(id: string): string {
-  const known = BRAND_COLORS[id];
+  const known = Object.hasOwn(BRAND_COLORS, id) ? BRAND_COLORS[id] : undefined;
   if (known) return known;
   const hue = createHash("sha256").update(id).digest()[0]! * 360 / 256;
-  return `hsl(${Math.round(hue)} 45% 38%)`;
+  return hslToHex(Math.round(hue), 0.45, 0.38);
+}
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map(at => { const value = parseInt(hex.slice(at, at + 2), 16) / 255; return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+/** WCAG contrast ratio between two `#rrggbb` colours. */
+export function contrastRatio(a: string, b: string): number {
+  const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (high + 0.05) / (low + 0.05);
+}
+/** The glyph colour (white or black) that reads best on a brand background `#rrggbb`. */
+export function contrastInk(background: string): "#ffffff" | "#000000" {
+  return contrastRatio(background, "#ffffff") >= contrastRatio(background, "#000000") ? "#ffffff" : "#000000";
 }
 export function dataUri(mime: "image/svg+xml" | "image/png", bytes: Buffer | string): string {
   return `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
-/** Deterministic monogram logo; safe for any id/name because every dynamic part is escaped or derived. */
+/** Letter tile on the brand colour (or a stable derived one). Never a fake logo: only the entry's own initials. Full-bleed: the web tile clips the corners. */
 export function monogramLogo(id: string, name: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="14" fill="${colorFor(id)}"/><text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="26" font-weight="600" fill="#fff">${escapeXml(initials(name))}</text></svg>`;
+  const fill = colorFor(id);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" fill="${fill}"/><text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="26" font-weight="600" fill="${contrastInk(fill)}">${escapeXml(initials(name))}</text></svg>`;
   return dataUri("image/svg+xml", svg);
 }
 
-/** Real brand mark on a neutral tile (readable on light and dark UIs), or a monogram when the brand is unknown. */
+/** Real brand mark, centred at 60% of the tile, on the brand colour (glyph white or black, whichever contrasts), or a letter tile when the brand is unknown. */
 export function connectorLogo(id: string, name: string): string {
   const brand = Object.hasOwn(BRAND_LOGOS, id) ? BRAND_LOGOS[id] : undefined;
   if (!brand || !/^[0-9A-Fa-f]{6}$/.test(brand.hex)) return monogramLogo(id, name);
   const width = brand.width ?? 24; const height = brand.height ?? 24;
-  const scale = Math.round(40 / Math.max(width, height) * 10_000) / 10_000;
+  const scale = Math.round(38.4 / Math.max(width, height) * 10_000) / 10_000;
   const x = Math.round((64 - width * scale) / 2 * 100) / 100; const y = Math.round((64 - height * scale) / 2 * 100) / 100;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect x=".5" y=".5" width="63" height="63" rx="14" fill="#fff" stroke="#8a8f98" stroke-opacity=".4"/><g transform="translate(${x} ${y}) scale(${scale})" fill="#${brand.hex}">${(brand.paths ?? [brand.path]).map(d => `<path d="${d}"/>`).join("")}</g></svg>`;
+  const fill = `#${brand.hex.toLowerCase()}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" fill="${fill}"/><g transform="translate(${x} ${y}) scale(${scale})" fill="${contrastInk(fill)}">${(brand.paths ?? [brand.path]).map(d => `<path d="${d}"/>`).join("")}</g></svg>`;
   return dataUri("image/svg+xml", svg);
 }
 

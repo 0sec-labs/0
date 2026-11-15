@@ -60,10 +60,10 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
     {registry?.error ? <Feedback error={registry.error} /> : registry && !registry.available && <Feedback error="The plugin registry is offline. Bundled connectors are still listed." />}
     <Feedback error={mutate.isError && !manager.confirmation ? mutate.error : null} message={manager.message} />
     {!loading && all.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "Nothing matches your search." : "No plugins are listed right now."}</p>}
-    {flat && paged.rows.length > 0 && <><ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{paged.rows.map(cell)}</ul><Pager page={paged.page} pages={paged.pages} onPage={onPage} /></>}
+    {flat && paged.rows.length > 0 && <><ul className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2">{paged.rows.map(cell)}</ul><Pager page={paged.page} pages={paged.pages} onPage={onPage} /></>}
     {!flat && sections.map(section => <section key={section.category} aria-label={section.category} className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4"><h2 className="text-sm font-medium text-foreground">{section.category}</h2>{section.entries.length > SECTION_PREVIEW && <Button variant="ghost" size="sm" onClick={() => onCategory(section.category)} aria-label={`View all ${section.category}`}>View all<ArrowRight aria-hidden="true" /></Button>}</div>
-      <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{section.entries.slice(0, SECTION_PREVIEW).map(cell)}</ul>
+      <ul className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2">{section.entries.slice(0, SECTION_PREVIEW).map(cell)}</ul>
     </section>)}
     <PluginConfirmDialog manager={manager} />
   </div>;

@@ -60,6 +60,16 @@ describe("generated catalog", () => {
       if (publisher.avatar) expect(Buffer.from(publisher.avatar.split(",")[1]!, "base64").length).toBeLessThanOrEqual(6 * 1024);
     }
   });
+  it("gives every skill owner a real avatar, so the browser never has to ask github.com for one", () => {
+    for (const owner of new Set(data.skills.map(skill => skill.publisher))) {
+      const publisher = data.publishers[owner];
+      expect(publisher, owner).toBeDefined();
+      expect(publisher!.name.length, owner).toBeGreaterThan(0);
+      expect(publisher!.avatar, owner).toMatch(/^data:image\/(png|jpeg);base64,/);
+      expect(publisher!.avatar.length, owner).toBeGreaterThan(500);
+    }
+    expect(JSON.stringify(data)).not.toMatch(/githubusercontent|github\.com\/[^"/]+\.png/);
+  });
   it("applies the licence rule: installable only for known permissive licences", () => {
     for (const skill of data.skills) expect(skill.installable, skill.id).toBe(licenceRule(skill.licence).installable);
     expect(data.skills.some(skill => !skill.installable)).toBe(true);

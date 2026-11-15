@@ -17,9 +17,9 @@ function monogram(name: string) { const words = name.replace(/[^\p{L}\p{N}]+/gu,
 /** Logo tile with the verified check at its corner. `avatar` fills the tile (publisher photo); `logo` is the padded connector mark. */
 export function Tile({ logo, avatar, name, verified, verifiedLabel, verifiedHint, fallback, size = "md" }: { logo?: string; avatar?: string; name?: string; verified?: boolean; verifiedLabel?: string; verifiedHint?: string; fallback?: ReactNode; size?: "md" | "lg" }) {
   const photo = safeLogo(avatar);
-  const dimension = size === "lg" ? "size-14 rounded-xl" : "size-10 rounded-lg";
+  const dimension = size === "lg" ? "size-14 rounded-xl" : "size-12 rounded-lg";
   return <span className="relative shrink-0">
-    {avatar !== undefined || name ? <LogoTile className={`${dimension} overflow-hidden`}>{photo ? <img src={photo} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-cover" /> : <span className="text-sm font-medium text-muted-foreground-1">{monogram(name ?? "?")}</span>}</LogoTile>
+    {avatar !== undefined || name ? <LogoTile className={dimension}>{photo ? <img src={photo} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-cover" /> : <span className="text-base font-medium text-muted-foreground-1">{monogram(name ?? "?")}</span>}</LogoTile>
       : <EntryLogo logo={logo} className={dimension} fallback={fallback} />}
     {verified && <VerifiedMark size={size === "lg" ? "md" : "sm"} {...(verifiedLabel ? { label: verifiedLabel } : {})} {...(verifiedHint ? { hint: verifiedHint } : {})} />}
   </span>;

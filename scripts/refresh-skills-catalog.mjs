@@ -48,7 +48,8 @@ function avatar(owner, work) {
   try {
     const source = join(work, `${owner}.src`);
     execFileSync("curl", ["-fsSL", "--max-time", "20", "-o", source, `https://github.com/${owner}.png?size=88`], { stdio: "ignore" });
-    for (const [format, size, extra] of [["png", 64, []], ["jpeg", 64, ["-s", "formatOptions", "70"]], ["jpeg", 48, ["-s", "formatOptions", "60"]]]) {
+    // 88 px is the size GitHub serves; the web view shows it at 48 px (crisp at 2x). PNG keeps transparency; JPEG is the size fallback.
+    for (const [format, size, extra] of [["png", 88, []], ["jpeg", 88, ["-s", "formatOptions", "75"]], ["jpeg", 88, ["-s", "formatOptions", "60"]], ["jpeg", 64, ["-s", "formatOptions", "60"]]]) {
       const out = join(work, `${owner}.${format}`);
       try { execFileSync("sips", ["-s", "format", format, "-Z", String(size), ...extra, source, "--out", out], { stdio: "ignore" }); } catch { return ""; }
       if (statSync(out).size <= MAX_AVATAR_BYTES) return `data:image/${format};base64,${readFileSync(out).toString("base64")}`;
