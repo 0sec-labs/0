@@ -7,6 +7,8 @@ import { Command as CommandPrimitive } from "cmdk";
 import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyPlugIcon, CapyPuzzleIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openWhatsNew } from "@/lib/whats-new";
+import { LATEST_RELEASE } from "@/lib/releases";
 import { setWebTheme } from "@/lib/web-theme";
 import { findBlankSession } from "@/console/blank-session";
 import { resolveSessionAlias } from "@/console/session-recovery";
@@ -222,6 +224,7 @@ export function CommandPalette({
       },
     ];
 
+    base.push({ id: "whats-new", group: "Actions", label: "What's new", meta: `Release notes · ${LATEST_RELEASE.version}`, icon: CapySparkleFourIcon, keywords: ["whats new release notes changelog version updates"], run: () => openWhatsNew() });
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
