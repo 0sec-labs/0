@@ -78,7 +78,7 @@ printf '#!/bin/sh\nexec corepack pnpm@%s "$@"\n' "$PNPM_VERSION" > "$TMP/shim/pn
 chmod +x "$TMP/shim/pnpm"
 
 COUNT="$(node -e 'console.log(JSON.parse(process.argv[1]).length)' "$STEPS")"
-started=0 failed=()
+started=0 failed=() timings=()
 for i in $(seq 0 $((COUNT - 1))); do
   name="$(node -e 'console.log(JSON.parse(process.argv[1])[+process.argv[2]].name)' "$STEPS" "$i")"
   [ "$LIST" = 1 ] && { echo "$name"; continue; }
@@ -101,6 +101,7 @@ fs.writeFileSync(process.argv[4], Object.entries(s.env).map(([k, v]) => `${k}=${
   printf '\n\033[36m[ci-local] ==> %s\033[0m\n' "$name"
   # PATH is kept (node/pnpm/bun/foxguard); everything else is scrubbed. Caches
   # point at the real home so a throw-away HOME does not force re-downloads.
+  step_t0=$SECONDS
   if env -i \
       PATH="$TMP/shim:${FOXDIR:+$FOXDIR:}$PATH" HOME="$TMP/home" TMPDIR="${TMPDIR:-/tmp}" CI=true GITHUB_ACTIONS=true \
       RUNNER_TEMP="$TMP/runner-temp" GITHUB_WORKSPACE="$ROOT" \
@@ -110,14 +111,20 @@ fs.writeFileSync(process.argv[4], Object.entries(s.env).map(([k, v]) => `${k}=${
       ${extra[@]+"${extra[@]}"} \
       bash -eo pipefail "$TMP/step.sh"; then
     printf '\033[32m[ci-local] ok: %s\033[0m\n' "$name"
+    timings+=("$((SECONDS - step_t0))s	$name")
   else
     printf '\033[31m[ci-local] FAILED: %s\033[0m\n' "$name" >&2
     failed+=("$name")
+    timings+=("$((SECONDS - step_t0))s	$name (FAILED)")
     [ "$KEEP" = 1 ] || break
   fi
 done
 
 [ "$LIST" = 1 ] && exit 0
+if [ "${#timings[@]}" -gt 0 ]; then
+  printf '\n[ci-local] step timings (slowest first):\n'
+  printf '%s\n' "${timings[@]}" | sort -rn | sed 's/^/  /'
+fi
 if [ "${#failed[@]}" -gt 0 ]; then
   printf '\n[ci-local] RED — failed steps:\n'; printf '  - %s\n' "${failed[@]}"; exit 1
 fi
