@@ -71,6 +71,8 @@ jobs:
           node --test scripts/check-architecture.test.mjs
       - name: Check no npm publishing
         run: pnpm check:no-npm-publish
+      - name: Check workflow triggers keep CI lean and releases gated
+        run: pnpm check:workflow-triggers
       - name: Check container image name
         run: |
           pnpm check:image-name
