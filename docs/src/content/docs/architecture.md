@@ -3,7 +3,7 @@ title: Architecture
 description: Components, evidence rules, execution ownership, isolation and the Rust boundary.
 ---
 
-0 runs agents that find vulnerabilities, then proves them. One rule drives the design: reproduce before trusting. For setup, start with [Scan code](/scan-code/), [Scan web and APIs](/scan-web/) or the [Browser app](/app/).
+One rule drives the design: reproduce before trusting. To run a scan instead, see [Scan code](/scan-code/), [Scan web and APIs](/scan-web/) or the [Browser app](/app/).
 
 ## Components
 
@@ -28,7 +28,7 @@ Research workflows emit evidence envelopes. The stages are discover, reachabilit
 | Novelty | `unchecked`, `novel`, `duplicate`, `inconclusive` |
 | Native evidence | Protocol attempts, sanitizer crashes, hunt records, VM proofs |
 
-Reproduced is not disclosure-ready. Disclosure also needs a real novelty receipt, plus scope, publishability, redaction and operator policy. A proof grade never implies attacker privilege. Privilege claims have their own gates, and all fail closed:
+Reproduced is not disclosure-ready. Disclosure also needs a novelty receipt, plus scope, publishability, redaction and operator policy. A proof grade never implies attacker privilege. Privilege claims have their own gates, and all fail closed:
 
 - Linux zero-capability: attested non-root UIDs, an empty effective capability set, `no_new_privs` and a digest-bound artifact.
 - Windows privilege escalation: a separate token-transition gate. Linux facts never count as Windows proof.
@@ -71,7 +71,7 @@ flowchart LR
   RemoteRunner --> RemoteTools[Server workspace / SmolVM / tools]
 ```
 
-A remote engine owns its machine's execution boundaries. A remote executor, where one engine outsources tools but keeps the run, is a separate capability that does not exist. There is no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
+A remote engine owns its machine's execution boundaries. 0 has no remote executor, where one engine outsources tools but keeps the run, and no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
 
 ## Scan pipeline
 
@@ -102,6 +102,8 @@ Different models can serve discovery, review, refutation and fix roles when the 
 
 ## Scan modes
 
+`0 scan web --mode <mode>` picks one. Without it the mode follows the target.
+
 | Mode | Target | What it does |
 | --- | --- | --- |
 | `deep` | LLM API URL | Multi-turn prompt injection, jailbreak, tool poisoning and exfiltration probing. |
@@ -110,7 +112,7 @@ Different models can serve discovery, review, refutation and fix roles when the 
 | `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation. |
 | `http_audit` | Authenticated HTTP target | Scoped assessment driven by `ZERO_TARGET_*` settings. |
 
-Package audits and source reviews are separate modules: `scan package` and `scan source`.
+Package audits and source reviews are separate commands: `0 scan package` and `0 scan source`.
 
 ## Runtime adapters
 
@@ -139,7 +141,7 @@ OCI is the image format. It does not mean Docker execution. SmolVM boots the ima
 
 ## Rust boundary
 
-Decision: keep the TypeScript harness and evaluate a small native execution supervisor before any full rewrite. A separate process with a versioned protocol is safer than adding native failure modes inside the credential-bearing controller. Candidate duties are process ownership, PTYs, OS confinement, resource accounting and confirmed teardown. Rust does not provide those guarantees by itself.
+The decision is to keep the TypeScript harness and evaluate a small native execution supervisor before any full rewrite. A separate process with a versioned protocol is safer than adding native failure modes inside the credential-bearing controller. Candidate duties are process ownership, PTYs, OS confinement, resource accounting and confirmed teardown. Rust does not provide those guarantees by itself.
 
 Before a port, measure CLI startup, peak memory, controller CPU, cancellation latency and sustained output. Require parity for scope, credentials, sessions, evidence and rollback. No benchmark so far shows that a full rewrite is warranted. The reasoning is in [TypeScript and Rust boundary](/research/typescript-rust-boundary/).
 
@@ -149,7 +151,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 
 - Client: selected agent and console paths connect to external MCP servers and expose their tools.
 - Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
-- Scan target: `--mode mcp` probes a server for tool poisoning, schema abuse and privilege escalation.
+- Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
 See [Agents and MCP](/mcp/).
 
@@ -172,3 +174,10 @@ Fresh CLI scans write a run-local `~/.0/runs/<scan-id>/state.db`, journal and re
 | `crawl`, `submit_form`, `http_request` | Network roles | Structured HTTP next to shell-first work. |
 
 Tool sets depend on role, target, scope and enabled features.
+
+## Next
+
+- [Agent loop](/agent-loop/)
+- [Triage and validation](/triage/)
+- [Self-improvement](/self-improvement/)
+- [Benchmarks](/benchmark/)

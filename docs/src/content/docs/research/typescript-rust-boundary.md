@@ -1,5 +1,5 @@
 ---
-title: TypeScript/Rust Boundary
+title: TypeScript and Rust boundary
 description: Why 0 should keep TypeScript for orchestration while moving deterministic engines such as FoxGuard into Rust behind stable contracts.
 ---
 

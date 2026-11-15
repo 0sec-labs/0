@@ -1,5 +1,5 @@
 ---
-title: Model Comparison
+title: Model comparison
 description: Benchmarking gpt-5.4, Kimi K2.5, Qwen3, DeepSeek, and free models for agentic pentesting.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: XBOW Analysis
+title: XBOW analysis
 description: Where 0's XBOW score comes from, its caveats, and what the benchmark does and doesn't tell you.
 ---
 

@@ -64,7 +64,7 @@ EGATS (`scan --egats`) is a hidden, opt-in discovery search, not a triage stage.
 
 ## Validators
 
-Category validators run real probes and judge the observation with ordinary code. A model's agreement does not count.
+Category validators run live probes and judge the observation with ordinary code. A model's agreement does not count.
 
 | Category | What the validator observes | Limits |
 | --- | --- | --- |
@@ -112,8 +112,13 @@ Do not use public names or shared fields as markers. A fixture matches the exact
 - Probes run only where you approve them. The oracle's direct HTTP transport is not a complete scope boundary. Inline, batch and delegated PoV checks use the scan executor's scoped transport. Standalone oracle calls without a context use direct fetch.
 - Raw HTTP evidence keeps application headers and JSON or form bodies. Configured identity credentials replace recorded auth.
 - A validator result does not prove isolation or authorization.
-- To run the browser qualification from a source checkout with Playwright Chromium installed: `ZERO_TEST_BROWSER_ORACLES=1 pnpm --filter @0/engine exec vitest run src/triage/oracles.browser.test.ts src/triage/oracles.test.ts`.
+- The browser oracle tests run from a source checkout with Playwright Chromium installed (command below).
 - `HuntScanOptions.runtimeVerify` is an SDK hook for a runtime verifier. 0 ships no provisioner for it. Supply the executor, startup descriptor, egress, credential isolation, limits and teardown yourself.
+
+```bash
+ZERO_TEST_BROWSER_ORACLES=1 pnpm --filter @0/engine exec vitest run \
+  src/triage/oracles.browser.test.ts src/triage/oracles.test.ts
+```
 
 ## Blind verification
 
@@ -157,7 +162,8 @@ Mark false positives so later verification has context:
 
 ```bash
 0 findings triage mark-fp <finding-id> --reason "test fixture, not prod"
-0 findings triage memory add --finding <id> --reason "sink is a harmless helper" --scope package --scope-value my-pkg
+0 findings triage memory add --finding <id> \
+  --reason "sink is a harmless helper" --scope package --scope-value my-pkg
 0 findings triage memory list --scope target
 0 findings triage memory remove <id>
 ```
@@ -168,7 +174,7 @@ Scope is exact: `global`, an inferred `package`, or a `target` URL or path, with
 
 Each layer records a verdict as it runs. `0 findings show` prints them:
 
-```
+```text
   Triage provenance:
   Layers: 3 executed, 5 skipped, 3 unrecorded | 412ms | $0.0000
     + holding_it_wrong   executed(pass) - no holding-it-wrong pattern matched
@@ -182,6 +188,9 @@ Each layer records a verdict as it runs. `0 findings show` prints them:
 
 Optional semantic dedupe runs in report post-processing and keeps the original evidence. Grouping is not verification and not a novelty receipt.
 
-## Related
+## Next
 
-[Agent loop](/agent-loop/), [Verify and fix](/verify-and-fix/), [Finding triage ML](/research/finding-triage-ml/), [Triage dataset](/research/triage-dataset/).
+- [Findings](/findings/) for the queue and triage memory commands
+- [Verify and fix](/verify-and-fix/)
+- [Agent loop](/agent-loop/)
+- [Finding triage ML](/research/finding-triage-ml/) and [Triage dataset](/research/triage-dataset/)

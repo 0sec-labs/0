@@ -1,5 +1,5 @@
 ---
-title: "2026-05-06 HackerOne Program Audit: AI-Tool Readiness at the Code-of-Conduct Layer"
+title: "2026-05-06 HackerOne program audit"
 description: "Historical analysis of 590 visible HackerOne programs: automation policy, scope, bounty status, and Safe Harbor."
 ---
 

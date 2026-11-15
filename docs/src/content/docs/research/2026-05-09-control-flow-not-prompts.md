@@ -1,5 +1,5 @@
 ---
-title: "2026-05-09: Control-flow audit"
+title: "2026-05-09 Control-flow audit"
 date: "2026-05-09"
 description: "A bear-blog post argued that agents need deterministic code at chokepoints, not 'MUST' prompts. We audited 0's agent loop, found 5 places we were doing it wrong, and shipped fixes in 24 hours."
 ---

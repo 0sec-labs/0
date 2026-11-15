@@ -1,5 +1,5 @@
 ---
-title: "2026-05-08 Cost per Flag: A Missing Axis in Autonomous-Pentest Reporting"
+title: "2026-05-08 Cost per flag"
 description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 per verified flag in the gpt-5.4 cohort."
 ---
 
@@ -59,7 +59,7 @@ Every scan run logs token counts (input, output, cached-input separately) into i
 
 The consolidate script's per-model summary line:
 
-```
+```text
 gpt-5.4: 93/95 (97.9%) — $0.48/run, $5.20/flag
 ```
 

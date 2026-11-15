@@ -3,15 +3,15 @@ title: Self-improvement
 description: How 0 learns from past work and evaluates changes to itself, and where each change is allowed to take effect.
 ---
 
-0 can keep lessons from earlier work, benchmark its own variants and evaluate proposed changes to detection workers. This is not an unattended loop that finds its own ground truth and rewrites itself. Each mechanism retains observations, proposes a change, evaluates it against criteria you own, and selects an exact version for later work. A candidate's own success claim is never an independent verifier.
+0 keeps lessons from earlier work, benchmarks its own variants and evaluates proposed changes to detection workers. It is not an unattended loop that finds its own ground truth and rewrites itself. Each mechanism keeps observations, proposes a change, evaluates it against criteria you own, and selects an exact version for later work. A candidate's own success claim is never an independent verifier.
 
-Internal contracts (artifact schemas, registry events, worker protocol) live in the code under `packages/engine/src/improvement/` and in the repository design docs.
+Internal contracts (artifact schemas, registry events, worker protocol) live in `packages/engine/src/improvement/`.
 
 ## Pick a workflow
 
 | Need | Entry point | Default |
 | --- | --- | --- |
-| Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Learning** view in the browser app | Lessons are untrusted hints. Verifiers exclude them. |
+| Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Memory** view in the browser app | Lessons are untrusted hints. Verifiers exclude them. |
 | Benchmark variants and gate regressions | `0 improve bench run` | Needs a labeled corpus. |
 | Evaluate and promote a detection worker | `0 improve evolve run --config evolution.json` | Source access and auto-promotion are off. |
 | Use an evolved finder in a review | `0 scan deep ./repo --evolution-config evolution.json` | Opt in per review. |
@@ -23,7 +23,7 @@ Model credentials pay for proposal generation. Guest images pay for execution. N
 
 ## Learning
 
-Open **Memory** in the browser app sidebar (`/learning`).
+Open **Memory** in the browser app (`/learning`).
 
 - Lessons are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching lessons have their cited file hashes rechecked. Changed files and disabled lessons are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 - Suggestions are automation instruction changes you can review with their run evidence before you apply them.
@@ -33,7 +33,8 @@ Finished missions stay history. They are not lessons or vulnerability labels, an
 ```bash
 0 improve learning status --json
 0 improve learning process --limit 25 --json
-0 improve learning evolve --config ./evolution.json --project /absolute/path/to/repo --json
+0 improve learning evolve --config ./evolution.json \
+  --project /absolute/path/to/repo --json
 ```
 
 All three use the local control database (`ZERO_DB_PATH` selects another one). `--project <id>` filters. Processing a local repo also imports its current source notes. The app processes pending work in small batches every five seconds, and the queue resumes after a restart. The default worker records activity without model calls. It does not spend provider credits on its own. `learning evolve` runs the source evolution below and mirrors its snapshots and receipts into Memory. Its evaluations are labeled output-fixture. Passing expected-output tests does not show better vulnerability discovery.
@@ -65,11 +66,15 @@ The control database, queue and knowledge stay on the selected engine. Nothing i
 Source evolution proposes edits to a copy of a source snapshot, runs them in a fresh Docker container or local smolvm guest, evaluates them, and keeps immutable versions.
 
 ```bash
-0 improve evolve run --config ./evolution.json --allow-source-access --no-auto-promote --json
+0 improve evolve run --config ./evolution.json \
+  --allow-source-access --no-auto-promote --json
 0 improve evolve status --store ./.evolution-store --json
-0 improve evolve promote --store ./.evolution-store --version <candidate-id> --json
-0 improve evolve exec --config ./evolution.json --run-id <id> --input '{"n":12}' --json
-0 improve evolve rollback --store ./.evolution-store --version <active-version-id>
+0 improve evolve promote --store ./.evolution-store \
+  --version <candidate-id> --json
+0 improve evolve exec --config ./evolution.json --run-id <id> \
+  --input '{"n":12}' --json
+0 improve evolve rollback --store ./.evolution-store \
+  --version <active-version-id>
 ```
 
 | Command | Effect |
@@ -114,7 +119,7 @@ A minimal config, which exercises the lifecycle and is not a security benchmark:
 }
 ```
 
-The low sample floor is for a demo only. Real evaluation needs larger corpora curated independently of the model.
+The low sample floor is for a demo only. Meaningful evaluation needs larger corpora curated independently of the model.
 
 ### Promotion gates
 
@@ -180,3 +185,10 @@ Rules that hold on every path:
 - Model-supported claims and model-only rejections stay unresolved in the shared hunt ledger.
 
 Lifecycle checks measure orchestration. Provider behavior, sandbox execution and detection quality need their own checks.
+
+## Next
+
+- [Benchmarks](/benchmark/) for scores and method
+- [Architecture](/architecture/)
+- [Plugins](/plugins/) and [Plugin security](/plugin-trust/) for self-extension
+- [Configuration](/configuration/#development-engine-updates)

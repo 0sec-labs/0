@@ -1,5 +1,5 @@
 ---
-title: Triage Dataset
+title: Triage dataset
 description: How 0 turns benchmark runs and verified findings into labeled JSONL for triage-model training.
 ---
 

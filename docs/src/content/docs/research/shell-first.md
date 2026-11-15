@@ -1,5 +1,5 @@
 ---
-title: Shell-First Rationale
+title: Shell-first rationale
 description: Why 0 uses bash instead of structured tools, with A/B test data from the XBOW benchmark.
 ---
 
