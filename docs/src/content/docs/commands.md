@@ -124,7 +124,7 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### web
 
-Open the local browser workspace for chats, scans and findings.
+Open the local browser workspace for threads, scans and findings.
 
 ```text
 0 web [options]
@@ -261,7 +261,7 @@ Guide: [Read the workflow](/troubleshooting/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--discard-reports` | — | Delete crash reports waiting for review on this machine |
+| `--discard-reports` | — | Delete crash reports waiting for review on this computer |
 
 ### config
 
@@ -488,7 +488,7 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 
 ### scan campaign
 
-Run a sequence of objective-driven security-testing chats for an authorized target.
+Run a sequence of objective-driven security-testing threads for an authorized target.
 Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
 an attached local engine's console. If no engine is available on the selected
 database, the supervisor falls back to headless chat children.
@@ -502,7 +502,7 @@ iteration or wall-clock limits, or when the model declares coverage complete.
 `--max-tool-calls` applies to headless fallback children; `--cost-ceiling` applies
 to the optional `--with-scan` run, rather than the whole campaign's model usage.
 Objective generation and docs triage also use models. `--dry-run` prints the
-iteration plan without starting chats or scans. With `--docs-url`, published docs
+iteration plan without starting threads or scans. With `--docs-url`, published docs
 are fetched for model-assisted severity triage; use `--no-docs-triage` to disable it.
 
 | Option | Registered default | Description |
@@ -513,7 +513,7 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 | `--total-timeout-ms <ms>` | `14400000` | Hard cap for the whole campaign (default 14400000 = 4h) |
 | `--cost-ceiling <usd>` | `10` | Per-scan-run cost ceiling passed through with --with-scan (default 10) |
 | `--max-tool-calls <n>` | `150` | Tool-call cap for headless fallback chat children (default 150) |
-| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chats |
+| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and threads |
 | `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
@@ -1302,7 +1302,7 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--all` | — | List unified work records with automation, scan and mission references |
+| `--all` | — | List unified work records with automation, scan and thread references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -1380,7 +1380,7 @@ Resume a persisted assessment scan in an existing engine session. The selected e
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` **required** | — | Existing engine mission |
+| `--chat <id>` **required** | — | Existing engine thread |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -2875,7 +2875,7 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 ### worker
 
 Deploy and manage remote Zero engine workers. A worker is a remote engine that
-runs chats and workflows on its host; select its registered backend in the
+runs threads and workflows on its host; select its registered backend in the
 browser's computer menu to work there.
 
 ```text
@@ -2898,7 +2898,7 @@ Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
 Use `--target-git` to clone your repository into the remote workspace. Forwarding
 `OPENAI_API_KEY` is explicit through `--forward-provider-key`; use it only for a
 host you own. Deployment installs runtime dependencies and starts the engine on
-the remote machine. Inspect the returned backend ID and connection details, then
+the remote computer. Inspect the returned backend ID and connection details, then
 select that computer in the browser before starting remote work.
 
 | Option | Registered default | Description |
@@ -2908,7 +2908,7 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the remote server clones into the engine workspace instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
-| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
+| `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
 #### worker repair
@@ -3471,39 +3471,39 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
+| `--chat <id>` | — | Attach the run to an existing thread on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### chats
+### threads
 
 Inspect and control the same live sessions used by the browser. Attach with --engine or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
 
 ```text
-0 chats
+0 threads
 ```
 
 ```bash
-0 chats list --engine production
+0 threads list --engine production
 ```
 
-Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [force-stop](#chats-force-stop) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
+Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide).
 
-#### chats list
+#### threads list
 
 List live sessions, or retained snapshots with --saved. Listing does not resume work.
 
 ```text
-0 chats list [options]
+0 threads list [options]
 ```
 
 ```bash
-0 chats list --saved --engine production
+0 threads list --saved --engine production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | List retained mission snapshots |
+| `--saved` | — | List retained thread snapshots |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3511,16 +3511,16 @@ List live sessions, or retained snapshots with --saved. Listing does not resume 
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats show
+#### threads show
 
 Read an existing live session without recreating it or restoring approvals.
 
 ```text
-0 chats show [options] <id>
+0 threads show [options] <id>
 ```
 
 ```bash
-0 chats show SESSION_ID --engine production
+0 threads show SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3536,21 +3536,21 @@ Read an existing live session without recreating it or restoring approvals.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats create
+#### threads create
 
 Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
 
 ```text
-0 chats create [options]
+0 threads create [options]
 ```
 
 ```bash
-0 chats create --config session.json --engine production
+0 threads create --config session.json --engine production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--config <path>` | — | Mission configuration JSON object |
+| `--config <path>` | — | Thread configuration JSON object |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3558,16 +3558,16 @@ Create a session within the engine's authorized workspace, scope, and model conf
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats send
+#### threads send
 
 Send text to a live engine session. The engine runs the turn using its configured provider and tools.
 
 ```text
-0 chats send [options] <id> <text>
+0 threads send [options] <id> <text>
 ```
 
 ```bash
-0 chats send SESSION_ID "Review the current findings" --engine production
+0 threads send SESSION_ID "Review the current findings" --engine production
 ```
 
 | Argument | Required | Description |
@@ -3584,16 +3584,16 @@ Send text to a live engine session. The engine runs the turn using its configure
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats continue
+#### threads continue
 
 Continue the selected live session with optional text. This preserves the existing engine context.
 
 ```text
-0 chats continue [options] <id> [text]
+0 threads continue [options] <id> [text]
 ```
 
 ```bash
-0 chats continue SESSION_ID --engine production
+0 threads continue SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3610,16 +3610,16 @@ Continue the selected live session with optional text. This preserves the existi
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats cancel
+#### threads cancel
 
 Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
 
 ```text
-0 chats cancel [options] <id>
+0 threads cancel [options] <id>
 ```
 
 ```bash
-0 chats cancel SESSION_ID --engine production
+0 threads cancel SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3635,16 +3635,16 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats events
+#### threads events
 
 Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
 
 ```text
-0 chats events [options] <id>
+0 threads events [options] <id>
 ```
 
 ```bash
-0 chats events SESSION_ID --after 0 --engine production
+0 threads events SESSION_ID --after 0 --engine production
 ```
 
 | Argument | Required | Description |
@@ -3661,20 +3661,20 @@ Read engine session events after an optional nonnegative cursor. Cursors belong 
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats force-stop
+#### threads force-stop
 
-Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 chats list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 threads list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
 
 ```text
-0 chats force-stop [options] <id>
+0 threads force-stop [options] <id>
 ```
 
 ```bash
-0 chats force-stop LIVE_SESSION_ID --engine production
-0 chats force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+0 threads force-stop LIVE_SESSION_ID --engine production
+0 threads force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
 ```
 
-Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 chats show` after an error before taking another action.
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 threads show` after an error before taking another action.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -3689,16 +3689,16 @@ Force stop is available for qualified Bun sessions on macOS/Linux; completed ext
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats resume
+#### threads resume
 
 Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
 
 ```text
-0 chats resume [options] <saved-id>
+0 threads resume [options] <saved-id>
 ```
 
 ```bash
-0 chats resume SAVED_ID --engine production
+0 threads resume SAVED_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3714,16 +3714,16 @@ Restore a retained snapshot as a new session under current engine grants. Stored
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats decide
+#### threads decide
 
 Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
 
 ```text
-0 chats decide [options] <id> <decision-id>
+0 threads decide [options] <id> <decision-id>
 ```
 
 ```bash
-0 chats decide SESSION_ID DECISION_ID --response response.json --engine production
+0 threads decide SESSION_ID DECISION_ID --response response.json --engine production
 ```
 
 | Argument | Required | Description |

@@ -7,7 +7,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 
 | Term | Meaning |
 | --- | --- |
-| **Thread** | A conversation with the agent. You describe a job; the agent plans it, runs tools and records findings. Threads can be saved, resumed and archived. The CLI manages them with `0 threads` (the older `0 chats` and `0 missions` still work); URLs and the API say chats and sessions (`/chats/<id>`, `--chat`). See [Browser app](/app/). |
+| **Thread** | A conversation with the agent. You describe a job; the agent plans it, runs tools and records findings. Threads can be saved, resumed and archived. The CLI manages them with `0 threads` (the old command names still work); URLs and the API say chats and sessions (`/chats/<id>`, `--chat`). See [Browser app](/app/). |
 | **Scan** | One assessment of one target. Modules: `web`, `source`, `package`, `deep`, `repair` and `campaign`. See [Scan code](/scan-code/) and [Scan web and APIs](/scan-web/). |
 | **Finding** | A security issue with evidence. An unconfirmed finding is a **lead**. See [Findings](/findings/). |
 | **Report** | The result of one run of a scan or an automation: status, evidence and linked findings. It opens at `/runs/<id>`; the CLI calls it a run (`0 runs`). |

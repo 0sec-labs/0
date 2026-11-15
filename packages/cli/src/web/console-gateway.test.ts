@@ -197,7 +197,7 @@ describe("ConsoleGateway", () => {
     const home = instance.create({ title: "Standing" });
     const child = instance.create({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
     expect(child).toMatchObject({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
-    expect(() => instance.create({ parentSessionId: "session-0-999" })).toThrow("Parent mission was not found");
+    expect(() => instance.create({ parentSessionId: "session-0-999" })).toThrow("Parent thread was not found");
     expect(() => instance.create({ skillAllowList: ["../escape"] })).toThrow("allow-list");
     expect(() => instance.create({ skillAllowList: "all" })).toThrow("allow-list");
     await instance.send(child.id, "Hello"); await idle(instance, child.id);
@@ -216,7 +216,7 @@ describe("ConsoleGateway", () => {
     await expect(instance.configure(created.id, { webSearchEnabled: false })).rejects.toThrow("does not support changing web search");
     expect(instance.get(created.id).session.webSearchEnabled).toBe(true);
   });
-  it("never starts the objective-refinement model call, since the mission title already costs one", async () => {
+  it("never starts the objective-refinement model call, since the thread title already costs one", async () => {
     const home = mkdtempSync(join(tmpdir(), "0-refine-test-")); homes.push(home);
     let factoryInput: ConsoleGatewaySessionFactoryInput | undefined;
     const instance = new ConsoleGateway({ homeDir: home, projectPath: home, createSession: input => { factoryInput = input; return engine(input); } }); gateways.push(instance);
@@ -529,7 +529,7 @@ describe("ConsoleGateway", () => {
     expect(reopened.listSaved().find(row => row.id === archived.id)).toBeUndefined();
   });
 
-  it("switches A to B to A, announces the folder on session events, and seeds new missions with the last pick", async () => {
+  it("switches A to B to A, announces the folder on session events, and seeds new threads with the last pick", async () => {
     const instance = gateway(); const created = instance.create();
     const a = realpathSync(mkdtempSync(join(tmpdir(), "zero-ws-a "))); const b = realpathSync(mkdtempSync(join(tmpdir(), "zero-ws-b ünï"))); homes.push(a, b);
     for (const dir of [a, b, a]) {
@@ -1643,7 +1643,7 @@ it("rejects unsupported worker transport transitions before changing the capture
   const chat = instance.create({ title: "Keep history" });
   await instance.send(chat.id, "Preserve context"); await idle(instance, chat.id);
   const history = instance.get(chat.id).messages;
-  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new mission");
+  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new thread");
   expect(reconfigure).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual(history);
   expect(instance.get(chat.id).session.status).toBe("ready");
 });
@@ -1949,7 +1949,7 @@ describe("confirmed mode changes and pending tool actions", () => {
       instance.resolveDecision(chat.id, decision.id, { approve: false });
     } else {
       if (failure === "cancelled turn") await instance.cancel(chat.id); else await instance.close(chat.id);
-      const checked = failure === "closed session" ? expect(change).rejects.toThrow("mission changed") : change;
+      const checked = failure === "closed session" ? expect(change).rejects.toThrow("thread changed") : change;
       ack.resolve(); await checked;
     }
     await vi.waitFor(() => expect(allowed).toBe(false));

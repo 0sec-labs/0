@@ -136,7 +136,7 @@ describe("manual security workflow execution", () => {
     }
   });
 
-  it("keeps Sentinel ownership on PATCH unless it is explicitly cleared", async () => {
+  it("keeps Agent ownership on PATCH unless it is explicitly cleared", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zero-owned-patch-"));
     directories.push(dir);
     const dbPath = join(dir, "control.db");
@@ -393,7 +393,7 @@ describe("browser workflow lifecycle", () => {
     expect(await instance.invokeLifecycle("owner", "list_workflows", {})).toEqual({ workflows: [] });
     expect(await instance.invokeLifecycle("owner", "get_run", { runId: launched.runId })).toMatchObject({ run: { id: launched.runId, status: "completed" } });
     expect(await instance.invokeLifecycle("owner", "get_run_results", { runId: launched.runId })).toMatchObject({ runId: launched.runId, status: "completed", findings: [] });
-    await expect(instance.invokeLifecycle("other", "get_run", { runId: launched.runId })).rejects.toThrow("for this mission");
+    await expect(instance.invokeLifecycle("other", "get_run", { runId: launched.runId })).rejects.toThrow("for this thread");
     await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "api-security", target: "https://changed.test", idempotencyKey: "same-request" })).rejects.toThrow("different run inputs");
   });
 

@@ -29,13 +29,18 @@ describe("command tree", () => {
     const program = tree();
     for (const path of [
       ["research", "kernel"], ["research", "hunt"], ["runs", "history"], ["runs", "relaunch"],
-      ["findings", "triage"], ["automation", "list"], ["chats", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"],
+      ["findings", "triage"], ["automation", "list"], ["threads", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"],
       ["scan", "web"], ["scan", "source"], ["scan", "package"], ["scan", "deep"], ["scan", "repair"], ["scan", "campaign"],
     ]) expect(resolves(program, path), path.join(" ")).toBe(true);
   });
 });
 
 describe("moved-command aliases", () => {
+  it("keeps the old thread names as silent aliases", () => {
+    for (const old of ["chats", "missions", "sessions"]) expect(rewriteMovedCommand([old, "list", "--saved"])?.args).toEqual(["threads", "list", "--saved"]);
+    expect(rewriteMovedCommand(["chats", "list"])?.notice).toBe("");
+  });
+
   it("rewrites an old first word and preserves the rest", () => {
     expect(rewriteMovedCommand(["kernel", "--help"])?.args).toEqual(["research", "kernel", "--help"]);
     expect(rewriteMovedCommand(["resume", "abc"])?.args).toEqual(["runs", "relaunch", "abc"]);
@@ -49,7 +54,7 @@ describe("moved-command aliases", () => {
 
   it("maps workflow and sessions onto automation and chats", () => {
     expect(rewriteMovedCommand(["workflow", "run", "x"])?.args).toEqual(["automation", "run", "x"]);
-    expect(rewriteMovedCommand(["sessions", "list"])?.args).toEqual(["chats", "list"]);
+    expect(rewriteMovedCommand(["sessions", "list"])?.args).toEqual(["threads", "list"]);
   });
 
   it("leaves current commands and inherited object keys alone", () => {

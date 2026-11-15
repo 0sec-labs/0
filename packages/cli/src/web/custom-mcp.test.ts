@@ -241,7 +241,7 @@ describe("custom MCP servers", () => {
   });
 });
 
-describe("custom MCP servers reach missions like built-ins (real stdio, no network)", () => {
+describe("custom MCP servers reach threads like built-ins (real stdio, no network)", () => {
   it("exposes enabled, approved servers as mcp__custom-*__ tools with a scrubbed environment", async () => {
     const home = mkdtempSync(join(tmpdir(), "zero-mcp-e2e-home-")); const workspace = realpathSync(mkdtempSync(join(tmpdir(), "zero-mcp-e2e-ws-")));
     const sdk = import.meta.resolve("@modelcontextprotocol/sdk/server/mcp.js"); const stdioSdk = import.meta.resolve("@modelcontextprotocol/sdk/server/stdio.js");

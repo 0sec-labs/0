@@ -172,7 +172,7 @@ export interface WebConsoleRuntimeBootstrap {
 }
 
 export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
-  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to an agent mission.");
+  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to an agent thread.");
   return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
     ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
 }
@@ -800,7 +800,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM missions. Start a new mission to use an approved plugin.");
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM threads. Start a new thread to use an approved plugin.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
@@ -819,7 +819,7 @@ export class WebOperatorServices {
       deferredPlugins.delete(id);
       // Approval removal is durable now; host reconciliation happens at the
       // next explicit session/run boundary, never by interrupting a leased host.
-      return { ok: true, message: "Disabled for future missions. Already leased missions keep their approved engine until cleanup.", state: "installed" };
+      return { ok: true, message: "Disabled for future threads. Already leased threads keep their approved engine until cleanup.", state: "installed" };
     }
     const discovered = readInstalledPlugin(pluginsRootDir(), id, { reservedToolNames });
     if (!discovered.ok) throw new OperatorError(409, "invalid_plugin", discovered.errors.join("; "));
@@ -831,7 +831,7 @@ export class WebOperatorServices {
         JSON.stringify([...new Set(body.capabilities)].sort()) !== JSON.stringify([...capabilities].sort())) throw new OperatorError(409, "approval_required", "Inspect and explicitly approve this installed version and its exact capabilities before enabling.");
       const result = await pluginService.enable(item);
       if (!result.ok) throw new OperatorError(409, "enable_failed", result.message);
-      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM missions. Plugin files are copied and loaded automatically inside each new VM." } : result;
+      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM threads. Plugin files are copied and loaded automatically inside each new VM." } : result;
     }
     if (action !== "run") throw new OperatorError(404, "unknown_action", "Unsupported plugin action.");
     const result = await pluginService.run(item);
