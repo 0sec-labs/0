@@ -78,6 +78,12 @@ pnpm safe
 pnpm --filter @0/bench test:targets
 ```
 
+## Main runs may be superseded
+
+A newer push to `main` cancels the still-running `Main` of the previous commit, so an older main commit can show "cancelled" instead of a verdict.
+The newest commit contains the older one, so its green run covers both. Docker publish and install E2E only follow a successful `Main`; a cancelled run publishes nothing.
+Releases are gated on the release commit's own green `Main` and Release dry run (see below).
+
 ## Cutting a release
 
 1. Bump `version` in `packages/cli/package.json`.
@@ -85,6 +91,7 @@ pnpm --filter @0/bench test:targets
 3. Add the matching entry to `packages/web/src/lib/releases.ts` (once it exists) for the in-app What's new.
 4. `pnpm check:release-notes` must pass; preview with `node scripts/release-notes.mjs`.
 5. Tag `vx.y.z`. The Release workflow publishes the binaries and uses the generated notes.
+6. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled.
 
 ## Attack templates
 
@@ -103,3 +110,5 @@ do not maintain a second hand-edited copy of a template in the embedded file.
 Describe the behavior changed, the tests run, and any scope or safety impact.
 By submitting a contribution, you agree that it is licensed under MIT OR
 Apache-2.0.
+
+
