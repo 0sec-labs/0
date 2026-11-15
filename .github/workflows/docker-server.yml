@@ -83,6 +83,7 @@ jobs:
       - name: Container health status and logs
         if: always()
         run: |
+          docker inspect zero-smoke >/dev/null 2>&1 || exit 0
           docker inspect --format 'health={{.State.Health.Status}}' zero-smoke || true
           if docker logs zero-smoke 2>&1 | grep -qF "$ZERO_TEST_TOKEN"; then echo "::error::access token found in container logs"; exit 1; fi
       - name: SIGTERM drains and exits 0

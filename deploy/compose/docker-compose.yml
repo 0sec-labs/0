@@ -65,7 +65,8 @@ services:
       zero:
         condition: service_healthy
     environment:
-      ZERO_DOMAIN: ${ZERO_DOMAIN:?set ZERO_DOMAIN in .env to use the proxy profile}
+      # Compose interpolates every service, even one in an inactive profile, so no `:?` here.
+      ZERO_DOMAIN: ${ZERO_DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
