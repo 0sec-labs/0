@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Save, Trash2 } from "lucide-react";
 import type { ScanPlan, SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowNode } from "@0/engine/shared";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/engine/dist/shared/security-workflows.js";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/engine/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

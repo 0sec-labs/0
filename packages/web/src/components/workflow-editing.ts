@@ -1,6 +1,6 @@
 import { assessmentLabel } from "./workflow-labels";
 import type { SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowNode } from "@0/engine/shared";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/engine/dist/shared/security-workflows.js";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/engine/shared";
 
 export function workflowInput(definition: SecurityWorkflow): SecurityWorkflowInput {
   const { createdAt: _createdAt, updatedAt: _updatedAt, ...input } = definition;

@@ -1,4 +1,4 @@
-import { BackendDescriptorSchema, parseBackendHandshake } from "@0/engine/dist/shared/backend-protocol.js";
+import { BackendDescriptorSchema, parseBackendHandshake } from "@0/engine/shared";
 import { createBackendApi, localControlFetch } from "@/api";
 import type { useBackendSelection } from "@/backend-context";
 

@@ -36,7 +36,7 @@ import type {
   ConsoleWorker,
   DesktopConsoleDecisionResponse,
 } from "@0/engine/shared";
-import { SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
+import { SLASH_COMMANDS } from "@0/engine/shared";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { useMobileSidebar } from "@/ui/components/sidebar";

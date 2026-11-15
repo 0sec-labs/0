@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
+import type { BackendDescriptor } from "@0/engine/shared";
 import type { BackendApi } from "./api";
 
 export const BackendApiContext = createContext<BackendApi | null>(null);

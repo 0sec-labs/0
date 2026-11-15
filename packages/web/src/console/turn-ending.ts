@@ -1,4 +1,4 @@
-import { turnEndingKind, type TurnEndingKind } from "@0/engine/dist/shared/desktop-console.js";
+import { turnEndingKind, type TurnEndingKind } from "@0/engine/shared";
 import { toolCallStatus } from "./tool-call-status";
 import type { ReducedTurn } from "./transcript";
 

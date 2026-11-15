@@ -1,5 +1,5 @@
 import type { SecurityWorkflow, SecurityWorkflowExecution, SecurityWorkflowInput } from "@0/engine/shared";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN } from "@0/engine/dist/shared/security-workflows.js";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN } from "@0/engine/shared";
 
 /** Pure view models for the Automations list and detail form. No React, no network. */
 

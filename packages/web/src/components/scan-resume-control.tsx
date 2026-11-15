@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { autonomyModeLabel } from "@/console/autonomy-options";
-import { ScanResumeRequestSchema } from "@0/engine/dist/shared/scan-resume.js";
+import { ScanResumeRequestSchema } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import { Button } from "@/components/ui/button";
