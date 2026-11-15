@@ -6,13 +6,21 @@ export function registerDoctorCommand(program: Command): void {
   program
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
-    .action(async () => {
+    .option("--discard-reports", "Delete crash reports waiting for review on this machine")
+    .action(async (options: { discardReports?: boolean }) => {
+      const pending = await import("../state/pending-diagnostics.js");
+      if (options.discardReports) {
+        const removed = pending.discardPendingReports();
+        console.log(`Discarded ${removed} crash report${removed === 1 ? "" : "s"}. Nothing was sent.`);
+        return;
+      }
       const { getRuntimeMetadata } = await import("../state/runtime.js");
       const { hasApiKey, availableRuntimes, apiRuntime } = await getRuntimeAvailability();
       const runtime = getRuntimeMetadata();
       const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
       const hasSupportedNode = nodeMajor >= 24;
 
+      const waiting = pending.listPendingReports().length;
       console.log("");
       console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" doctor"));
       console.log("");
@@ -28,6 +36,10 @@ export function registerDoctorCommand(program: Command): void {
       console.log(`  API provider  ${apiStatus}`);
       console.log(`  CLI providers ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
       console.log("");
+      if (waiting > 0) {
+        console.log(`  ${waiting} crash report${waiting === 1 ? " is" : "s are"} waiting for review: open 0 web → Settings → Feedback, or discard with 0 doctor --discard-reports`);
+        console.log("");
+      }
 
       if (!hasSupportedNode) {
         console.log(chalk.red("  Upgrade to Node 24+ before running 0."));

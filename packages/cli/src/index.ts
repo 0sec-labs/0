@@ -2,6 +2,8 @@
 
 
 import "./apply-env-aliases.js";
+// Last-resort crash capture (consent-gated; see crash-capture.ts). Must stay right after env aliases.
+import "./crash-capture-install.js";
 import { Command } from "commander";
 import chalk from "chalk";
 import { VERSION } from "@0/engine/shared";
@@ -23,6 +25,7 @@ import {
 import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
+import { commandPathsOf, setCrashCommandPaths } from "./crash-capture.js";
 
 // Private session workers must not rediscover host accounts or execution profiles.
 if (process.argv.includes("--host-console-worker")) {
@@ -112,6 +115,7 @@ async function buildProgram(): Promise<Command> {
     }
   });
   c.registerCommandTree(program);
+  setCrashCommandPaths(commandPathsOf(program));
   return program;
 }
 
