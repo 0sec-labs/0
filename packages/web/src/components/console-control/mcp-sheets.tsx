@@ -23,7 +23,8 @@ export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { o
   const [touched, setTouched] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [enable, setEnable] = useState(false);
-  useEffect(() => { if (!open) { setDraft(emptyMcpDraft()); setStep("form"); setTouched(false); setAcknowledged(false); setEnable(false); preview.reset(); create.reset(); test.reset(); } // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) { setDraft(emptyMcpDraft()); setStep("form"); setTouched(false); setAcknowledged(false); setEnable(false); preview.reset(); create.reset(); test.reset(); } // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const validation = validateMcpDraft(draft);
   const busy = create.isPending;
@@ -36,41 +37,41 @@ export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { o
   const title = step === "form" ? "Add MCP server" : step === "review" ? "Review and add" : "Server added";
   return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} title={title} description={step === "review" ? "Nothing has run yet." : undefined}
     footer={<>
-        {step === "form" && <><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><SubmitButton type="submit" form="add-mcp-server" pending={preview.isPending}>Review</SubmitButton></>}
-        {step === "review" && <><Button variant="ghost" disabled={busy} onClick={() => setStep("form")}>Back</Button>
-          <SubmitButton pending={busy} disabled={!acknowledged || !approval || !validation.payload} onClick={() => approval && validation.payload && create.mutate({ config: validation.payload, fingerprint: approval.fingerprint, enable }, { onSuccess: () => setStep("done") })}>Add server</SubmitButton></>}
-        {step === "done" && <Button onClick={() => onOpenChange(false)}>Done</Button>}
-  </>}>
-        {step === "form" && <form id="add-mcp-server" className="flex flex-col gap-5" noValidate onSubmit={event => { event.preventDefault(); review(); }}>
-          <TextField label="Name" value={draft.name} onChange={event => change({ name: event.target.value })} placeholder="Docs" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("name"))} hint={error("name")} data-1p-ignore data-lpignore="true" />
-          <div className="grid gap-2 text-sm"><label className="font-medium" htmlFor="mcp-transport">Transport</label><Select id="mcp-transport" aria-label="Transport" value={draft.transport} onValueChange={value => change({ transport: value === "http" || value === "sse" ? value : "stdio" })} options={[{ value: "stdio", label: "Command (stdio)" }, { value: "http", label: "HTTP (streamable)" }, { value: "sse", label: "SSE" }]} /></div>
-          {stdio ? <>
-            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>{STDIO_WARNING}</span></div>
-            <TextField label="Command" value={draft.command} onChange={event => change({ command: event.target.value })} placeholder="npx" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("command"))} hint={error("command")} data-1p-ignore data-lpignore="true" />
-            <TextField label="Arguments" value={draft.args} onChange={event => change({ args: event.target.value })} placeholder={'-y @scope/server "/path with spaces"'} autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("args"))} hint={error("args")} data-1p-ignore data-lpignore="true" />
-            <TextField label="Working folder (optional)" value={draft.cwd} onChange={event => change({ cwd: event.target.value })} placeholder="tools/server" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("cwd"))} hint={error("cwd")} data-1p-ignore data-lpignore="true" />
-            <KeyValueRows label="Environment variables" rows={draft.env} onChange={env => change({ env })} keyLabel="Variable" keyPlaceholder="API_KEY" secret error={error("env")} />
-          </> : <>
-            <TextField label="URL" type="url" value={draft.url} onChange={event => change({ url: event.target.value })} placeholder="https://example.com/mcp" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("url"))} hint={error("url")} data-1p-ignore data-lpignore="true" />
-            <KeyValueRows label="Headers" rows={draft.headers} onChange={headers => change({ headers })} keyLabel="Header" keyPlaceholder="Authorization" secret error={error("headers")} />
-          </>}
-          <p className="text-xs text-muted-foreground-2">Write-only. Never shown again.</p>
-          {preview.isError && <Feedback error={preview.error} />}
-        </form>}
-        {step === "review" && approval && <ApprovalReview approval={approval} name={draft.name.trim()} hostName={hostName} />}
-        {step === "review" && <>
-          <Check checked={acknowledged} onChange={setAcknowledged} disabled={busy}>{approval?.transport === "stdio" ? `I trust this command and understand it will run on ${hostName} as my user.` : "I trust this server and understand 0 can call its tools."}</Check>
-          <Check checked={enable} onChange={setEnable} disabled={busy}>Enable it for new threads right away. Leave this off to test first.</Check>
-          <Feedback error={create.error} />
-        </>}
-        {step === "done" && created && <div className="flex flex-col gap-4">
-          <SettingsCard className="mx-0"><SettingsRow label={created.name} description={created.enabled ? "Enabled for new threads." : "Saved and off. Test it, then turn it on from its page."}><StatusBadge appearance="outline" tone={created.enabled ? "success" : "neutral"}>{created.enabled ? "On" : "Off"}</StatusBadge></SettingsRow></SettingsCard>
-          <div className="flex flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-4">
-            <div className="flex items-center justify-between gap-3"><div className="min-w-0"><h3 className="text-sm font-medium">Test connection</h3><p className="text-sm text-muted-foreground-2">{stdio ? `Starts the command once on ${hostName} to list its tools.` : "Connects once to list its tools."}</p></div><SubmitButton type="button" variant="outline" size="sm" pending={test.isPending} onClick={() => test.mutate({ id: created.id })}>{test.data ? "Test again" : "Test connection"}</SubmitButton></div>
-            {test.isError && <Feedback error={test.error} />}
-            {test.data && <TestResult result={test.data} />}
-          </div>
-        </div>}
+      {step === "form" && <><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><SubmitButton type="submit" form="add-mcp-server" pending={preview.isPending}>Review</SubmitButton></>}
+      {step === "review" && <><Button variant="ghost" disabled={busy} onClick={() => setStep("form")}>Back</Button>
+        <SubmitButton pending={busy} disabled={!acknowledged || !approval || !validation.payload} onClick={() => approval && validation.payload && create.mutate({ config: validation.payload, fingerprint: approval.fingerprint, enable }, { onSuccess: () => setStep("done") })}>Add server</SubmitButton></>}
+      {step === "done" && <Button onClick={() => onOpenChange(false)}>Done</Button>}
+    </>}>
+    {step === "form" && <form id="add-mcp-server" className="flex flex-col gap-5" noValidate onSubmit={event => { event.preventDefault(); review(); }}>
+      <TextField label="Name" value={draft.name} onChange={event => change({ name: event.target.value })} placeholder="Docs" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("name"))} hint={error("name")} data-1p-ignore data-lpignore="true" />
+      <div className="grid gap-2 text-sm"><label className="font-medium" htmlFor="mcp-transport">Transport</label><Select id="mcp-transport" aria-label="Transport" value={draft.transport} onValueChange={value => change({ transport: value === "http" || value === "sse" ? value : "stdio" })} options={[{ value: "stdio", label: "Command (stdio)" }, { value: "http", label: "HTTP (streamable)" }, { value: "sse", label: "SSE" }]} /></div>
+      {stdio ? <>
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>{STDIO_WARNING}</span></div>
+        <TextField label="Command" value={draft.command} onChange={event => change({ command: event.target.value })} placeholder="npx" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("command"))} hint={error("command")} data-1p-ignore data-lpignore="true" />
+        <TextField label="Arguments" value={draft.args} onChange={event => change({ args: event.target.value })} placeholder={'-y @scope/server "/path with spaces"'} autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("args"))} hint={error("args")} data-1p-ignore data-lpignore="true" />
+        <TextField label="Working folder (optional)" value={draft.cwd} onChange={event => change({ cwd: event.target.value })} placeholder="tools/server" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("cwd"))} hint={error("cwd")} data-1p-ignore data-lpignore="true" />
+        <KeyValueRows label="Environment variables" rows={draft.env} onChange={env => change({ env })} keyLabel="Variable" keyPlaceholder="API_KEY" secret error={error("env")} />
+      </> : <>
+        <TextField label="URL" type="url" value={draft.url} onChange={event => change({ url: event.target.value })} placeholder="https://example.com/mcp" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("url"))} hint={error("url")} data-1p-ignore data-lpignore="true" />
+        <KeyValueRows label="Headers" rows={draft.headers} onChange={headers => change({ headers })} keyLabel="Header" keyPlaceholder="Authorization" secret error={error("headers")} />
+      </>}
+      <p className="text-xs text-muted-foreground-2">Write-only. Never shown again.</p>
+      {preview.isError && <Feedback error={preview.error} />}
+    </form>}
+    {step === "review" && approval && <ApprovalReview approval={approval} name={draft.name.trim()} hostName={hostName} />}
+    {step === "review" && <>
+      <Check checked={acknowledged} onChange={setAcknowledged} disabled={busy}>{approval?.transport === "stdio" ? `I trust this command and understand it will run on ${hostName} as my user.` : "I trust this server and understand 0 can call its tools."}</Check>
+      <Check checked={enable} onChange={setEnable} disabled={busy}>Enable it for new threads right away. Leave this off to test first.</Check>
+      <Feedback error={create.error} />
+    </>}
+    {step === "done" && created && <div className="flex flex-col gap-4">
+      <SettingsCard className="mx-0"><SettingsRow label={created.name} description={created.enabled ? "Enabled for new threads." : "Saved and off. Test it, then turn it on from its page."}><StatusBadge appearance="outline" tone={created.enabled ? "success" : "neutral"}>{created.enabled ? "On" : "Off"}</StatusBadge></SettingsRow></SettingsCard>
+      <div className="flex flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-4">
+        <div className="flex items-center justify-between gap-3"><div className="min-w-0"><h3 className="text-sm font-medium">Test connection</h3><p className="text-sm text-muted-foreground-2">{stdio ? `Starts the command once on ${hostName} to list its tools.` : "Connects once to list its tools."}</p></div><SubmitButton type="button" variant="outline" size="sm" pending={test.isPending} onClick={() => test.mutate({ id: created.id })}>{test.data ? "Test again" : "Test connection"}</SubmitButton></div>
+        {test.isError && <Feedback error={test.error} />}
+        {test.data && <TestResult result={test.data} />}
+      </div>
+    </div>}
   </SheetPanel>;
 }
 
@@ -101,7 +102,8 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
   const { githubReview, githubApprove } = actions;
   const [repo, setRepo] = useState(""); const [ref, setRef] = useState("");
   const [touched, setTouched] = useState(false); const [reviewed, setReviewed] = useState(false); const [replace, setReplace] = useState(false); const [done, setDone] = useState<string | null>(null);
-  useEffect(() => { if (!open) { setRepo(""); setRef(""); setTouched(false); setReviewed(false); setReplace(false); setDone(null); githubReview.reset(); githubApprove.reset(); } // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) { setRepo(""); setRef(""); setTouched(false); setReviewed(false); setReplace(false); setDone(null); githubReview.reset(); githubApprove.reset(); } // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const parsed = parseGithubRepo(repo, ref);
   const review = githubReview.data; const busy = githubApprove.isPending;
@@ -110,30 +112,53 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
   const approvable = review && isFullSha(review.sha) && (!review.alreadyInstalled || replace);
   return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} showClose={!busy && !done} title="Add plugin from GitHub" description="You approve the pinned commit before it is installed."
     footer={<>
-        <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>{done ? "Close" : "Cancel"}</Button>
-        {review && !done && <SubmitButton pending={busy} disabled={!reviewed || !approvable} onClick={() => githubApprove.mutate({ reviewId: review.reviewId, sha: review.sha, permissionHash: review.permissionHash, ...(replace ? { replaceExisting: true } : {}) }, { onSuccess: result => setDone(result?.message || "Installed, and not enabled. Open it in the list to review its permissions and enable it.") })}>Install commit {review.sha.slice(0, 7)}</SubmitButton>}
-  </>}>
-        <form id="add-github-plugin" noValidate hidden={Boolean(done)} className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); resolve(); }}>
-          <TextField label="Repository" value={repo} onChange={edit(setRepo)} placeholder="owner/name" autoComplete="off" spellCheck={false} aria-invalid={touched && Boolean(parsed.error)} hint={touched && parsed.error ? parsed.error : undefined} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
-          <TextField label="Branch, tag or commit" value={ref} onChange={edit(setRef)} placeholder="Default branch" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
-          <div><SubmitButton type="submit" variant="outline" size="sm" pending={githubReview.isPending} disabled={busy}>{review ? "Resolve again" : "Resolve and review"}</SubmitButton></div>
-          {githubReview.isError && <Feedback error={githubReview.error} />}
-        </form>
-        {review && !done && <section className="flex flex-col gap-4" aria-label="Review">
+      <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>{done ? "Close" : "Cancel"}</Button>
+      {review && !done && <SubmitButton pending={busy} disabled={!reviewed || !approvable} onClick={() => githubApprove.mutate({ reviewId: review.reviewId, sha: review.sha, permissionHash: review.permissionHash, ...(replace ? { replaceExisting: true } : {}) }, { onSuccess: result => setDone(result?.message || "Installed, and not enabled. Open it in the list to review its permissions and enable it.") })}>Install commit {review.sha.slice(0, 7)}</SubmitButton>}
+    </>}>
+    <form id="add-github-plugin" noValidate hidden={Boolean(done)} className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); resolve(); }}>
+      <TextField label="Repository" value={repo} onChange={edit(setRepo)} placeholder="owner/name" autoComplete="off" spellCheck={false} aria-invalid={touched && Boolean(parsed.error)} hint={touched && parsed.error ? parsed.error : undefined} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
+      <TextField label="Branch, tag or commit" value={ref} onChange={edit(setRef)} placeholder="Default branch" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
+      <div><SubmitButton type="submit" variant="outline" size="sm" pending={githubReview.isPending} disabled={busy}>{review ? "Resolve again" : "Resolve and review"}</SubmitButton></div>
+      {githubReview.isError && <Feedback error={githubReview.error} />}
+    </form>
+    {review && !done && <section className="flex flex-col gap-4" aria-label="Review">
+      <SettingsCard className="mx-0">
+        <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">{review.name}{review.version ? ` ${review.version}` : ""}</h3><p className="text-sm break-words text-muted-foreground-2">{review.repo} @ {review.ref}</p></div></SettingsCardRow>
+        <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Resolved commit</h3><p aria-label="Resolved commit" className="font-mono text-xs break-all text-foreground">{review.sha}</p>{!isFullSha(review.sha) && <p className="text-sm text-warning">This is not a full commit hash. Do not approve it.</p>}{review.entryBytes ? <p className="mt-1 text-xs text-muted-foreground-2">Plugin code: {Math.max(1, Math.round(review.entryBytes / 1024))} KB</p> : null}</div></SettingsCardRow>
+      </SettingsCard>
+      <div className="flex flex-col gap-2"><h3 className="text-base font-medium">Permissions it asks for</h3>
+        <SettingsCard className="mx-0">{review.capabilities.length ? review.capabilities.map(permission => <div key={permission} className="p-4 text-sm break-words">{permission}</div>) : <div className="p-4 text-sm text-muted-foreground-2">No extra permissions declared.</div>}</SettingsCard></div>
+      {review.tools.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-base font-medium">Tools</h3>
           <SettingsCard className="mx-0">
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">{review.name}{review.version ? ` ${review.version}` : ""}</h3><p className="text-sm break-words text-muted-foreground-2">{review.repo} @ {review.ref}</p></div></SettingsCardRow>
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Resolved commit</h3><p aria-label="Resolved commit" className="font-mono text-xs break-all text-foreground">{review.sha}</p>{!isFullSha(review.sha) && <p className="text-sm text-warning">This is not a full commit hash. Do not approve it.</p>}{review.entryBytes ? <p className="mt-1 text-xs text-muted-foreground-2">Plugin code: {Math.max(1, Math.round(review.entryBytes / 1024))} KB</p> : null}</div></SettingsCardRow>
+            {review.tools.map(tool => {
+              const isChanged = review.toolChanges?.changed.includes(tool.name);
+              const isAdded = review.toolChanges?.added.includes(tool.name);
+              const isRemoved = review.toolChanges?.removed.includes(tool.name);
+              return (
+                <div key={tool.name} className="p-4">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-medium break-words">{tool.name}</h4>
+                    {isChanged && <span className="px-1.5 py-0.5 text-[10px] uppercase font-bold bg-amber-500/10 text-amber-500 rounded border border-amber-500/20">Changed</span>}
+                    {isAdded && <span className="px-1.5 py-0.5 text-[10px] uppercase font-bold bg-green-500/10 text-green-500 rounded border border-green-500/20">Added</span>}
+                    {isRemoved && <span className="px-1.5 py-0.5 text-[10px] uppercase font-bold bg-red-500/10 text-red-500 rounded border border-red-500/20">Removed</span>}
+                  </div>
+                  {tool.description && <p className="text-sm break-words text-muted-foreground-2 mt-1">{tool.description}</p>}
+                  {tool.capabilities.length > 0 && <p className="text-xs text-muted-foreground-2 mt-1">Needs: {tool.capabilities.join(", ")}</p>}
+                </div>
+              );
+            })}
           </SettingsCard>
-          <div className="flex flex-col gap-2"><h3 className="text-base font-medium">Permissions it asks for</h3>
-            <SettingsCard className="mx-0">{review.capabilities.length ? review.capabilities.map(permission => <div key={permission} className="p-4 text-sm break-words">{permission}</div>) : <div className="p-4 text-sm text-muted-foreground-2">No extra permissions declared.</div>}</SettingsCard></div>
-          {review.tools.length > 0 && <div className="flex flex-col gap-2"><h3 className="text-base font-medium">Tools</h3><SettingsCard className="mx-0">{review.tools.map(tool => <div key={tool.name} className="p-4"><h4 className="text-sm font-medium break-words">{tool.name}</h4>{tool.description && <p className="text-sm break-words text-muted-foreground-2">{tool.description}</p>}{tool.capabilities.length > 0 && <p className="text-xs text-muted-foreground-2">Needs: {tool.capabilities.join(", ")}</p>}</div>)}</SettingsCard></div>}
-          <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>Plugin code is third-party code that runs with the permissions above once you enable it. Installing does not enable it.</span></div>
-          <p className="text-sm text-muted-foreground-2">This installs commit {review.sha.slice(0, 12)} only. It never updates by itself.</p>
-          {review.alreadyInstalled && <Check checked={replace} onChange={setReplace} disabled={busy}>A plugin with this id is already installed. Replace it with this commit.</Check>}
-          <Check checked={reviewed} onChange={setReviewed} disabled={busy}>I reviewed commit {review.sha.slice(0, 12)} and its permissions.</Check>
-          <Feedback error={githubApprove.error} />
-        </section>}
-        {done && <Feedback message={done} />}
+        </div>
+      )}
+      <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>Plugin code is third-party code that runs with the permissions above once you enable it. Installing does not enable it.</span></div>
+      <p className="text-sm text-muted-foreground-2">This installs commit {review.sha.slice(0, 12)} only. It never updates by itself.</p>
+      {review.alreadyInstalled && <Check checked={replace} onChange={setReplace} disabled={busy}>A plugin with this id is already installed. Replace it with this commit.</Check>}
+      <Check checked={reviewed} onChange={setReviewed} disabled={busy}>I reviewed commit {review.sha.slice(0, 12)} and its permissions.</Check>
+      <Feedback error={githubApprove.error} />
+    </section>}
+    {done && <Feedback message={done} />}
   </SheetPanel>;
 }
 

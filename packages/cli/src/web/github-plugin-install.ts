@@ -23,6 +23,7 @@ interface Review {
   tools: Array<{ name: string; description: string; capabilities: string[] }>;
   /** sha256 per tool name over its full definition; see toolHash. */
   toolHashes: Record<string, string>;
+  toolChanges: ToolChanges | null;
   permissionHash: string; entrySha256: string; entryBytes: number; alreadyInstalled: boolean; expiresAt: string;
 }
 interface Staged { review: Review; manifest: Buffer; entry: Buffer; expires: number }
@@ -159,9 +160,13 @@ export class GithubPluginInstaller {
     const now = this.#now();
     for (const [id, staged] of this.#staged) if (staged.expires <= now) this.#staged.delete(id);
     if (this.#staged.size >= 16) this.#staged.delete(this.#staged.keys().next().value!);
+
+    const targetPath = join(pluginsRootDir(this.#homeDir), manifest.id);
+    const alreadyInstalled = existsSync(targetPath);
+    const toolChanges = alreadyInstalled ? compareToolHashes(readRecordedToolHashes(targetPath), toolHashes) : null;
     const review: Review = {
       reviewId: randomUUID(), repo, ref: ref ?? null, sha: fetched.sha, id: manifest.id, name: manifest.name ?? manifest.id, version: manifest.version,
-      capabilities, tools, toolHashes, permissionHash, entrySha256, entryBytes: fetched.entry.length,
+      capabilities, tools, toolHashes, toolChanges, permissionHash, entrySha256, entryBytes: fetched.entry.length,
       alreadyInstalled: existsSync(join(pluginsRootDir(this.#homeDir), manifest.id)), expiresAt: new Date(now + TTL_MS).toISOString(),
     };
     this.#staged.set(review.reviewId, { review, manifest: fetched.manifest, entry: fetched.entry, expires: now + TTL_MS });
