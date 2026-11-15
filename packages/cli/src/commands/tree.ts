@@ -76,6 +76,8 @@ import { registerCampaignCommand } from "./campaign.js";
 import { registerMissionsCommand } from "./missions.js";
 import { registerFindingsExportCommand } from "./findings-export.js";
 import { registerFindingsKeysCommand } from "./findings-keys.js";
+import { registerSentinelsCommand } from "./sentinels.js";
+import { registerAutomationManageCommands } from "./automation-manage.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -117,6 +119,8 @@ export function registerCommandTree(program: Command): void {
   nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand]);
   registerWorkflowCommand(program); // also registers `chats`, `automation` and `runs`
   registerMissionsCommand(program);
+  nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
+  registerSentinelsCommand(program);
   nest(program, "runs", [
     registerHistoryCommand, registerReplayCommand,
     (parent) => registerResumeCommand(parent, "relaunch"),

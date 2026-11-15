@@ -92,6 +92,18 @@ export function registerLocalEngine(input: LocalEngineRegistration, dbPath?: str
   writeFileSync(path, JSON.stringify(descriptor), { flag: "wx", mode: 0o600 });
   return () => removeMatching(path, descriptor.nonce);
 }
+/**
+ * Read-only discovery of a live local host for in-process clients that speak the console API directly.
+ * A stale descriptor (dead pid) is removed. The token is control-token authority: callers must never print it.
+ */
+export function discoverLocalEngine(options: { dbPath?: string; homeDir?: string } = {}): { url: string; token: string; engineId: string; serverInstanceId: string; pid: number } | null {
+  if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
+  const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
+  const descriptor = readDescriptor(path);
+  if (!descriptor) return null;
+  if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
+  return { url: loopbackUrl(descriptor.url), token: descriptor.token, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId, pid: descriptor.pid };
+}
 /** Presence of a live descriptor is an authority boundary, never a reason to silently create a new host. */
 export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
   if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
