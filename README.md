@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is an open-source framework for building security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, prove them, fix them, verify the fix and keep watching. It runs on your own infrastructure, with the LLMs you choose.
+  0security is an open-source framework for building and deploying security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, prove them, fix them, verify the fix and keep watching. It runs on your own infrastructure, with the LLMs you choose.
 </p>
 
 <p align="center">

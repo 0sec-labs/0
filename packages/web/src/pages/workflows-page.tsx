@@ -29,6 +29,7 @@ import { errorText } from "@/lib/api-error";
 import { readAutomationDraft } from "@/components/automations/automation-draft";
 import type { ProjectResponse } from "@/components/console-control/contracts";
 import { Button } from "@/components/ui/button";
+import { folderLabel } from "@/console/file-path-picker";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
 
@@ -37,7 +38,7 @@ function runSummary(workflow: SecurityWorkflow | null, steps: readonly SecurityW
   if (!workflow) return "";
   const minutes = Math.round(steps.reduce((sum, node) => sum + (node.plan?.timeCapMs ?? 0), 0) / 60000);
   const cost = steps.reduce((sum, node) => sum + (node.plan?.costCapUsd ?? 0), 0);
-  const where = workflow.target === workspace || !workflow.target ? "This project" : workflow.target;
+  const where = workflow.target === workspace || !workflow.target ? (workspace ? `Runs in ${folderLabel(workspace)}` : "Runs in the current folder") : workflow.target;
   return [where, `${steps.length} ${steps.length === 1 ? "step" : "steps"}`, minutes ? `up to ${minutes} min` : "", cost ? `up to $${cost}` : "", workflow.model ? workflow.model.model : ""].filter(Boolean).join(" · ");
 }
 
@@ -64,7 +65,7 @@ export function WorkflowsPage() {
   const page = useRef<HTMLDivElement>(null);
   const definitionKey = queryKeys.workflowDefinitions(client.backendId, team.user?.workspaceId, team.user?.userId);
   const definitions = useQuery({ queryKey: definitionKey, queryFn: ({ signal }) => webFetchJson<{ definitions: SecurityWorkflow[] }>(DEFINITIONS, { signal }), refetchInterval: selectedId ? 1000 : 30_000, retry: false });
-  // The current project is implicit: automations that review code run against it, so nobody picks a project.
+  // The current folder is implicit: automations that review code run in it.
   const project = useQuery({ queryKey: queryKeys.consoleProject(), queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), staleTime: 60_000, retry: false });
   const workspace = project.data?.path ?? "";
   const selected = definitions.data?.definitions.find(item => item.id === selectedId);
@@ -132,7 +133,7 @@ export function WorkflowsPage() {
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
   });
   const createBlank = () => create(blankAutomationInput({ target: workspace }));
-  // Older automations that review code were saved without a target; they take the current project the first time they open.
+  // Older automations that review code were saved without a target; they take the current folder the first time they open.
   const filled = useRef(new Set<string>());
   useEffect(() => {
     if (!selected || readOnly || busy || !workspace || selected.target.trim() || filled.current.has(selected.id) || securityWorkflowScopeKind(selected.template?.id) === "url") return;

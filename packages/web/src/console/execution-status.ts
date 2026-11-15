@@ -9,7 +9,7 @@ export function executionLabel(execution?: ConsoleExecutionSnapshot): string {
 export function executionDetails(execution?: ConsoleExecutionSnapshot): string[] {
   if (!execution) return [];
   return [
-    execution.workspacePath && `Project: ${execution.workspacePath}`,
+    execution.workspacePath && `Folder: ${execution.workspacePath}`,
     execution.backend === "smolvm" && execution.status === "running" && execution.guestWorkspacePath && `Guest: ${execution.guestWorkspacePath}`,
     execution.runId && `Run: ${execution.runId}`,
     execution.imageDigest && `Image: ${execution.imageDigest}`,

@@ -11,13 +11,9 @@ import { cn } from "@/lib/utils";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { isPrivacyMessage, folderLabel, samePath } from "./workspace-path";
 
-/** Project label: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0security`). */
-function projectLabel(path: string) {
-  const parts = path.split(/[\\/]+/).filter(Boolean);
-  const last = parts.at(-1) ?? path;
-  return last.length < 3 && parts.length > 1 ? `${parts.at(-2)}/${last}` : last;
-}
+export { folderLabel };
 
 const NO_RECENTS: string[] = [];
 const ROW =
@@ -59,6 +55,7 @@ export function FilePathPicker({
   // A switch the server accepted is applied after it replies; keep the popover open until that settles.
   const [applying, setApplying] = useState<{ path: string; baseline?: string } | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [privacyNote, setPrivacyNote] = useState<string | null>(null);
   const nativeRequest = useRef<AbortController | null>(null);
   const nativeGeneration = useRef(0);
   const nativeAvailable =
@@ -88,13 +85,14 @@ export function FilePathPicker({
     setNativeMessage(null);
     setApplying(null);
     setApplyMessage(null);
+    setPrivacyNote(null);
   }, [client, sessionId, disabled, cancelNative]);
   useEffect(() => {
     if (!applying) return;
     if (applyError && applyError.at !== applying.baseline) {
       setApplying(null);
       setApplyMessage(applyError.message);
-    } else if (cwd === applying.path) {
+    } else if (samePath(cwd, applying.path)) {
       setApplying(null);
       setOpen(false);
     }
@@ -114,7 +112,11 @@ export function FilePathPicker({
     void workspace
       .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
       .then((result) => {
-        if (result) setApplying({ path: value, baseline });
+        if (!result) return;
+        // The server stores the real path (symlinks, iCloud, case, unicode form), so wait for that, not for what was typed.
+        const landed = result.session.pendingConfiguration?.workspacePath ?? result.session.workspacePath ?? value;
+        if (samePath(cwd, landed)) setOpen(false);
+        else setApplying({ path: landed, baseline });
       });
   };
   useEffect(
@@ -124,6 +126,11 @@ export function FilePathPicker({
     },
     [],
   );
+  const openPrivacySettings = async (message: string) => {
+    setPrivacyNote(null);
+    try { await webFetchJson("/api/console/project/open-privacy-settings", { method: "POST", body: JSON.stringify({ pane: message.includes("> Automation") ? "automation" : "files" }) }); }
+    catch { setPrivacyNote("Couldn't open System Settings. Open it from the Apple menu, then Privacy & Security."); }
+  };
   const chooseNativeFolder = async () => {
     if (!nativeAvailable || nativeRequest.current || workspace.busy || workspaceDisabled || disabled) return;
     const controller = new AbortController();
@@ -134,7 +141,7 @@ export function FilePathPicker({
     setApplyMessage(null);
     workspace.dismissError();
     try {
-      const result = await webFetchJson<{ supported: boolean; path: string | null }>(
+      const result = await webFetchJson<{ supported: boolean; path: string | null; message?: string; privacy?: boolean }>(
         "/api/console/project/choose-directory",
         {
           method: "POST",
@@ -144,8 +151,10 @@ export function FilePathPicker({
       );
       if (controller.signal.aborted || client.signal.aborted || nativeGeneration.current !== generation) return;
       if (!result.supported) {
-        setNativeMessage("The folder picker isn't available on this host. Browse folders below or enter a path.");
+        setNativeMessage(result.message ?? "The folder picker isn't available on this host. Browse folders below or enter a path.");
         navigate(path.trim());
+      } else if (result.message) {
+        setApplyMessage(result.message);
       } else if (result.path !== null) {
         setPath(result.path);
         setBrowserOpen(false);
@@ -165,21 +174,31 @@ export function FilePathPicker({
   useEffect(() => {
     if (cwd)
       setRecents((previous) =>
-        (previous ?? NO_RECENTS)[0] === cwd
+        samePath((previous ?? NO_RECENTS)[0], cwd)
           ? previous
-          : [cwd, ...(previous ?? NO_RECENTS).filter((item) => item !== cwd)].slice(0, 8),
+          : [cwd, ...(previous ?? NO_RECENTS).filter((item) => !samePath(item, cwd))].slice(0, 8),
       );
   }, [cwd, setRecents]);
-  const folders = [...new Set([...(cwd ? [cwd] : []), ...(recents ?? NO_RECENTS)])].filter((item) =>
-    item.toLowerCase().includes(filter.trim().toLowerCase()),
-  );
+  const folders = [...(cwd ? [cwd] : []), ...(recents ?? NO_RECENTS)]
+    .filter((item, index, all) => all.findIndex((other) => samePath(other, item)) === index)
+    .filter((item) =>
+      item.toLowerCase().includes(filter.trim().toLowerCase()),
+    );
   // The native dialog never locks the manual path: typing or browsing stays available while it is open.
   const controlsDisabled = workspace.busy || workspaceDisabled;
   const pickError = open ? (applyMessage ?? workspace.error ?? null) : null;
   const pickAlert = pickError && (
-    <p role="alert" data-testid="workspace-pick-error" className="mt-2 text-xs text-destructive">
-      {pickError}
-    </p>
+    <div className="mt-2 space-y-1.5">
+      <p role="alert" data-testid="workspace-pick-error" className="text-xs text-destructive">
+        {pickError}
+      </p>
+      {isPrivacyMessage(pickError) && nativeAvailable && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => void openPrivacySettings(pickError)}>
+          Open Privacy settings
+        </Button>
+      )}
+      {privacyNote && <p role="status" className="text-xs text-muted-foreground">{privacyNote}</p>}
+    </div>
   );
   const inputId = useId();
   const descriptionId = useId();
@@ -201,7 +220,7 @@ export function FilePathPicker({
         if (next) setBrowseRequest((previous) => ({ path: cwd ?? "", revision: previous.revision + 1 }));
       }}
     >
-      <Tooltip content={cwd ? `Project: ${cwd}` : "Choose project folder"}>
+      <Tooltip content={cwd ? `Folder: ${cwd}` : "Choose folder"}>
         <Popover.Trigger
           className={cn(
             "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:text-foreground disabled:opacity-40",
@@ -211,7 +230,7 @@ export function FilePathPicker({
             className,
           )}
           disabled={disabled || workspaceDisabled}
-          aria-label={cwd ? `Change project: ${cwd}` : "Change project"}
+          aria-label={cwd ? `Change folder: ${cwd}` : "Change folder"}
         >
           <Folder
             aria-hidden="true"
@@ -219,7 +238,7 @@ export function FilePathPicker({
             className={cn("shrink-0 translate-y-[0.5px]", rail ? "size-3" : "size-3.5")}
           />
           <span className="min-w-0 max-w-[min(16rem,40vw)] truncate text-left" dir="ltr">
-            {cwd ? projectLabel(cwd) : "Choose folder"}
+            {cwd ? folderLabel(cwd) : "Choose folder"}
           </span>
           <ChevronDown aria-hidden="true" strokeWidth={1} className="size-3.5 shrink-0 text-muted-foreground-3" />
         </Popover.Trigger>
@@ -237,9 +256,9 @@ export function FilePathPicker({
       >
         {!form && (
           <>
-            <Popover.Title className="sr-only">Change project</Popover.Title>
+            <Popover.Title className="sr-only">Change folder</Popover.Title>
             <Popover.Description className="sr-only">
-              {cwd ? `Current project: ${cwd}` : "Choose the folder where Zero works."}
+              {cwd ? `Current folder: ${cwd}` : "Choose the folder where Zero works."}
             </Popover.Description>
             <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-popover px-1 pt-1">
               <div className="relative">
@@ -254,8 +273,8 @@ export function FilePathPicker({
                   autoComplete="off"
                   data-1p-ignore
                   data-lpignore="true"
-                  aria-label="Search projects"
-                  placeholder="Search projects"
+                  aria-label="Search folders"
+                  placeholder="Search folders"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   className="block h-7 w-full bg-transparent pl-7 pr-2 text-[13px] font-[450] tracking-[-0.01em] text-foreground outline-none placeholder:text-muted-foreground-3"
@@ -263,28 +282,28 @@ export function FilePathPicker({
               </div>
               <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
             </div>
-            <div role="group" aria-label="Recent projects" className="flex flex-col">
+            <div role="group" aria-label="Recent folders" className="flex flex-col">
               {folders.map((item) => (
                 <button
                   key={item}
                   type="button"
                   title={item}
                   className={ROW}
-                  disabled={controlsDisabled || item === cwd}
-                  aria-current={item === cwd ? "true" : undefined}
+                  disabled={controlsDisabled || samePath(item, cwd)}
+                  aria-current={samePath(item, cwd) ? "true" : undefined}
                   onClick={() => choose(item)}
                 >
                   <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
-                  <span className="shrink-0 truncate">{projectLabel(item)}</span>
+                  <span className="shrink-0 truncate">{folderLabel(item)}</span>
                   <span dir="ltr" className="min-w-0 flex-1 truncate text-xs text-muted-foreground-2">
                     {item}
                   </span>
-                  {item === cwd && <Check aria-hidden="true" className="size-3.5 shrink-0 text-foreground" />}
+                  {samePath(item, cwd) && <Check aria-hidden="true" className="size-3.5 shrink-0 text-foreground" />}
                 </button>
               ))}
               {!folders.length && (
                 <p className="px-2 py-1.5 text-[13px] text-muted-foreground-1">
-                  {filter ? "No matching projects." : "No recent folders."}
+                  {filter ? "No matching folders." : "No recent folders."}
                 </p>
               )}
             </div>
@@ -312,7 +331,7 @@ export function FilePathPicker({
         {form && (
           <>
             <Popover.Title className="sticky top-0 z-10 flex min-h-[22px] items-center bg-popover text-xs font-medium text-muted-foreground-2">
-              Change project
+              Change folder
             </Popover.Title>
             <Popover.Description
               id={descriptionId}
@@ -362,7 +381,7 @@ export function FilePathPicker({
                 )
               )}
               <label htmlFor={inputId} className="sr-only">
-                Project folder path
+                Folder path
               </label>
               <div className="flex gap-2">
                 <Input
@@ -418,7 +437,7 @@ export function FilePathPicker({
                 <Button type="button" variant="ghost" size="sm" onClick={() => setForm(false)}>
                   Back
                 </Button>
-                <Button type="submit" size="sm" disabled={controlsDisabled || !path.trim() || path.trim() === cwd}>
+                <Button type="submit" size="sm" disabled={controlsDisabled || !path.trim() || samePath(path.trim(), cwd)}>
                   Use folder
                 </Button>
               </div>

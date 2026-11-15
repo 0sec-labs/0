@@ -14,11 +14,16 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- Automation templates no longer mention projects; automations run in the current folder.
 - Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
 
 ### Removed
 
 - Remove the Suggestions view from Memory, and the Learning section from the Automation page. The Memory page now lists saved memory only.
+
+### Fixed
+
+- Choosing Desktop, Documents, Downloads, iCloud Drive or an external drive on macOS now says when macOS privacy protection is the blocker, names the app to allow, and offers **Open Privacy settings**. The folder chooser no longer opens for a browser on another computer or without a desktop session, closing the popover closes the chooser, and a switch to a symlinked, differently cased or decomposed-unicode path no longer waits 8 seconds before the popover closes.
 
 ## [0.30.0] - 2026-11-14
 

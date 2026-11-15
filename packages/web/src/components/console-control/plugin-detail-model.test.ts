@@ -36,7 +36,7 @@ describe("buildPluginView", () => {
     expect(view.verified).toBe(false);
     expect(view.rail.find(entry => entry.label === "Verified by")).toBeUndefined();
     expect(view.status).toMatchObject({ label: "Not added", added: false });
-    expect(view.permissions).toEqual(["Send and receive data over the network", "Read files in your project", "mystery"]);
+    expect(view.permissions).toEqual(["Send and receive data over the network", "Read files in this folder", "mystery"]);
     expect(view.reportUrl).toBeUndefined();
   });
   it("marks a signed plugin verified and shows Added when enabled", () => {

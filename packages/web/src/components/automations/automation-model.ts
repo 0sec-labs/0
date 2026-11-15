@@ -145,8 +145,8 @@ export function duplicateName(name: string, existing: readonly string[] = []): s
 /** Plain wording for a failed run's raw error. Anything unrecognised is passed through. */
 export function executionErrorText(error: string): string {
   const missing = /ENOENT[^']*'([^']+)'/.exec(error);
-  if (missing) return `The project "${missing[1]}" was not found on this computer.`;
-  if (/EACCES/.test(error)) return "This computer cannot read the project. Check its permissions.";
+  if (missing) return `The folder "${missing[1]}" was not found on this computer.`;
+  if (/EACCES/.test(error)) return "This computer cannot read the folder. Check its permissions.";
   return error;
 }
 
@@ -197,9 +197,4 @@ export function runStatusTone(status: string | undefined): "success" | "danger" 
   if (status === "failed" || status === "error" || status === "interrupted") return "danger";
   if (status === "blocked" || status === "needs_review" || status === "cancelled") return "warning";
   return undefined;
-}
-
-/** Projects the Computer already knows: recent projects and mission targets, newest first, plus the current one. */
-export function knownProjects(targets: readonly (string | undefined)[], current: string): string[] {
-  return [...new Set([current, ...targets].map(item => item?.trim() ?? "").filter(Boolean))];
 }

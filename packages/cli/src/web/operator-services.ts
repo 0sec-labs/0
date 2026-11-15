@@ -53,7 +53,6 @@ import { z } from "zod";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { readUpdateStatus } from "./update-status.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
-import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
@@ -907,7 +906,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -971,13 +970,11 @@ export class WebOperatorServices {
       else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
-      } else if (path === "project/choose-directory" && method === "POST") {
-        data = await chooseWorkspaceFolder(object(input).path);
       } else if (path === "project/directories" && method === "POST") {
         data = await listWorkspaceDirectories(object(input).path);
       } else if (path === "project" && method === "GET") {
         const projectPath = realpathSync(resolve(query.get("path") ?? process.cwd()));
-        if (!statSync(projectPath).isDirectory()) throw new OperatorError(400, "invalid_project", "Project path must name a local directory.");
+        if (!statSync(projectPath).isDirectory()) throw new OperatorError(400, "invalid_project", "Folder path must name a local directory.");
         const git: { root: string | null; branch: string | null; dirty: boolean; error: string | null } = { root: null, branch: null, dirty: false, error: null };
         try {
           git.root = execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", projectPath, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -993,7 +990,7 @@ export class WebOperatorServices {
         if (!["propose", "add", "enable", "disable", "set", "remove"].includes(action)) throw new OperatorError(400, "invalid_action", "Unsupported review check action.");
         if (mutation.approved !== undefined && typeof mutation.approved !== "boolean") throw new OperatorError(400, "invalid_approval", "Approval must be an explicit boolean.");
         if (mutation.expectedRevision !== undefined && (!Number.isSafeInteger(mutation.expectedRevision) || Number(mutation.expectedRevision) < 1)) throw new OperatorError(400, "invalid_revision", "Expected revision must be a positive integer.");
-        data = updateProjectReviewChecks(body.path === undefined ? process.cwd() : text(body.path, "project path"), mutation as unknown as ReviewCheckMutation);
+        data = updateProjectReviewChecks(body.path === undefined ? process.cwd() : text(body.path, "folder path"), mutation as unknown as ReviewCheckMutation);
       } else if (path === "diagnostics/report" && method === "POST") {
         data = await this.#browserReport(input);
         status = 202;
