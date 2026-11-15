@@ -26,6 +26,8 @@ const markers = (over = {}) => ({ failed: 0, subagents: 0, compacted: false, ...
 describe("workedLabel", () => {
   const base = { isWorking: false, hasWork: true, stopped: false, time: "5m 16s", markers: markers() };
   it("plain, failed, subagent and compacted variants", () => {
+    expect(workedLabel({ ...base, reasoningOnly: true })).toBe("Thought for 5m 16s");
+    expect(workedLabel({ ...base, reasoningOnly: true, stopped: true })).toBe("Stopped for 5m 16s");
     expect(workedLabel(base)).toBe("Worked for 5m 16s");
     expect(workedLabel({ ...base, markers: markers({ failed: 1 }) })).toBe("Worked for 5m 16s, 1 failed");
     expect(workedLabel({ ...base, markers: markers({ failed: 2, subagents: 3, compacted: true }) })).toBe(

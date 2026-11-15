@@ -20,7 +20,8 @@ test("composer feedback reflects terminal events before session refresh and the 
     assert.equal(runFeedback(snapshot, { ...turn, notices: ["Cancellation requested."] }).label, "Stopping…");
     assert.deepEqual(runFeedback(snapshot, { ...turn, notices: ["Provider output cap reached; continuing from retained observations (continuation 4)."] }), { label: "Continuing automatically…", active: true });
     assert.deepEqual(runFeedback(snapshot, { ...turn, isComplete: true, stopReason: "max_tool_iterations" }), { label: "Response stopped at the previous tool limit", active: false }, "the stop button cannot stay active after turn-complete");
-    assert.deepEqual(runFeedback(snapshot, { ...turn, isComplete: true, stopReason: "end_turn" }), { label: "Response complete", active: false });
+    assert.deepEqual(runFeedback(snapshot, { ...turn, isComplete: true, stopReason: "end_turn", assistantText: "Done." }), { label: "Response complete", active: false });
+    assert.deepEqual(runFeedback(snapshot, { ...turn, isComplete: true, stopReason: "end_turn" }), { label: "No reply from the model", active: false }, "an empty completion is not a clean finish");
     assert.deepEqual(runFeedback(snapshot, { ...turn, isComplete: true, stopReason: "cancelled", error: "Workbench cancelled" }), { label: "Stopped", active: false });
     assert.deepEqual(runFeedback({ ...snapshot, session: { status: "failed" } }, { ...turn, error: "Connection refused" }), { label: "Response failed", active: false, error: "Connection refused" });
     const draining = { ...snapshot, session: { status: "cancelling", cancellation: { phase: "draining", message: "Waiting for cleanup" } } };

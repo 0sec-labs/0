@@ -104,6 +104,38 @@ describe("ConsoleGateway", () => {
     expect(messages).toHaveLength(4);
     await expect(instance.retry(chat.id, { text: "x", mode: "queue" })).rejects.toThrow("Retry runs immediately");
   });
+  it("flags a thread whose last turn ended without an answer, and clears it when the retry answers in place", async () => {
+    const script: ConsoleTurnOutcome[] = [
+      outcome(""),
+      { ...outcome("Partial answ"), stopReason: "output_cap" },
+      { ...outcome(""), stopReason: "error", error: "OpenAI-compatible API error: Provider finish_reason: content_filter" },
+      { ...outcome(""), toolCalls: [{ call: { name: "write_file", arguments: {} }, result: { success: true, output: "ok" } }] as ConsoleTurnOutcome["toolCalls"] },
+      outcome("Hello."),
+    ];
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async text => {
+        session.messages.push({ role: "user", content: [{ type: "text", text }] });
+        return script.shift()!;
+      };
+      return session;
+    });
+    const chat = instance.create({});
+    const flagged = async () => { await idle(instance, chat.id); return instance.get(chat.id).session.lastTurnIncomplete === true; };
+    await instance.send(chat.id, "hello?");
+    expect(await flagged()).toBe(true); // empty completion
+    expect(instance.get(chat.id).lastOutcome).toMatchObject({ stopReason: "end_turn", assistantText: "" });
+    await instance.retry(chat.id, { text: "hello?" });
+    expect(await flagged()).toBe(true); // cut off for length
+    expect(instance.get(chat.id).lastOutcome?.stopReason).toBe("output_cap");
+    await instance.retry(chat.id, { text: "hello?" });
+    expect(await flagged()).toBe(true); // blocked by the provider
+    await instance.retry(chat.id, { text: "hello?" });
+    expect(await flagged()).toBe(false); // silent finish after a tool that worked is finished work
+    await instance.retry(chat.id, { text: "hello?" });
+    expect(await flagged()).toBe(false);
+    expect(instance.get(chat.id).messages.filter(message => message.role === "user")).toHaveLength(1);
+  });
   it("forwards operator worker ceilings, reads them back, and retains restrictions on resume", async () => {
     const factory = vi.fn(engine);
     const instance = gateway(factory);

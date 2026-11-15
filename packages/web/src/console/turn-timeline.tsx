@@ -33,6 +33,7 @@ function TurnWork({ turn, subagents, shimmer, children }: { turn: ReducedTurn; s
   const label = turn.isWorking && turn.retry ? retryLabel(turn.retry, now) : workedLabel({
     isWorking: turn.isWorking,
     hasWork: Boolean(turn.toolCalls.length || turn.assistantText),
+    reasoningOnly: !turn.toolCalls.length && !turn.assistantText && Boolean(turn.reasoningText),
     stopped: turn.stopReason === "cancelled" || Boolean(turn.error),
     time,
     markers: { failed: failedCallCount(turn.toolCalls), subagents, compacted: Boolean(turn.compacted) },
@@ -167,13 +168,16 @@ export const TurnTimeline = memo(function TurnTimeline({
   const artifacts = turnArtifacts(turn);
   const answer = segments.slice(lastWork + 1);
   const answerText = answer.flatMap((segment) => (segment.type === "assistant" ? [segment.text] : [])).join("\n\n");
+  const workRows = segments
+    .slice(0, lastWork + 1)
+    .flatMap((segment, index) => (segment.type === "visual" ? [] : [render(segment, index)]))
+    .filter(Boolean);
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {(lastWork >= 0 || turn.isWorking) && (
+      {/* A divider that opens onto nothing (every call hidden, no reasoning) must not appear. */}
+      {(workRows.length > 0 || turn.isWorking) && (
         <TurnWork turn={turn} subagents={subagents} shimmer={streaming && !runningId && !reasoningTail}>
-          {segments
-            .slice(0, lastWork + 1)
-            .flatMap((segment, index) => (segment.type === "visual" ? [] : [render(segment, index)]))}
+          {workRows}
         </TurnWork>
       )}
       {segments

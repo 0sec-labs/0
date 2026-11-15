@@ -37,6 +37,8 @@ export function retryLabel(retry: { reason: "rate_limited" | "provider_error"; r
 export function workedLabel(input: {
   isWorking: boolean;
   hasWork: boolean;
+  /** Only reasoning ran: nothing was done, so the divider says the model thought rather than worked. */
+  reasoningOnly?: boolean;
   stopped: boolean;
   time: string;
   markers: WorkedMarkers;
@@ -47,7 +49,9 @@ export function workedLabel(input: {
       : "Thinking"
     : input.stopped
       ? "Stopped"
-      : "Worked";
+      : input.reasoningOnly
+        ? "Thought"
+        : "Worked";
   const head = !input.isWorking && input.time ? `${base} for ${input.time}` : base;
   return [head, ...workedMarkers(input.markers)].join(", ");
 }

@@ -139,6 +139,10 @@ export function Conversation({
       { retry: true },
     );
   }, []);
+  // A cut-off reply keeps what it said; Continue asks for the rest as an ordinary message.
+  const continueReply = useCallback(() => {
+    void latestWorkspace.current.send({ text: "Continue from where you were cut off.", mode: "send" });
+  }, []);
   const rootWorkspace = {
     ...workspace,
     draft: workspace.rootDraft,
@@ -341,6 +345,7 @@ export function Conversation({
                 {...transcriptControls}
                 onReference={referenceVisual}
                 onRetry={retryMessage}
+                onContinue={continueReply}
               />
               {snapshot.lastOutcome?.outputCap && !worker && (
                 <div

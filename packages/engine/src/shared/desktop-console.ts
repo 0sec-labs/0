@@ -86,6 +86,8 @@ export interface DesktopConsoleSession {
   messageCount?: number;
   /** The most recent turn ended with an error (for example a rejected key or a rate limit). */
   lastTurnFailed?: boolean;
+  /** The most recent turn finished without a visible answer (empty reply, cut off, blocked or dropped). */
+  lastTurnIncomplete?: boolean;
   runtime?: ConsoleRuntimeSnapshot;
   execution?: ConsoleExecutionSnapshot;
   /** Folder the mission works in; carried on every session event so clients never show a stale folder. */
@@ -319,6 +321,38 @@ export interface ConsoleTurnOutcome {
   usage?: { inputTokens: number; outputTokens: number };
   contextInputTokens?: number;
   outputCap?: { checkpoint: ConsoleJsonValue; continuations: number; message: string };
+}
+
+/** Why a finished turn left the operator without a visible answer. */
+export type TurnEndingKind = "no_reply" | "truncated" | "filtered" | "disconnected";
+
+/**
+ * The one model for "the turn ended without an answer". Pure over what a turn records, so the gateway
+ * (thread status), the transcript and the run line agree for live, restored and replayed turns alike.
+ * `silentWork` is true when the turn did visible work (a tool that succeeded, a visual) even though it
+ * produced no text: that is a finished task, not a missing reply. Cancelled turns and generic provider
+ * errors are not endings: they keep their own Stopped / error treatment.
+ */
+export function turnEndingKind(turn: {
+  stopReason?: string;
+  assistantText?: string;
+  error?: string;
+  silentWork?: boolean;
+  /** A legacy output-cap checkpoint carries its own continue control. */
+  outputCap?: unknown;
+}): TurnEndingKind | undefined {
+  if (turn.stopReason === "cancelled") return undefined;
+  const hasText = Boolean(turn.assistantText?.trim());
+  if (turn.error) {
+    if (/content[_ -]?filter|blocked by (?:the )?(?:provider|safety)|safety (?:filter|system|policy)/i.test(turn.error)) return "filtered";
+    // A stream that ends with nothing at all is an empty reply; one that ends after some text was cut off in transit.
+    if (/without finish_reason|no choices|empty (?:response|completion)/i.test(turn.error)) return hasText ? "disconnected" : "no_reply";
+    if (/UND_ERR_SOCKET|ECONNRESET|ECONNABORTED|EPIPE|other side closed|socket (?:hang up|connection was closed)|connection (?:closed|dropped|reset|was lost)|stream (?:closed|terminated)|^terminated\b|network (?:error|connection)|fetch failed/i.test(turn.error)) return "disconnected";
+    return undefined;
+  }
+  if (turn.stopReason === "output_cap") return turn.outputCap ? undefined : "truncated";
+  if ((turn.stopReason === undefined || turn.stopReason === "end_turn") && !hasText && !turn.silentWork) return "no_reply";
+  return undefined;
 }
 
 export interface ConsoleQueuedMessage {

@@ -36,6 +36,10 @@ on the GitHub Release tag.
 - The auto-granted scope notice is no longer shown in threads.
 - npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.
 
+### Fixed
+
+- A Thread turn that ends without an answer (an empty model reply, a reply cut off for length, a provider content block, or a dropped connection) no longer leaves a bare "Worked" divider. It shows a quiet line under your message ("The model returned no reply.", "The reply was cut off.", "The provider blocked this reply.", "The connection dropped before the model answered.") with Retry, Continue or Switch model, keeps any partial progress, and marks the Thread "Needs attention" in the sidebar.
+
 ## [0.31.0] - 2026-11-14
 
 This release renames Missions to Threads and Sentinels to Agents, brings most of the console to the CLI under 14 top-level commands, and shows whether a model connection really works. It also adds an experimental single-node server mode and automatic anonymous usage and crash reports.

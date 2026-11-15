@@ -19,6 +19,8 @@ import { Disclosure } from "@/components/ui/disclosure";
 import { SYNTHETIC_PROMPT_LABELS, classifySyntheticPrompt } from "./synthetic-prompt";
 import { turnLimitNotice } from "./run-feedback";
 import type { ReducedTurn } from "./transcript";
+import { turnEnding } from "./turn-ending";
+import { TurnEndingRow } from "./turn-ending-row";
 import { isLifecycleNotice, visibleResolvedDecisions } from "./transcript-visibility";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
@@ -73,6 +75,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
   onSelectWorker,
   onReference,
   onRetry,
+  onContinue,
 }: {
   turns: ReducedTurn[];
   turnWorkers: Map<string, ConsoleWorker[]>;
@@ -85,6 +88,8 @@ export const TranscriptTurns = memo(function TranscriptTurns({
   onReference?: (text: string) => void;
   /** Re-sends a user message through the composer's send path (the latest turn's generic errors only). */
   onRetry?: (message: { text: string; attachments?: ConsoleMessageInput["attachments"] }) => void;
+  /** Asks the model to carry on from a reply that was cut off. */
+  onContinue?: () => void;
 }) {
   const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const href = typeof window === "undefined" ? undefined : window.location.href;
@@ -101,6 +106,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
           const stamp =
             dayKey(turn.startedAt) !== undefined && dayKey(turn.startedAt) !== dayKey(turns[turnIndex - 1]?.startedAt);
           const synthetic = turn.user.attachments?.length ? undefined : classifySyntheticPrompt(turn.user.text);
+          const ending = turnEnding(turn, turnWorkers.get(turn.id)?.length ?? 0);
           const rejectedKey =
             Boolean(turn.error) &&
             needsProviderSignIn(turn.error!) &&
@@ -226,7 +232,26 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                     )}
                 </div>
               )}
+              {ending && (
+                <TurnEndingRow
+                  kind={ending}
+                  detail={turn.error}
+                  snapshot={snapshot}
+                  message={{ text: turn.user.text, attachments: turn.user.attachments }}
+                  interactive={
+                    turnIndex === turns.length - 1 &&
+                    !active &&
+                    canWrite &&
+                    !synthetic &&
+                    Boolean(turn.user.text || turn.user.attachments?.length)
+                  }
+                  busy={workspace.busy}
+                  onRetry={onRetry}
+                  onContinue={onContinue}
+                />
+              )}
               {turn.error &&
+                !ending &&
                 !turn.error.startsWith("Workbench cancelled") &&
                 !isCancellation(turn.error) &&
                 !(turnIndex < turns.length - 1 && recoveredProviderError(turn.error, workspace.connectionRecovery)) &&

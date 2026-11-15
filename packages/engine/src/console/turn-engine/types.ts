@@ -229,14 +229,16 @@ export interface ConsoleLocalScopeResolution {
  *   {@link ConsoleTurnOutcome.budget} for the numbers to show them).
  * - `max_tool_iterations` — an explicitly configured tool-round limit was
  *   reached. Interactive sessions impose no tool-round limit by default.
- * - `output_cap` — a restored legacy turn paused at an output limit. Observations and
- *   plan remain intact; the operator can resume with a concise remaining task.
+ * - `output_cap` — the provider cut the reply off for length (the text so far is kept), or a restored
+ *   legacy turn paused at an output limit. Observations and plan remain intact; the operator can continue.
  * - `cancelled` — the operator interrupted the turn via an {@link AbortSignal}
  *   (see {@link ConsoleSendOptions.signal}). Like the budget stops, this is NOT
  *   an error: the conversation is left intact and resumable — every dispatched
  *   `tool_use` still has a matching `tool_result` — so the operator can send
  *   another message to continue. What it does and does NOT interrupt is spelled
  *   out on {@link ConsoleSendOptions.signal}.
+ * - `output_cap` — the provider stopped the reply for length (or a restored legacy turn paused at an output
+ *   limit); the text so far is kept and the operator can ask it to continue.
  * - `error` — the LLM runtime failed.
  */
 export type ConsoleStopReason =

@@ -1950,6 +1950,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         (b): b is Extract<NativeContentBlock, { type: "tool_use" }> => b.type === "tool_use",
       );
       if (toolUseBlocks.length === 0) {
+        // The provider stopped for length with nothing to continue from: report the cut-off rather than a clean finish.
+        if (result.stopReason === "max_tokens") return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "output_cap",
+          ...(conversationTitle ? { conversationTitle } : {}),
+        };
         return {
           assistantText, toolCalls: runCalls, usage,
           contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,

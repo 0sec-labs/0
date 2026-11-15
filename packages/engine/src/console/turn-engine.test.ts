@@ -191,6 +191,28 @@ describe("createConsoleSession", () => {
     await session.cleanup();
   });
 
+  it("reports a reply the provider cut off for length instead of a clean finish, keeping its text", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "text", text: "Here is a partial answ" }], stopReason: "max_tokens", durationMs: 1 },
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const result = await session.send("Explain.");
+    expect(result.stopReason).toBe("output_cap");
+    expect(result.assistantText).toBe("Here is a partial answ");
+    expect(result.outputCap).toBeUndefined();
+    await session.cleanup();
+  });
+
+  it("finishes an empty completion as end_turn with no text, for the surface to report", async () => {
+    const runtime = new ScriptedRuntime([{ content: [], stopReason: "end_turn", durationMs: 1 }]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const result = await session.send("hello?");
+    expect(result.stopReason).toBe("end_turn");
+    expect(result.assistantText).toBe("");
+    expect(result.toolCalls).toEqual([]);
+    await session.cleanup();
+  });
+
   it("exposes the full audit-role tool registry by default", () => {
     const session = createConsoleSession({ runtime: new ScriptedRuntime([]) });
     const names = session.tools.map((t) => t.name);

@@ -1,6 +1,7 @@
 import { v } from "@/lib/vocabulary";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import type { ReducedTurn } from "./transcript";
+import { turnEnding } from "./turn-ending";
 
 export interface RunFeedback {
   label: string;
@@ -40,6 +41,8 @@ export function runFeedback(snapshot: ConsoleSessionSnapshot, turn?: ReducedTurn
     return { label: turn?.assistantText ? "Working…" : "Thinking…", active: true };
   }
   if (turn?.stopReason === "cancelled") return { label: "Stopped", active: false };
+  const ending = turn && turnEnding(turn);
+  if (ending) return { label: { no_reply: "No reply from the model", truncated: "Reply cut off", filtered: "Reply blocked by the provider", disconnected: "Connection dropped" }[ending], active: false };
   if (turn?.error || snapshot.session.status === "failed") return { label: "Response failed", active: false, error: turn?.error };
   switch (turn?.stopReason) {
     case "max_tool_iterations": return { label: "Response stopped at the previous tool limit", active: false };
