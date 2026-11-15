@@ -186,6 +186,20 @@ There is no interactive approval in this server. Limit the tool list, pass `--sc
 
 Open **Plugins**, press **Add** and choose **MCP server** (stdio, HTTP or SSE), or **From marketplace** or **From GitHub repository** for plugins. Nothing runs until you review the exact command and settings and approve them. New servers are saved disabled. Press **Test** to see its tools. Read [Plugin security](/plugin-trust/) first.
 
+### From the command line
+
+```sh
+0 plugin mcp add docs -- npx some-mcp-server        # shows the review; add --yes to approve it
+0 plugin mcp test custom-docs
+0 plugin mcp list
+0 plugin mcp remove custom-docs --yes
+0 plugin connectors
+0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
+0 plugin disconnect linear --yes
+```
+
+Secrets come from environment variables (`--secret-env`, `--env-from`, `--header-from`), never from the command line. Every command takes `--json`.
+
 ### From the environment
 
 The browser app and headless chat commands also read the JSON array in `ZERO_MCP`. It is an array, not a `{"mcpServers": ...}` object and not a file path:

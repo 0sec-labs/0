@@ -78,6 +78,9 @@ import { registerFindingsExportCommand } from "./findings-export.js";
 import { registerFindingsKeysCommand } from "./findings-keys.js";
 import { registerSentinelsCommand } from "./sentinels.js";
 import { registerAutomationManageCommands } from "./automation-manage.js";
+import { registerSkillsCommand } from "./skills.js";
+import { registerMemoryCommand } from "./memory.js";
+import { registerPluginConnectCommands } from "./plugin-connect.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -159,5 +162,9 @@ export function registerCommandTree(program: Command): void {
 
   // Plugins: install/run and author live together under `plugin`.
   registerPluginCommand(program);
-  nest(program, "plugin", [registerPluginAuthorCommands]);
+  nest(program, "plugin", [registerPluginAuthorCommands, registerPluginConnectCommands]);
+
+  // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
+  registerSkillsCommand(program);
+  registerMemoryCommand(program);
 }

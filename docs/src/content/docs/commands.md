@@ -46,8 +46,8 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
+    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#skills">skills</a> · <a href="#memory">memory</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/skills/">Skills</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
 
@@ -3103,7 +3103,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/plugins/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
 
 #### plugin list
 
@@ -3157,6 +3157,11 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 | --- | --- | --- |
 | `--registry <url>` | — | plugin registry index URL (https) |
 | `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
+| `--ref <ref>` | — | Branch, tag or commit for github:owner/repo |
+| `--replace` | — | Replace an installed plugin when installing from GitHub |
+| `--yes` | — | Install the reviewed GitHub commit |
+| `--json` | — | Print machine-readable JSON for github:owner/repo |
+| `--db-path <path>` | — | Engine database for github:owner/repo |
 
 #### plugin enable
 
@@ -3263,6 +3268,154 @@ Prepare the files to submit a plugin to the plugin registry; does not publish (y
 | --- | --- | --- |
 | `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
+#### plugin connectors
+
+List service connectors (Linear, Slack and others) and whether they are connected
+
+```text
+0 plugin connectors [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin connect
+
+Connect a service connector; secrets come from environment variables, never argv
+
+```text
+0 plugin connect [options] <service>
+```
+
+```bash
+0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `service` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--set <key=value>` | — | A non-secret field (repeatable) |
+| `--secret-env <key=ENVVAR>` | — | Read a secret field from this environment variable (repeatable) |
+| `--yes` | — | Approve connecting this service |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin disconnect
+
+Forget a connector's credentials
+
+```text
+0 plugin disconnect [options] <service>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `service` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp
+
+Manage custom MCP servers that missions can use
+
+```text
+0 plugin mcp
+```
+
+```bash
+0 plugin mcp add docs -- npx some-mcp-server
+0 plugin mcp add docs --yes -- npx some-mcp-server
+```
+
+Guide: [Read the workflow](/mcp/).
+
+Subcommands: [list](#plugin-mcp-list) · [add](#plugin-mcp-add) · [test](#plugin-mcp-test) · [remove](#plugin-mcp-remove).
+
+#### plugin mcp list
+
+List custom MCP servers
+
+```text
+0 plugin mcp list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp add
+
+Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for a remote one; shows a review first
+
+```text
+0 plugin mcp add [options] <name> [command...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+| `command` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--url <url>` | — | Remote server URL (https) instead of a local command |
+| `--transport <kind>` | — | stdio, http or sse (default: stdio, or http with --url) |
+| `--cwd <path>` | — | Relative directory inside the workspace to run in |
+| `--env <KEY=VALUE>` | — | Environment variable for a local server (repeatable) |
+| `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
+| `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
+| `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
+| `--enable` | — | Enable it for missions once added |
+| `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
+| `--yes` | — | Approve the reviewed command and settings |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp test
+
+Start the server and list its tools
+
+```text
+0 plugin mcp test [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp remove
+
+Remove a custom MCP server
+
+```text
+0 plugin mcp remove [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
 ### research h1
 
 HackerOne hacker-API helpers (read-only)
@@ -3346,6 +3499,349 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--out <path>` | — | Override the output path |
+
+### skills
+
+Browse, add, create, edit, import, export and link skills
+
+```text
+0 skills
+```
+
+Every command works with the app running or on its own, and takes `--json`. Adding from GitHub or the catalog shows a review first and needs `--yes`.
+
+```bash
+0 skills list
+0 skills catalog --search handoff
+0 skills add mattpocock~skills~handoff --yes
+```
+
+Guide: [Read the workflow](/skills/).
+
+Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [add](#skills-add) · [remove](#skills-remove).
+
+#### skills list
+
+List installed skills and linked folders
+
+```text
+0 skills list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills show
+
+Show a skill's SKILL.md and files
+
+```text
+0 skills show [options] <id-or-name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id-or-name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills new
+
+Create a skill from a SKILL.md file
+
+```text
+0 skills new [options] <file>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills edit
+
+Replace a skill's SKILL.md with the contents of --file
+
+```text
+0 skills edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | SKILL.md with the new content |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills copy
+
+Save a workspace copy of a skill under a new name
+
+```text
+0 skills copy [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Name for the copy (lowercase letters, digits, hyphens) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills delete
+
+Delete a skill from the workspace library
+
+```text
+0 skills delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills import
+
+Import a skill bundle (.skill.json) or a folder with SKILL.md
+
+```text
+0 skills import [options] <bundle>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `bundle` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills export
+
+Export a skill as a bundle
+
+```text
+0 skills export [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `-o, --output <file>` | — | Write the bundle to a file instead of stdout |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills link
+
+Link a folder of skills; they stay where they are
+
+```text
+0 skills link [options] <folder>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `folder` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills unlink
+
+Unlink a folder by its link id (see `0 skills list --json`)
+
+```text
+0 skills unlink [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills catalog
+
+Browse the skills catalog
+
+```text
+0 skills catalog [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--search <text>` | — | Filter by name, publisher or summary |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills add
+
+Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
+
+```text
+0 skills add [options] <catalog-id-or-repo>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `catalog-id-or-repo` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preview` | — | Only show the review |
+| `--yes` | — | Install the reviewed commit |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills remove
+
+Remove a skill that was added from GitHub or the catalog
+
+```text
+0 skills remove [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+### memory
+
+List, disable, export and import what 0 remembers across missions
+
+```text
+0 memory
+```
+
+Memory is what 0 remembers across missions. False-positive and evaluation memories live under [findings triage memory](#findings-triage-memory).
+
+```bash
+0 memory list
+0 memory export -o memory.json
+0 memory import memory.json --preview
+```
+
+Guide: [Read the workflow](/self-improvement/).
+
+Subcommands: [list](#memory-list) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
+
+#### memory list
+
+List memories
+
+```text
+0 memory list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <id>` | — | Only memories for this folder id |
+| `--limit <n>` | `100` | At most this many (1-200) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory disable
+
+Stop using a memory in future missions
+
+```text
+0 memory disable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory enable
+
+Use a disabled memory again
+
+```text
+0 memory enable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory export
+
+Export memories as a portable archive
+
+```text
+0 memory export [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <id>` | — | Only memories for this folder id |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory import
+
+Import a memory archive; imported memories start disabled
+
+```text
+0 memory import [options] <file>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preview` | — | Only show what would be imported |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
 
 ## Private local review checks
 

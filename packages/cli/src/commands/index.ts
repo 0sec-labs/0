@@ -67,3 +67,6 @@ export { registerCommandTree } from "./tree.js";
 export { registerMissionsCommand } from "./missions.js";
 export { registerFindingsExportCommand } from "./findings-export.js";
 export { registerFindingsKeysCommand } from "./findings-keys.js";
+export { registerSkillsCommand } from "./skills.js";
+export { registerMemoryCommand } from "./memory.js";
+export { registerPluginConnectCommands } from "./plugin-connect.js";
