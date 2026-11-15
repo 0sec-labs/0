@@ -169,9 +169,6 @@ Guide: [Read the workflow](/app/).
 | `--public-url <url>` | — | Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL |
 | `--access-token-env <name>` | — | Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated |
 | `--shutdown-timeout <seconds>` | — | Server mode: seconds to finish in-flight requests on SIGTERM (default 20) |
-| `--agents-dir <path>` | — | Apply Agent files from this folder at start and on SIGHUP (a read-only mount is fine); also ZERO_AGENTS_DIR |
-| `--agents-allow-changes` | — | Allow Agent files that ask for access: changes (policy agents.fileAccessCeiling); also ZERO_AGENTS_ALLOW_CHANGES=1 |
-| `--agents-prune` | — | Remove Agents this folder managed before but no longer has a file for; also ZERO_AGENTS_PRUNE=1 |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
 | `--engines-config <path>` | — | Trusted engine connection registry JSON (default ~/.0/engines.json) |
@@ -5205,7 +5202,7 @@ Create, inspect and control Agents.
 0 agents
 ```
 
-Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [validate](#agents-validate) · [diff](#agents-diff) · [apply](#agents-apply) · [export](#agents-export) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
+Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
 
 #### agents list
 
@@ -5430,87 +5427,6 @@ Show a Agent's budget and the last 24 hours of spend.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Control database (default: the user database) |
-
-#### agents validate
-
-Check Agent files (files or folders) without touching any Agent.
-
-```text
-0 agents validate [options] <path...>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Control database (default: the user database) |
-
-#### agents diff
-
-Show what applying Agent files would change, field by field, including edits made in the app since the last apply.
-
-```text
-0 agents diff [options] <path>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Control database (default: the user database) |
-| `--adopt` | — | Take over an unmanaged Agent with the same name instead of reporting a duplicate |
-| `--allow-changes` | — | Allow files that ask for access: changes (the operator decision) |
-| `--prune` | — | Also remove Agents this folder managed before but no longer has a file for |
-
-#### agents apply
-
-Create or update Agents from files; safe to repeat. Files own the Agents they manage.
-
-```text
-0 agents apply [options] <path>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--dry-run` | — | Only show what would change |
-| `--force` | — | Overwrite edits made in the app since the last apply |
-| `--yes` | — | Confirm --prune |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Control database (default: the user database) |
-| `--adopt` | — | Take over an unmanaged Agent with the same name instead of reporting a duplicate |
-| `--allow-changes` | — | Allow files that ask for access: changes (the operator decision) |
-| `--prune` | — | Also remove Agents this folder managed before but no longer has a file for |
-
-#### agents export
-
-Write an Agent (or all of them, or a preset) as a file. Exporting changes nothing; the Agent becomes managed by the file after the first apply.
-
-```text
-0 agents export [options] [id]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--all` | — | Every Agent |
-| `--dir <dir>` | — | With --all: write one file per Agent into this folder (default .0/agents) |
-| `--preset <id>` | — | A built-in preset instead of an Agent |
-| `--force` | — | With --dir: overwrite files that already exist |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 

@@ -50,24 +50,7 @@ export interface Sentinel {
   createdAt: string;
   updatedAt: string;
   attention?: SentinelAttention;
-  /** Where the definition lives: an Agent file (path is relative to the applied folder) or the app. */
-  fileState?: SentinelFileState;
 }
-
-export interface SentinelFileState { source: "app" | "file"; path?: string; root?: string; edited?: boolean }
-
-/** One line shown on an Agent a file defines. Nothing for Agents defined in the app. */
-export function managedNote(sentinel: Pick<Sentinel, "fileState">): string | null {
-  const state = sentinel.fileState;
-  return state?.source === "file" && state.path ? `Managed by ${state.path}` : null;
-}
-/** One line shown next to edit controls of an Agent a file defines. */
-export function managedEditWarning(sentinel: Pick<Sentinel, "fileState">): string | null {
-  return managedNote(sentinel) ? "The file overwrites changes made here the next time it is applied." : null;
-}
-/** True when a managed Agent was edited in the app after its file was last applied. */
-export const editedSinceApply = (sentinel: Pick<Sentinel, "fileState">): boolean => managedNote(sentinel) !== null && sentinel.fileState?.edited === true;
-
 
 export interface SentinelPresetAutomation {
   name: string;
