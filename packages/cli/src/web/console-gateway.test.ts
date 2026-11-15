@@ -542,6 +542,23 @@ describe("ConsoleGateway", () => {
     expect(instance.get(instance.create().id).workspacePath).toBe(a);
   });
 
+  it("reports a failed folder switch on the session, keeps the folder in effect, and retries cleanly", async () => {
+    let failing = true;
+    const instance = gateway(input => { const session = engine(input); const configure = session.configureWorkspace.bind(session); session.configureWorkspace = path => { if (failing) throw new Error("mcp init failed"); configure(path); }; return session; });
+    const created = instance.create(); const b = realpathSync(mkdtempSync(join(tmpdir(), "zero-ws-fail "))); homes.push(b);
+    const before = instance.get(created.id).workspacePath;
+    await instance.configure(created.id, { workspacePath: b });
+    await vi.waitFor(() => expect(instance.get(created.id).session.workspaceError?.path).toBe(b));
+    const failed = instance.get(created.id);
+    expect(failed.session.workspaceError?.message).toMatch(/^Couldn't switch to .+\. Try again\.$/);
+    expect(failed.session.pendingConfiguration).toBeUndefined();
+    expect(failed.workspacePath).toBe(before);
+    failing = false;
+    await instance.configure(created.id, { workspacePath: b });
+    await vi.waitFor(() => expect(instance.get(created.id).workspacePath).toBe(b));
+    expect(instance.get(created.id).session.workspaceError).toBeUndefined();
+  });
+
   it("applies a folder the operator picked without a second confirmation", async () => {
     const instance = gateway(); const created = instance.create();
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-workspace-"))); homes.push(directory);

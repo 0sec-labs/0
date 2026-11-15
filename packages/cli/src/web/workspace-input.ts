@@ -1,7 +1,13 @@
-import { realpathSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { accessSync, constants, readdirSync, realpathSync, statSync } from "node:fs";
+import { homedir, platform } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { isDangerousLocalRoot } from "@0/engine";
+
+function permissionMessage(): string {
+  return platform() === "darwin"
+    ? "Zero doesn't have permission to open that folder. On macOS, allow your terminal or Zero under System Settings, Privacy & Security, Files and Folders, then try again."
+    : "Zero doesn't have permission to open that folder. Check its permissions or choose another folder.";
+}
 
 export class WorkspaceInputError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -31,13 +37,16 @@ export function resolveWorkspaceInput(raw: string, base: string, home = homedir(
   try { directory = realpathSync(isAbsolute(value) ? value : resolve(base, value)); }
   catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") throw new WorkspaceInputError("Zero doesn't have permission to open that folder. On macOS, allow your terminal or Zero under System Settings, Privacy & Security, Files and Folders, then try again.");
+    if (code === "EACCES" || code === "EPERM") throw new WorkspaceInputError(permissionMessage());
     throw new WorkspaceInputError("That folder doesn't exist. Check the path, or choose a folder from the list.");
   }
   let isDirectory: boolean;
   try { isDirectory = statSync(directory).isDirectory(); }
-  catch { throw new WorkspaceInputError("Zero doesn't have permission to open that folder. On macOS, allow your terminal or Zero under System Settings, Privacy & Security, Files and Folders, then try again."); }
+  catch { throw new WorkspaceInputError(permissionMessage()); }
   if (!isDirectory) throw new WorkspaceInputError("That path is a file. Choose the folder that contains it.");
   if (isDangerousLocalRoot(directory)) throw new WorkspaceInputError("Zero can't work in your whole home folder or the disk root. Choose a folder inside it, such as ~/Documents/my-project.");
+  // stat succeeds on a folder we cannot read, so probe the way the engine will use it.
+  try { accessSync(directory, constants.R_OK | constants.X_OK); readdirSync(directory); }
+  catch { throw new WorkspaceInputError(permissionMessage()); }
   return directory;
 }

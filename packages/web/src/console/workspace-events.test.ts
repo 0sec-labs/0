@@ -20,4 +20,13 @@ describe("applyEvents", () => {
     expect(next.workspacePath).toBe("/b c");
     expect(applyEvents(next, [{ type: "session", sequence: 4, session: { id: "s" } } as unknown as DesktopConsoleEvent], 4).workspacePath).toBe("/b c");
   });
+  it("carries a failed folder switch on the session and clears it on the next successful event", () => {
+    const error = { path: "/b", message: "Couldn't switch to b. Try again.", at: "t" };
+    const failed = applyEvents(snapshot, [{ type: "session", sequence: 2, session: { id: "s", workspacePath: "/a", workspaceError: error } } as unknown as DesktopConsoleEvent], 2);
+    expect(failed.session.workspaceError).toEqual(error);
+    expect(failed.workspacePath).toBe("/a");
+    const ok = applyEvents(failed, [{ type: "session", sequence: 3, session: { id: "s", workspacePath: "/b" } } as unknown as DesktopConsoleEvent], 3);
+    expect(ok.session.workspaceError).toBeUndefined();
+    expect(ok.workspacePath).toBe("/b");
+  });
 });

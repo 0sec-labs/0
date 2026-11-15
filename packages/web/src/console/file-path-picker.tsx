@@ -28,6 +28,8 @@ export interface FilePathPickerProps {
   sessionId: string;
   cwd?: string;
   workspaceDisabled: boolean;
+  /** The last folder switch the engine accepted but could not apply; `cwd` is still the folder in effect. */
+  applyError?: { message: string; at: string };
   disabled: boolean;
   className?: string;
   /** Capy status-rail chip: 24px, 12px text and icon. */
@@ -40,6 +42,7 @@ export function FilePathPicker({
   sessionId,
   cwd,
   workspaceDisabled,
+  applyError,
   disabled,
   className,
   rail = false,
@@ -53,6 +56,9 @@ export function FilePathPicker({
   const [browserOpen, setBrowserOpen] = useState(false);
   const [nativePending, setNativePending] = useState(false);
   const [nativeMessage, setNativeMessage] = useState<string | null>(null);
+  // A switch the server accepted is applied after it replies; keep the popover open until that settles.
+  const [applying, setApplying] = useState<{ path: string; baseline?: string } | null>(null);
+  const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const nativeRequest = useRef<AbortController | null>(null);
   const nativeGeneration = useRef(0);
   const nativeAvailable =
@@ -80,7 +86,37 @@ export function FilePathPicker({
     setOpen(false);
     setBrowserOpen(false);
     setNativeMessage(null);
+    setApplying(null);
+    setApplyMessage(null);
   }, [client, sessionId, disabled, cancelNative]);
+  useEffect(() => {
+    if (!applying) return;
+    if (applyError && applyError.at !== applying.baseline) {
+      setApplying(null);
+      setApplyMessage(applyError.message);
+    } else if (cwd === applying.path) {
+      setApplying(null);
+      setOpen(false);
+    }
+  }, [applying, applyError, cwd]);
+  useEffect(() => {
+    if (!applying) return;
+    const timer = setTimeout(() => {
+      setApplying(null);
+      setOpen(false);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [applying]);
+  const choose = (value: string) => {
+    workspace.dismissError();
+    setApplyMessage(null);
+    const baseline = applyError?.at;
+    void workspace
+      .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
+      .then((result) => {
+        if (result) setApplying({ path: value, baseline });
+      });
+  };
   useEffect(
     () => () => {
       nativeGeneration.current++;
@@ -95,6 +131,8 @@ export function FilePathPicker({
     const generation = ++nativeGeneration.current;
     setNativePending(true);
     setNativeMessage(null);
+    setApplyMessage(null);
+    workspace.dismissError();
     try {
       const result = await webFetchJson<{ supported: boolean; path: string | null }>(
         "/api/console/project/choose-directory",
@@ -137,7 +175,12 @@ export function FilePathPicker({
   );
   // The native dialog never locks the manual path: typing or browsing stays available while it is open.
   const controlsDisabled = workspace.busy || workspaceDisabled;
-  const pickError = open && workspace.error ? workspace.error : null;
+  const pickError = open ? (applyMessage ?? workspace.error ?? null) : null;
+  const pickAlert = pickError && (
+    <p role="alert" data-testid="workspace-pick-error" className="mt-2 text-xs text-destructive">
+      {pickError}
+    </p>
+  );
   const inputId = useId();
   const descriptionId = useId();
 
@@ -146,6 +189,9 @@ export function FilePathPicker({
       open={open && !disabled}
       onOpenChange={(next) => {
         setOpen(next);
+        workspace.dismissError();
+        setApplyMessage(null);
+        setApplying(null);
         setForm(false);
         setFilter("");
         cancelNative();
@@ -226,13 +272,7 @@ export function FilePathPicker({
                   className={ROW}
                   disabled={controlsDisabled || item === cwd}
                   aria-current={item === cwd ? "true" : undefined}
-                  onClick={() => {
-                    void workspace
-                      .perform(() => configureConsoleSession(sessionId, { workspacePath: item }))
-                      .then((result) => {
-                        if (result) setOpen(false);
-                      });
-                  }}
+                  onClick={() => choose(item)}
                 >
                   <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
                   <span className="shrink-0 truncate">{projectLabel(item)}</span>
@@ -248,6 +288,7 @@ export function FilePathPicker({
                 </p>
               )}
             </div>
+            {pickAlert && <div className="px-2 pb-1">{pickAlert}</div>}
             <div className="sticky bottom-0 -mx-1 -mb-1 bg-popover px-1 pb-1">
               <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
               <button
@@ -255,6 +296,8 @@ export function FilePathPicker({
                 className={ROW}
                 disabled={controlsDisabled}
                 onClick={() => {
+                  workspace.dismissError();
+                  setApplyMessage(null);
                   setForm(true);
                   if (nativeAvailable) void chooseNativeFolder();
                   else navigate(path.trim());
@@ -281,11 +324,7 @@ export function FilePathPicker({
             <p className="mt-1 text-xs text-muted-foreground-2">
               Zero uses this folder for this mission's next message and for new missions.
             </p>
-            {pickError && (
-              <p role="alert" data-testid="workspace-pick-error" className="mt-2 text-xs text-destructive">
-                {pickError}
-              </p>
-            )}
+            {pickAlert}
             <form
               className="mt-3 space-y-2"
               onSubmit={(event) => {
@@ -293,11 +332,7 @@ export function FilePathPicker({
                 const value = path.trim();
                 if (!value || disabled || controlsDisabled) return;
                 cancelNative();
-                void workspace
-                  .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
-                  .then((result) => {
-                    if (result) setOpen(false);
-                  });
+                choose(value);
               }}
             >
               {nativeAvailable ? (
@@ -339,7 +374,11 @@ export function FilePathPicker({
                   placeholder="Or enter a folder path"
                   value={path}
                   disabled={controlsDisabled}
-                  onChange={(event) => setPath(event.target.value)}
+                  onChange={(event) => {
+                    workspace.dismissError();
+                    setApplyMessage(null);
+                    setPath(event.target.value);
+                  }}
                 />
                 <Button
                   type="button"

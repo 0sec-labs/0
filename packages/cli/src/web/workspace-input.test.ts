@@ -1,5 +1,5 @@
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { normalizeWorkspaceInput, resolveWorkspaceInput } from "./workspace-input.js";
@@ -25,5 +25,10 @@ describe("workspace input", () => {
     expect(() => resolveWorkspaceInput("~", root)).toThrow(/whole home folder/);
     expect(() => resolveWorkspaceInput("/", root)).toThrow(/whole home folder/);
     expect(() => resolveWorkspaceInput("  ", root)).toThrow(/Enter a folder/);
+  });
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("rejects a folder Zero cannot read", () => {
+    const locked = join(root, "locked"); mkdirSync(locked); chmodSync(locked, 0o000);
+    try { expect(() => resolveWorkspaceInput(locked, root)).toThrow(platform() === "darwin" ? "Files and Folders" : "permission"); }
+    finally { chmodSync(locked, 0o700); }
   });
 });
