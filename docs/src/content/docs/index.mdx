@@ -29,7 +29,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   <TabItem label="Docker">
     ```bash
     docker run --rm -e ANTHROPIC_API_KEY \
-      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0:latest \
+      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest \
       scan source /work/source --runtime api --depth quick --cost-ceiling 2
     ```
 
@@ -37,7 +37,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   </TabItem>
   <TabItem label="Source">
     ```bash
-    git clone https://github.com/0sec-labs/0security.git && cd 0
+    git clone https://github.com/0sec-labs/0security.git && cd 0security
     pnpm install --frozen-lockfile && pnpm build
     node packages/cli/dist/index.js web
     ```

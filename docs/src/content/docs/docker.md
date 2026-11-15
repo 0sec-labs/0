@@ -1,13 +1,13 @@
 ---
 title: Docker
-description: Run 0 from the ghcr.io/0sec-labs/0 container image.
+description: Run 0 from the ghcr.io/0sec-labs/0security container image.
 ---
 
 The image is Linux amd64 only and starts the `0` CLI, so arguments after the image name are `0` arguments.
 
 ```bash
 docker run --rm -e ANTHROPIC_API_KEY=$KEY -v "$PWD:/work" -w /work \
-  ghcr.io/0sec-labs/0:latest scan source . --runtime api --depth quick --cost-ceiling 2
+  ghcr.io/0sec-labs/0security:latest scan source . --runtime api --depth quick --cost-ceiling 2
 ```
 
 Tags are `latest`, `main` and the short commit SHA. `latest` follows eligible main builds, not a stable release. Pin a digest or a SHA tag for repeatable runs. Sources: [`Dockerfile`](https://github.com/0sec-labs/0security/blob/main/scripts/docker/Dockerfile) and [`docker-publish.yml`](https://github.com/0sec-labs/0security/blob/main/.github/workflows/docker-publish.yml).
@@ -35,7 +35,7 @@ The image is based on `ubuntu:24.04` and includes:
 docker run --rm \
   -e OPENAI_API_KEY=$KEY \
   -v "$PWD:/work:ro" -w /work \
-  ghcr.io/0sec-labs/0:latest scan web \
+  ghcr.io/0sec-labs/0security:latest scan web \
     --target https://example.com \
     --scope /work/scope.json
 ```
