@@ -93,6 +93,7 @@ export function Conversation({
   onDrainAgents,
   onSubmitRoot,
   onStopRoot,
+  pending = false,
 }: {
   /** @deprecated Ignored; the composer owns the context popover. */
   detailsControl?: ReactNode;
@@ -112,6 +113,8 @@ export function Conversation({
   onStop: () => void;
   resumeCap: () => void;
   sendBehavior: SendBehavior;
+  /** Home before its mission exists: the composer is live, session-bound controls wait for the real snapshot. */
+  pending?: boolean;
 }) {
   const snapshot = workspace.snapshot;
   const transcriptControls = useTranscriptControls(workspace, onResolve, onSelectWorker);
@@ -260,6 +263,7 @@ export function Conversation({
             <div className="relative flex w-full max-w-[712px] flex-col pb-[10dvh]">
               <Composer
                 home
+                pending={pending}
                 onOpenAgents={() => onSelectWorker(null)}
                 placeholder={composerPlaceholder}
                 canWrite={canWrite}
@@ -590,7 +594,10 @@ export function Composer({
   onStop,
   sendBehavior,
   canWrite,
+  pending = false,
 }: {
+  /** Before the mission exists: typing and sending work (sending is queued), session-bound controls are disabled. */
+  pending?: boolean;
   home?: boolean;
   onOpenAgents?: () => void;
   placeholder?: string;
@@ -960,6 +967,7 @@ export function Composer({
                   applyError={snapshot.session.workspaceError}
                   workspaceDisabled={
                     !canWrite ||
+                    pending ||
                     active ||
                     workspace.busy ||
                     closed ||
@@ -1197,7 +1205,7 @@ export function Composer({
                     <Tooltip content="Add to message">
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
-                        disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
+                        disabled={!canWrite || closed || pending || workspace.busy || workerReadOnly || attachmentUI.loading}
                         className="inline-flex size-8 max-sm:size-10 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
                         aria-keyshortcuts="Meta+/ Control+/"
                       >
@@ -1229,7 +1237,7 @@ export function Composer({
                     workspace={workspace}
                     sessionId={snapshot.session.id}
                     mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode}
-                    disabled={workspace.busy || closed || !canWrite}
+                    disabled={workspace.busy || closed || pending || !canWrite}
                   />
                 )}
                 {!worker && (
@@ -1242,7 +1250,7 @@ export function Composer({
                       <DropdownMenu.Trigger
                         ref={modelTrigger}
                         aria-label="Choose model"
-                        disabled={active || workspace.busy || closed || !canWrite}
+                        disabled={active || workspace.busy || closed || pending || !canWrite}
                       >
                         <Button
                           type="button"
@@ -1257,7 +1265,7 @@ export function Composer({
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
-                          <span className={`truncate${!modelLabel.known && modelCatalog.isLoading ? " invisible" : ""}`}>{modelLabel.text}</span>
+                          <span className="truncate">{!modelLabel.known && modelCatalog.isLoading ? "Loading" : modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
@@ -1450,6 +1458,7 @@ export function Composer({
               applyError={snapshot.session.workspaceError}
               workspaceDisabled={
                 !canWrite ||
+                pending ||
                 active ||
                 workspace.busy ||
                 closed ||
