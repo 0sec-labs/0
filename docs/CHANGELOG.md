@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Reviewing a GitHub plugin update in the web app now marks each tool as Changed, New or Removed against the installed version, using the same per-tool hashes as the install check. Approval is still for the whole plugin.
+
 ## [0.33.0] - 2026-11-15
 
 This release makes access the same two choices everywhere: Read-only or Can make changes. Asking before each command is only the global setting.

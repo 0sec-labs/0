@@ -167,7 +167,7 @@ export class GithubPluginInstaller {
     const review: Review = {
       reviewId: randomUUID(), repo, ref: ref ?? null, sha: fetched.sha, id: manifest.id, name: manifest.name ?? manifest.id, version: manifest.version,
       capabilities, tools, toolHashes, toolChanges, permissionHash, entrySha256, entryBytes: fetched.entry.length,
-      alreadyInstalled: existsSync(join(pluginsRootDir(this.#homeDir), manifest.id)), expiresAt: new Date(now + TTL_MS).toISOString(),
+      alreadyInstalled, expiresAt: new Date(now + TTL_MS).toISOString(),
     };
     this.#staged.set(review.reviewId, { review, manifest: fetched.manifest, entry: fetched.entry, expires: now + TTL_MS });
     return { review };

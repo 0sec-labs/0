@@ -53,7 +53,7 @@ fixed key order so the same tool always gives the same hash. The description and
 parameters are included because the model reads them and they can change how a
 tool is used without changing its capabilities.
 
-When you update a plugin (`replaceExisting`), 0 compares the new tool hashes
+The web review of an update shows this comparison before you approve: each tool is marked Changed, New or Removed, and tool descriptions are shown as plain text, shortened. When you update a plugin (`replaceExisting`), 0 compares the new tool hashes
 with the ones saved in the plugin's `source.json` and reports tools that were
 **changed**, **added** and **removed**, each list in alphabetical order. This
 list explains why the update needs another look. It does not replace the
