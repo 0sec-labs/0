@@ -122,3 +122,24 @@ export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
     throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.", { cause: error });
   }
 }
+
+/** Raw console-API access to the running local host, with the same discovery and pinning as `connectLocalEngine`. */
+export async function connectLocalConsole(options: { dbPath?: string; homeDir?: string }) {
+  if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
+  const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
+  const descriptor = readDescriptor(path);
+  if (!descriptor) return null;
+  if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
+  const backendId = "discovered-local-engine";
+  const registry = new BackendConnectionRegistry({
+    connections: [{ id: backendId, name: "Running local engine", url: descriptor.url, bearerTokenEnv: "LOCAL_ENGINE_DISCOVERY_TOKEN", expectedEngineId: descriptor.engineId }],
+    env: { LOCAL_ENGINE_DISCOVERY_TOKEN: descriptor.token }, timeoutMs: 5000,
+    localHandshake: { protocolVersion: 1, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId, capabilities: [], platform: { os: process.platform, pathStyle: process.platform === "win32" ? "windows" : "posix" } },
+  });
+  const connection = await registry.handshake(backendId);
+  if (connection.error || connection.handshake?.serverInstanceId !== descriptor.serverInstanceId) {
+    registry.dispose();
+    throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.");
+  }
+  return { registry, backendId };
+}

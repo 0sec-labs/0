@@ -48,6 +48,15 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 0 findings show 3f2a --db-path ~/.0/runs/<scan-id>/state.db
 ```
 
+Export findings without opening the browser:
+
+```bash
+0 findings export 3f2a 91bc --format sarif -o findings.sarif
+0 findings export --scan <scan-id> --format pdf -o report.pdf
+```
+
+Formats are `json` (default), `md`, `sarif`, `html` and `pdf`. Without `-o` the report goes to stdout, except `pdf`, which needs a file.
+
 `0 findings show` prints the business priority and its rationale, technical severity, CVSS when present, status, triage state, the evidence and related occurrences.
 
 ## Status and triage are different

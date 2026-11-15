@@ -876,7 +876,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/findings/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -973,6 +973,106 @@ Reset a finding family back to new
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--note <text>` | — | Optional triage note |
+
+#### findings export
+
+Export selected findings, or a whole scan, as `json`, `md`, `sarif`, `html` or `pdf`. Reads the local database; no engine needs to run. IDs accept a unique prefix. For a share-safe copy of a JSON report use `0 reports export`.
+
+```text
+0 findings export [options] [ids...]
+```
+
+```bash
+0 findings export 3f2a 91bc --format sarif -o findings.sarif
+0 findings export --scan 20260101-abc --format pdf -o report.pdf
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `ids` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--scan <id>` | — | Export every finding of this scan instead of selected IDs |
+| `--format <format>` | `json` | json, md, sarif, html or pdf |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print the result of writing a file as JSON |
+
+#### findings keys
+
+Manage read-only API access keys for the findings API. The secret is printed once at creation and never stored in plaintext. Team workspaces manage keys in the browser.
+
+```text
+0 findings keys
+```
+
+```bash
+0 findings keys create ci-reader --expires-in 30
+```
+
+Subcommands: [list](#findings-keys-list) · [create](#findings-keys-create) · [revoke](#findings-keys-revoke).
+
+#### findings keys list
+
+List keys with their expiry and status. Secrets are never shown.
+
+```text
+0 findings keys list [options]
+```
+
+```bash
+0 findings keys list --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+
+#### findings keys create
+
+Create a read-only key. Default expiry is 90 days.
+
+```text
+0 findings keys create [options] <name>
+```
+
+```bash
+0 findings keys create ci-reader --expires-in 30
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--expires-in <days>` | — | Days until the key expires (default 90) |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+
+#### findings keys revoke
+
+Revoke a key. Requires `--yes`.
+
+```text
+0 findings keys revoke [options] <id>
+```
+
+```bash
+0 findings keys revoke 643b88a4-2fae-409b-b4d9-bea00fc75812 --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the revocation |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
 
 ### findings triage
 
@@ -3474,6 +3574,337 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+### missions
+
+Start, steer and manage missions on the running engine. These commands make the same console API calls as the browser, so authority and audit trail match. They attach to the local engine started by `0 web`, or to `--engine-url` or `--computer`. A remote engine token cannot reach routes the browser protects.
+
+```text
+0 missions
+```
+
+```bash
+0 missions start "Map the login flow" --folder ~/code/app --wait
+```
+
+Subcommands: [list](#missions-list) · [start](#missions-start) · [stop](#missions-stop) · [retry](#missions-retry) · [set](#missions-set) · [rename](#missions-rename) · [clear](#missions-clear) · [close](#missions-close) · [archive](#missions-archive) · [delete](#missions-delete) · [export](#missions-export).
+
+#### missions list
+
+List live missions, or retained snapshots with `--saved`.
+
+```text
+0 missions list [options]
+```
+
+```bash
+0 missions list --saved
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | List retained mission snapshots instead |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions start
+
+Create a mission, send the first prompt and print its ID. With `--wait`, block until the turn ends and print the reply.
+
+```text
+0 missions start [options] <prompt>
+```
+
+```bash
+0 missions start "Triage the open findings" --model gpt-5 --effort high --mode recon --wait
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `prompt` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--model <model>` | — | Model for this mission |
+| `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
+| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--folder <path>` | — | Folder the mission works in |
+| `--target <target>` | — | Authorized target |
+| `--scope <path>` | — | Scope policy JSON file |
+| `--title <title>` | — | Mission title |
+| `--wait` | — | Wait for the turn to finish and print the reply |
+| `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions stop
+
+Cancel a mission's active work. `--force` force stops owned execution that did not drain.
+
+```text
+0 missions stop [options] <id>
+```
+
+```bash
+0 missions stop 3f2a --force
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--force` | — | Force stop owned execution that did not drain |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions retry
+
+Re-run the last turn of a mission.
+
+```text
+0 missions retry [options] <id>
+```
+
+```bash
+0 missions retry 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions set
+
+Change a mission's model, reasoning effort, mode or folder. A computer is chosen when the mission starts.
+
+```text
+0 missions set [options] <id>
+```
+
+```bash
+0 missions set 3f2a --mode copilot --folder ~/code/app
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--model <model>` | — | Model |
+| `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
+| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--folder <path>` | — | Folder the mission works in |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions rename
+
+Rename a mission, or generate a new title from its conversation.
+
+```text
+0 missions rename [options] <id> [title]
+```
+
+```bash
+0 missions rename 3f2a --regenerate
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `title` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--regenerate` | — | Generate a new title from the conversation |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions clear
+
+Erase a mission's conversation but keep the mission. Requires `--yes`.
+
+```text
+0 missions clear [options] <id>
+```
+
+```bash
+0 missions clear 3f2a --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the destructive action |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions close
+
+Stop and close a live mission. Its saved copy stays.
+
+```text
+0 missions close [options] <id>
+```
+
+```bash
+0 missions close 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions archive
+
+Archive a mission, or a retained snapshot with `--saved`.
+
+```text
+0 missions archive [options] <id>
+```
+
+```bash
+0 missions archive 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions delete
+
+Permanently delete a mission or, with `--saved`, a retained snapshot. Requires `--yes`.
+
+```text
+0 missions delete [options] <id>
+```
+
+```bash
+0 missions delete 3f2a --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--yes` | — | Confirm the destructive action |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### missions export
+
+Export a mission transcript as JSON or Markdown.
+
+```text
+0 missions export [options] <id>
+```
+
+```bash
+0 missions export 3f2a --format md -o transcript.md
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--format <format>` | `json` | json or md |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
 
 ### chats
 
