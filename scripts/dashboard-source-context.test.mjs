@@ -19,7 +19,7 @@ test('source context distinguishes supplied lessons, empty requests and unsuppor
     assert.match(none,/No saved lessons were supplied with this request/);
     assert.match(none,/Latest model request/);
     const supplied=render({status:'supplied',lessons:[{title:'Tenant ownership',summary:'Check & verify ownership.',sourceLinks:[{path:'src/routes.ts',hash:'hash-one'}]}]});
-    assert.match(supplied,/Memory supplied to model · 1/);
+    assert.match(supplied,/Lessons supplied to model · 1/);
     assert.match(supplied,/Tenant ownership/);
     assert.match(supplied,/Check &amp; verify ownership/);
     assert.match(supplied,/src\/routes.ts/);

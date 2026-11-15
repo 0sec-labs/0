@@ -633,7 +633,7 @@ export function DockWorkspace({
               <div
                 ref={host}
                 className="console-dock-workspace"
-                aria-label={v("{Mission} workspace")}
+                aria-label={v("{Mission} view")}
                 onDragEnterCapture={chatDragOver}
                 onDragOverCapture={chatDragOver}
                 onDropCapture={chatDrop}

@@ -11,8 +11,8 @@ describe("display settings", () => {
   it("makes every new setting and page searchable", () => {
     const hit = (query: string, key: string) => searchSettings(query).some(group => group.entries.some(entry => entry.key === key));
     expect(hit("cost", "showCost")).toBe(true);
-    expect(hit("tokens", "showTokenUsage")).toBe(true);
-    expect(hit("context", "showContextMeter")).toBe(true);
+    expect(hit("token", "showCost")).toBe(true);
+    expect(hit("context", "showCost")).toBe(true);
     expect(hit("timestamps", "showTimestamps")).toBe(true);
     expect(hit("spacing", "density")).toBe(true);
     expect(hit("work log", "transcriptDetail")).toBe(true);

@@ -11,7 +11,7 @@ Internal contracts (artifact schemas, registry events, worker protocol) live in 
 
 | Need | Entry point | Default |
 | --- | --- | --- |
-| Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Memory** view in the browser app | Lessons are untrusted hints. Verifiers exclude them. |
+| Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Lessons** view in the browser app | Lessons are untrusted hints. Verifiers exclude them. |
 | Benchmark variants and gate regressions | `0 improve bench run` | Needs a labeled corpus. |
 | Evaluate and promote a detection worker | `0 improve evolve run --config evolution.json` | Source access and auto-promotion are off. |
 | Use an evolved finder in a review | `0 scan deep ./repo --evolution-config evolution.json` | Opt in per review. |
@@ -23,7 +23,7 @@ Model credentials pay for proposal generation. Guest images pay for execution. N
 
 ## Learning
 
-Open **Memory** in the browser app (`/learning`).
+Open **Lessons** in the browser app (`/learning`).
 
 - Lessons are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching lessons have their cited file hashes rechecked. Changed files and disabled lessons are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 - Suggestions are automation instruction changes you can review with their run evidence before you apply them.
@@ -43,7 +43,7 @@ All three use the local control database (`ZERO_DB_PATH` selects another one). `
 
 Saving an automation creates an immutable revision. Each run keeps its original definition. Restoring an older revision creates a new one, and stale edits are rejected. A restored definition does not authorize new targets, tools or credentials. Schedules need review after a definition changes.
 
-If the same step fails in three separate runs after its instructions changed, Memory can suggest the instructions from an earlier version that succeeded. It reads the last 200 runs and events. Suggestions keep the same target, steps, tools, budgets and inputs. They never apply themselves. If someone edits or dismisses the automation first, applying the suggestion fails instead of overwriting. A good earlier run is operational evidence, not proof of better security.
+If the same step fails in three separate runs after its instructions changed, Lessons can suggest the instructions from an earlier version that succeeded. It reads the last 200 runs and events. Suggestions keep the same target, steps, tools, budgets and inputs. They never apply themselves. If someone edits or dismisses the automation first, applying the suggestion fails instead of overwriting. A good earlier run is operational evidence, not proof of better security.
 
 ### Isolated workspaces
 

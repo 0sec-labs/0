@@ -117,7 +117,7 @@ describe("entity coverage and keyword selection", () => {
   });
   it("offers bounded groups when empty while chat mode preserves paginated server full-text results", () => {
     const chats = Array.from({ length: 30 }, (_, index) => item(RECENT_GROUP, `Chat ${index}`));
-    const index = [...chats, ...Array.from({ length: 12 }, (_, i) => item("Pages", `Page ${i}`)), item("Memory", "Lesson")];
+    const index = [...chats, ...Array.from({ length: 12 }, (_, i) => item("Pages", `Page ${i}`)), item("Lessons", "Lesson")];
     expect(filterAppSearch(index, "").filter(result => result.group === RECENT_GROUP)).toHaveLength(6);
     expect(filterAppSearch(index, "").filter(result => result.group === "Pages")).toHaveLength(6);
     expect(filterAppSearch(index, "body-only match", "chats")).toEqual(chats);

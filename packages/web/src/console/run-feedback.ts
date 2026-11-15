@@ -32,7 +32,7 @@ export function runFeedback(snapshot: ConsoleSessionSnapshot, turn?: ReducedTurn
     if (turn?.notices.some(notice => notice.startsWith("Cancellation requested."))) return { label: "Stopping…", active: true };
     if (snapshot.session.status === "waiting" || snapshot.pendingDecisions.length) return { label: "Waiting for your decision", active: true, waiting: true };
     // Only an isolated workspace has a startup phase worth naming; the default local host just shows the working indicator.
-    if (snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending") return { label: "Starting isolated workspace…", active: true };
+    if (snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending") return { label: "Starting isolated environment…", active: true };
     const tools = turn?.toolCalls.filter(call => call.isRunning) ?? [];
     if (tools.length) return { label: tools.length === 1 ? `Running ${tools[0].name.replaceAll("_", " ")}…` : `Running ${tools.length} tools…`, active: true };
     const latestNotice = turn?.notices.at(-1);

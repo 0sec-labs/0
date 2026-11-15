@@ -155,7 +155,7 @@ export function ConsoleNavigationRail({
           </Tooltip>
         </div>
       </SidebarHeader>
-      <SidebarGroup aria-label="Workspace destinations">
+      <SidebarGroup aria-label="Primary destinations">
         <a
           href={newChatHref}
           aria-keyshortcuts="Meta+Shift+O Control+Shift+O"

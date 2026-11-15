@@ -8,7 +8,7 @@ export function SourceContext({ context }: { context?: SourceContext }) {
   // Older hosts do not report this telemetry; absence cannot imply no memory.
   if (!context) return null;
   const lessons = context.status === "supplied" ? context.lessons : [];
-  return <Disclosure summary={<>Memory supplied to model{lessons.length ? ` · ${lessons.length}` : ""}</>} triggerClassName="py-1 text-xs text-muted-foreground">
+  return <Disclosure summary={<>Lessons supplied to model{lessons.length ? ` · ${lessons.length}` : ""}</>} triggerClassName="py-1 text-xs text-muted-foreground">
     <div className="space-y-3 pt-3 text-xs leading-5 text-muted-foreground">
       {context.status === "not_requested" ? <p>No model request yet.</p> : <>
         <p>Latest model request. Supplied context does not show whether the model relied on it or cited it.</p>

@@ -198,3 +198,8 @@ export function runStatusTone(status: string | undefined): "success" | "danger" 
   if (status === "blocked" || status === "needs_review" || status === "cancelled") return "warning";
   return undefined;
 }
+
+/** Projects the Computer already knows: recent projects and mission targets, newest first, plus the current one. */
+export function knownProjects(targets: readonly (string | undefined)[], current: string): string[] {
+  return [...new Set([current, ...targets].map(item => item?.trim() ?? "").filter(Boolean))];
+}

@@ -88,7 +88,7 @@ nvm install 24
 API provider  missing  not configured
 ```
 
-No model credential was found. Connect a provider in **Settings → Connections**, or export a key:
+No model credential was found. Connect a provider in **Settings → Models**, or export a key:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -249,7 +249,7 @@ Run `0` or `0 web`. Use `0 web --no-open` and open the printed URL yourself if n
 
 ### A saved key seems missing
 
-Keys saved in **Connections** live in `~/.0/credentials.json` under the home folder of the process running 0. A nonblank environment variable overrides the saved key for that provider. Do not paste that file into a bug report.
+Keys saved under **Providers** on the Models page live in `~/.0/credentials.json` under the home folder of the process running 0. A nonblank environment variable overrides the saved key for that provider. Do not paste that file into a bug report.
 
 ### `--finding-intent` does nothing
 

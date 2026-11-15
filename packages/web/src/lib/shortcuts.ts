@@ -20,7 +20,7 @@ export type Shortcut = {
 };
 
 const mod = (key: string, shift = false, blockWhenTyping = false): Binding => ({ key, mod: true, shift, blockWhenTyping });
-const panelView = (id: string, action: string, key: string): Shortcut => ({ id: `panel.${id}`, action, group: "Panel", scope: "mission", when: "Mission workspace", bindings: [mod(key, true)], handler: "panel.open-view" });
+const panelView = (id: string, action: string, key: string): Shortcut => ({ id: `panel.${id}`, action, group: "Panel", scope: "mission", when: "In a mission", bindings: [mod(key, true)], handler: "panel.open-view" });
 
 export const SHORTCUTS: readonly Shortcut[] = [
   { id: "palette.open", action: "Search anything", group: "Navigation", scope: "global", when: "Always", bindings: [mod("k"), { key: "/" }], handler: "palette.toggle" },
@@ -31,7 +31,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "composer.focus", action: "Focus composer", group: "Editor", scope: "global", when: "Always", bindings: [mod("i")], handler: "composer.focus" },
   { id: "mission.stop", action: "Stop running mission", group: "Missions", scope: "global", when: "A mission is running", bindings: [mod(".")], handler: "mission.stop" },
   { id: "composer.upload", action: "Attach files", group: "Editor", scope: "global", when: "Composer visible, not typing in another field", bindings: [mod("/")], handler: "composer.upload" },
-  { id: "panel.toggle", action: "Toggle right panel", group: "Panel", scope: "mission", when: "Mission workspace", bindings: [mod("b", true)], handler: "panel.toggle-panel" },
+  { id: "panel.toggle", action: "Toggle right panel", group: "Panel", scope: "mission", when: "In a mission", bindings: [mod("b", true)], handler: "panel.toggle-panel" },
   panelView("findings", "Open Findings", "f"),
   panelView("evidence", "Open Evidence", "e"),
   panelView("fixes", "Open Fixes", "g"),

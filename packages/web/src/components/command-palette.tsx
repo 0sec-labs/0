@@ -195,12 +195,11 @@ export function CommandPalette({
         run: () => navigate("/chats?new=1"),
       },
       ...[
-        ["connections", "Connections", "API keys and accounts"],
-        ["models", "Models", "Choose which models 0 uses"],
+        ["models", "Models", "Providers and the models 0 uses"],
         ["engagements", "Reports", "Assessment reports and handoff notes"],
         ["doctor", "Diagnostics", "Check that everything works"],
         ["tools", "Tools", "What 0 can use"],
-        ["project", "Project", "Target and permissions"],
+        ["project", "Project", "Folder and permissions"],
         ["fix", "Fix", "Review and apply a code fix"],
       ].map(([route, label, meta]): PaletteAction => ({
         id: `control-${route}`, group: "Pages", href: `/${route}`, label: label!, meta: meta!, icon: route === "settings" ? CapySettingsIcon : route === "workers" ? CapyDevicesIcon : CapySlidersIcon,
@@ -325,17 +324,17 @@ export function CommandPalette({
       run: () => navigate("/plugins"),
     });
     for (const memory of memoryQuery.data?.knowledge ?? []) base.push({
-      id: `memory-${memory.id}`, group: "Memory", label: memory.title || memory.summary || "Saved lesson", meta: memory.status, icon: CapyDatabaseIcon,
+      id: `memory-${memory.id}`, group: "Lessons", label: memory.title || memory.summary || "Saved lesson", meta: memory.status, icon: CapyDatabaseIcon,
       keywords: searchKeywords(memory.content, memory.summary, memory.target, memory.scope, memory.projectId),
       run: () => navigate("/learning"),
     });
     for (const suggestion of memoryQuery.data?.improvements ?? []) base.push({
-      id: `suggestion-${suggestion.id}`, group: "Memory", label: suggestion.title || suggestion.summary || "Memory suggestion", meta: suggestion.status, icon: CapyDatabaseIcon,
+      id: `suggestion-${suggestion.id}`, group: "Lessons", label: suggestion.title || suggestion.summary || "Lesson suggestion", meta: suggestion.status, icon: CapyDatabaseIcon,
       keywords: searchKeywords(suggestion.kind, suggestion.summary, suggestion.targetId),
       run: () => navigate("/learning"),
     });
     for (const event of memoryQuery.data?.events ?? []) base.push({
-      id: `memory-event-${event.id}`, group: "Memory", label: event.title || event.summary || "Memory event", meta: event.outcome || event.kind, icon: CapyDatabaseIcon,
+      id: `memory-event-${event.id}`, group: "Lessons", label: event.title || event.summary || "Lesson event", meta: event.outcome || event.kind, icon: CapyDatabaseIcon,
       keywords: searchKeywords(event.summary, event.target, event.kind, event.projectId),
       run: () => navigate("/learning"),
     });
@@ -496,7 +495,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>{v("Search {missions}, pages and settings")}</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, lessons, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

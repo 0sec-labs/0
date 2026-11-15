@@ -17,7 +17,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Plugin** | Installable code that extends 0: a tool plugin or an MCP server plugin. A plugin can bundle skills. See [Plugins](/plugins/). |
 | **Skill** | A folder of instructions the agent loads when a task needs it. A skill is not code. See [Skills](/skills/). |
 | **Theme** | A light and dark color palette for the browser app. Themes live in the browser only. See [Browser app](/app/#themes). |
-| **Memory** | Source-backed lessons the agent saved and can recall. See [Browser app](/app/#memory). |
+| **Lessons** | Source-backed lessons the agent saved and can recall. See [Browser app](/app/#lessons). |
 | **Engine** | The process that does the work, on this computer or a remote server. See [Remote engines and teams](/engines/). |
 
 ## How they fit together

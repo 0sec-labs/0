@@ -28,10 +28,10 @@ describe("browser settings capability boundary", () => {
     expect(sharedSettingKeys([])).toEqual([]);
   });
   it("uses reviewed web copy and categories instead of terminal metadata", () => {
-    expect(categoryFor({ key: "busyInputMode" })).toBe("conversation");
+    expect(categoryFor({ key: "busyInputMode" })).toBe("input");
     expect(categoryFor({ key: "executionProfile" })).toBe("agents");
     expect(categoryFor({ key: "analyticsLevel" })).toBe("privacy");
-    expect(settingLabel({ key: "allowSubagentPeerMessaging", label: "CLI label" })).toBe("Agent collaboration");
+    expect(settingLabel({ key: "allowSubagentPeerMessaging", label: "CLI label" })).toBe("Agents share findings");
     expect(webSettingDetails("allowSubagentPeerMessaging")?.description).toBe("Agents can share findings with one another.");
     expect(webSettingDetails("unknown")).toBeUndefined();
     expect(settingChoiceLabel("executionProfile", "smolvm")).toBe("Isolated environment");

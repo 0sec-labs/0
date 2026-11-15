@@ -74,7 +74,7 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Scan finished", category: "notifications", keywords: "scan complete", key: "notifications-scan-finished" },
   { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
   { title: "Global instructions", category: "instructions", keywords: "agents.md every mission", key: "instructions-global" },
-  { title: "Project instructions", category: "instructions", keywords: "agents.md folder workspace", key: "instructions-workspace" },
+  { title: "Project instructions", category: "instructions", keywords: "agents.md folder project", key: "instructions-workspace" },
   { title: "Pull requests opened by 0", category: "git", keywords: "prs fixes branch merge links", key: "git-prs" },
   { title: "Repository search", category: "git", keywords: "owner name github visibility branch sentinels used by", key: "repositories-search" },
   { title: "Audit log search", category: "audit-log", keywords: "actions approvals denials history export json actor subject", key: "audit-log-search" },

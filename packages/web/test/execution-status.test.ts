@@ -14,6 +14,6 @@ describe("authoritative web execution labels", () => {
   });
   it("shows only reported workspace, run and resource details", () => {
     expect(executionDetails({ backend: "smolvm", status: "pending", guestWorkspacePath: "/workspace" })).toEqual([]);
-    expect(executionDetails({ backend: "smolvm", status: "running", workspacePath: "/tmp/project", guestWorkspacePath: "/workspace", cpus: 2, memoryMb: 2048 })).toEqual(["Workspace: /tmp/project", "Guest: /workspace", "2 CPUs", "2048 MiB memory"]);
+    expect(executionDetails({ backend: "smolvm", status: "running", workspacePath: "/tmp/project", guestWorkspacePath: "/workspace", cpus: 2, memoryMb: 2048 })).toEqual(["Project: /tmp/project", "Guest: /workspace", "2 CPUs", "2048 MiB memory"]);
   });
 });

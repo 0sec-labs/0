@@ -25,8 +25,9 @@ The sidebar holds:
 
 - **New mission**, search and your mission history.
 - **Findings**, with a count of open findings.
-- **Automations** and **Skills**.
-- **More…**: **Explore** (the catalog of plugins, skills and themes), **Plugins**, **Memory** and **Computers**.
+- **Automations**.
+- **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
+- **More…**: **Lessons**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
 - Your **Sentinels**, when the engine supports them.
 
 Two cards can appear above the account row, for local users and team owners:
@@ -54,7 +55,7 @@ Press `?` outside a text field to see every shortcut, or open **Settings → Sho
 ## Run a mission
 
 1. Press **New mission**.
-2. Pick a workspace folder if the job involves code.
+2. Pick a project folder if the job involves code.
 3. Choose a model with the model picker under the composer. Connect a provider first if the list is empty; see [Models and keys](/models/).
 4. Describe the job in plain words, for example "Review this repo for auth bypasses and verify anything you find".
 5. Watch tool activity and agents in the transcript. Findings land in **Findings**.
@@ -97,9 +98,9 @@ With **Act without asking**, the agent can clone a public HTTPS repository to re
 
 The **Daybreak** control next to the model settings requests an OpenAI cyber access program (**Daybreak Blue** or **Daybreak Red**) for eligible OpenAI and ChatGPT Codex connections. **Automatic** clears the request. See [Models and keys](/models/#cyber-access-programs).
 
-## Memory
+## Lessons
 
-**Memory** holds lessons the agent saved while reading source code. Each lesson records its project folder and supporting files with content fingerprints. Before a lesson is reused, 0 checks those files. If a file changed or is missing, the lesson is skipped.
+**Lessons** hold lessons the agent saved while reading source code. Each lesson records its project folder and supporting files with content fingerprints. Before a lesson is reused, 0 checks those files. If a file changed or is missing, the lesson is skipped.
 
 - Open **Supporting files** on a lesson to see its evidence.
 - Press **Stop using** to keep a lesson out of future context. The record stays for inspection.
@@ -134,20 +135,21 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 
 | Group | Page | What it controls |
 | --- | --- | --- |
-| Preferences | **General** | Engine update policy and a reset for shared preferences. |
+| Preferences | **General** | Engine update policy, input behavior, privacy (usage metrics and problem reports), support, status and one reset for shared preferences. |
 | | **Appearance** | Theme, mode, accent color, font size and reduce motion. This browser only. |
-| | **Missions** | Messages while working, summarizing long missions, title instructions, idle archiving, subagent limits, transcript options and the cost, token and context displays. |
+| | **Missions** | Summarizing long missions, title instructions, idle archiving, subagent limits, transcript options and one **Show cost and usage** switch. |
 | | **Notifications** | Browser notifications. This browser only. |
 | | **Shortcuts** | The searchable shortcut list. |
-| Agent | **Instructions** | Your own `AGENTS.md` text for every mission. |
-| | **Agents and privacy** | Agent collaboration and messages, model-authored plugins, where tools run, usage metrics and problem reports. |
-| | **Connections** | Provider keys and sign-ins. See [Models and keys](/models/). |
-| | **Models** | The default model and per-role models. |
-| Workspace | **Workspace** | The workspace folder, target and permissions. |
+| Agent | **Instructions** | Your own `AGENTS.md` text for every mission, plus one file per project. |
+| | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. `/connections` redirects here. |
+| | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
+| | **Computers** | The machines missions run on. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this engine opened. |
-| | **Usage** | Estimated spend and tokens by model and by mission. |
-| | **Audit log** | Approvals, denials, settings, plugin and connection changes. Searchable, with JSON export. |
-| | **Diagnostics** | Checks that the engine, provider and tools work. |
+| Activity | **Usage** | Estimated spend and tokens by model and by mission. |
+| | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |
+| | **Members** | Team mode only. |
+
+The project folder and permissions page opens at `/project`. Checks that the engine, provider and tools work open from **General → Status → Details** (`/doctor`).
 
 ### Themes
 
@@ -172,7 +174,7 @@ Themes are stored in the browser. The engine and the CLI never see them.
 **Settings → Instructions** edits two Markdown files you own, each up to 32,000 characters:
 
 - **Global**: `~/.0/AGENTS.md`, for every mission.
-- **Workspace**: one file per workspace folder under `~/.0/workspaces/`.
+- **Project**: one file per project folder under `~/.0/workspaces/`.
 
 When a mission starts, both are added to its system prompt in a block marked as trusted operator instructions, global first. `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded. Whoever wrote the target controls that text.
 

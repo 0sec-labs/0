@@ -563,12 +563,12 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
   return (
     <Tooltip
       content={v(
-        "The first message starts an isolated VM and copies your workspace. Later messages reuse it while this {mission} stays open.",
+        "The first message starts an isolated VM and copies your project. Later messages reuse it while this {mission} stays open.",
       )}
     >
       <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
         <LoadingDots />
-        {message && message !== "Starting workspace" ? message : "Starting isolated workspace"}…
+        {message && message !== "Starting workspace" ? message : "Starting isolated environment"}…
         {seconds >= 5 && (
           <span className="tabular-nums">
             {seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}
@@ -897,7 +897,7 @@ export function Composer({
             snapshot.session.cancellation?.phase === "force_stopping" ||
             snapshot.session.status === "cancelling" ||
             feedback.label === "Stopping…" ||
-            feedback.label.startsWith("Starting isolated workspace")) && (
+            feedback.label.startsWith("Starting isolated environment")) && (
             <div
               role="status"
               aria-live="polite"

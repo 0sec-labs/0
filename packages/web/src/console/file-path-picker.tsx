@@ -153,7 +153,7 @@ export function FilePathPicker({
         if (next) setBrowseRequest((previous) => ({ path: cwd ?? "", revision: previous.revision + 1 }));
       }}
     >
-      <Tooltip content={cwd ? `Workspace: ${cwd}` : "Choose workspace folder"}>
+      <Tooltip content={cwd ? `Project: ${cwd}` : "Choose project folder"}>
         <Popover.Trigger
           className={cn(
             "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:text-foreground disabled:opacity-40",
@@ -163,7 +163,7 @@ export function FilePathPicker({
             className,
           )}
           disabled={disabled || workspaceDisabled}
-          aria-label={cwd ? `Change workspace: ${cwd}` : "Change workspace"}
+          aria-label={cwd ? `Change project: ${cwd}` : "Change project"}
         >
           <Folder
             aria-hidden="true"
@@ -189,9 +189,9 @@ export function FilePathPicker({
       >
         {!form && (
           <>
-            <Popover.Title className="sr-only">Change workspace</Popover.Title>
+            <Popover.Title className="sr-only">Change project</Popover.Title>
             <Popover.Description className="sr-only">
-              {cwd ? `Current workspace: ${cwd}` : "Choose the folder where Zero works."}
+              {cwd ? `Current project: ${cwd}` : "Choose the folder where Zero works."}
             </Popover.Description>
             <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-popover px-1 pt-1">
               <div className="relative">
@@ -215,7 +215,7 @@ export function FilePathPicker({
               </div>
               <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
             </div>
-            <div role="group" aria-label="Recent workspaces" className="flex flex-col">
+            <div role="group" aria-label="Recent projects" className="flex flex-col">
               {folders.map((item) => (
                 <button
                   key={item}
@@ -316,7 +316,7 @@ export function FilePathPicker({
                 )
               )}
               <label htmlFor={inputId} className="sr-only">
-                Workspace folder path
+                Project folder path
               </label>
               <div className="flex gap-2">
                 <Input

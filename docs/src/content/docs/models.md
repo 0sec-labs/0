@@ -7,11 +7,11 @@ description: Connect a model provider, choose models per role and control how 0 
 
 ## Connect in the browser
 
-1. Run `0` and open **Settings → Connections**.
+1. Run `0` and open **Settings → Models**.
 2. Pick a provider. Paste an API key or follow its sign-in flow.
 3. A connected provider gets its default model automatically. To change it, open **Settings → Models** and pick a **Default model**, or pick a model in a mission with the model picker.
 
-The model list comes from your connections. **Models** lists every model they serve and flags a connection that needs attention. On **Connections**, you can turn off single models of a connection. Public catalogs add price and context data but do not grant access; a listed model can still be unavailable to your account.
+The model list comes from your connections. **Models** lists every model they serve and flags a connection that needs attention. Under **Providers** on the Models page, you can turn off single models of a connection. Public catalogs add price and context data but do not grant access; a listed model can still be unavailable to your account.
 
 ## Connect from a shell
 
@@ -82,7 +82,7 @@ Role models stay on the parent's connection. Child agents use the same provider,
 <span id="custom-ai-providers-including-9router"></span>
 Any OpenAI-compatible Chat Completions server works, local or remote.
 
-In **Connections**, choose **OpenAI / Custom AI Provider**. Enter the base URL with its version path (for example `http://localhost:20128/v1`), the **Custom model ID** and the API key. HTTP and HTTPS both work. The model does not need to be in any catalog.
+On the Models page, in **Providers**, choose **OpenAI / Custom AI Provider**. Enter the base URL with its version path (for example `http://localhost:20128/v1`), the **Custom model ID** and the API key. HTTP and HTTPS both work. The model does not need to be in any catalog.
 
 In a shell:
 
@@ -112,7 +112,7 @@ The model comes from `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`. `OL
 ## ChatGPT Codex
 
 <span id="chatgpt-codex-authentication"></span>
-In **Connections**, select **ChatGPT Codex** and follow the device sign-in. It runs `codex login --device-auth` and reloads the auth file when done.
+On the Models page, in **Providers**, select **ChatGPT Codex** and follow the device sign-in. It runs `codex login --device-auth` and reloads the auth file when done.
 
 From a shell, run `codex login`. 0 reads tokens from `~/.codex/auth.json` at startup when no `ZERO_CHATGPT_*` token is set. A signed-in Codex session takes priority over stale `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY` values in your shell.
 
@@ -306,7 +306,7 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 <span id="console-credential-store"></span>
 ## Where credentials live
 
-Keys saved in **Connections** are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider. For CI and other automation, pass credentials in the environment.
+Keys saved under **Providers** on the Models page are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider. For CI and other automation, pass credentials in the environment.
 
 ## Limits
 
