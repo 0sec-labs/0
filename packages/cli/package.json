@@ -1,6 +1,6 @@
 {
   "name": "@0/cli",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "description": "0security CLI: build and deploy security agents that find vulnerabilities, prove them, fix them, verify the fix and keep watching.",
   "license": "MIT OR Apache-2.0",
   "private": true,
