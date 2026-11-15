@@ -1,387 +1,275 @@
 /**
- * Shared pure slash-command registry, parser, and filter.
+ * The one slash-command registry, shared by the chat composer and the CLI docs.
  *
- * Portable — no React, OpenTUI, or @0/engine imports. Usable by both
- * the Bun TUI (ChatScreen) and the Node readline console.
+ * Every command is defined once. A command that mirrors the CLI is named like it
+ * (`/threads list` is `0 threads list`) and carries that path in `cli`, so a parity
+ * test can prove the two never drift. Commands that exist only in chat have no `cli`.
  *
- * A "slash command" is any input starting with `/` followed by a name
- * (alphanumeric, digits, hyphens, underscores). The parser detects
- * whether the input is a slash invocation, extracts the name and
- * argument string, and resolves it against the built-in vocabulary.
+ * Portable: no React, no @0/engine imports.
  *
- * Unknown slash commands produce `{ isSlash: true, isUnknown: true }`
- * so consumers can show a local notice — they MUST NOT reach the LLM.
- * Non-slash input is left for the engine as a normal operator message.
+ * A "slash command" is any input starting with `/`. Unknown slash commands produce
+ * `{ isSlash: true, isUnknown: true }` so consumers can show a local notice and never
+ * send them to the model.
  */
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type CommandCategory =
-  | "navigation"
-  | "session"
-  | "info"
-  | "system";
+export type SlashGroup =
+  | "Threads"
+  | "Findings"
+  | "Agents"
+  | "Automation"
+  | "Computers"
+  | "Models"
+  | "Skills"
+  | "Memory"
+  | "Plugins"
+  | "Settings"
+  | "Chat";
 
 export interface SlashCommand {
-  /** Canonical name (without leading `/`). */
+  /** Canonical path without the leading `/`: `threads list`, or one word for chat-only commands. */
   readonly name: string;
-  /** Alternate names (without leading `/`). */
-  readonly aliases: readonly string[];
-  readonly category: CommandCategory;
-  /** One-line description for help output. */
+  readonly group: SlashGroup;
+  /** One-line description. */
   readonly description: string;
-  /** Usage hint, e.g. "/model <id>". Omitted when blank. */
+  /** Usage hint, e.g. "/models default [model]". */
   readonly usage?: string;
-  /**
-   * Commands that require the Bun TUI's interaction or routing surfaces.
-   * The readline console explains that the TUI is required.
-   */
-  readonly tuiOnly?: boolean;
+  /** The CLI command this mirrors, without the leading `0 `, e.g. `threads list`. Absent for chat-only commands. */
+  readonly cli?: string;
+  /** Web page route this command opens. */
+  readonly destination?: string;
+  /** Alternate names that stay visible in the menu match. */
+  readonly aliases: readonly string[];
+  /** Old names kept so muscle memory works; resolved but never listed. */
+  readonly legacy: readonly string[];
 }
 
 export interface ParsedSlashInput {
   /** True when the raw input starts with `/`. */
   readonly isSlash: boolean;
-  /**
-   * The canonical command name when the slash input resolves to a known
-   * command. `undefined` for unknown slash commands or non-slash input.
-   */
+  /** Canonical command name when the input resolves to a known command. */
   readonly command: string | undefined;
-  /**
-   * The raw name extracted from input: everything between the leading `/`
-   * and the first space (or end of string). E.g. "/model gpt-5.5" → "model".
-   */
+  /** The name as typed (one or two words), or the first word for unknown input. */
   readonly rawName: string;
-  /**
-   * Everything after the first space following the command name (trimmed).
-   * Empty string when there are no arguments.
-   */
+  /** Everything after the command (trimmed). Empty when there are no arguments. */
   readonly args: string;
-  /** True when a known command was matched. */
   readonly isKnown: boolean;
-  /** True when input starts with `/` but does NOT match a known command. */
   readonly isUnknown: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Vocabulary
-// ---------------------------------------------------------------------------
+const cmd = (
+  name: string,
+  group: SlashGroup,
+  description: string,
+  extra: Partial<Omit<SlashCommand, "name" | "group" | "description">> = {},
+): SlashCommand => ({ aliases: [], legacy: [], ...extra, name, group, description });
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
-  // ── info ────────────────────────────────────────────────────────────────
-  {
-    name: "help",
-    aliases: ["?", "commands"],
-    category: "info",
-    description: "List commands",
-    usage: "/help [command]",
-  },
-  {
-    name: "capabilities",
-    aliases: ["caps"],
-    category: "info",
-    description: "What 0 can do and what needs approval",
-    usage: "/capabilities",
-    tuiOnly: true,
-  },
-  {
-    name: "status",
-    aliases: [],
-    category: "info",
-    description: "Session status",
-  },
-  {
-    name: "tools",
-    aliases: [],
-    category: "info",
-    description: "List available tools",
-  },
+  // Threads
+  cmd("threads start", "Threads", "Start a new thread", {
+    cli: "threads start",
+    aliases: ["new"],
+    legacy: ["new-mission", "new-chat", "threads new", "threads create", "onboard", "launcher", "run", "home"],
+  }),
+  cmd("threads list", "Threads", "Switch between threads", {
+    cli: "threads list",
+    legacy: ["threads", "chats", "sessions", "history", "runs", "ops", "chat", "back"],
+  }),
+  cmd("threads export", "Threads", "Export this thread", { cli: "threads export" }),
+  cmd("threads close", "Threads", "Close this thread", { cli: "threads close", legacy: ["exit", "quit"] }),
+  cmd("clear", "Threads", "Clear this thread", { cli: "threads clear" }),
 
-  {
-    name: "new-mission",
-    aliases: ["new", "new-chat"],
-    category: "navigation",
-    description: "Start a fresh audit",
-    tuiOnly: true,
-  },
-  {
-    name: "onboard",
-    aliases: [],
-    category: "navigation",
-    description: "Run setup again",
-    tuiOnly: true,
-  },
-
-  // ── session ─────────────────────────────────────────────────────────────
-  {
-    name: "clear",
-    aliases: [],
-    category: "session",
-    description: "Clear the conversation",
-  },
-  {
-    name: "history",
-    aliases: [],
-    category: "session",
-    description: "Past scans",
-    tuiOnly: true,
-  },
-  {
-    name: "findings",
+  // Findings
+  cmd("findings list", "Findings", "Review findings", {
+    cli: "findings list",
+    destination: "/findings",
     aliases: ["finds"],
-    category: "session",
-    description: "Show findings",
-    tuiOnly: true,
-  },
-  {
-    name: "fix",
-    aliases: [],
-    category: "session",
-    description: "Write and test a fix; you approve any PR",
+    legacy: ["findings"],
+  }),
+  cmd("findings export", "Findings", "Export findings and reports", {
+    cli: "findings export",
+    destination: "/findings",
+  }),
+  cmd("fix", "Findings", "Write and test a fix; you approve any pull request", {
+    cli: "scan fix",
+    destination: "/fix",
     usage: "/fix [finding-id] | /fix publish <finding-id> | /fix cancel",
-    tuiOnly: true,
-  },
-  {
-    name: "copy",
-    aliases: ["export", "dump"],
-    category: "session",
-    description: "Copy the conversation",
-    usage: "/copy",
-    tuiOnly: true,
-  },
+  }),
 
-  {
-    name: "sessions",
-    aliases: [],
-    category: "session",
-    description: "Switch or resume a conversation",
-    usage: "/sessions",
-    tuiOnly: true,
-  },
-  {
-    name: "explain",
-    aliases: ["eli5"],
-    category: "session",
-    description: "Explain simply",
-    usage: "/explain [topic]",
-    tuiOnly: true,
-  },
-  {
-    name: "feedback",
-    aliases: [],
-    category: "system",
-    description: "Send feedback",
+  // Agents, automation, computers
+  cmd("agents list", "Agents", "Browse your agents", {
+    cli: "agents list",
+    destination: "/sentinels",
+    legacy: ["agents"],
+  }),
+  cmd("agents create", "Agents", "Create an agent", { cli: "agents create", destination: "/sentinels" }),
+  cmd("automation list", "Automation", "Browse automations", {
+    cli: "automation list",
+    destination: "/automations",
+    legacy: ["automation", "automations"],
+  }),
+  cmd("automation run", "Automation", "Run an automation (you confirm first)", {
+    cli: "automation run",
+    destination: "/automations",
+  }),
+  cmd("computers list", "Computers", "Browse your computers", {
+    cli: "computers list",
+    destination: "/computers",
+    legacy: ["computers"],
+  }),
+
+  // Models
+  cmd("models list", "Models", "Models from your connected providers", {
+    cli: "models list",
+    destination: "/models",
+    legacy: ["models"],
+  }),
+  cmd("models default", "Models", "Show the default model, or set this thread's", {
+    cli: "models default",
+    usage: "/models default [model]",
+    legacy: ["model"],
+  }),
+  cmd("models connections", "Models", "Add an API key or sign in", {
+    cli: "models connections",
+    destination: "/connections",
+    legacy: ["connect", "connections"],
+  }),
+  cmd("models usage", "Models", "Tokens, cost and context", {
+    cli: "models usage",
+    aliases: ["usage"],
+    legacy: ["cost", "tokens"],
+  }),
+
+  // Skills, memory, plugins
+  cmd("skills list", "Skills", "Browse your skills", {
+    cli: "skills list",
+    destination: "/plugins/skills",
+    legacy: ["skills"],
+  }),
+  cmd("memory list", "Memory", "What 0 remembers", {
+    cli: "memory list",
+    destination: "/memory",
+    legacy: ["memory"],
+  }),
+  cmd("plugin list", "Plugins", "Browse and enable plugins", {
+    cli: "plugin list",
+    destination: "/plugins",
+    aliases: ["plugins"],
+    legacy: ["plugin", "hackstore", "store", "market", "marketplace"],
+  }),
+  cmd("plugin browse", "Plugins", "Explore plugins to install", {
+    cli: "plugin browse",
+    destination: "/plugins/explore",
+  }),
+
+  // Settings
+  cmd("config list", "Settings", "Open settings", {
+    cli: "config list",
+    destination: "/settings",
+    aliases: ["settings"],
+    legacy: ["config", "prefs"],
+  }),
+  cmd("config get", "Settings", "Look up one setting", {
+    cli: "config get",
+    destination: "/settings",
+    usage: "/config get <key>",
+  }),
+  cmd("config set", "Settings", "Change a setting", {
+    cli: "config set",
+    destination: "/settings",
+    usage: "/config set <key> <value>",
+  }),
+  cmd("doctor", "Settings", "Check your setup", { cli: "doctor", destination: "/doctor" }),
+
+  // Chat only
+  cmd("help", "Chat", "List commands", { aliases: ["commands"], legacy: ["?"], usage: "/help" }),
+  cmd("status", "Chat", "Status of this thread"),
+  cmd("tools", "Chat", "What 0 can do and what needs approval", {
+    destination: "/tools",
+    aliases: ["capabilities"],
+    legacy: ["caps"],
+  }),
+  cmd("explain", "Chat", "Explain simply", { usage: "/explain [topic]", legacy: ["eli5"] }),
+  cmd("copy", "Chat", "Copy this thread", { legacy: ["export", "dump"] }),
+  cmd("feedback", "Chat", "Send feedback", {
     usage: "/feedback <message> | /feedback submit <message> | /feedback send | /feedback cancel",
-    tuiOnly: true,
-  },
-  {
-    name: "settings",
-    aliases: ["config", "prefs"],
-    category: "system",
-    description: "Open settings",
-    usage: "/settings",
-    tuiOnly: true,
-  },
-  {
-    name: "keybindings",
-    aliases: ["keys", "keymap"],
-    category: "system",
-    description: "Keyboard shortcuts",
-    usage: "/keybindings",
-    tuiOnly: true,
-  },
-  {
-    name: "theme",
-    aliases: ["themes"],
-    category: "system",
-    description: "Change the colour theme",
-    usage: "/theme [name]",
-    tuiOnly: true,
-  },
-  {
-    name: "model",
-    aliases: ["models"],
-    category: "session",
-    description: "Choose a model",
-    usage: "/model [id]",
-    tuiOnly: true,
-  },
-
-  // ── navigation ──────────────────────────────────────────────────────────
-  {
-    name: "chat",
-    aliases: [],
-    category: "navigation",
-    description: "Back to the conversation",
-    tuiOnly: true,
-  },
-  {
-    name: "launcher",
-    aliases: ["run", "home"],
-    category: "navigation",
-    description: "Scan one target",
-    tuiOnly: true,
-  },
-  {
-    name: "ops",
-    aliases: ["runs"],
-    category: "navigation",
-    description: "Running and recent scans",
-    tuiOnly: true,
-  },
-  {
-    name: "plugins",
-    aliases: ["plugin", "hackstore", "store", "market", "marketplace"],
-    category: "navigation",
-    description: "Browse and install plugins",
-    tuiOnly: true,
-  },
-  {
-    name: "connect",
-    aliases: [],
-    category: "navigation",
-    description: "Add an API key or sign in",
-    usage: "/connect",
-    tuiOnly: true,
-  },
-  {
-    name: "usage",
-    aliases: ["cost", "tokens"],
-    category: "navigation",
-    description: "Tokens, cost and context",
-    usage: "/usage",
-    tuiOnly: true,
-  },
-  {
-    name: "back",
-    aliases: [],
-    category: "navigation",
-    description: "Previous screen",
-    tuiOnly: true,
-  },
-  {
-    name: "scope",
-    aliases: [],
-    category: "navigation",
-    description: "What 0 is allowed to test",
-    tuiOnly: true,
-  },
-
-  // ── system ──────────────────────────────────────────────────────────────
-  {
-    name: "doctor",
-    aliases: [],
-    category: "system",
-    description: "Check your setup",
-    tuiOnly: true,
-  },
-  {
-    name: "exit",
-    aliases: ["quit"],
-    category: "system",
-    description: "Quit",
-  },
+  }),
+  cmd("theme", "Chat", "Change appearance", { destination: "/settings", usage: "/theme [light|dark]", legacy: ["themes"] }),
+  cmd("shortcuts", "Chat", "Keyboard shortcuts", { destination: "/settings", legacy: ["keybindings", "keys", "keymap"] }),
 ];
 
 // ---------------------------------------------------------------------------
-// Index — static string-keyed lookup table
+// Index
 // ---------------------------------------------------------------------------
 
-/** Maps every canonical name and alias → canonical name (lowercase). */
-const NAME_INDEX: Record<string, string> = {};
-for (const cmd of SLASH_COMMANDS) {
-  NAME_INDEX[cmd.name] = cmd.name;
-  for (const alias of cmd.aliases) {
-    NAME_INDEX[alias] = cmd.name;
-  }
+/** Every canonical name, alias and legacy name → canonical name. */
+const NAME_INDEX = new Map<string, string>();
+for (const command of SLASH_COMMANDS) {
+  for (const name of [command.name, ...command.aliases, ...command.legacy]) NAME_INDEX.set(name, command.name);
 }
+/** First words of two-word commands (`threads`, `models`...): typing one alone with extra text is not a command. */
+const NOUNS = new Set(SLASH_COMMANDS.filter((c) => c.name.includes(" ")).map((c) => c.name.split(" ")[0]!));
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Look up a command by canonical name or alias (case-sensitive, lower-case
- * only). Returns `undefined` when no match exists.
- */
 export function getCommandByName(name: string): SlashCommand | undefined {
-  const canonical = NAME_INDEX[name];
-  if (!canonical) return undefined;
-  // Linear scan over the small static array — fine at this scale.
-  // Swap to a canonical-indexed Record if the list grows past ~50.
-  for (const cmd of SLASH_COMMANDS) {
-    if (cmd.name === canonical) return cmd;
-  }
-  return undefined;
+  const canonical = NAME_INDEX.get(name.trim().replace(/\s+/g, " "));
+  return canonical ? SLASH_COMMANDS.find((c) => c.name === canonical) : undefined;
 }
 
+const NOT_SLASH: ParsedSlashInput = {
+  isSlash: false,
+  command: undefined,
+  rawName: "",
+  args: "",
+  isKnown: false,
+  isUnknown: false,
+};
+
 /**
- * Parse a raw input line and resolve it against the command vocabulary.
- *
- * Non-slash inputs return `{ isSlash: false, isKnown: false, isUnknown: false }`.
- * Unknown slash commands (e.g. "/blarg") return `{ isSlash: true, isUnknown: true }`.
- * Known commands populate `command`, `rawName`, and `args`.
- *
- * Consumers MUST check `isUnknown` before sending to the LLM — unknown
- * slash commands produce a local notice and MUST NOT reach the engine.
+ * Parse a raw input line. Longest name wins: `/models default gpt-5` is `models default`
+ * with args `gpt-5`; `/sessions` resolves through a legacy name.
  */
 export function findCommand(input: string): ParsedSlashInput {
   const trimmed = input.trimStart();
-
-  if (!trimmed.startsWith("/")) {
-    return {
-      isSlash: false,
-      command: undefined,
-      rawName: "",
-      args: "",
-      isKnown: false,
-      isUnknown: false,
-    };
-  }
-
-  // Strip the leading "/" and split on first space
-  const afterSlash = trimmed.slice(1);
-  const spaceIndex = afterSlash.indexOf(" ");
-  const rawName = spaceIndex >= 0 ? afterSlash.slice(0, spaceIndex) : afterSlash;
-  const args = spaceIndex >= 0 ? afterSlash.slice(spaceIndex + 1).trim() : "";
-
-  const canonical = NAME_INDEX[rawName];
-  if (canonical) {
-    return {
-      isSlash: true,
-      command: canonical,
-      rawName,
-      args,
-      isKnown: true,
-      isUnknown: false,
-    };
-  }
-
-  return {
+  if (!trimmed.startsWith("/")) return NOT_SLASH;
+  const body = trimmed.slice(1);
+  const words = body.trim().split(/\s+/).filter(Boolean);
+  const unknown = (): ParsedSlashInput => ({
     isSlash: true,
     command: undefined,
-    rawName,
-    args,
+    rawName: words[0] ?? "",
+    args: words.slice(1).join(" "),
     isKnown: false,
     isUnknown: true,
-  };
+  });
+  for (const count of [2, 1]) {
+    if (words.length < count) continue;
+    const key = words.slice(0, count).join(" ").toLowerCase();
+    const canonical = NAME_INDEX.get(key);
+    if (!canonical) continue;
+    const args = body.trimStart().split(/\s+/).slice(count).join(" ").trim();
+    // `/threads bogus` is a mistake, not `/threads list` with an argument.
+    if (count === 1 && NOUNS.has(key) && args) return unknown();
+    return { isSlash: true, command: canonical, rawName: key, args, isKnown: true, isUnknown: false };
+  }
+  return unknown();
 }
 
 /**
- * Filter the command vocabulary by a query string. Matches against
- * canonical names and aliases (case-insensitive prefix match).
- *
- * Returns all commands when query is empty. Commands are ordered by
- * category, then alphabetically by canonical name.
+ * Does `command` match the text typed after `/`? Word-by-word prefix match against the
+ * name and visible aliases; legacy names only match exactly. Text with more words than
+ * the command has means the arguments have started.
  */
-export function filterCommands(query: string): SlashCommand[] {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return [...SLASH_COMMANDS];
+export function matchesSlashQuery(command: SlashCommand, query: string): boolean {
+  const typed = query.toLowerCase().replace(/^\s+/, "");
+  if (!typed) return true;
+  const tokens = typed.split(/\s+/);
+  const prefix = (name: string) => {
+    const parts = name.split(" ");
+    return tokens.length <= parts.length && tokens.every((token, i) => parts[i]!.startsWith(token));
+  };
+  return prefix(command.name) || command.aliases.some(prefix) || command.legacy.includes(typed.trim());
+}
 
-  return SLASH_COMMANDS.filter((cmd) => {
-    if (cmd.name.startsWith(trimmed)) return true;
-    return cmd.aliases.some((a) => a.startsWith(trimmed));
-  });
+/** Commands matching the text typed after `/`, in registry order. All commands for an empty query. */
+export function filterCommands(query: string): SlashCommand[] {
+  return SLASH_COMMANDS.filter((command) => matchesSlashQuery(command, query));
 }

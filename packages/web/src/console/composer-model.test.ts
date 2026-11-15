@@ -1,6 +1,9 @@
 import { resolveStartChoice } from "./provider-health";
 import { describe, expect, it } from "vitest";
+import { SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
 import {
+  CURATED_SLASH_COMMANDS,
+  groupSlashCommands,
   curateSlashCommands,
   effortChoices,
   filterMentions,
@@ -12,49 +15,30 @@ import {
   type MentionItem,
 } from "./composer-model";
 
-const names = [
-  "help",
-  "capabilities",
-  "status",
-  "tools",
-  "new-mission",
-  "clear",
-  "findings",
-  "settings",
-  "model",
-  "launcher",
-  "plugins",
-  "usage",
-];
-const commands = names.map((name) => ({
-  name,
-  aliases: name === "new-mission" ? ["new"] : [],
-}));
-
 describe("slash curation", () => {
   it("shows the curated eight in order and counts the rest", () => {
-    const { items, hidden } = curateSlashCommands(commands, "", false);
-    expect(items.map((c) => c.name)).toEqual([
-      "model",
-      "new-mission",
-      "status",
-      "findings",
-      "plugins",
-      "settings",
-      "tools",
-      "help",
-    ]);
-    expect(hidden).toBe(3);
+    const { items, hidden } = curateSlashCommands(SLASH_COMMANDS, "", false);
+    expect(items.map((c) => c.name)).toEqual([...CURATED_SLASH_COMMANDS]);
+    expect(hidden).toBe(SLASH_COMMANDS.length - 8);
   });
-  it("show all lists everything but the launcher", () => {
-    const { items, hidden } = curateSlashCommands(commands, "", true);
-    expect(items).toHaveLength(11);
-    expect(items.some((c) => c.name === "launcher")).toBe(false);
+  it("show all lists everything", () => {
+    const { items, hidden } = curateSlashCommands(SLASH_COMMANDS, "", true);
+    expect(items).toHaveLength(SLASH_COMMANDS.length);
     expect(hidden).toBe(0);
   });
-  it("a typed query searches every command, including aliases", () => {
-    expect(curateSlashCommands(commands, "u", false).items.map((c) => c.name)).toEqual(["usage"]);
-    expect(curateSlashCommands(commands, "new", false).items.map((c) => c.name)).toEqual(["new-mission"]);
+  it("a typed query searches every command, including aliases and verbs", () => {
+    const names = (query: string) => curateSlashCommands(SLASH_COMMANDS, query, false).items.map((c) => c.name);
+    expect(names("us")).toEqual(["models usage"]);
+    expect(names("new")).toEqual(["threads start"]);
+    expect(names("sessions")).toEqual(["threads list"]);
+    expect(names("threads ")).toEqual(["threads start", "threads list", "threads export", "threads close"]);
+    expect(names("models d")).toEqual(["models default"]);
+    expect(names("threads list extra")).toEqual([]);
+  });
+  it("groups consecutive commands under one heading", () => {
+    const groups = groupSlashCommands(curateSlashCommands(SLASH_COMMANDS, "threads ", false).items);
+    expect(groups.map((g) => g.group)).toEqual(["Threads"]);
+    expect(groupSlashCommands(SLASH_COMMANDS).map((g) => g.group)).toContain("Chat");
   });
 });
 

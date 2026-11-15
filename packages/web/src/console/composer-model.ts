@@ -1,39 +1,30 @@
 /** Pure helpers for the composer's menus: slash curation, @ mentions and reasoning-effort choices. */
+import { matchesSlashQuery, type SlashCommand } from "@0/engine/dist/shared/slash-commands.js";
 
 /** Commands shown first when the slash menu opens with no query. */
 export const CURATED_SLASH_COMMANDS = [
-  "model",
-  "new-mission",
+  "threads start",
+  "threads list",
+  "findings list",
+  "models default",
+  "plugin list",
+  "config list",
   "status",
-  "findings",
-  "plugins",
-  "settings",
-  "tools",
   "help",
 ] as const;
 export const SLASH_CURATED_LIMIT = 8;
-
-export interface SlashLike {
-  name: string;
-  aliases: readonly string[];
-}
 
 /**
  * Empty query: the curated top 8 (when `showAll` is false), with `hidden` counting the rest. A typed query always
  * searches every command, so nothing is unreachable.
  */
-export function curateSlashCommands<T extends SlashLike>(
-  commands: readonly T[],
+export function curateSlashCommands(
+  commands: readonly SlashCommand[],
   query: string,
   showAll: boolean,
-): { items: T[]; hidden: number } {
-  const q = query.toLowerCase();
-  const matches = commands.filter(
-    (command) =>
-      command.name !== "launcher" &&
-      (command.name.startsWith(q) || command.aliases.some((alias) => alias.startsWith(q))),
-  );
-  if (q || showAll) return { items: matches, hidden: 0 };
+): { items: SlashCommand[]; hidden: number } {
+  const matches = commands.filter((command) => matchesSlashQuery(command, query));
+  if (query.trim() || showAll) return { items: matches, hidden: 0 };
   const curated = CURATED_SLASH_COMMANDS.flatMap(
     (name) => matches.find((command) => command.name === name) ?? [],
   ).slice(0, SLASH_CURATED_LIMIT);
@@ -41,6 +32,17 @@ export function curateSlashCommands<T extends SlashLike>(
     items: curated,
     hidden: Math.max(0, matches.length - curated.length),
   };
+}
+
+/** Consecutive commands of one group under one heading, in the order given (the keyboard walks the flat list). */
+export function groupSlashCommands(commands: readonly SlashCommand[]): { group: string; items: SlashCommand[] }[] {
+  const groups: { group: string; items: SlashCommand[] }[] = [];
+  for (const command of commands) {
+    const last = groups[groups.length - 1];
+    if (last && last.group === command.group) last.items.push(command);
+    else groups.push({ group: command.group, items: [command] });
+  }
+  return groups;
 }
 
 export type MentionKind = "plugin" | "finding" | "mission";

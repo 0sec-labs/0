@@ -1,5 +1,5 @@
 import { queryKeys } from "@/queries";
-import { SLASH_DESTINATIONS, explainPrompt } from "@/console/slash-destinations";
+import { explainPrompt } from "@/console/slash-destinations";
 import { findBlankSession, withCreateLock } from "@/console/blank-session";
 import { runOnBackendHost } from "@/console/run-on-host";
 import { useChatVisibility } from "@/console/use-chat-visibility";
@@ -36,7 +36,8 @@ import {
   type To,
 } from "react-router-dom";
 import { useQuery, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { findCommand, SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
+import { findCommand, getCommandByName, SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
+import { startingModelChoice } from "@/lib/last-model-choice";
 import type {
   ConsoleSessionSnapshot,
   ConsolePublicExport,
@@ -921,7 +922,7 @@ function ConsolePageContent({
         return;
       }
       const name = command.command!;
-      if (messageWorkerId && (name === "clear" || name === "exit")) {
+      if (messageWorkerId && (name === "clear" || name === "threads close")) {
         setNotice(`Switch back to the main ${VOCAB.mission.singular} to use /${name}.`);
         return;
       }
@@ -930,48 +931,34 @@ function ConsolePageContent({
         messageWorkspace.setDraft("");
         return;
       }
-      if (name === "new-mission") {
+      if (name === "threads start") {
+        messageWorkspace.setDraft("");
         void createSession();
         return;
       }
-      if (name === "sessions") {
+      if (name === "threads list") {
         mobileSidebar?.setOpen(true);
         messageWorkspace.setDraft("");
+        if (!sessionId) navigate("/chats");
         return;
       }
-      if (name === "status" || name === "usage") {
+      if (name === "status" || name === "models usage") {
         openPanelView("overview");
         messageWorkspace.setDraft("");
         return;
       }
-      if (name === "chat") {
-        messageWorkspace.setDraft("");
-        requestAnimationFrame(() =>
-          document
-            .querySelector<HTMLTextAreaElement>(
-              `[data-console-session="${CSS.escape(sessionId ?? "")}"] textarea[aria-autocomplete="list"]`,
-            )
-            ?.focus(),
-        );
-        return;
-      }
-      if (name === "back") {
-        messageWorkspace.setDraft("");
-        navigate(-1);
-        return;
-      }
-      if (savedMode && (name === "clear" || name === "exit" || name === "model")) {
+      if (savedMode && (name === "clear" || name === "threads close" || name === "models default" || name === "threads export")) {
         setNotice(v("Send a message to resume this {mission} first."));
         return;
       }
-      if (name === "copy") {
+      if (name === "copy" || name === "threads export") {
         if (sessionId) {
           await openExport(sessionId, savedMode, true, messageWorkerId ?? undefined);
           messageWorkspace.setDraft("");
         }
         return;
       }
-      if (name === "clear" || name === "exit") {
+      if (name === "clear" || name === "threads close") {
         if (sessionId)
           setConfirm({
             kind: name === "clear" ? "clear" : "close",
@@ -980,7 +967,17 @@ function ConsolePageContent({
           });
         return;
       }
-      if (name === "model" && command.args && sessionId) {
+      if (name === "models default" && !command.args) {
+        const choice = startingModelChoice(client.backendId);
+        messageWorkspace.setDraft("");
+        setNotice(
+          choice
+            ? `Default model: ${choice.model} (${choice.providerId}). Same as 0 models default.`
+            : "No default model yet. Pick one from the model button, or use /models list.",
+        );
+        return;
+      }
+      if (name === "models default" && command.args && sessionId) {
         const result = await messageWorkspace.perform(() =>
           configureChatRuntime(scopedApi, sessionId, { model: command.args }, snapshot?.runtime),
         );
@@ -1053,8 +1050,9 @@ function ConsolePageContent({
         });
         return;
       }
-      if (SLASH_DESTINATIONS[name]) {
-        let extra = name === "theme" ? "#setting-web-theme" : name === "keybindings" ? "&tab=keybindings" : "";
+      const destination = getCommandByName(name)?.destination;
+      if (destination) {
+        let extra = name === "theme" ? "#setting-web-theme" : name === "shortcuts" ? "&tab=keybindings" : "";
         if (name === "fix" && command.args) {
           if (command.args === "cancel") extra = "&intent=cancel";
           else if (command.args.startsWith("publish "))
@@ -1062,7 +1060,7 @@ function ConsolePageContent({
           else extra = `&finding=${encodeURIComponent(command.args)}`;
         }
         messageWorkspace.setDraft("");
-        navigate(`${SLASH_DESTINATIONS[name]}${controlsQuery}${extra}`);
+        navigate(`${destination}${controlsQuery}${extra}`);
         return;
       }
       setNotice(`/${name} isn't available here.`);
@@ -1821,14 +1819,13 @@ function ConsolePageContent({
                 key={command.name}
                 className="h-auto w-full flex-col items-start whitespace-normal p-3 text-left"
                 onClick={() => {
-                  workspace.setDraft(
-                    `/${command.name}${command.name === "feedback" || command.name === "explain" ? " " : ""}`,
-                  );
+                  workspace.setDraft(`/${command.name}${command.usage && /[<\[]/.test(command.usage) ? " " : ""}`);
                   setHelpOpen(false);
                 }}
               >
                 <span className="font-mono text-xs">/{command.name}</span>
-                <span className="mt-1 text-xs leading-5 text-muted-foreground">{command.description}</span>
+                <span className="mt-1 text-xs leading-5 text-muted-foreground">{v(command.description)}</span>
+                {command.cli && <span className="font-mono text-[11px] text-muted-foreground">0 {command.cli}</span>}
               </Button>
             ))}
           </div>

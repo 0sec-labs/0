@@ -9,7 +9,7 @@ import { consoleErrorMessage } from "./provider-error";
 import { readLastModelChoice, rememberModelChoice, setRecommendedDefault, setResolvedStartModel, setSavedPreference, setUnusableProviders, usableModelChoice } from "@/lib/last-model-choice";
 import { healthHint, nextHealthyChoice, providerUnusable, resolveStartChoice, unusableProviderIds, type HealthProvider } from "./provider-health";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
-import { boundModelStale, curateSlashCommands, modelButtonLabel } from "./composer-model";
+import { boundModelStale, curateSlashCommands, groupSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
 import {
   Activity,
@@ -535,34 +535,6 @@ function ContextSuggestions({
 /** Open popups and dialogs own Escape; the stop shortcut must not fire from or under them. */
 const OVERLAY_SELECTOR = "[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-slot=popover-content]";
 
-const COMMAND_SUMMARIES: Record<string, string> = {
-  help: "Browse commands",
-  capabilities: "Explore what 0 can do",
-  status: v("Check this {mission}"),
-  tools: "Browse available tools",
-  "new-mission": v("Start a new {mission}"),
-  onboard: "Open guided setup",
-  clear: v("Clear this {mission}"),
-  history: "Browse run reports",
-  findings: "Review findings",
-  fix: "Prepare a fix for review",
-  copy: v("Export this {mission}"),
-  sessions: v("Switch {missions}"),
-  explain: "Get a simpler explanation",
-  feedback: "Share feedback",
-  settings: "Manage preferences",
-  keybindings: "View keyboard shortcuts",
-  theme: "Change appearance",
-  model: "Choose a model",
-  chat: v("Return to {mission}"),
-  ops: "Open dashboard",
-  plugins: "Browse plugins",
-  connect: "Connect a provider",
-  usage: "Check usage and cost",
-  back: "Go back",
-  doctor: "Check your setup",
-  exit: v("Close this {mission}"),
-};
 
 function WorkspaceStartup({ message, runId }: { message?: string; runId?: string }) {
   const started = useMemo(() => Date.now(), [runId]);
@@ -778,12 +750,14 @@ export function Composer({
   const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0, needsConnection);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
-  const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
+  const slashText = /^\/([^\n]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
   const [showAllCommands, setShowAllCommands] = useState(false);
   const curated = useMemo(
-    () => curateSlashCommands(SLASH_COMMANDS, commandQuery ?? "", showAllCommands),
-    [commandQuery, showAllCommands],
+    () => curateSlashCommands(SLASH_COMMANDS, slashText ?? "", showAllCommands),
+    [slashText, showAllCommands],
   );
+  // Text with a space and no matching command means the arguments have started: close the menu.
+  const commandQuery = slashText !== undefined && (!/\s\S|\s$/.test(slashText.trimStart()) || curated.items.length) ? slashText : undefined;
   const commands = commandQuery === undefined ? [] : curated.items;
   const commandsOpen = !worker && commandQuery !== undefined && !commandsDismissed;
   useEffect(() => {
@@ -1090,32 +1064,49 @@ export function Composer({
             )}
             {attachmentUI.controls}
             <IntegrationPicker picker={integrations} />
-            <ComposerPickerSurface open={commandsOpen} label="Commands" className="w-80 max-w-[calc(100%-2.5rem)]">
+            <ComposerPickerSurface open={commandsOpen} label="Commands" className="w-[26rem] max-w-[calc(100%-2.5rem)]">
               <div
                 id="composer-command-list"
                 role="listbox"
                 aria-label="Slash commands"
-                className="max-h-[224px] overflow-y-auto overscroll-contain scroll-fade-y"
+                className="max-h-[288px] overflow-y-auto overscroll-contain scroll-fade-y"
               >
                 {commands.length ? (
-                  commands.map((command, index) => (
-                    <button
-                      key={command.name}
-                      id={`composer-command-${index}`}
-                      type="button"
-                      role="option"
-                      aria-selected={index === commandIndex}
-                      className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5 font-[450] tracking-[-0.01em] text-foreground outline-none focus-visible:outline-ring-inset ${index === commandIndex ? "bg-secondary" : "hover:bg-secondary/60"}`}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onMouseEnter={() => setCommandIndex(index)}
-                      onClick={() => selectCommand(command.name)}
-                    >
-                      <Terminal aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
-                      <span className="shrink-0">/{command.name}</span>
-                      <span className="min-w-0 flex-1 truncate text-right text-muted-foreground-1">
-                        {COMMAND_SUMMARIES[command.name] ?? command.description.replace(/ \(TUI:.*\)/, "")}
-                      </span>
-                    </button>
+                  groupSlashCommands(commands).map((section) => (
+                    <div key={section.group} role="group" aria-label={section.group}>
+                      <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground-2">
+                        {section.group}
+                      </p>
+                      {section.items.map((command) => {
+                        const index = commands.indexOf(command);
+                        return (
+                          <button
+                            key={command.name}
+                            id={`composer-command-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === commandIndex}
+                            className={`flex min-h-[var(--h-menu-row,28px)] w-full flex-col justify-center rounded-md px-2 py-1 text-left text-[13px] leading-5 font-[450] tracking-[-0.01em] text-foreground outline-none focus-visible:outline-ring-inset ${index === commandIndex ? "bg-secondary" : "hover:bg-secondary/60"}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onMouseEnter={() => setCommandIndex(index)}
+                            onClick={() => selectCommand(command.name)}
+                          >
+                            <span className="flex w-full items-center gap-2">
+                              <Terminal aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
+                              <span className="shrink-0">/{command.name}</span>
+                              <span className="min-w-0 flex-1 truncate text-right text-muted-foreground-1">
+                                {v(command.description)}
+                              </span>
+                            </span>
+                            {command.cli && (
+                              <span className="pl-[22px] font-mono text-[11px] leading-4 text-muted-foreground-2" data-testid="slash-cli">
+                                0 {command.cli}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   ))
                 ) : (
                   <p className="px-2 py-1.5 text-[13px] text-muted-foreground-1">No matching commands. Try /help.</p>

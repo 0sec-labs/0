@@ -1,22 +1,3 @@
-/** Slash commands that simply navigate to another page. */
-export const SLASH_DESTINATIONS: Record<string, string> = {
-  capabilities: "/tools",
-  tools: "/tools",
-  settings: "/settings",
-  keybindings: "/settings",
-  theme: "/settings",
-  connect: "/connections",
-  model: "/models",
-  history: "/runs",
-  findings: "/findings",
-  launcher: "/audits",
-  ops: "/dashboard",
-  skills: "/plugins/skills",
-  plugins: "/plugins",
-  doctor: "/doctor",
-  fix: "/fix",
-};
-
 /** Prompt sent by `/explain`; topic is optional. */
 export function explainPrompt(topic: string | undefined): string {
   const subject = topic ? `Explain "${topic}"` : "Explain your previous result";

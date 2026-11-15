@@ -3,7 +3,7 @@ title: Concepts
 description: The terms 0 uses in the browser app, the CLI and these docs.
 ---
 
-0 uses one small vocabulary everywhere. Commands, flags and API routes keep older internal names; the table notes where they differ.
+0 uses one small vocabulary everywhere. Commands, flags and API routes keep older internal names; the table notes where they differ. Chat slash commands use the CLI words too: `/threads start` is `0 threads start`.
 
 | Term | Meaning |
 | --- | --- |

@@ -56,6 +56,11 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
 Run commands as `0 <command>`. Check your release with `0 --version` and
 command-specific `--help`.
 
+The browser app's chat uses the same words as slash commands: `/threads list`,
+`/findings list`, `/models default` and `/config get` mirror `0 threads list`,
+`0 findings list`, `0 models default` and `0 config get`. `scan`, `api` and `web`
+are CLI-only. See [Slash commands](/app/#slash-commands).
+
 Option tables show registration defaults. **— means no default is registered**:
 a handler may resolve configuration or require an explicit value. Inverse
 `--no-*` options show the underlying positive boolean default. See

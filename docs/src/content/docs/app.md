@@ -65,7 +65,37 @@ The composer also has:
 - **Add to message**: attach images or text files, or reference a file path.
 - **Thinking effort**, for models that support it.
 - **Mode**: whether the agent asks before it acts. See below.
-- Slash commands. Type `/` to list them. For example `/model`, `/connect`, `/findings`, `/skills`, `/doctor` and `/explain`.
+- Slash commands. Type `/` to list them. They are the CLI commands: `/threads start` is `0 threads start`. See [Slash commands](#slash-commands).
+
+### Slash commands
+
+Type `/` in the composer for a menu grouped by command. Each entry shows the CLI command it mirrors, so the same words work in chat and in a terminal. Filter by typing, move with the arrow keys, press Enter or Tab to fill in the command, then Enter to run it. Escape closes the menu.
+
+| Slash command | CLI | What it does here |
+| --- | --- | --- |
+| `/threads start` | `0 threads start` | Starts a new thread |
+| `/threads list` | `0 threads list` | Opens the thread list |
+| `/threads export`, `/copy` | `0 threads export` | Exports this thread |
+| `/threads close` | `0 threads close` | Closes this thread after you confirm |
+| `/clear` | `0 threads clear` | Clears this thread after you confirm |
+| `/findings list`, `/findings export` | `0 findings list`, `0 findings export` | Opens Findings |
+| `/fix [finding-id]` | `0 scan fix` | Opens the fix flow; you approve any pull request |
+| `/agents list`, `/agents create` | `0 agents list`, `0 agents create` | Opens Agents |
+| `/automation list`, `/automation run` | `0 automation list`, `0 automation run` | Opens Automations; running asks you to confirm |
+| `/computers list` | `0 computers list` | Opens Computers |
+| `/models list` | `0 models list` | Opens Models |
+| `/models default [model]` | `0 models default` | Shows the default model, or switches this thread's model |
+| `/models connections` | `0 models connections` | Opens Connections to add a key or sign in |
+| `/models usage`, `/usage` | `0 models usage` | Shows tokens, cost and context |
+| `/skills list` | `0 skills list` | Opens Skills |
+| `/memory list` | `0 memory list` | Opens Memory |
+| `/plugin list`, `/plugin browse` | `0 plugin list`, `0 plugin browse` | Opens Plugins or the plugin explorer |
+| `/config list`, `/config get`, `/config set` | `0 config list`, `0 config get`, `0 config set` | Opens Settings; changes are made there |
+| `/doctor` | `0 doctor` | Checks your setup |
+
+Chat-only commands have no CLI form: `/help`, `/status`, `/tools`, `/explain [topic]`, `/feedback <message>`, `/theme [light|dark]` and `/shortcuts`.
+
+Slash commands never skip a confirmation. Anything that changes or deletes asks you first, exactly as the page does. `0 scan`, `0 api` and `0 web` are CLI-only. Old names still work: `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings`, `/model`, `/keybindings` and `/exit` map to their new commands.
 
 ### Modes
 
