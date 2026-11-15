@@ -378,7 +378,8 @@ mobile-starlight-toc .dropdown a[aria-current='true'] { color: var(--foreground)
   .right-sidebar-container { width: var(--docs-toc-width); }
   .right-sidebar { width: var(--docs-toc-width); }
   .right-sidebar-panel .sl-container { width: auto; max-width: none; }
-  :root[data-has-toc] .main-pane { width: calc(100% - var(--docs-toc-width)); }
+  /* Starlight pins the article to the rail (margin-inline: auto 0); center it in the space left of the rail instead. */
+  :root[data-has-toc] .main-pane { width: calc(100% - var(--docs-toc-width)); --sl-content-margin-inline: auto; }
 }
 @media (min-width: 80rem) {
   .docs-tabs { display: flex; }

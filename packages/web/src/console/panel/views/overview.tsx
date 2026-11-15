@@ -104,7 +104,7 @@ export function jumpToDecision(sessionId: string, title: string) {
   if (!card) return;
   card.scrollIntoView({
     block: "center",
-    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    behavior: document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth",
   });
   card.querySelector<HTMLElement>("button, textarea, input")?.focus({ preventScroll: true });
 }

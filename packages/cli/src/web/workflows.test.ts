@@ -154,6 +154,22 @@ describe("manual security workflow execution", () => {
     expect((detached?.data as { definition: SecurityWorkflow }).definition.ownerSentinelId ?? null).toBeNull();
   });
 
+  it("keeps the saved model when a patch omits it and clears it on explicit null", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zero-model-patch-"));
+    directories.push(dir);
+    const { instance } = service(join(dir, "control.db"));
+    const model = { providerId: "anthropic", model: "claude-opus", reasoning: "high" };
+    const created = await instance.handle("/api/console/workflow-definitions", "POST", { ...definition, model }, new URLSearchParams());
+    expect(created?.status, JSON.stringify(created?.data)).toBe(201);
+    const saved = (created?.data as { definition: SecurityWorkflow }).definition;
+    expect(saved.model).toEqual(model);
+    const path = `/api/console/workflow-definitions/${saved.id}`;
+    const kept = (await instance.handle(path, "PATCH", { ...definition, id: saved.id, revision: saved.revision, name: "Renamed" }, new URLSearchParams()))?.data as { definition: SecurityWorkflow };
+    expect(kept.definition.model).toEqual(model);
+    const cleared = (await instance.handle(path, "PATCH", { ...definition, id: saved.id, revision: kept.definition.revision, model: null }, new URLSearchParams()))?.data as { definition: SecurityWorkflow };
+    expect(cleared.definition.model ?? null).toBeNull();
+  });
+
   it("retains exact scan reports and owned evidence when result persistence fails", async () => {
     const persistence = vi.spyOn(SecurityWorkflowStore.prototype, "saveExecutionResults").mockImplementation(() => { throw new Error("Storage full."); });
     const report = { target: "https://example.test", scanDepth: "default", startedAt: "2026-01-01", completedAt: "2026-01-01", durationMs: 10,

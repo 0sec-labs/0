@@ -25,7 +25,7 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-full bg-muted p-1 text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:rounded-[var(--radius-menu,12px)] data-[variant=line]:rounded-none data-[variant=line]:border-0 data-[variant=line]:bg-transparent data-[variant=line]:p-0",
+  "group/tabs-list inline-flex w-fit items-center justify-center gap-1 rounded-none bg-transparent p-0 text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:rounded-[var(--radius-menu,12px)] data-[variant=line]:rounded-none data-[variant=line]:border-0 data-[variant=line]:bg-transparent data-[variant=line]:p-0",
   {
     variants: {
       variant: {
@@ -56,10 +56,9 @@ function TabsList({
 }
 
 const tabsTriggerClasses = cn(
-        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-2 rounded-full border border-transparent px-3 py-1 text-sm font-medium whitespace-nowrap text-foreground/70 transition-[background-color,border-color,color] duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start group-data-[orientation=vertical]/tabs:rounded-[var(--radius-control,8px)] group-data-[orientation=vertical]/tabs:px-3 group-data-[orientation=vertical]/tabs:py-1.5 hover:text-foreground focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:px-2 group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:data-[active]:bg-transparent",
-        "data-[active]:border-foreground/5 data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm dark:data-[active]:bg-foreground/10 dark:data-[active]:text-foreground",
-        "after:absolute after:bg-primary after:opacity-0 after:transition-opacity motion-reduce:after:transition-none group-data-[orientation=horizontal]/tabs:after:inset-x-0 group-data-[orientation=horizontal]/tabs:after:bottom-[-5px] group-data-[orientation=horizontal]/tabs:after:h-0.5 group-data-[orientation=vertical]/tabs:after:inset-y-0 group-data-[orientation=vertical]/tabs:after:-right-1 group-data-[orientation=vertical]/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-[active]:after:opacity-100"
+        "relative inline-flex h-7 flex-none items-center justify-center gap-2 rounded-md border border-transparent px-2.5 py-0 text-sm font-medium whitespace-nowrap text-muted-foreground-1 transition-[background-color,border-color,color] duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start group-data-[orientation=vertical]/tabs:rounded-[var(--radius-control,8px)] group-data-[orientation=vertical]/tabs:px-3 group-data-[orientation=vertical]/tabs:py-1.5 hover:text-foreground focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group-data-[variant=line]/tabs-list:h-7 group-data-[variant=line]/tabs-list:flex-none group-data-[variant=line]/tabs-list:rounded-md group-data-[variant=line]/tabs-list:px-2.5 group-data-[variant=line]/tabs-list:py-0 group-data-[variant=line]/tabs-list:text-muted-foreground-1 group-data-[variant=line]/tabs-list:data-[active]:border-transparent group-data-[variant=line]/tabs-list:data-[active]:bg-secondary group-data-[variant=line]/tabs-list:data-[active]:text-foreground group-data-[variant=line]/tabs-list:data-[active]:shadow-none",
+        "data-[active]:bg-secondary data-[active]:text-foreground",
 )
 
 function TabsTrigger({

@@ -457,6 +457,7 @@ export class WebWorkflowService {
             const raw = input as Record<string, unknown>;
             if (!("ownerSentinelId" in raw) && existing.ownerSentinelId) merged.ownerSentinelId = existing.ownerSentinelId;
             if (!("runIn" in raw) && existing.runIn && raw.ownerSentinelId !== null) merged.runIn = existing.runIn;
+            if (!("model" in raw) && existing.model) merged.model = existing.model;
           }
           return { status: 200, data: { definition: this.#definitions.save(merged) } };
         }

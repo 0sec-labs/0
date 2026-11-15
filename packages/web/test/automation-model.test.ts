@@ -79,3 +79,23 @@ test("an empty or blank name is rejected inline", () => {
   expect(validateAutomationDraft({ name: "  " })).toEqual({ name: "Name is required" });
   expect(validateAutomationDraft({ name: "Nightly" })).toEqual({});
 });
+
+test("automation model choice round-trips the Model and Reasoning selects", async () => {
+  const m = await import("../src/components/automations/automation-model");
+  const saved = { providerId: "anthropic", model: "opus" };
+  const value = m.encodeAutomationModel(saved);
+  expect(m.decodeAutomationModel(value)).toEqual(saved);
+  expect(m.decodeAutomationModel("")).toBeNull();
+  expect(m.automationModelChoice(value, "high", null)).toEqual({ ...saved, reasoning: "high" });
+  expect(m.automationModelChoice(value, "", null)).toEqual(saved);
+  expect(m.automationModelChoice("", "high", null)).toBeNull();
+  expect(m.automationModelOptions([], saved).map(option => option.value)).toEqual(["", value]);
+  expect(m.automationRuntime(undefined)).toBeUndefined();
+  expect(m.automationRuntime({ ...saved, reasoning: "low" })).toEqual({ ...saved, reasoningEffort: "low" });
+});
+
+test("known projects dedupe, drop blanks and keep the current target first", async () => {
+  const { knownProjects } = await import("../src/components/automations/automation-model");
+  expect(knownProjects(["/a", undefined, " /b ", "/a"], "/c")).toEqual(["/c", "/a", "/b"]);
+  expect(knownProjects(["/a"], "")).toEqual(["/a"]);
+});

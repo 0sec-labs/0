@@ -61,13 +61,17 @@ export interface SecurityWorkflowInput { id?: string; revision?: number; templat
   /** Sentinel that owns this automation; owned runs share its budget cap and memory. Absent/null = standalone. */
   ownerSentinelId?: string | null;
   /** Where runs live: a fresh mission, the owner's standing mission, or an explicit mission id. Absent = "new-mission". */
-  runIn?: string }
+  runIn?: string;
+  /** Model and reasoning effort for runs started from this automation. Absent/null = the Computer's current selection. */
+  model?: SecurityWorkflowModel | null }
+export interface SecurityWorkflowModel { providerId: string; model: string; reasoning?: string }
 export interface SecurityWorkflow extends SecurityWorkflowInput { id: string; revision: number; createdAt: string; updatedAt: string }
+const modelSchema = z.object({ providerId: z.string().trim().min(1).max(256), model: z.string().trim().min(1).max(256), reasoning: z.string().trim().min(1).max(64).optional() }).strict();
 export const SecurityWorkflowInputSchema = z.object({
   id: identifier.optional(), revision: z.number().int().positive().optional(), template: z.object({ id: identifier, revision: z.number().int().positive() }).strict().optional(), name: z.string().trim().min(1).max(160),
   instructions: z.string().trim().max(16_000), target: z.string().trim().max(4096),
   nodes: z.array(nodeSchema).min(2).max(16), edges: z.array(z.object({ source: identifier, target: identifier }).strict()).min(1).max(120),
-  ownerSentinelId: identifier.nullable().optional(), runIn: identifier.optional(),
+  ownerSentinelId: identifier.nullable().optional(), runIn: identifier.optional(), model: modelSchema.nullable().optional(),
 }).strict().superRefine((workflow, context) => {
   const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
   if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in a Sentinel's home mission requires an owner Sentinel.");
@@ -136,8 +140,8 @@ export interface SecurityWorkflowExecution { id: string; workflowId: string; wor
 export interface SecurityWorkflowCode { schemaVersion: 1; workflow: Omit<SecurityWorkflowInput, "id" | "revision"> }
 const codeEnvelope = z.object({ schemaVersion: z.literal(1), workflow: z.unknown() }).strict();
 export function exportSecurityWorkflowCode(value: SecurityWorkflowInput | SecurityWorkflow): string {
-  const { name, instructions, target, nodes, edges, template } = value;
-  const parsed = parseSecurityWorkflowInput({ name, instructions, target, nodes, edges, ...(template ? { template } : {}) });
+  const { name, instructions, target, nodes, edges, template, model } = value;
+  const parsed = parseSecurityWorkflowInput({ name, instructions, target, nodes, edges, ...(template ? { template } : {}), ...(model ? { model } : {}) });
   const json = JSON.stringify({ schemaVersion: 1, workflow: parsed } satisfies SecurityWorkflowCode, null, 2);
   if (new TextEncoder().encode(json).byteLength > 65_536) throw new Error("Workflow JSON must be at most 64 KiB.");
   return json;

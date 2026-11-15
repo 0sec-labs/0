@@ -1,4 +1,5 @@
 import { queryKeys } from "@/queries";
+import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -15,7 +16,7 @@ import { workflowOperationLabel } from "@/components/workflow-labels";
 import { WorkflowLibrary } from "@/components/workflow-library";
 import { WorkflowPhaseEditor } from "@/components/workflow-phase-editor";
 import { AutomationForm } from "@/components/automations/automation-form";
-import { blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
+import { automationRuntime, blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
 import { addWorkflowPhase, linearWorkflowNodes, removeWorkflowPhase, workflowInput } from "@/components/workflow-editing";
 import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration } from "@/console/team-collaboration";
@@ -29,7 +30,7 @@ import { readAutomationDraft } from "@/components/automations/automation-draft";
 const DEFINITIONS = "/api/console/workflow-definitions";
 
 export function WorkflowsPage() {
-  const { client, teamClient, createConsoleSession, sendConsoleMessage, webFetchJson } = useBackendApi();
+  const { client, teamClient, createConsoleSession, deleteConsoleSession, sendConsoleMessage, webFetchJson } = useBackendApi();
   const connection = useBackendSelection();
   const computerName = client.backendId === "local" ? "This computer" : connection?.backends.find(backend => backend.id === client.backendId)?.name ?? client.backendId;
   const team = useTeamAccess();
@@ -53,6 +54,7 @@ export function WorkflowsPage() {
   const definitionKey = queryKeys.workflowDefinitions(client.backendId, team.user?.workspaceId, team.user?.userId);
   const definitions = useQuery({ queryKey: definitionKey, queryFn: ({ signal }) => webFetchJson<{ definitions: SecurityWorkflow[] }>(DEFINITIONS, { signal }), refetchInterval: selectedId ? 1000 : 30_000, retry: false });
   const selected = definitions.data?.definitions.find(item => item.id === selectedId);
+  useBreadcrumbLabel(selected?.name);
   const selectedNode = selected?.nodes.find(node => node.id === nodeId);
   // A blank automation nobody touched is not worth keeping, however the person left it (Back, sidebar, reload).
   const swept = useRef(new Set<string>());
@@ -112,8 +114,10 @@ export function WorkflowsPage() {
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);
   const reviewedAudits = runCandidate?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const run = () => { if (!runCandidate) return; const reviewed = runCandidate; void perform(async () => {
-    const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target });
-    await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(reviewed.id)}/run`, { method: "POST", body: JSON.stringify({ sessionId: session.id, revision: reviewed.revision, approval: "launch-authorized-run" }) });
+    const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target, ...(automationRuntime(reviewed.model) ? { runtime: automationRuntime(reviewed.model)! } : {}) });
+    // A run the Computer rejects must not leave an empty Mission behind.
+    try { await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(reviewed.id)}/run`, { method: "POST", body: JSON.stringify({ sessionId: session.id, revision: reviewed.revision, approval: "launch-authorized-run" }) }); }
+    catch (cause) { await deleteConsoleSession(session.id).catch(() => {}); await cache.invalidateQueries({ queryKey: queryKeys.consoleSessions() }); throw cause; }
     setRunCandidate(null);
     toast({ title: v("Run started"), description: reviewed.name, kind: "success", action: { label: v("Open {mission}"), href: `/chats/${encodeURIComponent(session.id)}` } });
     requestAnimationFrame(() => document.getElementById("workflow-runs")?.scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -138,13 +142,13 @@ export function WorkflowsPage() {
     </>}
     <ConfirmDialog open={runCandidate !== null} onOpenChange={open => { if (!open) setRunCandidate(null); }} pending={busy} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg"
       onCloseAutoFocus={event => { event.preventDefault(); runTrigger.current?.focus(); }}
-      title={`Run ${runCandidate?.name}?`} description={v("Run these enabled steps in a new {mission}.")}
+      title={`Run ${runCandidate?.name}?`}
       confirmLabel={busy ? "Starting…" : "Run automation"} confirmDisabled={!reviewedAudits.length} onConfirm={run}>
-      <div className="space-y-4 text-sm"><p><span className="text-muted-foreground">Computer: </span>{computerName}</p><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p><p className="text-xs text-muted-foreground">Reviewed revision {runCandidate?.revision}</p>{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">{node.type === "audit" && <>{node.plan.goal.replaceAll("-", " ")} · {node.plan.runCount} {node.plan.runCount === 1 ? "attempt" : "attempts"}, {node.plan.executionMode} · {node.plan.depth === "default" ? "standard" : node.plan.depth} depth · </>} {Math.round(node.plan.timeCapMs / 60000)} minutes · ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div>
+      <div className="space-y-4 text-sm"><p><span className="text-muted-foreground">Computer: </span>{computerName}</p><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p>{runCandidate?.model && <p><span className="text-muted-foreground">Model: </span>{runCandidate.model.model}{runCandidate.model.reasoning ? ` (${runCandidate.model.reasoning})` : ""}</p>}<p className="text-xs text-muted-foreground">Reviewed revision {runCandidate?.revision}</p>{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">{node.type === "audit" && <>{node.plan.goal.replaceAll("-", " ")} · {node.plan.runCount} {node.plan.runCount === 1 ? "attempt" : "attempts"}, {node.plan.executionMode} · {node.plan.depth === "default" ? "standard" : node.plan.depth} depth · </>} {Math.round(node.plan.timeCapMs / 60000)} minutes · ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div>
     </ConfirmDialog>
     <ConfirmDialog open={deleteCandidate !== null} onOpenChange={open => { if (!open) setDeleteCandidate(null); }} pending={busy} destructive className="sm:max-w-sm"
       onCloseAutoFocus={event => { event.preventDefault(); if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus(); else page.current?.focus(); }}
-      title={`Delete ${deleteCandidate?.name}?`} description="The saved automation will be removed. Prior run records remain available."
+      title={`Delete ${deleteCandidate?.name}?`} description="Prior run records remain."
       error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       confirmLabel="Delete automation" onConfirm={() => { if (!deleteCandidate) return; const reviewed = deleteCandidate; void perform(async () => { await webFetchJson(`${DEFINITIONS}/${reviewed.id}?revision=${reviewed.revision}`, { method: "DELETE" }); setDeleteCandidate(null); select(null); await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() }); }).catch(() => {}); }} />
   </PageContent>;
