@@ -42,7 +42,7 @@ Not in scope: hosted inference, hosted sandboxes, a hosted self-serve funnel
 | Teams | `0 team init`, `0 web --team-config`; owner/editor/viewer; scrypt accounts in a JSON file; OIDC; sessions in memory | `packages/cli/src/web/team-*.ts` |
 | Remote engines | The console dials out to engines with a static bearer token per engine; engines never dial in | `backend-connections.ts` |
 | Scope | `ScopePolicy` matcher with an injectable `opts.scope`; off unless the scope plugin is enabled | `packages/engine/src/scope` |
-| Telemetry | Level defaults to `usage`; only sends to a configured cloud host (inferred, not fully verified) | `telemetry/analytics-level.ts` |
+| Telemetry | Level defaults to `usage`; only sends when a cloud token is configured (no credentials is a silent no-op; verified in analytics-pipeline.ts and cloud/credentials.ts) | `telemetry/analytics-level.ts` |
 
 ## Gaps
 
