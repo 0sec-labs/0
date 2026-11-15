@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { extname, join } from "node:path";
 import { URL } from "node:url";
 import { enginesConfigOption } from "./shared-options.js";
 import type { Command } from "commander";
@@ -53,7 +53,6 @@ import { listAudit } from "@0/engine/storage";
 import { GITHUB_WEBHOOK_PATH, GitHubWebhookReceiver, WebhookSecretStore } from "../web/github-webhook.js";
 
 type DashboardOptions = {
-  agentsDir?: string; agentsAllowChanges?: boolean; agentsPrune?: boolean;
   dbPath?: string;
   port?: string;
   host?: string;
@@ -111,9 +110,6 @@ export function registerDashboardCommand(program: Command): void {
     .option("--public-url <url>", "Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL")
     .option("--access-token-env <name>", "Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated")
     .option("--shutdown-timeout <seconds>", "Server mode: seconds to finish in-flight requests on SIGTERM (default 20)")
-    .option("--agents-dir <path>", "Apply Agent files from this folder at start and on SIGHUP (a read-only mount is fine); also ZERO_AGENTS_DIR")
-    .option("--agents-allow-changes", "Allow Agent files that ask for access: changes (policy agents.fileAccessCeiling); also ZERO_AGENTS_ALLOW_CHANGES=1")
-    .option("--agents-prune", "Remove Agents this folder managed before but no longer has a file for; also ZERO_AGENTS_PRUNE=1")
     .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
     .action(async (opts: DashboardOptions) => {
@@ -258,21 +254,6 @@ export function registerDashboardCommand(program: Command): void {
         }
         runningThreads = () => consoleGateway.activeThreadCount() + (workflows.hasActiveWork() ? 1 : 0);
         startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
-        const agentsDir = opts.agentsDir ?? process.env.ZERO_AGENTS_DIR;
-        const applyAgentFiles = async (reason: string): Promise<void> => {
-          if (!agentsDir) return;
-          const result = await sentinels.applyDirectory(resolve(agentsDir), {
-            allowChanges: opts.agentsAllowChanges === true || process.env.ZERO_AGENTS_ALLOW_CHANGES === "1", prune: opts.agentsPrune === true || process.env.ZERO_AGENTS_PRUNE === "1",
-            adopt: process.env.ZERO_AGENTS_ADOPT === "1", force: process.env.ZERO_AGENTS_FORCE === "1",
-          });
-          if (!result.result) { console.error(chalk.yellow(`  Agent files (${reason}): ${result.error ?? "not applied"}`)); return; }
-          const c = result.result.counts;
-          const line = `Agent files (${reason}): ${c.create} created, ${c.adopt} adopted, ${c.update} updated, ${c.unchanged} unchanged, ${c.prune} removed, ${c.error} with errors`;
-          if (result.ok) console.log(chalk.gray(`  ${line}`));
-          else { console.error(chalk.yellow(`  ${line}`)); for (const item of result.result.items) for (const error of item.errors ?? []) console.error(chalk.yellow(`    ${item.path}${error.line ? `:${error.line}` : ""}: ${error.message}`)); }
-        };
-        await applyAgentFiles("start");
-        if (agentsDir) process.on("SIGHUP", () => { void applyAgentFiles("reload").catch(() => undefined); });
         let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
         let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
         const activeResponses = new Set<ServerResponse>();

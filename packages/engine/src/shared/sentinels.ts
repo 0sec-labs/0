@@ -174,19 +174,9 @@ export interface Sentinel extends SentinelInput {
   /** Why the runner paused this Sentinel (budget breach); cleared by resume. Surfaces as "needs you". */
   pauseReason?: SentinelPauseReason;
   owner: string;
-  /** Set when an Agent file defines this Agent (agents as code). Never writable through the API; see SentinelStore.setManagedBy. */
-  managedBy?: SentinelManagedBy;
   version: number;
   createdAt: string;
   updatedAt: string;
-}
-/** Marker of a file-managed Agent: the file's stable id, the file path (relative to the applied root), the applied root and the content hash of the last applied file. */
-export interface SentinelManagedBy {
-  id: string; path: string; root: string; hash: string; appliedAt: string;
-  /** Digest of the Agent's portable state right after the last apply; a different digest later means it was edited in the app. */
-  stateHash?: string;
-  /** File trigger id -> the trigger it owns; `created` is true when apply made the automation (so apply may also remove it). */
-  triggers?: Record<string, { trigger: string; created: boolean }>;
 }
 export type SentinelCreateInput = z.output<typeof SentinelCreateSchema>;
 
@@ -222,7 +212,7 @@ export function parseSentinelCreate(value: unknown): SentinelCreateInput {
 /** Patches replace whole top-level fields (nested objects included); fields not named stay as they are. */
 export function applySentinelPatch(current: Sentinel, patch: Record<string, unknown>): SentinelInput {
   const { version: _version, ...rawFields } = patch;
-  const { id: _id, homeMissionId: _home, reviewedFingerprint: _fp, pauseReason: _pause, managedBy: _managed, owner: _owner, version: _v, createdAt: _c, updatedAt: _u, ...editable } = current;
+  const { id: _id, homeMissionId: _home, reviewedFingerprint: _fp, pauseReason: _pause, owner: _owner, version: _v, createdAt: _c, updatedAt: _u, ...editable } = current;
   const fields = resolveAccessAlias(rawFields, editable);
   return SentinelInputSchema.parse({ ...editable, ...fields });
 }

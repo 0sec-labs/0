@@ -86,11 +86,6 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
     if (m[2]) return method === "POST" ? { action: `automation.${m[2]}`, subject: id, detail: { id } } : null;
     return method === "DELETE" ? { action: "automation.delete", subject: id, detail: { id } } : null;
   }
-  if (path === "sentinels/apply" && method === "POST") {
-    const docs = Array.isArray(b.documents) ? b.documents as Array<Record<string, unknown>> : [];
-    return { action: "agents.apply", subject: typeof b.root === "string" ? b.root.slice(0, 200) : "agent files", detail: { files: docs.length, hash: hash(docs.map(doc => [doc.path, typeof doc.content === "string" ? createHash("sha256").update(doc.content).digest("hex") : ""])), prune: b.prune === true, allowChanges: b.allowChanges === true, adopt: b.adopt === true, force: b.force === true } };
-  }
-  if (path === "sentinels/plan") return null;
   if (path === "sentinels" && method === "POST") return { action: "sentinel.create", subject: String(b.name ?? "sentinel") };
   if ((m = /^sentinels\/([^/]+)(?:\/(.*))?$/.exec(path))) {
     const id = decodeURIComponent(m[1]!); const rest = m[2];

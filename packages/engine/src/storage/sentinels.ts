@@ -5,7 +5,7 @@ import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 import {
   SENTINEL_FILE_DEFAULTS, SENTINEL_MAX_FILES, SENTINEL_MAX_FILE_BYTES, SENTINEL_MAX_SENTINELS, SentinelFilePathSchema,
   applySentinelPatch, normalizeSentinelBudget, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
-  type Sentinel, type SentinelActivation, type SentinelManagedBy, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
+  type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
 } from "../shared/sentinels.js";
 import {
   SentinelTriggerCreateSchema, isSentinelTriggerKind, nextSentinelFire,
@@ -101,7 +101,7 @@ export class SentinelStore {
       let next;
       try { next = applySentinelPatch(current, patch); } catch (error) { return invalid(error); }
       if (current.status === "archived" && next.status !== "archived") throw new SentinelStoreError("Archived Sentinels cannot be resumed; duplicate it instead.", 409);
-      const sentinel: Sentinel = { ...next, id: current.id, homeMissionId: current.homeMissionId, ...(current.reviewedFingerprint ? { reviewedFingerprint: current.reviewedFingerprint } : {}), ...(current.pauseReason && next.status === "paused" ? { pauseReason: current.pauseReason } : {}), ...(current.managedBy ? { managedBy: current.managedBy } : {}), owner: current.owner, version: current.version + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
+      const sentinel: Sentinel = { ...next, id: current.id, homeMissionId: current.homeMissionId, ...(current.reviewedFingerprint ? { reviewedFingerprint: current.reviewedFingerprint } : {}), ...(current.pauseReason && next.status === "paused" ? { pauseReason: current.pauseReason } : {}), owner: current.owner, version: current.version + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
       this.#write(sentinel, false);
       return sentinel;
     })();
@@ -114,17 +114,6 @@ export class SentinelStore {
       if (current.status === "archived" && status !== "archived") throw new SentinelStoreError("Archived Sentinels cannot be resumed; duplicate it instead.", 409);
       const { pauseReason: _previous, ...rest } = current;
       const sentinel: Sentinel = { ...rest, status, ...(status === "paused" && reason ? { pauseReason: reason } : {}), ...(acknowledge ? { reviewedFingerprint: sentinelReviewFingerprint(current) } : {}), version: current.version + 1, updatedAt: new Date().toISOString() };
-      this.#write(sentinel, false);
-      return sentinel;
-    })();
-  }
-  /** Agents defined by files (agents as code). */
-  listManaged(): Sentinel[] { return this.list().filter(sentinel => sentinel.managedBy); }
-  /** Sets or clears the file-managed marker. Not an operator edit of the Agent, so the version is unchanged; it is not reachable through the patch API. */
-  setManagedBy(id: string, managedBy: SentinelManagedBy | null): Sentinel {
-    return this.#db.transaction(() => {
-      const { managedBy: _previous, ...rest } = this.#require(id);
-      const sentinel: Sentinel = { ...rest, ...(managedBy ? { managedBy } : {}), updatedAt: new Date().toISOString() };
       this.#write(sentinel, false);
       return sentinel;
     })();
