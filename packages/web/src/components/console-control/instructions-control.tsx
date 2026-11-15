@@ -12,7 +12,7 @@ import { INSTRUCTIONS_MAX_CHARS, instructionCounter, instructionDraftState, inst
 
 const COPY: Record<InstructionKind, { title: string; description: string }> = {
   global: { title: "Global", description: "" },
-  workspace: { title: "Workspace", description: "" },
+  workspace: { title: "Project", description: "" },
 };
 
 function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: InstructionKind; workspacePath?: string; file: InstructionFile; onClose: () => void }) {

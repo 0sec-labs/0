@@ -105,8 +105,8 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
 
   if (state === "loading") return <SkeletonPanel label="Loading models" className="flex flex-col gap-10"><Skeleton className="h-28 w-full" /><Skeleton className="h-40 w-full" /></SkeletonPanel>;
   if (providers.error) return <Feedback error={providers.error} />;
-  if (state === "empty") return <section aria-labelledby="models-heading" className="flex flex-col gap-4"><Heading id="models-heading" title="Default model" />
-    <SettingsCard><SettingsCardRow><p className="min-w-0 flex-1 text-sm text-muted-foreground-2">No models yet. Connect a provider to choose one.</p><Button type="button" onClick={() => navigate("/connections")}>Connect a provider</Button></SettingsCardRow></SettingsCard></section>;
+  // The connections above carry the only action: with none connected there is nothing to choose.
+  if (state === "empty") return null;
 
   return <div className="flex flex-col gap-10">
     <section aria-labelledby="models-default-heading" className="flex flex-col gap-4">
@@ -138,7 +138,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       </SettingsCard>
     </section>}
     <section aria-labelledby="models-list-heading" className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-4"><Heading id="models-list-heading" title="Models" /><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Manage connections</Link></div>
+      <div className="flex items-end justify-between gap-4"><Heading id="models-list-heading" title="Models" /></div>
       <SettingsCard>
         {allRows.length === 0 && !models.isPending && <SettingsCardRow><p className="text-sm text-muted-foreground-2">No models available right now.</p></SettingsCardRow>}
         {rows.map(row => <SettingsCardRow key={row.key} className={`py-3 ${row.disabled ? "opacity-60" : ""}`} data-model-row>

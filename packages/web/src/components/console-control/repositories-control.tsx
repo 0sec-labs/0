@@ -41,7 +41,7 @@ export function RepositoriesSettings({ embedded = false }: { embedded?: boolean 
   const noun = VOCAB.sentinel;
   return <div className="flex flex-col gap-10">
     <QueryState pending={repositories.isPending} error={repositories.error} retry={repositories.refetch} label="Loading repositories…" />
-    {state === "unavailable" && <SettingsSection id="settings-repositories-unavailable" title="GitHub CLI not found" description="Listing repositories needs the GitHub CLI (gh) on the computer running the computer.">
+    {state === "unavailable" && <SettingsSection id="settings-repositories-unavailable" title="GitHub CLI not found" description="Listing repositories needs the GitHub CLI (gh) on this computer.">
       <p role="status" className="p-4 text-sm text-muted-foreground-2">Install gh, then refresh this page.</p>
     </SettingsSection>}
     {state === "disconnected" && !embedded && <>
@@ -49,7 +49,6 @@ export function RepositoriesSettings({ embedded = false }: { embedded?: boolean 
       <GitHubPublicationControl />
     </>}
     {(state === "ready" || state === "empty" || state === "error") && data && <SettingsSection id="settings-repositories" title={data.account ? `Repositories for ${data.account}` : "Repositories"}
-      description={`Used for pull request review. ${data.fetchedAt ? "Cached for five minutes." : ""}`.trim()}
       action={<Button variant="ghost" size="sm" disabled={repositories.isFetching} onClick={() => { refresh.current = true; void repositories.refetch(); }}><RefreshCcw className="size-4" />Refresh</Button>}>
       <SettingsRow id="setting-repositories-search" label="Search" description={`${data.repositories.length} ${data.repositories.length === 1 ? "repository" : "repositories"}${data.truncated ? " (list truncated)" : ""}`}>
         <Input aria-label="Search repositories" type="search" className="w-56" placeholder="owner/name" value={search} onChange={event => setSearch(event.target.value)} />

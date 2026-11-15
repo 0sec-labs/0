@@ -11,9 +11,9 @@ import { FixControl } from "@/components/console-control/workflow-control";
 export type WebConsoleControlMode = "connections" | "models" | "settings" | "plugins" | "doctor" | "tools" | "project" | "fix";
 
 const pages = [
-  { mode: "connections", path: "/connections", label: "Connections", icon: CapyApiKeyIcon, description: "Subscriptions and API keys that power your models" },
+  { mode: "connections", path: "/connections", label: "Models", icon: CapyApiKeyIcon, description: "" },
   { mode: "models", path: "/models", label: "Models", icon: CapyChipIcon, description: "" },
-  { mode: "project", path: "/project", label: "Workspace", icon: CapyInboxIcon, description: "" },
+  { mode: "project", path: "/project", label: "Scope", icon: CapyInboxIcon, description: "" },
   { mode: "settings", path: "/settings", label: "Settings", icon: CapySettingsIcon, description: "" },
   { mode: "plugins", path: "/plugins", label: "Plugins", icon: CapyPlugIcon, description: "" },
   { mode: "doctor", path: "/doctor", label: "Diagnostics", icon: CapyGaugeIcon, description: "" },
@@ -33,6 +33,8 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   const redirect = mode === "settings" ? settingsRedirect(params.get("section")) : undefined;
 
   useEffect(() => { if (!location.hash) headingRef.current?.focus(); }, [mode, category, location.hash]);
+  // Connections and Models are one page; old links keep working.
+  if (mode === "connections") return <Navigate replace to={{ pathname: "/models", search: location.search, hash: location.hash }} />;
   if (redirect) {
     // A removed or merged section: keep the session and return context, drop the old section name.
     const next = new URLSearchParams(location.search); next.delete("section");
@@ -42,8 +44,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     return <Navigate replace to={{ pathname: path, search: keep, hash: location.hash }} />;
   }
 
-  const content = mode === "connections" ? <ConnectionsControl />
-    : mode === "models" ? <ModelsControl sessionId={sessionId} />
+  const content = mode === "models" ? <><ConnectionsControl /><ModelsControl sessionId={sessionId} /></>
     : mode === "settings" ? <SettingsControl category={category} />
     : mode === "plugins" ? <PluginsControl sessionId={sessionId} />
     : mode === "doctor" ? <DoctorControl />

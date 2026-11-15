@@ -10,8 +10,8 @@ import { CapyArrowUpRightIcon } from "@/ui/icons/capy";
 import type { DashboardResponse } from "@/types";
 import type { Workflow } from "./contracts";
 import { RepositoriesSettings } from "./repositories-control";
-import { GitHubPublicationControl, useGitHubPublicationAccount } from "./github-publication-control";
-import { SettingsRow, SettingsSection, SettingsValueRow } from "./settings-section";
+import { GitHubPublicationControl } from "./github-publication-control";
+import { SettingsRow, SettingsSection } from "./settings-section";
 import { pullRequestRows, safePullRequestUrl } from "./settings-data-model";
 
 function useDashboard() {
@@ -40,21 +40,15 @@ function useRecentFixes(dashboard: DashboardResponse | undefined) {
   return { fixes, loading: results.some(result => result.isPending) };
 }
 
-/** GitHub connection, the repositories it can reach, and the pull requests this computer has opened. */
+/** The one GitHub connection, the repositories it can reach, and the pull requests opened from fixes. */
 export function GitSettings() {
-  const github = useGitHubPublicationAccount();
   const dashboard = useDashboard();
   const { fixes, loading } = useRecentFixes(dashboard.data);
   const prs = pullRequestRows(fixes);
   return <div className="flex flex-col gap-10">
-    {github.data?.connected && <SettingsSection id="settings-git-connection" title="Connected account" description="A published fix goes to a new branch and opens a pull request against the repository's current branch.">
-      <SettingsValueRow id="setting-git-status" label="Connection" value="Connected" />
-      {github.data.account && <SettingsValueRow id="setting-git-account" label="Account" value={github.data.account} />}
-      {github.data.scopes.length > 0 && <SettingsValueRow id="setting-git-scopes" label="Permissions" value={github.data.scopes.join(", ")} />}
-    </SettingsSection>}
     <GitHubPublicationControl secondary />
     <RepositoriesSettings embedded />
-    <SettingsSection id="setting-git-prs" title="Pull requests opened by 0" description="Opened from fixes since this computer started. Whether they are merged is not tracked here.">
+    <SettingsSection id="setting-git-prs" title="Pull requests opened by 0">
       {prs.length === 0
         ? <p role="status" className="p-4 text-sm text-muted-foreground-2">{loading ? "Looking for pull requests…" : "No pull requests opened yet."}</p>
         : prs.map(pr => { const url = safePullRequestUrl(pr.url); return <SettingsRow key={pr.id} id={`setting-git-pr-${pr.id}`} label={pr.title} description={`${pr.branch}${pr.baseBranch ? ` into ${pr.baseBranch}` : ""} · ${formatRelativeAge(Date.parse(pr.updatedAt))}`}>

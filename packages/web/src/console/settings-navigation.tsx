@@ -2,16 +2,14 @@ import { PanelLeftIcon } from "@/ui/icons/panel";
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  CapyApiKeyIcon,
   CapyThreadListIcon,
   CapyUsageIcon,
   CapyAppearanceIcon,
   CapyArrowLeftIcon as ArrowLeft,
   CapyChatBubbleIcon,
   CapyChipIcon,
+  CapyPeopleIcon,
   CapyDocumentIcon,
-  CapyGaugeIcon,
-  CapyInboxIcon,
   CapyKeyboardIcon,
   CapyBranchIcon,
   CapyBellIcon,
@@ -20,7 +18,7 @@ import {
   CapyShieldIcon,
   type IconComponent,
 } from "@/ui/icons/capy";
-import { AccountMenu } from "@/components/team-access";
+import { AccountMenu, useTeamAccess } from "@/components/team-access";
 import { settingsPages, settingsPageId, searchSettings } from "@/components/console-control/settings-index";
 import { consoleReturn } from "@/components/console-control/control-ui";
 import { Button } from "@/components/ui/button";
@@ -60,26 +58,20 @@ const groups: { label: string; items: Item[] }[] = [
     label: "Agent",
     items: [
       pageItem("instructions"),
-      pageItem("agents"),
-      { key: "connections", label: "Connections", icon: CapyApiKeyIcon, path: "/connections" },
       { key: "models", label: "Models", icon: CapyChipIcon, path: "/models" },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      { key: "project", label: "Workspace", icon: CapyInboxIcon, path: "/project" },
+      pageItem("agents"),
       pageItem("git"),
-      pageItem("usage"),
-      pageItem("audit-log"),
-      { key: "doctor", label: "Diagnostics", icon: CapyGaugeIcon, path: "/doctor" },
     ],
   },
+  { label: "Activity", items: [pageItem("usage"), pageItem("audit-log")] },
 ];
+const membersItem: Item = { key: "members", label: "Members", icon: CapyPeopleIcon, path: "/team" };
 
 /** Capy-style settings sidebar: back link, search, grouped navigation and account. */
 export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; onToggle: () => void }) {
   const location = useLocation();
+  const team = useTeamAccess();
+  const navGroups = useMemo(() => (team.enabled && team.user ? groups.map((group) => (group.label === "Activity" ? { ...group, items: [...group.items, membersItem] } : group)) : groups), [team.enabled, team.user]);
   const [query, setQuery] = useState("");
   const searchId = useId();
   const params = new URLSearchParams(location.search);
@@ -103,11 +95,11 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
   const found = useMemo(() => searchSettings(needle), [needle]);
   const pageHits = useMemo(
     () =>
-      groups
+      navGroups
         .filter((group) => group.label !== "Preferences")
         .flatMap((group) => group.items)
         .filter((item) => !item.section && item.label.toLowerCase().includes(needle)),
-    [needle],
+    [needle, navGroups],
   );
   const resultHref = (category: string, key?: string) => {
     const search = new URLSearchParams({ section: category });
@@ -256,7 +248,7 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
             )}
           </div>
         ) : (
-          groups.map((group) => (
+          navGroups.map((group) => (
             <SidebarGroup key={group.label} role="group" aria-label={group.label} className="px-0.5 pb-4">
               {group.label !== "Preferences" && (
                 <div className="h-7 px-2 text-xs leading-7 font-medium text-muted-foreground-2">{group.label}</div>

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { SettingsCard } from "@/ui/components/settings-card";
-import { SettingsSection } from "./settings-section";
+import { SettingsRow, SettingsSection } from "./settings-section";
+import { AgentOnboarding } from "@/console/agent-onboarding";
 import { AddGithubPluginSheet, AddMcpServerSheet, mcpStatus } from "./mcp-sheets";
 import { useMcpServers } from "./mcp-api";
 import { EntryLogo } from "./mcp-ui";
@@ -64,6 +65,10 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
     </SettingsCard>
+
+    <SettingsSection id="coding-agents" title="Coding agents">
+      <SettingsRow id="coding-agent-setup" label="Use 0 from your coding agent"><AgentOnboarding /></SettingsRow>
+    </SettingsSection>
 
     <SettingsSection id="mcp-plugins" title="Shared on this computer">
       <CardHeaderRow title={`${entries.length} added`}>

@@ -9,7 +9,7 @@ export const settingsPages = [
   { id: "notifications", label: "Notifications" },
   { id: "shortcuts", label: "Shortcuts" },
   { id: "instructions", label: "Instructions" },
-  { id: "agents", label: "Agents and privacy" },
+  { id: "agents", label: "Agents" },
   { id: "git", label: "Git and pull requests" },
   { id: "usage", label: "Usage" },
   { id: "audit-log", label: "Audit log" },
@@ -17,12 +17,12 @@ export const settingsPages = [
 export type SettingsPageId = typeof settingsPages[number]["id"];
 
 /** Page that shows each engine-backed category as a section. */
-const pageOfCategory: Record<SettingsCategory, SettingsPageId> = { general: "general", appearance: "appearance", conversation: "missions", transcript: "missions", telemetry: "missions", agents: "agents", privacy: "agents" };
+const pageOfCategory: Record<SettingsCategory, SettingsPageId> = { general: "general", input: "general", appearance: "appearance", conversation: "missions", transcript: "missions", telemetry: "missions", agents: "agents", privacy: "general" };
 export const categoriesOfPage = (page: SettingsPageId): SettingsCategory[] => settingsCategories.filter(category => pageOfCategory[category.id] === page).map(category => category.id);
 
 /** Sections that no longer exist as pages, mapped to the closest page or route, so old links and bookmarks keep working. */
 const removedSections: Record<string, string> = {
-  conversation: "missions", transcript: "missions", telemetry: "missions", privacy: "agents",
+  conversation: "missions", transcript: "missions", telemetry: "missions", privacy: "general",
   profile: "appearance", experiments: "general", activity: "usage", repositories: "git",
   "finding-states": "/findings", integrations: "/plugins", skills: "/plugins/skills", members: "/team",
 };
@@ -44,13 +44,13 @@ export type SettingsSearchGroup = { category: { id: SettingsPageId; label: strin
 export const settingsHref = (category: string, key?: string) => `/settings?section=${encodeURIComponent(category)}${key ? `#setting-${encodeURIComponent(key)}` : ""}`;
 
 const categoryKeywords: Record<SettingsPageId, string> = {
-  general: "updates engine update policy reset defaults development source",
+  general: "updates update policy reset defaults messages queue interrupt privacy usage metrics analytics problem reports telemetry diagnostics status support feedback",
   appearance: "theme light dark mode colors browser density compact spacing profile",
-  missions: "mission missions chat chats messages queue interrupt summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
+  missions: "mission missions chat chats summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
   usage: "usage spend cost tokens model chats billing credits activity",
-  agents: "agents execution tools sandbox isolated host subagents plugins data privacy analytics metrics diagnostics problem reports telemetry",
+  agents: "agents where agents run computer sandbox subagents plugins",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
-  instructions: "instructions agents.md global workspace system prompt guidance rules markdown",
+  instructions: "instructions agents.md global project guidance rules markdown",
   git: "git github pull requests prs branch publish fixes connection token repository repositories repos commit visibility default branch sentinels",
   "audit-log": "audit log security history approvals denials settings changes mcp plugins connections sentinels export json actor action subject",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
@@ -73,9 +73,8 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Mission asked a question", category: "notifications", keywords: "ask answer", key: "notifications-mission-question" },
   { title: "Scan finished", category: "notifications", keywords: "scan complete", key: "notifications-scan-finished" },
   { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
-  { title: "Global instructions", category: "instructions", keywords: "agents.md system prompt every mission", key: "instructions-global" },
-  { title: "Workspace instructions", category: "instructions", keywords: "agents.md system prompt folder project", key: "instructions-workspace" },
-  { title: "GitHub connection", category: "git", keywords: "connected account permissions sign in token", key: "git-status" },
+  { title: "Global instructions", category: "instructions", keywords: "agents.md every mission", key: "instructions-global" },
+  { title: "Project instructions", category: "instructions", keywords: "agents.md folder workspace", key: "instructions-workspace" },
   { title: "Pull requests opened by 0", category: "git", keywords: "prs fixes branch merge links", key: "git-prs" },
   { title: "Repository search", category: "git", keywords: "owner name github visibility branch sentinels used by", key: "repositories-search" },
   { title: "Audit log search", category: "audit-log", keywords: "actions approvals denials history export json actor subject", key: "audit-log-search" },

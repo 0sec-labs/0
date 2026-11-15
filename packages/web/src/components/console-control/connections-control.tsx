@@ -1,10 +1,8 @@
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyChevronDownIcon as ChevronDown, CapyMoreIcon as More, CapyPlusIcon as Plus } from "@/ui/icons/capy";
-import { AgentOnboarding } from "@/console/agent-onboarding";
 import { formatTokens } from "@/console/format-tokens";
 import { useBackendSelection } from "@/backend-context";
 import { useBackendApi } from "@/api";
@@ -25,7 +23,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { ModelPicker } from "@/components/model-picker";
 import { useModelCatalog } from "@/console/use-model-catalog";
-import { SettingsRow, SettingsSection } from "./settings-section";
+import { SettingsSection } from "./settings-section";
 import { CardHeaderRow } from "./connection-ui";
 import { LogoTile } from "@/ui/components/logo-tile";
 import { StatusBadge } from "@/ui/components/status-badge";
@@ -33,7 +31,6 @@ import { ConnectionSheet, providerSubtitle, providerTitle } from "./connection-s
 import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import type { ModelsResponse, Provider, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
 import { ControlDisclosure } from "./control-disclosure";
-import { GitHubPublicationControl } from "./github-publication-control";
 
 export function useProviders() {
   const { webFetchJson } = useBackendApi();
@@ -84,7 +81,6 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const [removing, setRemoving] = useState<ConnectionRow | null>(null);
   const disconnectName = (row: ConnectionRow) => accountDisplayName(providerTitle(row.provider), extra.get(row.key)?.label ?? row.account?.label, row.account?.accountId);
   const [selected, setSelected] = useState("");
-  const [showAllModels, setShowAllModels] = useState(false);
   const extras = useConnectionExtras();
   const [renaming, setRenaming] = useState<{ key: string; value: string } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -181,22 +177,10 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     {providers.data && connectionsCard}{feedback}{sheetView}
   </div>;
 
-  const allModels = models.data?.models.filter(item => list.some(provider => provider.id === item.provider && connected(provider))) ?? [];
-  const shownModels = showAllModels ? allModels : allModels.slice(0, 8);
   return <>
     <QueryState pending={providers.isPending} error={providers.error} retry={providers.refetch} />
     {providers.data && <>
       {connectionsCard}{feedback}
-      <SettingsSection id="models" title="Models" description="Every model served by your connections" action={allModels.length > 0 ? <Button variant="ghost" size="sm" render={<Link to="/models" />}>Choose a model</Button> : undefined}>
-        {allModels.length === 0 ? <div className="p-4 text-sm text-muted-foreground-2">{models.isFetching ? "" : "Connect a provider to see its models."}</div> : <>
-          {shownModels.map(item => <div key={`${item.provider}:${item.id}`} className="flex items-center gap-3 px-4 py-3 text-sm"><ModelIcon modelId={item.id} providerId={item.provider} className="size-4" /><span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.id}</span><span className="hidden shrink-0 text-xs text-muted-foreground-2 sm:inline">{item.contextWindowTokens ? `${formatTokens(item.contextWindowTokens)} context` : "Context unknown"}</span><span className="shrink-0 text-xs text-muted-foreground-1">{providerTitle(list.find(provider => provider.id === item.provider) ?? { id: item.provider, label: item.provider })}</span></div>)}
-          {allModels.length > shownModels.length && <button type="button" onClick={() => setShowAllModels(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset">Show {allModels.length - shownModels.length} more</button>}
-        </>}
-      </SettingsSection>
-      <SettingsSection id="coding-agents" title="Coding agents">
-        <SettingsRow id="coding-agent-setup" label="Use 0 from your coding agent"><AgentOnboarding /></SettingsRow>
-      </SettingsSection>
-      <GitHubPublicationControl />
     </>}
     <ConfirmDialog open={Boolean(removing)} onOpenChange={open => { if (!open) setRemoving(null); }} pending={change.isPending} spinner destructive
       title={`Disconnect ${removing ? disconnectName(removing) : ""}?`}
