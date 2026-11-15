@@ -66,9 +66,9 @@ const groups: { label: string; items: Item[] }[] = [
     ],
   },
   {
-    label: "Workspace",
+    label: "Project",
     items: [
-      { key: "project", label: "Workspace", icon: CapyInboxIcon, path: "/project" },
+      { key: "project", label: "Project", icon: CapyInboxIcon, path: "/project" },
       pageItem("git"),
       pageItem("usage"),
       pageItem("audit-log"),

@@ -62,7 +62,7 @@ export function categoryFor(definition: { key: string }): SettingsCategory { ret
 export function settingLabel(definition: { key: string; label: string }): string { return webSettingDetails(definition.key)?.label ?? definition.label; }
 export function settingChoiceLabel(key: string, choice: string): string {
   const labels: Record<string, Record<string, string>> = {
-    executionProfile: { local: "This computer", smolvm: "Isolated workspace" },
+    executionProfile: { local: "This computer", smolvm: "Isolated environment" },
     busyInputMode: { steer: "Interrupt", queue: "Queue" },
     diagnosticReporting: { off: "Keep local", ask: "Ask before sending", automatic: "Send automatically" },
     updatePolicy: { off: "Off", notify: "Notify me", automatic: "Automatic" },

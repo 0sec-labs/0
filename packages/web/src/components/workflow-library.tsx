@@ -96,7 +96,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   return <div className="flex min-h-0 flex-col gap-4">
     <PageHeader title="Automations" summary={rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "automation" : "automations"}` : undefined} actions={actions} />
     {empty && <EmptyState title="No automations yet" action={readOnly ? undefined : <Button variant="secondary" size="sm" disabled={busy} onClick={create}><Plus aria-hidden="true" />New automation</Button>} />}
-    {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
+    {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your team</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {definitions.length > 0 && <>
       {executions.isPending && schedules.isPending && <LoadingState label="Loading automations…" rows={2} />}

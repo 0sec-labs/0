@@ -43,8 +43,8 @@ const CAPABILITY_WORDING: Record<string, string> = {
   compute: "Run calculations on this machine",
   "model-call": "Call your connected AI models",
   network: "Send and receive data over the network",
-  "filesystem-read": "Read files in your workspace",
-  "filesystem-write": "Create and change files in your workspace",
+  "filesystem-read": "Read files in your project",
+  "filesystem-write": "Create and change files in your project",
   "process-exec": "Run programs on this machine",
   "findings-write": "Add and update findings",
 };

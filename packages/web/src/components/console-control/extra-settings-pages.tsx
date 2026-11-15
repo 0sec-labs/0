@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -42,18 +43,18 @@ export function UsageSettings() {
   return <div className="flex flex-col gap-10">
     <QueryState pending={usage.isPending} error={usage.error} retry={usage.refetch} />
     {usage.data && <>
-      <SettingsSection id="settings-usage-total" title="Open chats">
+      <SettingsSection id="settings-usage-total" title={v("Open {missions}")}>
         <SettingsValueRow id="setting-usage-cost" label="Estimated spend" value={rows.some(row => row.costUsd !== undefined) ? formatCost(totalCost) : "Not reported"} />
         <SettingsValueRow id="setting-usage-tokens" label="Tokens" value={formatTokens(totalTokens)} />
-        <SettingsValueRow id="setting-usage-chats" label="Chats counted" value={rows.length} />
+        <SettingsValueRow id="setting-usage-chats" label={v("{Missions} counted")} value={rows.length} />
       </SettingsSection>
       <SettingsSection id="settings-usage-models" title="By model">
-        {models.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">No chats yet.</p> : models.map(model => <SettingsRow key={model.model} id={`setting-usage-model-${model.model}`} label={model.model} description={`${model.chats} ${model.chats === 1 ? "chat" : "chats"} · ${formatTokens(model.tokens)} tokens`}>
+        {models.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">{v("No {missions} yet.")}</p> : models.map(model => <SettingsRow key={model.model} id={`setting-usage-model-${model.model}`} label={model.model} description={`${model.chats} ${model.chats === 1 ? "chat" : "chats"} · ${formatTokens(model.tokens)} tokens`}>
           <div className="flex items-center gap-3"><span aria-hidden="true" className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(2, Math.round(model.tokens / maxTokens * 100))}%` }} /></span><span className="w-16 text-right text-sm tabular-nums text-muted-foreground-1">{model.priced ? formatCost(model.costUsd) : "—"}</span></div>
         </SettingsRow>)}
       </SettingsSection>
-      <SettingsSection id="settings-usage-chats" title="By chat">
-        {rows.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">No chats yet.</p> : [...rows].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0) || b.inputTokens + b.outputTokens - a.inputTokens - a.outputTokens).map(row => <SettingsRow key={row.id} id={`setting-usage-chat-${row.id}`} label={row.title} description={`${row.model} · ${formatTokens(row.inputTokens)} in · ${formatTokens(row.outputTokens)} out`}>
+      <SettingsSection id="settings-usage-chats" title={v("By {mission}")}>
+        {rows.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">{v("No {missions} yet.")}</p> : [...rows].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0) || b.inputTokens + b.outputTokens - a.inputTokens - a.outputTokens).map(row => <SettingsRow key={row.id} id={`setting-usage-chat-${row.id}`} label={row.title} description={`${row.model} · ${formatTokens(row.inputTokens)} in · ${formatTokens(row.outputTokens)} out`}>
           <span className="flex items-center gap-3"><span className="text-sm tabular-nums text-muted-foreground-1">{formatCost(row.costUsd) ?? "—"}</span><Button variant="ghost" size="sm" render={<Link to={`/chats/${encodeURIComponent(row.id)}`} />}>Open</Button></span>
         </SettingsRow>)}
       </SettingsSection>

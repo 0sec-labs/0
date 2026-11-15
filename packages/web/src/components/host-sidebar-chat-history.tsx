@@ -179,10 +179,10 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const account = chatHostScopeKey(host.id, team.user?.workspaceId, team.user?.userId);
   const handshake = useQuery({ queryKey: queryKeys.hostSidebarConnection(account), enabled: host.id !== "local" && (!team.enabled || team.user?.role === "owner"), queryFn: async ({ signal }) => {
     const response = await localControlFetch(`/api/backends/${encodeURIComponent(host.id)}/handshake`, { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) });
-    if (!response.ok) throw new Error("Host is disconnected.");
+    if (!response.ok) throw new Error("Computer is disconnected.");
     const value = await response.json();
     const backend = BackendDescriptorSchema.parse(value.backend);
-    if (backend.id !== host.id || backend.status !== "connected") throw new Error("Host is disconnected.");
+    if (backend.id !== host.id || backend.status !== "connected") throw new Error("Computer is disconnected.");
     const identity = parseBackendHandshake(value.handshake);
     return { backend, epoch: JSON.stringify([identity.engineId, identity.serverInstanceId]) };
   }, retry: false, refetchInterval: 60_000, refetchOnWindowFocus: false });

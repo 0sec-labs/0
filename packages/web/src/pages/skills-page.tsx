@@ -25,7 +25,7 @@ type Skill = { id: string; name: string; description: string; scope: string; rev
 type Inventory = { skills: Skill[]; mounts: { id: string; path: string }[]; diagnostics: { path?: string; message: string }[]; workspacePath: string };
 type SkillDraft = { id: string; revision: string; content: string; copy?: boolean };
 type Detail = Skill & { content: string; files: { path: string; size: number }[] };
-const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Included", workspace: team ? "Team" : "Workspace", personal: "Solo", project: "Project", mounted: "Linked" })[scope] ?? scope;
+const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Included", workspace: team ? "Team" : "Project", personal: "Solo", project: "Project", mounted: "Linked" })[scope] ?? scope;
 /** Natural names become valid skill ids: lowercase letters, numbers and hyphens. */
 const slugify = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64).replace(/-+$/, "");
 const endpoint = (id: string) => `/api/skills/${encodeURIComponent(id)}`;

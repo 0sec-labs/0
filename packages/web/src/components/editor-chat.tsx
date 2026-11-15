@@ -87,7 +87,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
     void workspace.send({ text, attachments: attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: active && !worker ? "steer" : "send", ...(worker && workerId ? { workerId } : {}) });
   };
   const stop = () => { if (sessionId) void workspace.perform(() => api.controlConsoleSession(sessionId, "cancel")); };
-  if (readOnly) return <div className="grid h-full place-items-center p-6 text-sm text-muted-foreground">You can view this item. Editing requires workspace access.</div>;
+  if (readOnly) return <div className="grid h-full place-items-center p-6 text-sm text-muted-foreground">You can view this item. Editing requires team access.</div>;
   const contextMismatch = Boolean(snapshot && boundId !== resource.id);
   return <div className="flex h-full min-h-0 flex-col" aria-label={`Edit ${resource.kind} in ${VOCAB.mission.singular}`}>
     {!resuming && (error || workspace.error || contextMismatch) && <div role="alert" className="space-y-2 p-4 text-xs text-destructive"><p>{error || workspace.error || v("Reconnect this {mission} to edit the current item.")}</p><Button size="sm" variant="ghost" onClick={() => { request.current = null; setSession(null); setError(""); workspace.dismissError(); setAttempt(value => value + 1); }}>{v("Reconnect {mission}")}</Button></div>}
