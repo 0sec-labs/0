@@ -1,8 +1,25 @@
 # Shared server: push, runners, schedules and policy
 
-Status: proposal. Nothing here is built. It records what exists today, the gaps
+Status: **deferred** (decision recorded 2026-11-15). The share-safe export shipped; the server, runner, schedules and policy below are not built and are not planned until the triggers in "Decision" are met. It records what exists today, the gaps
 found by a code audit on 2026-11-14, and a staged plan. Decisions marked
 **Open** need an owner (Fabian for pricing and positioning, Doruk for engineering).
+
+## Decision: do not build the server yet
+
+Reasons, from the audit and the promptfoo comparison:
+
+- Adoption comes from the local CLI, the browser app and CI. promptfoo's own docs say its self-hosted server is not for production; its revenue is enterprise and hosted, which matches `GTM.md`: make individual use valuable, then sell team operations.
+- What exists already covers the need: the GitHub Action (report, SARIF, `run.json` artifacts), `0 reports import`, `0 reports export`, the Findings API, the team workspace and remote engines, automations and sentinels. A new server would mostly duplicate the team workspace.
+- A server that stores customers' vulnerability data is a high-value target. Results staying in the customer's own artifacts and engine is a feature.
+- No customer demand for cross-engine aggregation has been recorded.
+
+Build the server only when at least one of these is true, and write the API spec first:
+
+- A pilot or paying customer needs results from several engines or runners in one view.
+- A customer needs central schedules or policy across many runners.
+- The team workspace's single-engine limit blocks a real deployment.
+
+Meanwhile, improve what exists: an optional share-safe output from the GitHub Action, durable team sessions, and the gaps listed in `engines.md`.
 
 ## Principle
 
