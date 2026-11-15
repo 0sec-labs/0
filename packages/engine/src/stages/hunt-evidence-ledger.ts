@@ -95,7 +95,7 @@
 import { closeSync, constants, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { canonicalProposalJson, proposalDigest } from "../research/proposal.js";
+import { canonicalProposalJson, proposalDigest } from "../shared/canonical-digest.js";
 
 export const HUNT_CLAIM_SCHEMA_VERSION = 1 as const;
 
