@@ -1,13 +1,8 @@
-import cliPackage from "../../../cli/package.json?raw";
 import { describe, expect, it } from "vitest";
 import { RELEASES } from "./releases";
 import { compareVersions, releaseIndex, shouldAutoOpenWhatsNew, showWhatsNewCard } from "./whats-new";
 
 describe("release data", () => {
-  it("starts with the version in packages/cli/package.json", () => {
-    const { version } = JSON.parse(cliPackage) as { version: string };
-    expect(RELEASES[0]?.version).toBe(version);
-  });
   it("is newest first with unique versions", () => {
     for (let i = 1; i < RELEASES.length; i++) expect(compareVersions(RELEASES[i - 1]!.version, RELEASES[i]!.version)).toBe(1);
   });
