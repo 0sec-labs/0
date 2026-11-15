@@ -11,8 +11,6 @@ import { createWebConsoleRuntime } from "./operator-services.js";
 import { PROVIDERS } from "../state/provider-status.js";
 import { planSettingsReset, applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
 
-import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
-vi.mock("./workspace-folder-picker.js", () => ({ chooseWorkspaceFolder: vi.fn(async () => ({ supported: false, path: null })) }));
 
 const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm", flush: vi.fn(async () => []) }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => execution.profile }));
@@ -371,15 +369,6 @@ describe("explicit captured connection refresh", () => {
 
 
 describe("read-only selected workspace metadata", () => {
-  it("routes native selection through the operator service without applying session configuration", async () => {
-    const service = new WebOperatorServices();
-    vi.mocked(chooseWorkspaceFolder).mockResolvedValueOnce({ supported: true, path: testHome });
-    expect(await service.handle("/api/console/project/choose-directory", "POST", { path: testHome }, new URLSearchParams())).toEqual({ status: 200, data: { supported: true, path: testHome } });
-    expect(chooseWorkspaceFolder).toHaveBeenLastCalledWith(testHome);
-    expect(await service.handle("/api/console/project/choose-directory", "GET", undefined, new URLSearchParams())).toMatchObject({ status: 405 });
-    vi.mocked(chooseWorkspaceFolder).mockResolvedValueOnce({ supported: true, path: null });
-    expect(await service.handle("/api/console/project/choose-directory", "POST", {}, new URLSearchParams())).toEqual({ status: 200, data: { supported: true, path: null } });
-  });
 
   it("routes bounded folder browsing through the actual operator service without opening file contents", async () => {
     const project = join(testHome, "browse-workspace"); mkdirSync(project); mkdirSync(join(project, "child"));

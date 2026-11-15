@@ -11,13 +11,9 @@ import { cn } from "@/lib/utils";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { isPrivacyMessage, folderLabel, samePath } from "./workspace-path";
 
-/** Folder display name: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0security`). */
-export function folderLabel(path: string) {
-  const parts = path.split(/[\\/]+/).filter(Boolean);
-  const last = parts.at(-1) ?? path;
-  return last.length < 3 && parts.length > 1 ? `${parts.at(-2)}/${last}` : last;
-}
+export { folderLabel };
 
 const NO_RECENTS: string[] = [];
 const ROW =
@@ -59,6 +55,7 @@ export function FilePathPicker({
   // A switch the server accepted is applied after it replies; keep the popover open until that settles.
   const [applying, setApplying] = useState<{ path: string; baseline?: string } | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [privacyNote, setPrivacyNote] = useState<string | null>(null);
   const nativeRequest = useRef<AbortController | null>(null);
   const nativeGeneration = useRef(0);
   const nativeAvailable =
@@ -88,13 +85,14 @@ export function FilePathPicker({
     setNativeMessage(null);
     setApplying(null);
     setApplyMessage(null);
+    setPrivacyNote(null);
   }, [client, sessionId, disabled, cancelNative]);
   useEffect(() => {
     if (!applying) return;
     if (applyError && applyError.at !== applying.baseline) {
       setApplying(null);
       setApplyMessage(applyError.message);
-    } else if (cwd === applying.path) {
+    } else if (samePath(cwd, applying.path)) {
       setApplying(null);
       setOpen(false);
     }
@@ -114,7 +112,11 @@ export function FilePathPicker({
     void workspace
       .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
       .then((result) => {
-        if (result) setApplying({ path: value, baseline });
+        if (!result) return;
+        // The server stores the real path (symlinks, iCloud, case, unicode form), so wait for that, not for what was typed.
+        const landed = result.session.pendingConfiguration?.workspacePath ?? result.session.workspacePath ?? value;
+        if (samePath(cwd, landed)) setOpen(false);
+        else setApplying({ path: landed, baseline });
       });
   };
   useEffect(
@@ -124,6 +126,11 @@ export function FilePathPicker({
     },
     [],
   );
+  const openPrivacySettings = async (message: string) => {
+    setPrivacyNote(null);
+    try { await webFetchJson("/api/console/project/open-privacy-settings", { method: "POST", body: JSON.stringify({ pane: message.includes("> Automation") ? "automation" : "files" }) }); }
+    catch { setPrivacyNote("Couldn't open System Settings. Open it from the Apple menu, then Privacy & Security."); }
+  };
   const chooseNativeFolder = async () => {
     if (!nativeAvailable || nativeRequest.current || workspace.busy || workspaceDisabled || disabled) return;
     const controller = new AbortController();
@@ -134,7 +141,7 @@ export function FilePathPicker({
     setApplyMessage(null);
     workspace.dismissError();
     try {
-      const result = await webFetchJson<{ supported: boolean; path: string | null }>(
+      const result = await webFetchJson<{ supported: boolean; path: string | null; message?: string; privacy?: boolean }>(
         "/api/console/project/choose-directory",
         {
           method: "POST",
@@ -144,8 +151,10 @@ export function FilePathPicker({
       );
       if (controller.signal.aborted || client.signal.aborted || nativeGeneration.current !== generation) return;
       if (!result.supported) {
-        setNativeMessage("The folder picker isn't available on this host. Browse folders below or enter a path.");
+        setNativeMessage(result.message ?? "The folder picker isn't available on this host. Browse folders below or enter a path.");
         navigate(path.trim());
+      } else if (result.message) {
+        setApplyMessage(result.message);
       } else if (result.path !== null) {
         setPath(result.path);
         setBrowserOpen(false);
@@ -165,21 +174,31 @@ export function FilePathPicker({
   useEffect(() => {
     if (cwd)
       setRecents((previous) =>
-        (previous ?? NO_RECENTS)[0] === cwd
+        samePath((previous ?? NO_RECENTS)[0], cwd)
           ? previous
-          : [cwd, ...(previous ?? NO_RECENTS).filter((item) => item !== cwd)].slice(0, 8),
+          : [cwd, ...(previous ?? NO_RECENTS).filter((item) => !samePath(item, cwd))].slice(0, 8),
       );
   }, [cwd, setRecents]);
-  const folders = [...new Set([...(cwd ? [cwd] : []), ...(recents ?? NO_RECENTS)])].filter((item) =>
-    item.toLowerCase().includes(filter.trim().toLowerCase()),
-  );
+  const folders = [...(cwd ? [cwd] : []), ...(recents ?? NO_RECENTS)]
+    .filter((item, index, all) => all.findIndex((other) => samePath(other, item)) === index)
+    .filter((item) =>
+      item.toLowerCase().includes(filter.trim().toLowerCase()),
+    );
   // The native dialog never locks the manual path: typing or browsing stays available while it is open.
   const controlsDisabled = workspace.busy || workspaceDisabled;
   const pickError = open ? (applyMessage ?? workspace.error ?? null) : null;
   const pickAlert = pickError && (
-    <p role="alert" data-testid="workspace-pick-error" className="mt-2 text-xs text-destructive">
-      {pickError}
-    </p>
+    <div className="mt-2 space-y-1.5">
+      <p role="alert" data-testid="workspace-pick-error" className="text-xs text-destructive">
+        {pickError}
+      </p>
+      {isPrivacyMessage(pickError) && nativeAvailable && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => void openPrivacySettings(pickError)}>
+          Open Privacy settings
+        </Button>
+      )}
+      {privacyNote && <p role="status" className="text-xs text-muted-foreground">{privacyNote}</p>}
+    </div>
   );
   const inputId = useId();
   const descriptionId = useId();
@@ -270,8 +289,8 @@ export function FilePathPicker({
                   type="button"
                   title={item}
                   className={ROW}
-                  disabled={controlsDisabled || item === cwd}
-                  aria-current={item === cwd ? "true" : undefined}
+                  disabled={controlsDisabled || samePath(item, cwd)}
+                  aria-current={samePath(item, cwd) ? "true" : undefined}
                   onClick={() => choose(item)}
                 >
                   <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
@@ -279,7 +298,7 @@ export function FilePathPicker({
                   <span dir="ltr" className="min-w-0 flex-1 truncate text-xs text-muted-foreground-2">
                     {item}
                   </span>
-                  {item === cwd && <Check aria-hidden="true" className="size-3.5 shrink-0 text-foreground" />}
+                  {samePath(item, cwd) && <Check aria-hidden="true" className="size-3.5 shrink-0 text-foreground" />}
                 </button>
               ))}
               {!folders.length && (
@@ -418,7 +437,7 @@ export function FilePathPicker({
                 <Button type="button" variant="ghost" size="sm" onClick={() => setForm(false)}>
                   Back
                 </Button>
-                <Button type="submit" size="sm" disabled={controlsDisabled || !path.trim() || path.trim() === cwd}>
+                <Button type="submit" size="sm" disabled={controlsDisabled || !path.trim() || samePath(path.trim(), cwd)}>
                   Use folder
                 </Button>
               </div>

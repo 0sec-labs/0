@@ -15,7 +15,7 @@ head:
               "name": "What is 0security?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "0security is a framework for building security agents. They find vulnerabilities across your code, dependencies, infrastructure and AI agents, prove them, fix them, verify the fix and keep watching."
+                "text": "0security is an open-source framework for building and deploying security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, prove them, fix them, verify the fix and keep watching."
               }
             },
             {
@@ -96,7 +96,7 @@ head:
 
 ## What is 0security?
 
-0security is a framework for building security agents. They find vulnerabilities across your code, dependencies, infrastructure and AI agents, prove them, fix them, verify the fix and keep watching. Start with the [Quickstart](/) and the [concepts](/concepts/).
+0security is an open-source framework for building and deploying security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, prove them, fix them, verify the fix and keep watching. Start with the [Quickstart](/) and the [concepts](/concepts/).
 
 ## Is 0security open source?
 

@@ -247,6 +247,15 @@ The scan ID prints when the scan starts. `0 console --resume` is different: it c
 
 Run `0` or `0 web`. Use `0 web --no-open` and open the printed URL yourself if no browser starts. In a source checkout, run `pnpm build` first. For scripts, use `0 -p "<prompt>"`; see [Run headless](/app/#run-headless).
 
+### macOS blocks Desktop, Documents or Downloads
+
+The message "macOS is blocking access to Documents" means macOS privacy protection refused the app that runs 0, not that the folder is missing. It applies to Desktop, Documents, Downloads, iCloud Drive and external or network drives.
+
+1. Open **System Settings > Privacy & Security > Files & Folders** (the **Open Privacy settings** button goes there) and turn on the folder for your terminal or the app that started 0. **Full Disk Access** covers every folder.
+2. Quit and restart 0 from that app, then choose the folder again.
+
+If 0 was started over SSH or as a background service, grant **Full Disk Access** to `sshd-keygen-wrapper` or to the `node` binary, or start 0 from Terminal on the Mac. The native **Choose folder** window only appears for a browser on the same Mac that runs 0. From another computer, type the path or use **Browse folders**.
+
 ### A saved key seems missing
 
 Keys saved under **Providers** on the Models page live in `~/.0/credentials.json` under the home folder of the process running 0. A nonblank environment variable overrides the saved key for that provider. Do not paste that file into a bug report.

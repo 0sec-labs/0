@@ -53,7 +53,6 @@ import { z } from "zod";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { readUpdateStatus } from "./update-status.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
-import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
@@ -907,7 +906,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -971,8 +970,6 @@ export class WebOperatorServices {
       else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
-      } else if (path === "project/choose-directory" && method === "POST") {
-        data = await chooseWorkspaceFolder(object(input).path);
       } else if (path === "project/directories" && method === "POST") {
         data = await listWorkspaceDirectories(object(input).path);
       } else if (path === "project" && method === "GET") {

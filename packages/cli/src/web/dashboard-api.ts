@@ -9,6 +9,7 @@ import { workbenchStatus } from "../commands/workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
 import { handleInstructionsRequest } from "./operator-instructions.js";
+import { handleWorkspaceHostRequest } from "./workspace-host-routes.js";
 import { audit, auditActor, auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
@@ -180,6 +181,8 @@ export async function handleWebConsoleApiRequest(
     if (sentinel) { json(res, sentinel.status, sentinel.data); return true; }
     const instructions = handleInstructionsRequest(path, method, input, requestUrl.searchParams);
     if (instructions) { json(res, instructions.status, instructions.data); return true; }
+    const hostRoute = await handleWorkspaceHostRequest(path, method, input, req, res);
+    if (hostRoute) { json(res, hostRoute.status, hostRoute.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
     if (path === "search" && method === "GET") {
