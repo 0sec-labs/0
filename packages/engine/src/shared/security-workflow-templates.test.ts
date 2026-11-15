@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget } from "./security-workflow-templates.js";
+import { SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, securityWorkflowStarters, securityWorkflowScopeKind } from "./security-workflow-templates.js";
 import { exportSecurityWorkflowCode, parseSecurityWorkflowCode, parseSecurityWorkflowInput } from "./security-workflows.js";
 
 describe("built-in security workflow templates", () => {
   it("provides bounded assessment sequences and typed operation drafts using real scan plans and execution instructions", () => {
-    expect(SECURITY_WORKFLOW_TEMPLATES).toHaveLength(12);
-    expect(new Set(SECURITY_WORKFLOW_TEMPLATES.map(template => template.id)).size).toBe(12);
+    expect(SECURITY_WORKFLOW_TEMPLATES).toHaveLength(13);
+    expect(new Set(SECURITY_WORKFLOW_TEMPLATES.map(template => template.id)).size).toBe(13);
     for (const template of SECURITY_WORKFLOW_TEMPLATES) {
       const draft = parseSecurityWorkflowInput(template.definition);
       expect(draft.target).toBe(""); expect(draft.id).toBeUndefined(); expect(draft.revision).toBeUndefined();
@@ -52,6 +52,16 @@ describe("built-in security workflow templates", () => {
     expect(fix.inputRequirements.some(input => input.names.includes("testCommand") && input.required)).toBe(true);
     expect(getSecurityWorkflowTemplate("finding-verification").inputRequirements.some(input => input.names.includes("runner") && input.required)).toBe(true);
     expect(getSecurityWorkflowTemplate("security-research").definition.nodes.find(node => node.type === "research")?.inputs).toEqual({ engine: "pipeline" });
+  });
+  it("offers eight starting points with real prompts and a scope kind", () => {
+    const starters = securityWorkflowStarters();
+    expect(starters.map(item => item.starter!.group)).toEqual(["code", "code", "code", "code", "code", "code", "web", "web"]);
+    expect(new Set(starters.map(item => item.starter!.icon)).size).toBe(8);
+    for (const item of starters) { expect(item.description.length).toBeLessThanOrEqual(80); expect(item.definition.instructions).not.toBe(item.description); expect(item.description).not.toMatch(/authori[sz]ed/i); }
+    expect(starters.some(item => ["finding-verification", "fix-candidate"].includes(item.id))).toBe(false);
+    expect(securityWorkflowScopeKind("web-configuration")).toBe("url");
+    expect(securityWorkflowScopeKind("repository-review")).toBe("workspace");
+    expect(securityWorkflowScopeKind(undefined)).toBe("workspace");
   });
   it("clones independently without changing the catalog or another user's draft", () => {
     const first = createSecurityWorkflowTemplate("scoped-penetration-test");
