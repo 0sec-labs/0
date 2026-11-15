@@ -3,7 +3,7 @@ import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { planWorkbenchBuild, assertWorkbenchBuildReady } from "./build-workbench-image.mjs";
-import { manifest, resolveWorkbenchProfile, assertWorkbenchToolProbe, workbenchProbeFallback } from "./workbench-profile.mjs";
+import { manifest, resolveWorkbenchProfile, assertWorkbenchToolProbe, workbenchProbeFallback, assertWorkbenchFoxguardSource } from "./workbench-profile.mjs";
 
 const revision = "a".repeat(40);
 const input = { sourceRevision: revision, archive: "/tmp/0-profile.tar", availableBytes: 60 * 1024 ** 3 };
@@ -82,4 +82,13 @@ test("Gobuster version compatibility retries only the known rejected subcommand"
   assert.equal(workbenchProbeFallback("gobuster", ["version"], { status: 0, stdout: "3.5" }), null);
   assert.equal(workbenchProbeFallback("gobuster", ["version"], { status: 1, stderr: "Permission denied" }), null);
   assert.equal(workbenchProbeFallback("other", ["version"], { status: 3, stderr: "No help topic for 'version'" }), null);
+});
+
+test("FoxGuard receipts require the pinned source and both policy versions", () => {
+  const expected = { revision: "a".repeat(40), archiveSha256: "b".repeat(64) };
+  const metadata = { ...expected, policyVersions: ["v1", "v2"] };
+  assert.equal(assertWorkbenchFoxguardSource(metadata, expected), metadata);
+  for (const invalid of [undefined, { ...metadata, revision: "c".repeat(40) }, { ...metadata, archiveSha256: "d".repeat(64) }, { ...metadata, policyVersions: ["v1"] }]) {
+    assert.throws(() => assertWorkbenchFoxguardSource(invalid, expected), /source identity/);
+  }
 });

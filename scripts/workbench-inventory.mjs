@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { manifest, resolveWorkbenchProfile, immutableImageReference, assertWorkbenchToolProbe, workbenchProbeFallback } from "./workbench-profile.mjs";
+import { manifest, resolveWorkbenchProfile, immutableImageReference, assertWorkbenchToolProbe, workbenchProbeFallback, assertWorkbenchFoxguardSource } from "./workbench-profile.mjs";
 
 function probe(name, args, expected = [0]) {
   let result = spawnSync(name, args, { encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
@@ -40,6 +40,8 @@ const osRelease = readFileSync("/etc/os-release", "utf8");
 const osId = /^ID=(?:"([^"\n]+)"|([^\n]+))$/m.exec(osRelease);
 if ((osId?.[1] ?? osId?.[2]) !== (profile.name === "kali" ? "kali" : "debian")) throw new Error("Profile OS identity does not match the installed image");
 const expectedTools = JSON.parse(readFileSync(new URL("./workbench-tools.json", import.meta.url), "utf8"));
+const foxguardSource = assertWorkbenchFoxguardSource(JSON.parse(readFileSync("/usr/local/share/0/foxguard-source.json", "utf8")), expectedTools.foxguardSource);
+const foxguardBinarySha256 = createHash("sha256").update(readFileSync(tools.find(tool => tool.name === "foxguard").path)).digest("hex");
 for (const [name, expected] of Object.entries({ node: expectedTools.runtimes.node, bun: expectedTools.runtimes.bun, ...expectedTools.agentProviders })) {
   if (!tools.find(tool => tool.name === name)?.versionOutput.includes(expected)) throw new Error(`Pinned runtime version mismatch: ${name}`);
 }
@@ -48,6 +50,7 @@ const receipt = {
   sourceRevision, baseImage, aptSnapshot: profile.name === "kali" ? null : manifest.aptSnapshot,
   profileManifestSha256: createHash("sha256").update(readFileSync(new URL("./workbench-profiles.json", import.meta.url))).digest("hex"),
   cliVersion, osRelease, user: { uid: 1000, gid: process.getgid(), home: process.env.HOME }, tools,
+  foxguardSource: { ...foxguardSource, binarySha256: foxguardBinarySha256 },
   packages: allPackages.stdout.trim().split("\n").map(line => { const [name, version, architecture] = line.split("\t"); return { name, version, architecture }; }),
   pythonModules: JSON.parse(python.versionOutput), nativeParser: "passed", browser: { version: browserVersion, localStartup: "passed" },
 };

@@ -20,6 +20,10 @@
     "claude": "2.1.285",
     "gemini": "0.62.0"
   },
+  "foxguardSource": {
+    "revision": "01a77530488f198584deb3ccec7cd2ce2f1c7688",
+    "archiveSha256": "c293250bd27704930662c93389300115635948da33109776a864ebeb7cfa9cac"
+  },
   "tools": [
     "0",
     "node",

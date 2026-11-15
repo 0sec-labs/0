@@ -13,6 +13,14 @@ export function immutableImageReference(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(value);
 }
 
+export function assertWorkbenchFoxguardSource(metadata, expected) {
+  if (!metadata || metadata.revision !== expected.revision || metadata.archiveSha256 !== expected.archiveSha256
+    || !Array.isArray(metadata.policyVersions) || !metadata.policyVersions.includes("v1") || !metadata.policyVersions.includes("v2")) {
+    throw new Error("FoxGuard source identity or required policy versions do not match the build pins");
+  }
+  return metadata;
+}
+
 /** Accepted help exit codes must not turn initialization failures into receipts. */
 export function assertWorkbenchToolProbe(name, result, expected = [0]) {
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
