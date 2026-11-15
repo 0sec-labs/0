@@ -324,6 +324,22 @@ describe("ConsoleGateway", () => {
     const worker = instance.get(chat.id).workers.find(worker => worker.id === `${chat.id}-cancelled`)!;
     expect(worker.status).toBe("stopped"); expect(worker.error).toBeUndefined(); expect(worker.transcript).toEqual([]);
   });
+  it("does not restore a stale model binding for an empty draft, but keeps it for a thread with history", async () => {
+    const instance = gateway();
+    const draft = instance.create({ runtime: { providerId: "xai", model: "gpt-xai-pro", reasoningEffort: "high" } });
+    const savedDraft = instance.save(draft.id); await instance.close(draft.id);
+    const resumedDraft = await instance.resume(savedDraft.id);
+    const rewritten = instance.save(resumedDraft.id);
+    const draftRuntime = loadSession(rewritten.id, homes.at(-1))?.consoleState?.configuration?.runtime;
+    expect(draftRuntime?.model).toBeUndefined();
+    expect(draftRuntime?.providerId).toBeUndefined();
+    expect(draftRuntime?.reasoningEffort).toBe("high");
+    const used = instance.create({ runtime: { providerId: "xai", model: "gpt-xai-pro" } });
+    await instance.send(used.id, "Hello"); await idle(instance, used.id);
+    const savedUsed = instance.save(used.id); await instance.close(used.id);
+    const resumedUsed = await instance.resume(savedUsed.id);
+    expect(loadSession(instance.save(resumedUsed.id).id, homes.at(-1))?.consoleState?.configuration?.runtime).toMatchObject({ providerId: "xai", model: "gpt-xai-pro" });
+  });
   it("sends image-only messages as native images and preserves public history", async () => {
     const instance = gateway(); const chat = instance.create();
     const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9uoAAAAASUVORK5CYII=";

@@ -143,3 +143,18 @@ export function modelButtonLabel(
   // Models are listed but none is picked: the mission runs on the host's own default, and the button says so.
   return hasModels ? { text: "Default model", known: false } : { text: "Choose model", known: false };
 }
+
+/**
+ * A bound model the picker no longer lists: not an enabled catalog row, or (for an empty draft, which can simply move)
+ * served by a provider that is rejected or unreachable. Unknown until the catalog has loaded, and never for local/relay sources.
+ */
+export function boundModelStale(
+  runtime: { providerId?: string; model?: string; modelSource?: string } | null | undefined,
+  models: readonly { id: string; provider: string; enabled?: boolean }[] | undefined,
+  options: { unusable?: ReadonlySet<string>; emptyThread?: boolean } = {},
+): boolean {
+  if (!runtime?.model || !models || runtime.modelSource === "local") return false;
+  const listed = models.some((item) => item.provider === runtime.providerId && item.id === runtime.model && item.enabled !== false);
+  if (!listed) return true;
+  return Boolean(options.emptyThread && runtime.providerId && options.unusable?.has(runtime.providerId));
+}

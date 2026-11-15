@@ -9,7 +9,7 @@ import { consoleErrorMessage } from "./provider-error";
 import { readLastModelChoice, rememberModelChoice, setRecommendedDefault, setResolvedStartModel, setSavedPreference, setUnusableProviders, usableModelChoice } from "@/lib/last-model-choice";
 import { healthHint, nextHealthyChoice, providerUnusable, resolveStartChoice, unusableProviderIds, type HealthProvider } from "./provider-health";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
-import { curateSlashCommands, modelButtonLabel } from "./composer-model";
+import { boundModelStale, curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
 import {
   Activity,
@@ -757,7 +757,24 @@ export function Composer({
       : pendingRuntime?.model
         ? { providerId: pendingRuntime.providerId ?? snapshot.runtime?.providerId, model: pendingRuntime.model }
         : undefined;
-  const shownRuntime = chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
+  const catalogLoaded = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
+  const emptyThread = !worker && !snapshot.messages.length && !snapshot.session.messageCount && !snapshot.queuedMessages.length;
+  // A bound model the catalog no longer lists. An empty thread re-resolves (healthy provider first); one with history keeps it and says so.
+  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread });
+  const rebindStale = bindingStale && emptyThread;
+  const shownRuntime = rebindStale
+    ? startModel ? ({ providerId: startModel.providerId, model: startModel.model } as typeof snapshot.runtime) : undefined
+    : chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const rebound = useRef("");
+  useEffect(() => {
+    if (!rebindStale || !startModel || !canWrite || snapshot.session.status === "closed") return;
+    const key = `${snapshot.session.id}:${snapshot.runtime?.providerId}/${snapshot.runtime?.model}>${startModel.providerId}/${startModel.model}`;
+    if (rebound.current === key) return;
+    rebound.current = key;
+    void workspace.perform(() => configureChatRuntime(chatApi, snapshot.session.id, startModel, snapshot.runtime));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bind once per stale binding
+  }, [rebindStale, startModel?.providerId, startModel?.model, snapshot.session.id, snapshot.runtime?.model, snapshot.runtime?.providerId]);
   const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0, needsConnection);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
@@ -845,6 +862,7 @@ export function Composer({
     workspace.draft.length <= 32000 &&
     !workspace.busy &&
     !closed &&
+    !bindingStale &&
     !workerReadOnly;
   const sendActive = showStop ? !(workspace.busy || stopping || !canWrite) : canSend || workspace.busy || stopping;
   const modelTrigger = useRef<HTMLButtonElement>(null);
@@ -1114,6 +1132,22 @@ export function Composer({
                 </button>
               )}
             </ComposerPickerSurface>
+            {bindingStale && !rebindStale && snapshot.runtime && (
+              <div role="alert" data-testid="model-unavailable-notice" className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[13px] text-muted-foreground-1">
+                <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => setModelMenuOpen(true)}>
+                  {snapshot.runtime.model} is no longer available. Pick another model
+                </button>
+                {startModel && (
+                  <button
+                    type="button"
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => void workspace.perform(() => configureChatRuntime(chatApi, snapshot.session.id, startModel, snapshot.runtime))}
+                  >
+                    Switch to {startModel.model}
+                  </button>
+                )}
+              </div>
+            )}
             <div className="relative">
               <textarea
                 data-composer-textarea=""
@@ -1261,7 +1295,9 @@ export function Composer({
                 )}
                 {!worker && (
                   <DropdownMenu
+                    open={modelMenuOpen}
                     onOpenChange={(open) => {
+                      setModelMenuOpen(open);
                       if (open) modelCatalog.refreshIfStale();
                     }}
                   >

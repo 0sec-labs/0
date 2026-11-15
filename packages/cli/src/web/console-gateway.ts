@@ -958,7 +958,12 @@ export class ConsoleGateway {
     // Restore validated working context, never infer permissions from transcript text.
     // Scope grants, approvals and executable worker handles belong to the old engine.
     const configuration = stored.consoleState?.configuration;
-    const { connectionIdentity: savedConnectionIdentity, ...savedRuntime } = configuration?.runtime ?? {};
+    const { connectionIdentity: savedConnectionIdentity, ...savedConfigured } = configuration?.runtime ?? {};
+    // An empty draft never keeps a model binding across a restart: the catalog may have changed since it was saved, and the
+    // client re-resolves (and re-binds) a usable model on load. Threads with history keep theirs.
+    const emptyDraft = initialMessages.length === 0 && !stored.messages.length;
+    const { providerId: _staleProvider, model: _staleModel, agentModels: _staleAgents, singleModel: _staleSingle, autoRoute: _staleRoute, ...draftRuntime } = savedConfigured;
+    const savedRuntime = emptyDraft ? draftRuntime : savedConfigured;
     const overrides = raw.runtime === undefined ? {} : runtimeSelection(raw.runtime);
     const restoredRuntime = { ...savedRuntime, ...overrides };
     const defaults = {
@@ -969,7 +974,7 @@ export class ConsoleGateway {
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
       ...(configuration?.skillAllowList ? { skillAllowList: configuration.skillAllowList } : {}),
       ...(configuration?.parentSessionId && this.#sessions.has(configuration.parentSessionId) ? { parentSessionId: configuration.parentSessionId } : {}),
-      ...(configuration ? { role: configuration.role, runtime: savedRuntime } : stored.model ? { runtime: { model: stored.model } } : {}),
+      ...(configuration ? { role: configuration.role, runtime: savedRuntime } : stored.model && !emptyDraft ? { runtime: { model: stored.model } } : {}),
     };
     const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}), ...((configuration?.workerPolicy !== undefined || requestedPolicy !== undefined) ? { workerPolicy: intersectWorkerPolicy(configuration?.workerPolicy, requestedPolicy) } : {}) }); const managed = this.#require(created.id);
     if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
