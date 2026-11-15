@@ -27,6 +27,9 @@ on the GitHub Release tag.
 ### Fixed
 
 - Findings board: dropping a card now lands in the column under the pointer (it used to pick the column the dragged card overlapped most), the card moves out of Accepted and Cancelled at once, Accepted accepts drops, columns are reachable by edge auto-scroll, touch and keyboard (Space, arrows, Space), and refused moves (review stages, a finding that needs review) are shown in the column and in a message instead of silently doing nothing. The workflow API now rejects unknown or engine-only statuses with a clear error instead of storing them as Backlog.
+- The thread work log is calmer. Only the single newest active item shimmers (the running call, else the Thinking row, else the Working label); finished rows, Thought rows and a thread waiting for you stay still. Each call is one row that changes in place from Running to Ran, and two or more finished calls fold into one line such as "Read 3 files and ran 2 commands" that opens on click. Reopening a thread no longer shows calls that have not started as Running.
+- Questions from the agent are a flat list instead of a bordered card: a "Waiting on <title>" line, the question, selectable options (arrow keys and Enter work) and Decline and Send answers. After you answer, the thread keeps one "Answered: <choice>" line.
+- A failed send now says what happened and what to do: your message could not reach the model, the connection dropped, the model took too long, the provider is busy or rate limiting, the model is unavailable, the thread is too long, a folder needs access, or the connection needs signing in. Retry shows only when trying again can work, and your progress is kept.
 
 ### Removed
 

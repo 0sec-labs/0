@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { Disclosure } from "@/components/ui/disclosure";
+import { ShimmerText } from "./shimmer-text";
 
 /** A single keyboard-accessible work-log row: bright verb, dim object, muted trailing duration. */
 export function ActivityRow({
@@ -8,6 +9,7 @@ export function ActivityRow({
   status,
   duration,
   running = false,
+  shimmer = running,
   failed = false,
   children,
 }: {
@@ -15,6 +17,8 @@ export function ActivityRow({
   status: string;
   duration?: string;
   running?: boolean;
+  /** Only the one active row of a live turn shimmers; running rows behind it stay plain. */
+  shimmer?: boolean;
   failed?: boolean;
   children: ReactNode;
 }) {
@@ -29,8 +33,8 @@ export function ActivityRow({
       contentClassName="pt-1 pb-2 text-xs"
       summary={
         <>
-          <span className={`min-w-0 truncate${running ? " ui-text-shimmer" : ""}`} title={title}>
-            <span className={running ? undefined : "text-foreground"}>{verb}</span>
+          <span className="min-w-0 truncate" title={title}>
+            <ShimmerText active={running && shimmer} className={running && shimmer ? undefined : running ? "text-muted-foreground-1" : "text-foreground"}>{verb}</ShimmerText>
             {object}
           </span>
           {duration && (

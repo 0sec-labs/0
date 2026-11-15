@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { Markdown } from "./markdown";
 import { MessageClamp } from "./message-clamp";
 import { ToolActivity } from "./tool-activity";
+import { ShimmerText } from "./shimmer-text";
 import { InlineImage, transcriptToolImages } from "./inline-image";
 import { MessageToolbar } from "./message-toolbar";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,7 @@ const hairline =
   "h-px min-w-4 flex-1 bg-border-2 scale-x-0 opacity-0 transition-[transform,opacity] duration-[120ms] ease-[var(--ease-out-quint,cubic-bezier(.23,1,.32,1))] motion-reduce:scale-x-100 motion-reduce:transition-none group-hover/work-head:scale-x-100 group-hover/work-head:opacity-100 group-focus-within/work-head:scale-x-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:scale-x-100 group-data-[open]/work-head:opacity-100";
 
 /** Centered "Worked for 12s" disclosure flanked by hairlines; it owns the turn's collapsible work log. */
-function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents: number; children: ReactNode }) {
+function TurnWork({ turn, subagents, shimmer, children }: { turn: ReducedTurn; subagents: number; shimmer: boolean; children: ReactNode }) {
   const [manual, setManual] = useState<boolean | undefined>(undefined);
   const id = useId();
   const { transcriptDetail, elapsedTimer } = useDisplaySettings();
@@ -48,8 +49,9 @@ function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents:
           onClick={() => setManual(!open)}
           className="inline-flex min-h-7 w-fit max-w-[80%] items-center gap-1 rounded-[var(--radius-inner,4px)] text-xs font-normal text-muted-foreground-2 transition-colors hover:text-muted-foreground-1 focus-visible:outline-ring-inset"
         >
-          <span className={cn("truncate", turn.isWorking && "ui-text-shimmer")}>
-            {label}
+          <span className="truncate">
+            <ShimmerText active={shimmer}>{label.split(",")[0]}</ShimmerText>
+            {label.includes(",") ? label.slice(label.indexOf(",")) : ""}
           </span>
           {turn.isWorking && !turn.retry && time && <span className="tabular-nums">{time}</span>}
           <ChevronRight
@@ -102,6 +104,10 @@ export const TurnTimeline = memo(function TurnTimeline({
         ...(turn.toolCalls.length ? [{ type: "tools" as const, toolIds: turn.toolCalls.map((call) => call.id) }] : []),
         ...(turn.assistantText ? [{ type: "assistant" as const, text: turn.assistantText }] : []),
       ];
+  // One shimmer per live turn, always on the newest active thing: the running call, else the streaming
+  // reasoning row, else the "Working" label. A turn waiting on the operator or finished shimmers nothing.
+  const runningId = streaming ? turn.toolCalls.findLast((call) => call.isRunning && !call.queued)?.id : undefined;
+  const reasoningTail = streaming && !runningId && segments.at(-1)?.type === "reasoning";
   const latestToolIndex = segments.findLastIndex((segment) => segment.type === "tools");
   const callsById = new Map(turn.toolCalls.map((call) => [call.id, call]));
   // Everything up to the last reasoning/tool segment is work; the trailing assistant text is the answer.
@@ -133,6 +139,7 @@ export const TurnTimeline = memo(function TurnTimeline({
           calls={[]}
           reasoning={segment.text}
           working={streaming && index === segments.length - 1}
+          shimmerReasoning={reasoningTail && index === segments.length - 1}
         />
       );
     const hasVisuals = Boolean(turn.visuals?.length);
@@ -147,6 +154,7 @@ export const TurnTimeline = memo(function TurnTimeline({
           calls={calls}
           showLatest={index === latestToolIndex}
           working={turn.isWorking && index === latestToolIndex}
+          shimmerId={runningId ?? null}
         />
         {calls
           .flatMap((call) => transcriptToolImages(call.name, call.result))
@@ -162,7 +170,7 @@ export const TurnTimeline = memo(function TurnTimeline({
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {(lastWork >= 0 || turn.isWorking) && (
-        <TurnWork turn={turn} subagents={subagents}>
+        <TurnWork turn={turn} subagents={subagents} shimmer={streaming && !runningId && !reasoningTail}>
           {segments
             .slice(0, lastWork + 1)
             .flatMap((segment, index) => (segment.type === "visual" ? [] : [render(segment, index)]))}

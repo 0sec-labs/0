@@ -6,6 +6,7 @@ import { ActivityRow } from "./activity-row";
 import { ScrollFade } from "./scroll-fade";
 import { presentToolCall } from "./tool-presentation";
 import { toolCallStatus } from "./tool-call-status";
+import { groupFinishedCalls, groupSummary } from "./tool-groups";
 import type { ToolCallState } from "./transcript";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useDisplaySettings } from "@/lib/display-settings";
@@ -22,6 +23,7 @@ function toolKind(name: string): string {
 export { toolPresentationText as toolPayloadText } from "./tool-presentation";
 
 function toolTitle(call: ToolCallState): string {
+  if (call.name === "ask_operator") return call.isRunning ? "Asking a question" : toolCallStatus(call) === "Done" ? "Asked a question" : "Question not answered";
   const view = presentToolCall(call);
   const prefix = call.isRunning
     ? "Running"
@@ -128,13 +130,14 @@ function ToolDetails({ call }: { call: ToolCallState }) {
   );
 }
 
-function ToolResult({ call }: { call: ToolCallState }) {
+function ToolResult({ call, shimmer }: { call: ToolCallState; shimmer: boolean }) {
   const status = presentToolCall(call).status;
   return (
     <ActivityRow
       title={toolTitle(call)}
       status={status === "Error" || status === "Stopped" ? status : ""}
       running={call.isRunning}
+      shimmer={shimmer}
       failed={status === "Error"}
     >
       <ToolDetails call={call} />
@@ -148,22 +151,31 @@ export function ToolActivity({
   reasoning,
   working = false,
   showLatest = false,
+  shimmerId,
+  shimmerReasoning = working,
 }: {
   calls: ToolCallState[];
   reasoning?: string;
   working?: boolean;
+  /** The one running call allowed to shimmer; `null` for none. Defaults to the last running call of this list. */
+  shimmerId?: string | null;
+  /** The reasoning row is the live tail ("Thinking"); past reasoning reads "Thought" and never shimmers. */
+  shimmerReasoning?: boolean;
   showLatest?: boolean;
   startedAt?: string;
   endedAt?: string;
 }) {
   const { toolCardStyle } = useDisplaySettings();
   // "Hidden" folds away finished successful calls; running, failed and stopped calls always show.
+  const started = allCalls.filter((call) => !call.queued);
   const calls =
     toolCardStyle === "hidden"
-      ? allCalls.filter((call) => call.isRunning || toolCallStatus(call) !== "Done")
-      : allCalls;
+      ? started.filter((call) => call.isRunning || toolCallStatus(call) !== "Done")
+      : started;
   if (!calls.length && !reasoning) return null;
   const running = calls.filter((call) => call.isRunning);
+  const shimmering = shimmerId === undefined ? running.at(-1)?.id : (shimmerId ?? undefined);
+  const items = groupFinishedCalls(calls);
   const active = running.length > 0 || working;
   const sources = recordedSources(allCalls.filter((call) => toolCallStatus(call) === "Done"));
   const latest = showLatest || active ? (running.at(-1) ?? calls.at(-1)) : undefined;
@@ -175,19 +187,24 @@ export function ToolActivity({
       className="flex min-w-0 flex-col gap-1"
     >
       {reasoning && (
-        <ActivityRow title={working ? "Thinking…" : "Thought"} status="" running={working}>
+        <ActivityRow title={working ? "Thinking…" : "Thought"} status="" running={working} shimmer={shimmerReasoning}>
           <div className="max-h-48 overflow-y-auto break-words text-xs leading-5 text-muted-foreground-1">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown>
           </div>
         </ActivityRow>
       )}
-      {calls.map((call) => (
-        <ToolResult key={call.id} call={call} />
-      ))}
-      {working && !running.length && allCalls.length > 0 && (
-        <div role="status" className="flex h-7 items-center text-sm font-medium">
-          <span className="ui-text-shimmer">Working…</span>
-        </div>
+      {items.map((item) =>
+        item.type === "call" ? (
+          <ToolResult key={item.call.id} call={item.call} shimmer={item.call.id === shimmering} />
+        ) : (
+          <ActivityRow key={item.id} title={groupSummary(item.calls)} status="">
+            <div className="flex flex-col gap-1 border-l-[0.5px] border-border-1 pl-3">
+              {item.calls.map((call) => (
+                <ToolResult key={call.id} call={call} shimmer={false} />
+              ))}
+            </div>
+          </ActivityRow>
+        ),
       )}
       {sources.length > 0 && (
         <div aria-label="Sources" className="flex flex-wrap gap-2 py-1">

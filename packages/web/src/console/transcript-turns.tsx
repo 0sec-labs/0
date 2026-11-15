@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { ConsoleMessageInput, ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
 import { Button } from "@/components/ui/button";
 import { recoveredProviderError } from "./connection-recovery";
-import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
+import { classifyRunError, consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
 import { ProviderRejectedNotice } from "./provider-rejected-notice";
 import { TurnTimeline } from "./turn-timeline";
 import { InlineImage } from "./inline-image";
@@ -263,7 +263,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       canWrite &&
                       !turn.isWorking &&
                       !synthetic &&
-                      (isRetryableError(turn.error) || recoveredProviderError(turn.error, workspace.connectionRecovery)) &&
+                      ((isRetryableError(turn.error) && classifyRunError(turn.error).retryable) || recoveredProviderError(turn.error, workspace.connectionRecovery)) &&
                       (turn.user.text || turn.user.attachments?.length) && (
                         <Button
                           type="button"

@@ -17,6 +17,8 @@ export interface ToolCallState {
   arguments: unknown;
   result?: unknown;
   isRunning: boolean;
+  /** Committed in the assistant message but not started yet: the engine runs a round's calls one after another. */
+  queued?: boolean;
 }
 
 export interface DecisionState extends DesktopConsoleDecision {
@@ -147,7 +149,7 @@ function completeTurn(turn: ReducedTurn) {
   turn.isComplete = true;
   turn.isWorking = false;
   for (const decision of turn.decisions) decision.resolved = true;
-  for (const tool of turn.toolCalls) tool.isRunning = false;
+  for (const tool of turn.toolCalls) { tool.isRunning = false; tool.queued = false; }
 }
 
 function applyOutcome(turn: ReducedTurn, outcome: ConsoleTurnOutcome) {
@@ -182,10 +184,15 @@ function reconcileStatus(turns: ReducedTurn[], status?: DesktopConsoleSessionSta
         completeTurn(turn);
       else {
         turn.isWorking = false;
-        for (const tool of turn.toolCalls) tool.isRunning = false;
+        for (const tool of turn.toolCalls) { tool.isRunning = false; tool.queued = false; }
       }
     } else {
       turn.isWorking = true;
+      // Calls run sequentially, so with nothing confirmed running the first unstarted one is the active call.
+      if (!turn.toolCalls.some(tool => tool.isRunning)) {
+        const next = turn.toolCalls.find(tool => tool.queued && tool.result === undefined);
+        if (next) { next.queued = false; next.isRunning = true; }
+      }
     }
   }
 }
@@ -533,7 +540,8 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
             id: block.id,
             name: block.name,
             arguments: block.input,
-            isRunning: true,
+            isRunning: false,
+            queued: true,
           });
         }
         appendToolSegment(turn, block.id);
@@ -545,6 +553,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
         if (tool) {
           tool.result = result;
           tool.isRunning = false;
+          tool.queued = false;
         } else {
           ensureTurn(index).toolCalls.push({
             id: block.tool_use_id,
@@ -649,6 +658,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
           existing.arguments = tool.arguments;
           if (tool.result !== undefined) existing.result = tool.result;
           existing.isRunning = existing.result === undefined && tool.isRunning;
+          existing.queued = false;
         } else {
           turn.toolCalls.push(tool);
         }

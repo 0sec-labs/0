@@ -105,22 +105,24 @@ function QuestionBlock({
       tabIndex={-1}
       aria-describedby={`${descriptionId} ${hintId}${error ? ` ${errorId}` : ""}`}
       aria-invalid={Boolean(error)}
-      className="min-w-0 space-y-3 rounded-md bg-secondary/50 p-2.5 disabled:opacity-60"
+      className="m-0 min-w-0 space-y-2 border-0 p-0 disabled:opacity-60"
     >
-      <legend className="px-1 text-[13px] font-medium">{question.header}</legend>
-      <p id={descriptionId} className="whitespace-pre-wrap break-words text-sm">{question.question}</p>
-      <p id={hintId} className="text-xs text-muted-foreground">
+      <legend className="sr-only">{question.header}</legend>
+      {question.header && <p aria-hidden="true" className="text-xs text-muted-foreground-2">{question.header}</p>}
+      <p id={descriptionId} className="whitespace-pre-wrap break-words text-sm font-medium text-foreground">{question.question}</p>
+      <p id={hintId} className="sr-only">
         {question.options?.length
           ? question.multiSelect ? "Choose one or more." : "Choose one."
           : question.allowCustom ? "Type your answer." : ""}
         {question.options?.length && question.allowCustom ? " Or type your own answer." : ""}
       </p>
+      <div className="flex flex-col gap-0.5">
       {question.options?.map((option, optionIndex) => {
         const optionId = `${id}-option-${optionIndex}`;
         const optionDescriptionId = `${optionId}-description`;
         const selected = answer.selectedLabels.includes(option.label);
         return (
-          <label key={optionIndex} htmlFor={optionId} className="flex items-start gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-secondary has-[:checked]:bg-secondary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/40">
+          <label key={optionIndex} htmlFor={optionId} data-selected={selected || undefined} className="-mx-2 flex cursor-pointer items-baseline gap-2.5 rounded-[var(--radius-inner,4px)] px-2 py-1.5 transition-colors hover:bg-secondary has-[:checked]:bg-secondary has-[:focus-visible]:outline-solid has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ring">
             <input
               id={optionId}
               name={`${id}-options`}
@@ -130,7 +132,7 @@ function QuestionBlock({
               disabled={disabled}
               aria-invalid={Boolean(error)}
               aria-describedby={[option.description ? optionDescriptionId : "", error ? errorId : ""].filter(Boolean).join(" ") || undefined}
-              className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={`size-3.5 shrink-0 translate-y-0.5 appearance-none border border-muted-foreground-2 bg-transparent ${question.multiSelect ? "rounded-[3px] checked:border-primary checked:bg-primary" : "rounded-full checked:border-[4.5px] checked:border-primary"}`}
               onChange={(event) => onChange({
                 ...answer,
                 selectedLabels: question.multiSelect
@@ -140,19 +142,20 @@ function QuestionBlock({
                   : [option.label],
               })}
             />
-            <span className="min-w-0 space-y-1">
-              <span className="block whitespace-pre-wrap break-words text-sm font-medium">{option.label}</span>
-              {option.description && <span id={optionDescriptionId} className="block whitespace-pre-wrap break-words text-xs text-muted-foreground">{option.description}</span>}
+            <span className="min-w-0 flex-1 truncate text-sm" title={option.description ? `${option.label}: ${option.description}` : option.label}>
+              <span className="font-medium text-foreground">{option.label}</span>
+              {option.description && <span id={optionDescriptionId} className="text-muted-foreground-2">{" · "}{option.description}</span>}
             </span>
           </label>
         );
       })}
+      </div>
       {question.allowCustom && !question.multiSelect && answer.selectedLabels.length > 0 && (
         <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => onChange({ ...answer, selectedLabels: [] })}>Clear choice</Button>
       )}
       {question.allowCustom && (
         <div className="space-y-1.5">
-          <label htmlFor={`${id}-custom`} className="text-sm font-medium">Your answer</label>
+          <label htmlFor={`${id}-custom`} className="text-xs text-muted-foreground-2">Or type an answer</label>
           <Textarea
             id={`${id}-custom`}
             name={`${id}-custom`}
@@ -226,6 +229,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
         return answer;
       });
     }
+    if (response.answers) rememberAnswer(decision.id, response.answers);
     onResolve(response);
   }
 
@@ -238,7 +242,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       aria-busy={busy && !decision.resolved}
       onSubmit={handleSubmit}
       data-slot="question-form"
-      className="mx-auto w-full max-w-[560px] space-y-3 border-l-[0.5px] border-border-1 pl-3 text-[13px] text-foreground"
+      className="mx-auto w-full max-w-[560px] space-y-3 text-[13px] text-foreground"
     >
       {questions.length > 0 && (
         <div className="space-y-3">
@@ -263,12 +267,19 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       {!decision.resolved && (
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           {sequential && currentIndex > 0 && <Button type="button" size="sm" variant="ghost" className="mr-auto" disabled={busy} onClick={() => { navigated.current = true; setQuestionIndex(currentIndex - 1); setAttempted(false); }}>Back</Button>}
-          <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { if (!disabled) onResolve({ approve: false }); }}>Decline</Button>
-          <Button type="submit" size="sm" disabled={busy}>{busy ? <><LoadingDots />Please wait…</> : hasNext ? "Next" : "Send answers"}</Button>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { if (!disabled) onResolve({ approve: false }); }}>Decline</Button>
+          <Button type="submit" size="sm" variant="secondary" disabled={busy}>{busy ? <><LoadingDots />Please wait…</> : hasNext ? "Next" : "Send answers"}</Button>
         </div>
       )}
     </form>
   );
+}
+
+const answered = new Map<string, string>();
+
+/** Remember what was chosen so the closed decision can read "Answered: <choice>" for the rest of this page's life. */
+export function rememberAnswer(id: string, answers: DesktopConsoleOperatorAnswer[]) {
+  answered.set(id, answers.map((answer) => [...(answer.selectedLabels ?? []), ...(answer.customText ? [answer.customText] : [])].join(", ")).filter(Boolean).join("; "));
 }
 
 /** The request, in the words the waiting line shows after "Waiting on". */
@@ -280,6 +291,8 @@ export function waitingRequest(decision: DesktopConsoleDecision): string {
 /** Closed decisions collapse to one muted sentence; nothing about them is a card. */
 export function resolvedSummary(decision: DesktopConsoleDecision & { approved?: boolean }): string {
   const outcome = decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "allowed" : "declined";
+  const choice = decision.kind === "operator-question" && decision.approved ? answered.get(decision.id) : undefined;
+  if (choice) return `Answered: ${choice}`;
   return `${waitingRequest(decision)} · ${outcome}`;
 }
 

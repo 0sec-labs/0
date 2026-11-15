@@ -159,6 +159,8 @@ Visuals are plain data, never HTML. Markup, URLs and control characters are reje
 
 A saved thread opens at `/chats/saved/<id>` in the same view as a live one, with its transcript, work log and panels. Opening it does not start any work. It stays read-only until you send a message, which resumes it. Rename, clear, close and model change wait until then.
 
+While the agent works, the work log shows one row per call. A row changes in place from Running to Ran, and only the newest active item shimmers. Finished calls in a row fold into one line such as "Read 3 files and ran 2 commands"; click it to see each call. When the agent needs you, the thread shows "Waiting on <question>" with the options below it. Pick one with the arrow keys or the mouse, then press Enter or Send answers. The thread then keeps one "Answered: <choice>" line. If a send fails, the message says why and offers Retry only when trying again can work. Your progress stays in the thread.
+
 Use thread history or ⌘K search to find older work. Search matches message text and metadata, ranks relevant matches first and skips tool payloads and private reasoning.
 
 ## Settings
