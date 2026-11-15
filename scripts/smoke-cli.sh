@@ -70,8 +70,11 @@ say "--help"
 run_cli --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
 grep -q "security harness that fixes what it finds" "$TMP/help.out" || fail "--help did not contain tagline"
 grep -q "scan" "$TMP/help.out" || fail "--help did not list scan subcommand"
-grep -q "mcp-server" "$TMP/help.out" || fail "--help did not list mcp-server subcommand"
-grep -q "review" "$TMP/help.out" || fail "--help did not list review subcommand"
+grep -q "findings" "$TMP/help.out" || fail "--help did not list findings subcommand"
+grep -q "doctor" "$TMP/help.out" || fail "--help did not list doctor subcommand"
+# mcp-server lives under the hidden `lab` group; the old top-level name still works.
+run_cli lab --help 2>&1 | grep -q "mcp-server" || fail "lab --help did not list mcp-server subcommand"
+run_cli mcp-server --help >/dev/null 2>&1 || fail "legacy mcp-server --help exited non-zero"
 
 # ── 2. doctor ──────────────────────────────────────────────────────────────
 # Proves runtime detection boots and doesn't crash on a bare environment.

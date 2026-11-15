@@ -48,7 +48,8 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = ["workbench", "config", "reports", "connections", "models", "github", "usage", "audit-log"].includes(process.argv[2] ?? "");
+const isWorkbenchManagement = ["workbench", "config", "reports", "connections", "models", "github", "usage", "audit-log"].includes(process.argv[2] ?? "")
+  || (process.argv[2] === "findings" && process.argv[3] === "reports") || (process.argv[2] === "doctor" && process.argv[3] === "workbench");
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -131,6 +132,7 @@ async function buildProgram(): Promise<Command> {
     }
   });
   c.registerCommandTree(program);
+  c.configureGroupedHelp(program);
   setCrashCommandPaths(commandPathsOf(program));
   return program;
 }
@@ -184,16 +186,16 @@ if (userArgs.length === 0) {
     // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
     // saved chat session by id/prefix when a headless prompt is supplied. commander's
     // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
-    process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--resume", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
     // `0 -c` → `console --continue`: reopen the most recent chat session.
-    process.argv = [process.argv[0], process.argv[1], "console", "--continue", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--continue", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
     // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
     // query (or read the prompt from piped stdin when no argument is given).
-    process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--print", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs.length >= 1 && !knownCommands.has(userArgs[0]) && !userArgs[0].startsWith("-")) {
     const route = detectAndRoute(userArgs[0]);

@@ -11,7 +11,7 @@ Settings, credentials and run state are separate. This page covers settings and 
 0 config show                    # effective settings, each labelled default, global or project
 0 config export ./settings.json  # write the effective settings as JSON
 0 config import ./settings.json  # merge into the global layer
-0 upgrade                        # install the latest release
+0 doctor upgrade                        # install the latest release
 ```
 
 Resolution order, highest first: command-line flag, environment variable, project settings, global settings, built-in default.
@@ -28,8 +28,8 @@ Resolution order, highest first: command-line flag, environment variable, projec
 Set up the workbench, then start the app:
 
 ```bash
-0 workbench setup --image /absolute/path/0-workbench-linux-arm64.tar --provider chatgpt-codex
-0 workbench status --json
+0 doctor workbench setup --image /absolute/path/0-workbench-linux-arm64.tar --provider chatgpt-codex
+0 doctor workbench status --json
 0
 ```
 
@@ -40,7 +40,7 @@ Setup downloads the pinned VM runtime and approves a digest-pinned local image a
 | `--image <archive>` | saved approved image | Local OCI or Docker archive to approve (limit 8 GiB). |
 | `--state <directory>` | `~/.0/workbench` | VM state, image approval and guest data. |
 | `--workspace <directory>` | current directory per launch | Host folder mounted at `/workspace` in the guest. |
-| `--provider <id>` | none | Grant a host provider account to the guest. Repeat to grant several. `0 workbench providers` lists the IDs. |
+| `--provider <id>` | none | Grant a host provider account to the guest. Repeat to grant several. `0 doctor workbench providers` lists the IDs. |
 | `--no-github` | | Revoke the GitHub token grant. Forwarding a GitHub token is refused. |
 | `--cpus`, `--memory <MiB>`, `--storage <GiB>` | `2`, `4096`, `20` | Guest resources. |
 | `--sandbox-image <reference=archive>` | none | Approve a `repository@sha256:<64 hex>` image for isolated container actions. Repeat for more. |
@@ -48,11 +48,11 @@ Setup downloads the pinned VM runtime and approves a digest-pinned local image a
 Change it later:
 
 ```bash
-0 workbench configure --provider openai,anthropic --no-github   # replace grants
-0 workbench configure --provider none                           # revoke provider grants
-0 workbench configure --current-workspace                       # drop a fixed workspace
-0 workbench configure --clear-sandbox-images
-0 workbench disable                                             # return to local; keeps image and state
+0 doctor workbench configure --provider openai,anthropic --no-github   # replace grants
+0 doctor workbench configure --provider none                           # revoke provider grants
+0 doctor workbench configure --current-workspace                       # drop a fixed workspace
+0 doctor workbench configure --clear-sandbox-images
+0 doctor workbench disable                                             # return to local; keeps image and state
 ```
 
 Rules:
@@ -61,7 +61,7 @@ Rules:
 - The guest sees only granted providers. Host HOME, SSH keys, Docker sockets and other environment variables are not forwarded.
 - If the runtime, image or admission check fails, launch is refused. It never falls back to the host.
 - Project settings cannot change the profile. A change applies at the next launch.
-- `0 workbench status` is read-only and never downloads anything.
+- `0 doctor workbench status` is read-only and never downloads anything.
 
 ## Runtime modes
 
@@ -326,19 +326,19 @@ Release builds embed the PostHog project key and the Sentry DSN when they are bu
 
 ## Update checks
 
-At startup, 0 checks GitHub for a newer release, at most once every 24 hours. What happens next depends on `updatePolicy`.
+At startup, 0 doctor checks GitHub for a newer release, at most once every 24 hours. What happens next depends on `updatePolicy`.
 
 | Policy | Behavior |
 | --- | --- |
 | `automatic` | Default. Runs the installer before starting, then tells you to restart. This can delay startup by a few seconds. |
-| `notify` | Prints `Update available: <old> → <new>. Run 0 upgrade.` |
+| `notify` | Prints `Update available: <old> → <new>. Run 0 doctor upgrade.` |
 | `off` | No request. |
 
 The check runs only in an interactive terminal. It is skipped when `CI`, `ZERO_NO_UPDATE_CHECK` or `ZERO_OFFLINE` is set to a non-empty value other than `0` or `false`. Project settings cannot change the policy. Automatic installation is not available on Windows. Download a release instead.
 
 ```bash
-0 upgrade                    # install the latest release now
-0 upgrade --version v0.10.0  # pin a release
+0 doctor upgrade                    # install the latest release now
+0 doctor upgrade --version v0.10.0  # pin a release
 env ZERO_NO_UPDATE_CHECK=1 0 # skip the check for one run
 ```
 

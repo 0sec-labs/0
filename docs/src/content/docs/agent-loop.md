@@ -8,8 +8,8 @@ The model reads the task, proposes tool calls, receives their results and decide
 To see what a loop did, list runs and read the timeline:
 
 ```bash
-0 runs history --limit 10
-0 runs timeline <scan-id> --db-path ~/.0/runs/<scan-id>/state.db
+0 lab runs history --limit 10
+0 lab runs timeline <scan-id> --db-path ~/.0/runs/<scan-id>/state.db
 ```
 
 ## The loop

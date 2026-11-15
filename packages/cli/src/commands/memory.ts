@@ -1,6 +1,6 @@
 // `0 memory` — what the Memory page does: list, disable or re-enable, export and import.
 // False-positive and evaluation memories live under `0 findings triage memory`; improvement
-// candidates live under `0 improve learning`.
+// candidates live under `0 lab improve learning`.
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";

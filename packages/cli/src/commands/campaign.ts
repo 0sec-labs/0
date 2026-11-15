@@ -7,7 +7,7 @@
  * that accumulated, ask the model for the NEXT objective, run the next
  * session — until iterations/budget are exhausted or the model declares
  * coverage complete. When no local engine is running on the campaign
- * database, iterations fall back to headless `0 console --print` children
+ * database, iterations fall back to headless `0 lab console --print` children
  * with a printed warning.
  *
  * Safety: children and sessions always run under a hard timeout (child
@@ -287,7 +287,7 @@ function runChild(argv: string[], timeoutMs: number): Promise<ChildRunResult> {
 
 /**
  * Discover the local engine that owns the campaign database — the same
- * discovery `0 console` uses — so campaign sessions stream live in the
+ * discovery `0 lab console` uses — so campaign sessions stream live in the
  * console UI. Returns null when no engine is running (headless fallback).
  */
 async function connectCampaignEngine(dbPath: string): Promise<CampaignEngine | null> {

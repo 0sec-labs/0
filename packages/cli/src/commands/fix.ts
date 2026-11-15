@@ -146,7 +146,7 @@ export function registerFixCommand(program: Command): void {
     .option("--finding <path>", "Path to an external finding JSON with verificationSpec")
     .option("--finding-id <id>", "Persisted finding ID (full ID or unique prefix)")
     .option("--db-path <path>", "Database containing --finding-id")
-    .option("--verification-result <path>", "Optional verification_result JSON from `0 verify`; required when the finding does not already carry one")
+    .option("--verification-result <path>", "Optional verification_result JSON from `0 scan verify`; required when the finding does not already carry one")
     .requiredOption("--test-command <command>", "Explicit regression command to run in the isolated candidate worktree")
     .option("--runtime <runtime>", "Fix runtime: auto or api", "auto")
     .option("-m, --model <model>", "Model identifier for the selected runtime")

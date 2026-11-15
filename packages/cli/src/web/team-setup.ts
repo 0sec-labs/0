@@ -81,7 +81,7 @@ export class TeamSetupService {
       config.users.push(member);
       temporaryFD = openSync(tempPath, "wx", 0o600);
       writeFileSync(temporaryFD, `${JSON.stringify(config, null, 2)}\n`, "utf8"); fsyncSync(temporaryFD); closeSync(temporaryFD); temporaryFD = undefined;
-      // The lock is shared with `0 team add-user`; CAS also catches external manual edits.
+      // The lock is shared with `0 config team add-user`; CAS also catches external manual edits.
       if (auth.configurationDigest() !== baseline || configDigest(readPrivateConfig(this.configPath)) !== baseline) throw new TeamAuthError("Workspace configuration changed during this update", 409);
       renameSync(tempPath, this.configPath);
       return { user: auth.addMember(member) };

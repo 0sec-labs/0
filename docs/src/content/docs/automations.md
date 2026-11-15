@@ -121,12 +121,12 @@ Run `0 automation list --templates` for the catalog your build ships. A template
 `0 scan source`, `scan package`, `scan web`, `scan deep`, `fix`, `verify` and `research` also record a one-step run in the same control database.
 
 ```bash
-0 runs list --format json
-0 runs show RUN_ID --format json
-0 runs cancel RUN_ID
+0 lab runs list --format json
+0 lab runs show RUN_ID --format json
+0 lab runs cancel RUN_ID
 ```
 
-Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing thread when the computer supports it. It does not restart an automation graph.
+Run history does not resume interrupted work. `0 lab runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing thread when the computer supports it. It does not restart an automation graph.
 
 ## Attach to a running computer
 

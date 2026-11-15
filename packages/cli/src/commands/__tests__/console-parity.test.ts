@@ -38,7 +38,10 @@ describe("command tree", () => {
     const program = new Command();
     registerCommandTree(program);
     const names = program.commands.map(c => c.name());
-    for (const name of ["connections", "models", "github", "usage", "audit-log", "computers", "config"]) expect(names).toContain(name);
+    for (const name of ["models", "computers", "config"]) expect(names).toContain(name);
+    const nested = (group: string) => program.commands.find(c => c.name() === group)!.commands.map(c => c.name());
+    expect(nested("models")).toEqual(expect.arrayContaining(["connections", "usage"]));
+    expect(nested("config")).toEqual(expect.arrayContaining(["github", "audit-log"]));
     const computers = program.commands.find(c => c.name() === "computers")!;
     expect(computers.aliases()).toContain("worker");
     expect(computers.commands.map(c => c.name())).toEqual(expect.arrayContaining(["list", "deploy", "repair", "stop", "hosts"]));

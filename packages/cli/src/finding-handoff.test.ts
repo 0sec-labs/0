@@ -38,7 +38,7 @@ describe("finding handoff", () => {
     expect(
       buildFindingConsoleCommand({ id: "F'42" }, "/tmp/0 db's.sqlite", "draft_fix"),
     ).toBe(
-      "0 console --finding 'F'\\''42' --finding-intent draft_fix --db-path '/tmp/0 db'\\''s.sqlite'",
+      "0 lab console --finding 'F'\\''42' --finding-intent draft_fix --db-path '/tmp/0 db'\\''s.sqlite'",
     );
   });
 

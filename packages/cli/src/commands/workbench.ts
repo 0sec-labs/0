@@ -59,10 +59,10 @@ async function setupWorkbench(options: WorkbenchSetupOptions, home: string = pro
   const workspaceRoot = options.workspace === undefined ? previous?.workspaceRoot : realpathSync(resolve(options.workspace));
   if (workspaceRoot !== undefined && !lstatSync(workspaceRoot).isDirectory()) throw new Error("Workbench workspace must be a directory.");
   const providers = options.provider ?? previous?.providers ?? [];
-  for (const id of providers) if (!PROVIDERS.some((provider) => provider.id === id)) throw new Error(`Unknown provider grant: ${id}. Use 0 workbench providers.`);
+  for (const id of providers) if (!PROVIDERS.some((provider) => provider.id === id)) throw new Error(`Unknown provider grant: ${id}. Use 0 doctor workbench providers.`);
   // Reuse only a saved operator-approved image, never an archive found in a checkout.
   const imageArchive = options.image ? resolve(options.image) : previous?.image;
-  if (!imageArchive) throw new Error("No approved workbench image is available. Supply a locally provisioned archive with 0 workbench setup --image <archive>. Docker is only needed to build an image, never to run this profile.");
+  if (!imageArchive) throw new Error("No approved workbench image is available. Supply a locally provisioned archive with 0 doctor workbench setup --image <archive>. Docker is only needed to build an image, never to run this profile.");
   const cpus = resource(options.cpus, previous?.cpus ?? 2, 64, "CPUs");
   const memoryMb = resource(options.memory, previous?.memoryMb ?? 4096, 262144, "Memory (MiB)");
   const storageGb = resource(options.storage, previous?.storageGb ?? 20, 1024, "Storage (GiB)");
@@ -170,7 +170,7 @@ export function registerWorkbenchCommand(program: Command): void {
     .action(async (options: { provider?: string; github?: boolean; currentWorkspace?: boolean; sandboxImage?: string[]; clearSandboxImages?: boolean }) => {
       try {
         const config = loadWorkbenchConfig();
-        if (!config) throw new Error("No workbench is configured. Run 0 workbench setup first.");
+        if (!config) throw new Error("No workbench is configured. Run 0 doctor workbench setup first.");
         if (options.provider !== undefined) config.providers = options.provider === "none" ? [] : options.provider.split(",").map((id) => id.trim());
         if (options.github !== undefined) config.github = options.github;
         if (options.currentWorkspace) delete config.workspaceRoot;

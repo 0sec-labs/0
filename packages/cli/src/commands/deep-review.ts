@@ -3,7 +3,7 @@
  *
  * This is the "depth method" (PR #1162: specialized finder lenses × best-of-N +
  * the multi-lens verify quorum) exposed as a dispatchable, seedless product.
- * Unlike `0 research hunt` (which REQUIRES a `--seed` fix diff to derive variant
+ * Unlike `0 lab research hunt` (which REQUIRES a `--seed` fix diff to derive variant
  * candidate sites), deep-review needs no seed: it enumerates candidate files
  * straight from the prepared source tree and re-hunts each through the profile's
  * `*FinderLenses`, gating survivors through the profile's `*VerifyLenses`

@@ -8,7 +8,7 @@
  * `redactPii` from the existing disclosure pipeline so the same secret
  * and PII sweep covers the manifest.
  *
- * Designed to be surfaced for HUMAN INSPECTION via `0 disclose review`
+ * Designed to be surfaced for HUMAN INSPECTION via `0 scan disclose review`
  * BEFORE any disclosure artifact is drafted. The manifest itself never sends
  * or publishes anything.
  *

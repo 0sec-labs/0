@@ -3,7 +3,7 @@ title: MCP servers
 description: Drive 0 from Claude Code, Codex or Cursor, and give 0 tools from other MCP servers.
 ---
 
-MCP works in two directions. Run `0 mcp-server` so a coding agent can start 0's automations or call its target tools. Or connect other MCP servers to 0 so its agent can use their tools.
+MCP works in two directions. Run `0 lab mcp-server` so a coding agent can start 0's automations or call its target tools. Or connect other MCP servers to 0 so its agent can use their tools.
 
 ## Let a coding agent use 0
 
@@ -16,7 +16,7 @@ An agent with shell access can run 0 directly. No MCP adapter is needed. Install
 0 scan web --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
-The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 doctor` and `0 workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 web --no-open --ready-json` starts a browser app and prints its URL.
+The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 doctor` and `0 doctor workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 web --no-open --ready-json` starts a browser app and prints its URL.
 
 Notes for agents:
 
@@ -26,7 +26,7 @@ Notes for agents:
 
 ### Use the MCP server
 
-`0 mcp-server` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Add it to a client that launches local stdio servers. This example uses the common `mcpServers` shape:
+`0 lab mcp-server` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Add it to a client that launches local stdio servers. This example uses the common `mcpServers` shape:
 
 ```json
 {
@@ -50,17 +50,17 @@ There are two tool sets:
 
 `--tools a,b,c` selects exactly those tools, from either set, and overrides the default. The external agent reasons with its own model. Assessments that run inside 0 use 0's [model connection](/models/).
 
-Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 automation`. Switching to host execution with `0 workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
+Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 automation`. Switching to host execution with `0 doctor workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
 
 ## Automation tools
 
 ```bash
 # Source workflows in a local repository
-0 mcp-server --automations --workspace /absolute/path/to/repo
+0 lab mcp-server --automations --workspace /absolute/path/to/repo
 
 # Live targets (needs the scope plugin and a scope file)
 0 plugin enable scope
-0 mcp-server --automations --scope /absolute/path/to/scope.json \
+0 lab mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```
 
@@ -105,7 +105,7 @@ In browser chat, `start_run` returns a queued `requestId`. It runs only after th
 By default the MCP server embeds a computer that stops when the client disconnects. To use a running one, such as the browser app's computer:
 
 ```bash
-0 mcp-server --automations \
+0 lab mcp-server --automations \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
   --chat SESSION_ID
 ```
@@ -113,7 +113,7 @@ By default the MCP server embeds a computer that stops when the client disconnec
 `ENGINE_TOKEN` holds the bearer token, so the value never appears in arguments or reports. Direct connections use HTTPS, or HTTP on loopback. For a registered remote computer:
 
 ```bash
-0 mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json
+0 lab mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json
 ```
 
 The computer supplies its own workspace, scope, model and execution profile, so do not pass `--workspace`, `--scope` or `--db-path`. It must advertise `workflow-engine`. Disconnecting detaches the client and the computer's runs continue until they finish or you cancel them. See [Computers](/engines/).
@@ -146,7 +146,7 @@ A web computer that owns the same control database and workspace is found and at
 Select these with `--tools`. They need `--target` and `--scan-id`.
 
 ```bash
-0 mcp-server \
+0 lab mcp-server \
   --target https://target.example.com --scan-id my-scan-001 \
   --scope /absolute/path/to/scope.json \
   --tools http_request,crawl,query_findings

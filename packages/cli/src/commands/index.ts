@@ -68,7 +68,7 @@ export { registerSentinelsCommand } from "./sentinels.js";
 export { registerAutomationManageCommands } from "./automation-manage.js";
 
 export { registerReportsCommand } from "./reports.js";
-export { registerCommandTree } from "./tree.js";
+export { registerCommandTree, configureGroupedHelp } from "./tree.js";
 export { registerMissionsCommand } from "./missions.js";
 export { registerFindingsExportCommand } from "./findings-export.js";
 export { registerFindingsKeysCommand } from "./findings-keys.js";

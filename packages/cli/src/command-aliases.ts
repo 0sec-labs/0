@@ -41,12 +41,36 @@ const MOVED: Readonly<Record<string, readonly string[]>> = {
 /** Renamed for vocabulary only: no moved notice, the old word is simply an alias. */
 const SILENT = new Set(["chats", "missions", "sentinels"]);
 
+/**
+ * Top-level commands that now live under another group (mirrors NEW_HOME in
+ * commands/tree.ts, which a test keeps in sync). The old name still works,
+ * silently, with identical arguments and behaviour: `0 scan fix .` runs `0 scan fix .`.
+ */
+const NEW_HOME: Readonly<Record<string, string>> = {
+  fix: "scan", verify: "scan", deps: "scan", eval: "scan", "agent-assure": "scan", disclose: "scan",
+  reports: "findings",
+  connections: "models", usage: "models",
+  "audit-log": "config", team: "config", db: "config", github: "config",
+  upgrade: "doctor", workbench: "doctor", checks: "doctor",
+  research: "lab", improve: "lab", console: "lab", "mcp-server": "lab", runs: "lab",
+};
+
+/** Put a path under its new group when its first word moved. */
+function rehome(path: readonly string[]): string[] {
+  const group = Object.hasOwn(NEW_HOME, path[0]!) ? NEW_HOME[path[0]!] : undefined;
+  return group ? [group, ...path] : [...path];
+}
+
 interface AliasRewrite { args: string[]; notice: string }
 
 export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | undefined {
   const first = args[0];
-  const target = first === undefined ? undefined : MOVED[first];
-  if (!target || !Object.hasOwn(MOVED, first!)) return undefined;
+  if (first === undefined) return undefined;
+  if (!Object.hasOwn(MOVED, first)) {
+    // Regroup-only rename: silent, no notice.
+    return Object.hasOwn(NEW_HOME, first) ? { args: [...rehome([first]), ...args.slice(1)], notice: "" } : undefined;
+  }
+  const target = rehome(MOVED[first]!);
   const rest = args.slice(1);
   const renamed = rest[0] === undefined ? undefined : RENAMED_SUBCOMMANDS[first!]?.[rest[0]];
   if (renamed) rest[0] = renamed;

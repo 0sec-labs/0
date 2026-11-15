@@ -8,7 +8,7 @@ export type CatalogPublisher = { name: string; url: string; avatar: string };
 export type CatalogResponse = { generated: string; publishers: Record<string, CatalogPublisher>; skills: CatalogSkill[] };
 export type CatalogFilter = "all" | "security";
 
-export const VERIFIED_BY_0 = "Verified by the 0 team";
+export const VERIFIED_BY_0 = "Verified by the 0 config team";
 export const VERIFIED_HINT = "Listed and pinned by 0. Review a skill before adding it.";
 
 /** 323876 -> "323.9k", 8188 -> "8.2k", 346 -> "346", 1_250_000 -> "1.3M". */

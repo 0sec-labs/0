@@ -6,7 +6,7 @@ description: Dated benchmark results, the conditions behind them and the command
 Run a benchmark with the shared orchestrator:
 
 ```bash
-0 improve bench run --integration core --variants variants.json
+0 lab improve bench run --integration core --variants variants.json
 ```
 
 `variants.json` is a nonempty JSON array. Or skip it and use `--model`, `--runtime` and `--depth` for one variant. `--variants` wins when both are given.
@@ -39,7 +39,7 @@ Each integration owns its target lifecycle and grading. The orchestrator shares 
 
 ```bash
 # XBOW: Docker lifecycle, fresh flag per attempt, shared oracle.
-0 improve bench run \
+0 lab improve bench run \
   --integration xbow \
   --xbow-path /path/to/xbow \
   --variants variants.json \
@@ -48,7 +48,7 @@ Each integration owns its target lifecycle and grading. The orchestrator shares 
   --schedule case-major
 
 # CyberGym: official differential oracle, one graded submit per task.
-0 improve bench run \
+0 lab improve bench run \
   --integration cybergym \
   --cybergym-harness /path/to/cybergym \
   --cybergym-subset results/cybergym-fair-v1.subset.txt \
@@ -106,7 +106,7 @@ Report dollars per flag next to solve rate, with an explicit denominator. The gp
 
 ## Specialized XBOW runner
 
-For new runs use `0 improve bench run --integration xbow`. The older runner remains for repeat statistics on a slice:
+For new runs use `0 lab improve bench run --integration xbow`. The older runner remains for repeat statistics on a slice:
 
 ```bash
 pnpm --filter @0/bench xbow \

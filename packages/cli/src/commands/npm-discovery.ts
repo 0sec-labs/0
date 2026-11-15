@@ -25,7 +25,7 @@ interface NpmDiscoveryRunOptions {
  * npm-ecosystem dynamic-discovery — drive the pluggable detector registry
  * (sspp-fuzz, read-unstable, parser-diff) over a package worklist. LLM-proposes
  * / harness-disposes: confirmed ONLY on an observed runtime consequence
- * (assume-FP), deduped against fork-twins + prior 0 reports.
+ * (assume-FP), deduped against fork-twins + prior 0 findings reports.
  *
  * SAFETY: `run` loads the target packages in-process to exercise their code, so
  * it runs UNTRUSTED code on this host. It is gated behind

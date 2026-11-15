@@ -1,8 +1,8 @@
 /**
  * Tests for the runtime validation schemas (`findingSchema`,
  * `pocStepArraySchema`) that guard the two highest-risk
- * `JSON.parse(...) as T` sites in the CLI: `0 verify --finding <path>`
- * and the DB-stored `pocSteps` blob consumed by `0 disclose`.
+ * `JSON.parse(...) as T` sites in the CLI: `0 scan verify --finding <path>`
+ * and the DB-stored `pocSteps` blob consumed by `0 scan disclose`.
  *
  * The schemas are intentionally permissive on unknown top-level fields
  * (`.passthrough()`) but strict on the load-bearing core (`id`, `severity`

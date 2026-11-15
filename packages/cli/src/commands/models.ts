@@ -10,7 +10,7 @@ export function runModelsList(options: JsonOption & { provider?: string }, deps:
     const data = expectOk(await client.request("GET", query(options.provider)));
     const models = data.models as ModelRow[];
     if (options.json) return printJson(io, { models, diagnostics: data.diagnostics });
-    if (!models.length) io.out("No models. Connect a provider with `0 connections add`.");
+    if (!models.length) io.out("No models. Connect a provider with `0 models connections add`.");
     else io.out(renderTable(["PROVIDER", "MODEL", "ENABLED", "PRICE", "CONTEXT"], models.map(m => [m.provider, m.id, m.enabled ? "yes" : "no", m.price, m.contextWindowTokens ? String(m.contextWindowTokens) : "-"])));
   });
 }

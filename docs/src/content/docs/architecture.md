@@ -50,7 +50,7 @@ These are trusted-orchestrator bindings, not hardware attestation of a hostile w
 | XNU IOKit | Selector discovery and deterministic programs | Partial, fail closed |
 | Unified web, AI, source, package pipeline | Native findings wrapped without a rerun | Connected |
 
-Two kernel import paths exist because the generic VM runner cannot safely rebuild those proofs. `0 research linux-matrix` imports boots that ran elsewhere and marks the envelope `executionOrigin: external`. `0 research linux` runs boots natively against a literal crash oracle (`--expected-signature`). A different oops cannot satisfy the gate, and each boot keeps its own hashed dmesg artifact.
+Two kernel import paths exist because the generic VM runner cannot safely rebuild those proofs. `0 lab research linux-matrix` imports boots that ran elsewhere and marks the envelope `executionOrigin: external`. `0 lab research linux` runs boots natively against a literal crash oracle (`--expected-signature`). A different oops cannot satisfy the gate, and each boot keeps its own hashed dmesg artifact.
 
 ## Where work runs
 
@@ -150,7 +150,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 0 uses MCP in three roles.
 
 - Client: selected agent and console paths connect to external MCP servers and expose their tools.
-- Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
+- Server: `0 lab mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
 - Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
 See [MCP servers](/mcp/).
