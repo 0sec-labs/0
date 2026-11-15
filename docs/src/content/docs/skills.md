@@ -59,3 +59,9 @@ In a team workspace, created and imported skills are shared with the team. Edito
 ## Limits
 
 Folder mounting works with local mission execution. Mounted skills are not copied into SmolVM guests automatically.
+
+## Next steps
+
+- [Plugin security](/plugin-trust/#adding-skills-from-github): what to check before adding a skill from GitHub.
+- [Sentinels](/sentinels/): give a standing agent the skills it should load.
+- [Plugins](/plugins/): add tools, not instructions.

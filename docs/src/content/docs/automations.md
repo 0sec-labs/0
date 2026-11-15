@@ -140,7 +140,7 @@ Disconnecting an attached client leaves the engine running. A foreground `automa
 
 Open a finding and use **Edit business impact** to record affected customers, services and data, with a rationale. The levels are **Urgent**, **High**, **Moderate**, **Low** and **Not assessed**. Clear it when you lack the context. Your edit does not change technical severity, verification results, review gates or patch permissions.
 
-## Related
+## Next steps
 
 - [Sentinels](/sentinels/): standing agents that run automations on triggers.
 - [CI](/ci/github-action/): run 0 in a pipeline.

@@ -7,7 +7,7 @@ MCP works in two directions. Run `0 mcp-server` so a coding agent can start 0's 
 
 ## Let a coding agent use 0
 
-### Option 1: the CLI
+### Use the CLI
 
 An agent with shell access can run 0 directly. No MCP adapter is needed. Install 0 where the agent runs, connect a model in [Models and keys](/models/), and give it absolute paths:
 
@@ -24,7 +24,7 @@ Notes for agents:
 - Check the exit status and the saved report, not the last stdout line.
 - A finding can be a lead. Use [Verify and fix](/verify-and-fix/) before calling it exploitable, and keep fix application a separate, reviewed step.
 
-### Option 2: the MCP server
+### Use the MCP server
 
 `0 mcp-server` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Add it to a client that launches local stdio servers. This example uses the common `mcpServers` shape:
 
@@ -98,7 +98,7 @@ Start a run:
 - Applying a patch needs the host flag `--allow-apply` and `allowApply: true` in the request, plus an authorized source workspace. Proposing a fix and applying it are separate.
 - A step whose executor is missing fails before launch.
 
-In browser chat, `start_run` returns a queued `requestId`. It runs only after the turn ends and you approve the launch and target. Read `get_run` with that request ID to get the real `runId`. Changing the chat's configuration cancels the request.
+In browser chat, `start_run` returns a queued `requestId`. It runs only after the turn ends and you approve the launch and target. Read `get_run` with that request ID to get the `runId`. Changing the chat's configuration cancels the request.
 
 ## Attach to a running engine
 
@@ -176,7 +176,7 @@ Set target authentication with `ZERO_MCP_AUTH_JSON`, through your client's secre
 
 For authorized engagements, `ZERO_MCP_ATTRIBUTION_HEADERS_JSON` (a JSON array of `"Header-Name: value"` strings) adds headers, and `ZERO_MCP_ATTRIBUTION_UA_TOKEN` appends a token to the User-Agent.
 
-`--engagement-profile conservative` turns off the WAF-evasion ladder, caps each host at 1 rps and applies full jitter. An explicit `--rate-limit` is clamped to that ceiling and never raised. The server tries to record an `engagement_posture_applied` event and prints the effective posture to stderr. `--scan-id` ties tool state to an ID. It does not create a scan pipeline or run a verifier.
+With `--engagement-profile conservative`, an explicit `--rate-limit` is clamped to 1 rps and never raised. The server tries to record an `engagement_posture_applied` event and prints the effective posture to stderr. `--scan-id` ties tool state to an ID. It does not create a scan pipeline or run a verifier.
 
 There is no interactive approval in this server. Limit the tool list, pass `--scope`, and only test systems you are authorized to assess.
 
@@ -238,8 +238,14 @@ In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Clo
 | Slack | Channels, recent messages, posting summaries. |
 | Microsoft Teams | Joined teams, channels, posting channel messages. |
 
-Setup uses vendor API tokens. Jira Cloud also needs an account email and site URL, Elastic its Kibana URL, Semgrep a deployment ID and Snyk an organization ID. Teams needs a delegated Microsoft Graph token with the right permissions, and you reconnect when it expires. There is no browser OAuth or token refresh. Semgrep and Snyk read their platform's findings and do not start a local scan.
+Setup uses vendor API tokens. Jira Cloud also needs an account email and site URL, Elastic its Kibana URL, Semgrep a deployment ID and Snyk an organization ID. Teams needs a delegated Microsoft Graph token with the right permissions, and you reconnect when it expires. There is no browser OAuth or token refresh. Semgrep and Snyk read their own findings and do not start a local scan.
 
 Credentials are stored for the operator in `~/.0/service-plugins.json` (mode `0600`, directory `0700`) and are never part of portable automation JSON. The API returns only non-secret settings and tool metadata. Connecting a service does not widen the token's vendor permissions.
 
 Local chats connect enabled accounts directly. SmolVM chats get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing chats keep their original tools.
+
+## Next steps
+
+- [Automations](/automations/): the runs these tools start.
+- [Plugin security](/plugin-trust/): what an MCP server can do on your machine.
+- [Scope](/scope/): authorize targets before a live run.

@@ -64,7 +64,7 @@ repository** share one flow:
 - **Pinned snapshot.** The server resolves the repository to a full commit SHA,
   reads the skill folder at exactly that commit with your own `gh` login, and
   checks every file against its git object id. The browser never talks to GitHub.
-- **Preview before adding.** You see the real `SKILL.md`, the file list, the
+- **Preview before adding.** You see the actual `SKILL.md`, the file list, the
   licence and the commit. Adding is an explicit click that echoes the reviewed
   SHA; a changed catalog pin is refused until you preview it again. Hidden
   Unicode, HTML comments and long encoded blocks are flagged in the preview.
@@ -90,9 +90,9 @@ repository** share one flow:
 Previewing, adding and removing are browser-only routes (engine callers get
 `403 browser_only`); in team mode viewers cannot add skills.
 
-## Who can do it
+## Who can approve
 
-These routes are browser-only: engine-bearer (agent) callers get
+Approval routes are browser-only: engine-bearer (agent) callers get
 `403 browser_only`, so an agent cannot add or approve its own tools. In team
 mode only the workspace owner can use them (`403 owner_required`).
 
@@ -108,5 +108,11 @@ mode only the workspace owner can use them (`403 owner_required`).
 - Provider discovery and registry icon fetches reach out to external hosts.
 
 Model-authored plugins are the exception: they run in a disposable Docker or smolvm guest with no network (see [Plugins](/plugins/#model-authored-plugins)).
+
+## Next steps
+
+- [Agents and MCP](/mcp/): add an MCP server or service connection.
+- [Plugins](/plugins/): install, build and submit plugins.
+- [Skills](/skills/): skill folders and where they come from.
 
 Report problems through the [security policy](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).

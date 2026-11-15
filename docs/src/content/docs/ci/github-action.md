@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: 0sec-labs/0@main # Pin a reviewed full commit SHA.
         with:
-          version: v0.28.5 # Pin the CLI release you reviewed.
+          version: v0.28.11 # Pin the CLI release you reviewed.
           path: .
           runtime: api
           cost-ceiling: '5'
@@ -65,7 +65,7 @@ Run it from a trusted workflow and a reviewed revision. Never use `pull_request_
 | `changed-only` | empty | Limit static leads to changed files. Empty means `true` when `diff-base` is set. Review only. |
 | `static-only` | `false` | Skip AI analysis on purpose. Not allowed with `scan`. |
 | `cli-path` | none | Existing executable. Empty installs a release. |
-| `version` | `latest` | Release tag, such as `v0.28.5`. Pin it. |
+| `version` | `latest` | Release tag, such as `v0.28.11`. Pin it. |
 
 ### Modes and scan commands
 
@@ -129,7 +129,7 @@ jobs:
       - id: zero
         uses: 0sec-labs/0@<pinned-commit-sha>
         with:
-          version: v0.28.5
+          version: v0.28.11
           diff-base: ${{ github.event.pull_request.base.sha }}
           cost-ceiling: '5'
           format: sarif
@@ -340,7 +340,7 @@ Imported findings are marked **discovered** and **unverified**. Verification cla
 - Live scans need runner-side reachability and an authorized scope.
 - A finding, a SARIF upload and a green job are not verified exploitability or full coverage.
 
-## Related
+## Next steps
 
 - [Scan code](/scan-code/), [Scan web and APIs](/scan-web/) and [Dependencies](/dependencies/)
 - [Budgets](/budgets/)

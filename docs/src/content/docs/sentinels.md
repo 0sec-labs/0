@@ -29,7 +29,7 @@ A new Sentinel always starts paused, read-only and with production targets off. 
 | `secrets-hunter` | observe | `read-only` | Find leaked credentials in code and git history, reported redacted. |
 | `attack-surface-monitor` | observe | `read-web` | Re-map the in-scope external surface daily and report what is new. |
 | `cloud-posture-auditor` | observe | `read-only` | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
-| `incident-triage` | propose | `read-only` | Assess an alert or finding: real, exploitable, duplicate, how severe. |
+| `incident-triage` | propose | `read-only` | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
 | `regression-tester` | observe | `read-web` | Re-check known findings and API spec drift to catch regressions. |
 | `release-gate` | propose | `read-only` | Review what changed since the last release before you ship. |
 
@@ -72,7 +72,7 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 | `GET sentinels/:id/budget` | Spend against the daily cap, as `{ runs, costUsd }`. |
 | `.../triggers`, `.../run`, `.../activations`, `.../automations`, `.../files` | Triggers, manual run, run history, owned automations, memory files. |
 
-## Related
+## Next steps
 
 - [Automations](/automations/): the saved jobs a Sentinel can own.
 - [Skills](/skills/): instructions a Sentinel loads.

@@ -225,3 +225,9 @@ Enabling self-extension does not install Docker or pull an image. For measured e
 The default image is `0-toolbox:local`, and `ZERO_PLUGIN_IMAGE` overrides it. The image is pinned to an immutable digest on first use, and resumed versions keep that digest. Every call starts a fresh guest. The controller and authorized host tools run outside the sandbox.
 
 Versions live in `~/.0/executable-plugins/`, apart from `~/.0/plugins/`. Digests are checked on read and at admission and execution. These are local integrity checks, not registry signatures. The sources are [`executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/executable-plugins.ts) and [`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/executable.ts).
+
+## Next steps
+
+- [Plugin security](/plugin-trust/): approvals, fingerprints and what is not protected.
+- [MCP](/mcp/): connect MCP servers and services.
+- [Skills](/skills/): reusable instructions.
