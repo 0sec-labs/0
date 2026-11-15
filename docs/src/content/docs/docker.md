@@ -193,4 +193,6 @@ docker build -f scripts/docker/Dockerfile -t 0:local .
 docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
 
+The published image embeds the project's telemetry keys like the release binaries do. Building the Dockerfile yourself embeds nothing unless you pass the `zero_release_sentry_dsn` and `zero_release_posthog_key` BuildKit secrets.
+
 Next: [CI/CD](/ci/github-action/), [Scan web and APIs](/scan-web/).

@@ -316,7 +316,7 @@ Change them in the browser app under Settings, Helpers. Every payload that is se
 
 ### Destinations and overrides
 
-Release builds embed the PostHog project key and the Sentry DSN when they are built. Source builds and pull-request builds embed neither, so they send nothing. You can point telemetry at your own projects:
+Release builds embed the PostHog project key and the Sentry DSN when they are built, and so does the published Docker image. Source builds, including a `docker build` of the Dockerfile that does not pass the build secrets, and pull-request builds embed neither, so they send nothing. You can point telemetry at your own projects:
 
 - `ZERO_ANALYTICS_POSTHOG_KEY` is a PostHog project key (`phc_` followed by letters and digits). An empty value turns the direct PostHog path off.
 - `ZERO_ANALYTICS_POSTHOG_HOST` is the PostHog host. It must be `https`, or `http` on `localhost`, `127.0.0.1` or `::1` for local testing. Anything else disables the path.
