@@ -1,13 +1,8 @@
-import { accessSync, constants, readdirSync, realpathSync, statSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { accessSync, constants, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { isDangerousLocalRoot } from "@0/engine";
-
-function permissionMessage(): string {
-  return platform() === "darwin"
-    ? "Zero doesn't have permission to open that folder. On macOS, allow your terminal or Zero under System Settings, Privacy & Security, Files and Folders, then try again."
-    : "Zero doesn't have permission to open that folder. Check its permissions or choose another folder.";
-}
+import { classifyFolderError, permissionMessageFor, probeFolderReadable } from "./workspace-access.js";
 
 export class WorkspaceInputError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -26,27 +21,42 @@ export function normalizeWorkspaceInput(raw: string, home = homedir()): string {
 }
 
 export function isUsableWorkspace(directory: string): boolean {
-  try { return statSync(directory).isDirectory() && !isDangerousLocalRoot(realpathSync(directory)); } catch { return false; }
+  try { return statSync(directory).isDirectory() && !isDangerousLocalRoot(realpathSync.native(directory)); } catch { return false; }
 }
 
-/** Resolves operator input to a canonical project folder or throws a plain, actionable message. */
+/** Resolves operator input to a canonical project folder or throws a plain, actionable message. Synchronous checks only; see verifyWorkspaceReadable for the read probe. */
 export function resolveWorkspaceInput(raw: string, base: string, home = homedir()): string {
   const value = normalizeWorkspaceInput(raw, home);
   if (!value) throw new WorkspaceInputError("Enter a folder path.");
+  const typed = isAbsolute(value) ? value : resolve(base, value);
   let directory: string;
-  try { directory = realpathSync(isAbsolute(value) ? value : resolve(base, value)); }
+  // native realpath returns the folder's real case and unicode form on APFS, so every later comparison sees one spelling.
+  try { directory = realpathSync.native(typed); }
   catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") throw new WorkspaceInputError(permissionMessage());
+    if (classifyFolderError(error) === "permission") throw new WorkspaceInputError(permissionMessageFor(resolve(typed), { error }));
     throw new WorkspaceInputError("That folder doesn't exist. Check the path, or choose a folder from the list.");
   }
   let isDirectory: boolean;
   try { isDirectory = statSync(directory).isDirectory(); }
-  catch { throw new WorkspaceInputError(permissionMessage()); }
+  catch (error) { throw new WorkspaceInputError(permissionMessageFor(directory, { error })); }
   if (!isDirectory) throw new WorkspaceInputError("That path is a file. Choose the folder that contains it.");
   if (isDangerousLocalRoot(directory)) throw new WorkspaceInputError("Zero can't work in your whole home folder or the disk root. Choose a folder inside it, such as ~/Documents/my-project.");
-  // stat succeeds on a folder we cannot read, so probe the way the engine will use it.
-  try { accessSync(directory, constants.R_OK | constants.X_OK); readdirSync(directory); }
-  catch { throw new WorkspaceInputError(permissionMessage()); }
+  // stat succeeds on a folder we cannot read (macOS privacy protection), so check access the way the engine will use it.
+  try { accessSync(directory, constants.R_OK | constants.X_OK); }
+  catch (error) { throw new WorkspaceInputError(permissionMessageFor(directory, { error })); }
   return directory;
+}
+
+/**
+ * Opens the folder like the engine's tools do (opendir plus first entry). A folder that is only slow (iCloud, network)
+ * is accepted after the timeout instead of blocking the picker; a definite permission error is explained.
+ */
+export async function verifyWorkspaceReadable(directory: string, options: Parameters<typeof probeFolderReadable>[1] = {}): Promise<void> {
+  try { await probeFolderReadable(directory, options); }
+  catch (error) {
+    const failure = classifyFolderError(error);
+    if (failure === "permission") throw new WorkspaceInputError(permissionMessageFor(directory, { error }));
+    if (failure === "missing") throw new WorkspaceInputError("That folder doesn't exist. Check the path, or choose a folder from the list.");
+    if (failure === "other") throw new WorkspaceInputError("Zero couldn't read that folder. Check that it is available, or choose another folder.");
+  }
 }
