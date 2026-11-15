@@ -875,12 +875,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // belong to the engagement). Grants the requested path's directory subtree
   // (grounded on a directory that exists), re-checks the dangerous-root floor on
   // the directory actually granted, and applies it to the in-memory tool context
-  // (never persisted). The expansion is announced via `notify` for auditability.
+  // (never persisted). The grant is deliberately silent: the operator already
+  // chose the autonomy mode, so a per-call transcript notice is pure noise.
   function autoGrantLocalScope(
     call: ToolCall,
     requestedPath: string,
-    notify: ((message: string) => void) | undefined,
-    modeLabel: string,
   ): "approved" | ToolResult {
     const grantDir = directoryToGrantFor(requestedPath);
     if (isDangerousLocalRoot(grantDir)) {
@@ -899,9 +898,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
     sessionScopePath = grantDir;
     toolContext.scopePath = grantDir;
-    notify?.(
-      `${modeLabel} mode: auto-granted local scope ${grantDir} for ${requestedPath} without prompting.`,
-    );
     return "approved";
   }
 
@@ -971,13 +967,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
     // ── yolo: auto-grant the path's subtree, no prompt (floors above still ran) ──
     if (autonomyMode === "yolo") {
-      return autoGrantLocalScope(call, requestedPath, notify, "YOLO");
+      return autoGrantLocalScope(call, requestedPath);
     }
 
     // ── copilot: auto-grant when the path belongs to the engagement ──
     // (adjacent to an established local scope); otherwise defer to the operator.
     if (autonomyMode === "copilot" && pathBelongsToEngagement(requestedPath, sessionScopePath)) {
-      return autoGrantLocalScope(call, requestedPath, notify, "Co-pilot");
+      return autoGrantLocalScope(call, requestedPath);
     }
 
     // ── standard (and copilot's out-of-engagement remainder): ask the operator ──

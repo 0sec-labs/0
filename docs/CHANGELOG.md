@@ -23,6 +23,7 @@ on the GitHub Release tag.
 
 ### Removed
 
+- The auto-granted scope notice is no longer shown in threads.
 - npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.
 
 ## [0.31.0] - 2026-11-14
