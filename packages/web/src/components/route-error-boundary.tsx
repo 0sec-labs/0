@@ -8,12 +8,20 @@ const CHUNK_FAILURE = /dynamically imported module|importing a module script|loa
 export class RouteErrorBoundary extends Component<{ resetKey: string; silent?: boolean; children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
   static getDerivedStateFromError(error: unknown) { return { error: error instanceof Error ? error : new Error(String(error)) }; }
-  componentDidCatch(_error: Error, _info: ErrorInfo) { /* rendered below; nothing to report */ }
+  componentDidCatch(_error: Error, _info: ErrorInfo) { this.syncRetryTimer(); }
+  private retryTimer: number | undefined;
   componentDidUpdate(previous: { resetKey: string }) {
     if (this.state.error && previous.resetKey !== this.props.resetKey) this.reset();
+    this.syncRetryTimer();
   }
   componentDidMount() { window.addEventListener("online", this.reset); }
-  componentWillUnmount() { window.removeEventListener("online", this.reset); }
+  componentWillUnmount() { window.removeEventListener("online", this.reset); window.clearInterval(this.retryTimer); }
+  /** A failed chunk import also happens while the server is down (the browser can still be "online"), so keep retrying until it loads. */
+  private syncRetryTimer() {
+    const retrying = Boolean(this.state.error && CHUNK_FAILURE.test(this.state.error.message));
+    if (retrying && this.retryTimer === undefined) this.retryTimer = window.setInterval(this.reset, 5000);
+    else if (!retrying && this.retryTimer !== undefined) { window.clearInterval(this.retryTimer); this.retryTimer = undefined; }
+  }
   reset = () => { if (this.state.error) { retryFailedRoutes(); this.setState({ error: null }); } };
   render() {
     const { error } = this.state;
