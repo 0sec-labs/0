@@ -8,6 +8,18 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.34.0",
+    date: "2026-11-15",
+    title: "Updates that finish themselves",
+    summary: "The console can update and restart itself, pull request Agents react to GitHub straight away in server mode, and plugin reviews show which tools changed.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "RefreshCw", title: "Update and restart in one click", text: "The Update available card downloads, checks and installs the new version, then restarts and reconnects by itself. With Updates set to Automatic it installs in the background once nothing is running." },
+      { icon: "Cloud", title: "Faster pull request Agents", text: "In server mode, GitHub can tell 0 about a new pull request the moment it opens, so an Agent starts reviewing without waiting for the next check." },
+      { icon: "ShieldCheck", title: "See what changed in a plugin", text: "Reviewing a plugin update marks each tool as Changed, New or Removed, and four unused enterprise hooks are gone." },
+    ],
+  },
+  {
     version: "0.33.0",
     date: "2026-11-15",
     title: "Two kinds of access",

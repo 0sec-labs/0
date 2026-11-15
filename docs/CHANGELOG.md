@@ -12,31 +12,38 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-15
+
+This release lets the console update and restart itself, lets pull request Agents react to GitHub straight away in server mode, and shows exactly which tools change when you review a plugin update.
+
 ### Added
 
-- **Update and restart** in the console. The **Update available** card now has a primary **Update and restart** button for standalone installs: 0 downloads the release, verifies its checksum, replaces the binary in the folder you run it from, and restarts the console on the same port, database and assets. The page shows **Updating…**, reconnects by itself and confirms **Updated to <version>**. If threads are running it asks first (**Update after they finish** or **Update anyway**). Docker, source checkouts, npm installs and read-only folders never get this button: the card shows the right command instead (`docker pull ghcr.io/0sec-labs/0security:latest`, `git pull`, the npm migration, or `0 doctor upgrade`). Every update is an `update.apply` entry in the audit log.
-- A running console keeps itself current. Every six hours (jittered, offline-safe, never blocking) it checks for a release; with **Updates** set to **Automatic** it installs the verified release in the background when nothing is running, then shows **Restart to finish updating** (one click), and restarts by itself after 10 idle minutes. Server mode and consoles run by launchd, systemd or pm2 never restart themselves: the card is shown instead, and a service manager that restarts on exit finishes the update.
+- **Update and restart** in the console. The **Update available** card now has an **Update and restart** button for standalone installs: 0 downloads the release, verifies its checksum, replaces the binary and restarts on the same port and database. Docker, source and npm installs show the right command instead.
+- A running console keeps itself current. With **Updates** set to **Automatic** it checks every six hours and installs a verified release in the background when nothing is running, then restarts after 10 idle minutes. Server mode and service-managed consoles show the card instead.
+- Server mode accepts GitHub webhooks so pull request Agents react at once. `POST /api/webhooks/github` checks a signature, accepts only `pull_request` and `ping`, and just asks the poller to check now, so polling stays the default and every review rule is unchanged.
+- The per-instance webhook secret is generated on first use, stored with mode 0600, shown once, and can be rotated; the old secret keeps working for 5 minutes. Set it up from the **GitHub webhook** card on Agents and in Settings > Git (server mode only), or with the hidden `0 agents webhook status` and `0 agents webhook secret rotate --yes`.
+- `pnpm test:webhook-e2e` runs a signed delivery, a replay, a bad signature and an oversize body against a throwaway server-mode console.
 
 ### Changed
 
 - Reviewing a GitHub plugin update in the web app now marks each tool as Changed, New or Removed against the installed version, using the same per-tool hashes as the install check. Approval is still for the whole plugin.
-- The update card reads **Update available · 0.33.0** with **You have 0.31.0** and a **What's new** link, instead of repeating the product name. **Settings → Updates** (Off, Notify me, Automatic) stays the one control, with a plain description.
-- A page left open while the console restarts no longer reloads into the browser's error page.
+- The update card reads **Update available · 0.34.0** with **You have 0.33.0** and a **What's new** link, instead of repeating the product name. **Settings → Updates** (Off, Notify me, Automatic) stays the one control, with a plain description.
+- Agents is now the main page address: `/agents` is the route and `/sentinels` redirects to it, along with the other old addresses.
+- Surfaces across the console use one corner radius (`rounded-md`), and a check keeps new styles from drifting.
 - Copies older than this release cannot be updated remotely. Run `0 doctor upgrade`, or the install one-liner, once.
+- Internal cleanup only: shared engine types moved to neutral modules, and unreferenced helpers and benchmark tooling were deleted. The Docker publish job now refuses to push any name other than `ghcr.io/0sec-labs/0security`.
 
-### Added
+### Fixed
 
-- Server mode accepts GitHub webhooks as an accelerator for pull request Agents: `POST /api/webhooks/github` verifies an HMAC-SHA256 signature of the raw body, caps the body at 1 MB, accepts only `pull_request` (opened, reopened, synchronize, ready for review) and `ping`, drops replayed deliveries and rate limits per source. A delivery only asks the poller to check the matching trigger now, so the draft, fork, comment and one-review-per-head-SHA rules are unchanged. Polling stays the default and the fallback, and the route does not exist outside `--server-mode`.
-- The per-instance webhook secret is generated on first use, stored with mode 0600, shown once, and can be rotated; the old secret keeps working for 5 minutes. Set it up from the **GitHub webhook** card on Agents and in Settings > Git (server mode only), or with the hidden `0 agents webhook status` and `0 agents webhook secret rotate --yes`.
-- `pnpm test:webhook-e2e` runs a signed delivery, a replay, a bad signature and an oversize body against a throwaway server-mode console.
+- A page left open while the console restarts no longer reloads into the browser's error page.
 
 ### Security
 
-- `/api/webhooks/github` is the only anonymous `/api` route in server mode. It is exempt from sign-in and the control token, authenticated by the signature, and refused for the engine bearer. Audit events `webhook.received`, `webhook.ignored` and `webhook.rejected` record a reason and never the payload, secret or signature.
+- The GitHub webhook is the only anonymous `/api` route in server mode, and it is authenticated by its signature. Audit events `webhook.received`, `webhook.ignored` and `webhook.rejected` record a reason and never the payload, secret or signature.
 
 ### Removed
 
-- Remove four enterprise extension points that shipped in v0.30.0: audit event subscriptions for plugins, offline verification of signed licences (entitlements), support for an external identity provider for team sign-in, and the named-permission policy behind team roles. Enterprise will attach as a separate gateway in front of the engine, which needs none of them. None was required for open-source use: no signing key was ever bundled, so no licence was accepted, and built-in OIDC sign-in and the owner, editor and viewer roles behave as before. Ed25519 verification of plugin registry entries (`ZERO_REGISTRY_PUBLIC_KEY_FILE`) stays.
+- Four unused enterprise hooks that shipped in v0.30.0 are gone: audit event subscriptions for plugins, offline verification of signed licences, support for an external identity provider for team sign-in, and the named-permission policy behind team roles. None was needed for open-source use: no signing key was ever bundled, so no licence was accepted, and built-in OIDC sign-in and the owner, editor and viewer roles behave as before. Ed25519 verification of plugin registry entries (`ZERO_REGISTRY_PUBLIC_KEY_FILE`) stays.
 
 ## [0.33.0] - 2026-11-15
 
