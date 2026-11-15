@@ -64,7 +64,7 @@ test("blank drafts are valid workflow definitions", () => {
 
 test("templates are searchable by name, description and category", () => {
   expect(filterTemplates(SECURITY_WORKFLOW_TEMPLATES, "")).toHaveLength(SECURITY_WORKFLOW_TEMPLATES.length);
-  expect(filterTemplates(SECURITY_WORKFLOW_TEMPLATES, "whitebox").map(item => item.id)).toContain("repository-review");
+  expect(filterTemplates(SECURITY_WORKFLOW_TEMPLATES, "whitebox pentest").map(item => item.id)).toContain("repository-review");
   expect(filterTemplates(SECURITY_WORKFLOW_TEMPLATES, "zzzz")).toEqual([]);
 });
 
@@ -94,8 +94,9 @@ test("automation model choice round-trips the Model and Reasoning selects", asyn
   expect(m.automationRuntime({ ...saved, reasoning: "low" })).toEqual({ ...saved, reasoningEffort: "low" });
 });
 
-test("known projects dedupe, drop blanks and keep the current target first", async () => {
-  const { knownProjects } = await import("../src/components/automations/automation-model");
-  expect(knownProjects(["/a", undefined, " /b ", "/a"], "/c")).toEqual(["/c", "/a", "/b"]);
-  expect(knownProjects(["/a"], "")).toEqual(["/a"]);
+test("run status maps to a dot tone", async () => {
+  const { runStatusTone } = await import("../src/components/automations/automation-model");
+  expect(runStatusTone("completed")).toBe("success");
+  expect(runStatusTone("failed")).toBe("danger");
+  expect(runStatusTone(undefined)).toBeUndefined();
 });

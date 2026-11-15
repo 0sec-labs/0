@@ -115,10 +115,10 @@ export function filterAutomationRows(rows: readonly AutomationRow[], query: stri
   return rows.filter(row => { const haystack = `${row.name} ${row.target} ${row.trigger}`.toLowerCase(); return terms.every(term => haystack.includes(term)); });
 }
 
-export type TemplateLike = { id: string; name: string; description: string; category: string };
+export type TemplateLike = { id: string; name: string; description: string; category: string; starter?: { aliases: readonly string[] } };
 export function filterTemplates<T extends TemplateLike>(templates: readonly T[], query: string): T[] {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return templates.filter(item => { const haystack = `${item.name} ${item.description} ${item.category} ${item.id === "repository-review" ? "whitebox pentest source code repository review" : ""}`.toLowerCase(); return terms.every(term => haystack.includes(term)); });
+  return templates.filter(item => { const haystack = `${item.name} ${item.description} ${item.category} ${item.starter?.aliases.join(" ") ?? ""}`.toLowerCase(); return terms.every(term => haystack.includes(term)); });
 }
 
 /** Minimal valid definition: manual trigger, one review step, result collection. */
@@ -190,7 +190,11 @@ export function automationRuntime(model: SecurityWorkflow["model"]): { providerI
   return model ? { providerId: model.providerId, model: model.model, ...(model.reasoning ? { reasoningEffort: model.reasoning } : {}) } : undefined;
 }
 
-/** Projects the Computer already knows: targets of its Missions and automations, newest first, plus the current one. */
-export function knownProjects(targets: readonly (string | undefined)[], current: string): string[] {
-  return [...new Set([current, ...targets].map(item => item?.trim() ?? "").filter(Boolean))];
+/** Where a run's status dot sits: green when it finished, red when it failed, none before the first run. */
+export function runStatusTone(status: string | undefined): "success" | "danger" | "warning" | undefined {
+  if (!status) return undefined;
+  if (status === "completed" || status === "succeeded") return "success";
+  if (status === "failed" || status === "error" || status === "interrupted") return "danger";
+  if (status === "blocked" || status === "needs_review" || status === "cancelled") return "warning";
+  return undefined;
 }
