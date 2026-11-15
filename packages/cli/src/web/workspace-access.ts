@@ -3,6 +3,14 @@ import { opendir } from "node:fs/promises";
 import { homedir, platform as osPlatform, userInfo } from "node:os";
 import { basename } from "node:path";
 
+/** True when a desktop session can show the chooser. SSH, launchd daemons and tmux started over SSH cannot. */
+export function hasDesktopSession(env: NodeJS.ProcessEnv = process.env): boolean {
+  try {
+    const manager = execFileSync("/bin/launchctl", ["managername"], { encoding: "utf8", timeout: 1_500, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return manager === "Aqua";
+  } catch { return !env.SSH_CONNECTION; }
+}
+
 /** What went wrong when the host touched a folder. EPERM/EACCES are the signature of macOS privacy protection (TCC). */
 export type FolderFailure = "permission" | "missing" | "timeout" | "other";
 
@@ -28,10 +36,17 @@ function homes(home: string): string[] {
   return [...list];
 }
 
+/** Test-only switches (fake protected root, simulated slow or denied probes). Both conditions are required, so a production server ignores them. */
+export function testHooksEnabled(): boolean {
+  return process.env.NODE_ENV === "test" && process.env.ZERO_TEST_HOOKS === "1";
+}
+
 /** The macOS-protected location a path lives in (for the message), or null. Callers pass a realpath. */
 export function protectedFolderName(path: string, options: { platform?: NodeJS.Platform; home?: string } = {}): string | null {
   if ((options.platform ?? osPlatform()) !== "darwin") return null;
   const lower = path.toLowerCase();
+  const testRoot = testHooksEnabled() ? process.env.ZERO_TEST_PROTECTED_ROOT?.toLowerCase().replace(/\/+$/, "") : undefined;
+  if (testRoot && (lower === testRoot || lower.startsWith(testRoot + "/"))) return "Documents";
   for (const home of homes(options.home ?? homedir())) {
     const root = home.replace(/\/+$/, "").toLowerCase() + "/";
     for (const [relative, name] of PROTECTED_HOME_FOLDERS) {

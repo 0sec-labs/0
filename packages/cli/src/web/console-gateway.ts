@@ -10,6 +10,8 @@ import { z } from "zod";
 import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/engine/storage";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { protectedFolderName } from "./workspace-access.js";
+import { blockedAtThreadStart, folderChecks } from "./workspace-folder-check.js";
 import { resolveWorkspaceInput, verifyWorkspaceReadable, isUsableWorkspace, WorkspaceInputError } from "./workspace-input.js";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
@@ -590,7 +592,22 @@ export class ConsoleGateway {
       if (input.mode === "steer" && managed.abort) this.#cancelTurn(managed);
       return { ...this.#summary(managed), queuedMessageId };
     }
+    await this.#assertWorkspaceReadable(managed);
     await this.#startTurn(managed, input.text, attribution, input.attachments); return this.#summary(managed);
+  }
+  /**
+   * Before the first model turn, ask once (cached) whether macOS lets this server into the working folder, so a refusal is
+   * reported as one clear message instead of an EPERM in the middle of a turn. Only protected locations are checked.
+   */
+  async #assertWorkspaceReadable(managed: ManagedSession): Promise<void> {
+    const directory = managed.workspacePath ?? this.#projectPath;
+    if (!directory || !protectedFolderName(directory)) return;
+    const check = await folderChecks.settled(directory, { retry: true });
+    if (check.state === "allowed" || check.state === "error") { if (managed.workspaceError?.path === directory) { managed.workspaceError = undefined; this.#emitSession(managed); } return; }
+    const message = blockedAtThreadStart(check);
+    managed.workspaceError = { path: directory, message, at: this.#now().toISOString() };
+    this.#emitSession(managed);
+    throw new ConsoleGatewayError(message, 409);
   }
   /** Re-run the last turn (failed or stopped): its user message and everything after it are dropped first, so the retry never adds a second copy. */
   async retry(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
@@ -812,7 +829,7 @@ export class ConsoleGateway {
       void this.#applyPendingConfiguration(managed).catch(error => {
         managed.pendingConfiguration = undefined;
         // The reply was already sent, so surface the failure on the session: the chip keeps the folder in effect and the picker says what happened.
-        managed.workspaceError = { path: requested, message: error instanceof ConsoleGatewayError && error.message.startsWith("macOS is blocking") ? error.message : `Couldn't switch to ${basename(requested) || requested}. Try again.`, at: this.#now().toISOString() };
+        managed.workspaceError = { path: requested, message: error instanceof ConsoleGatewayError && /^macOS (?:is blocking|blocked|can only ask|is still waiting|is waiting)/.test(error.message) ? error.message : `Couldn't switch to ${basename(requested) || requested}. Try again.`, at: this.#now().toISOString() };
         this.#emitSession(managed);
         this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#refreshStatus(managed);
       }).finally(() => { void this.#processIdleWork(managed); });
