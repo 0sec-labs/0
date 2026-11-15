@@ -13,6 +13,21 @@ A skill is a folder of instructions the agent loads when a task calls for it. A 
 
 The **Built in** tab keeps bundled guides apart from your own collection. The agent finds skills with `list_skills` and loads one with `load_skill`.
 
+## From the command line
+
+Everything on the Skills page has a command. With the app running they go through it; otherwise they use the same files directly.
+
+```sh
+0 skills list
+0 skills catalog --search handoff
+0 skills add mattpocock~skills~handoff --yes      # shows a review first; --yes installs that commit
+0 skills import ./code-review --json              # a folder with SKILL.md, or an exported bundle
+0 skills edit code-review --file ./SKILL.md
+0 skills export code-review -o code-review.skill.json
+0 skills link ~/team-skills                       # mount a folder without copying it
+0 skills delete code-review --yes
+```
+
 ## Folder format
 
 0 reads the [Agent Skills format](https://agentskills.io/specification):

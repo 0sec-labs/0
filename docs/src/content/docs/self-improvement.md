@@ -27,6 +27,15 @@ Open **Memory** in the browser app (`/memory`).
 
 - Memory entries are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching entries have their cited file hashes rechecked. Changed files and disabled entries are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 
+```bash
+0 memory list
+0 memory disable <id>
+0 memory export -o memory.json
+0 memory import memory.json --preview
+```
+
+`0 memory import` always shows what would be imported first, and imported memories start disabled. These are the Memory page's entries. False-positive and evaluation memories stay under `0 findings triage memory`.
+
 Finished missions stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
 
 ```bash
