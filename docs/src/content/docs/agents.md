@@ -55,6 +55,26 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 `github-pr` has no webhooks. The first poll only records pull requests that are already open and never reviews them. If `gh` is missing or signed out, the trigger shows a blocked status and retries on the next poll. Push, webhook and finding-created triggers do not exist.
 
+### What a pull request run does
+
+A new commit on an open pull request starts one thread, recorded as an activation on the Agent with a link to the thread. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. Nothing is cloned, checked out or executed from the pull request.
+
+By default a run **posts nothing to GitHub**. Results are in the Agent's activity and thread only. Two options on the trigger change that, and both are off by default:
+
+| Option | UI label | CLI flag | Effect |
+| --- | --- | --- | --- |
+| `commentOnPr` | Comment on the pull request | `--comment` | When a run completes, posts one summary comment with the reviewed commit and each finding's severity, title and repository-relative location. No proof-of-concept steps, evidence, descriptions or local paths. The comment carries a hidden marker per Agent, so a later push edits it in place. At most one comment per pull request per minute and 30 per hour. |
+| `includeForks` | Include pull requests from forks | `--include-forks` | Without it, fork pull requests are skipped and recorded as a skipped activation with the reason `fork pull request`. With it, the run is read-only analysis of the diff in recon mode with GET-only requests, and the activation and any comment say it is untrusted. |
+
+Draft pull requests are skipped the same way, with the reason `draft pull request`, and are reviewed once when marked ready for review. Changing a trigger's repository, branch or options turns it off and records a new baseline, so turning on comments or forks needs a fresh approval.
+
+```bash
+0 agents triggers add <agent> --automation <automation> --kind github-pr --repo owner/name --comment --include-forks
+0 agents triggers check <agent> <trigger>
+```
+
+The Agent's `gh` account needs permission to comment when `--comment` is on. A failed comment is shown on the activation and does not fail the review. Comments are posted with the signed-in `gh` account, so they appear as that person.
+
 ## Review gate
 
 Scheduled and polled runs are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
@@ -88,7 +108,7 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 | `GET` / `PATCH` / `DELETE sentinels/:id` | Read, update (needs `version`), delete (needs `?version=`). |
 | `POST sentinels/:id/pause`, `resume`, `acknowledge` | Status and review gate. |
 | `GET sentinels/:id/budget` | Spend against the daily cap, as `{ runs, costUsd }`. |
-| `.../triggers`, `.../run`, `.../activations`, `.../automations`, `.../files` | Triggers, manual run, run history, owned automations, memory files. |
+| `.../triggers`, `.../triggers/:id/check`, `.../run`, `.../activations`, `.../automations`, `.../files` | Triggers, manual run, run history, owned automations, memory files. |
 
 ## Next steps
 

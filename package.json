@@ -32,6 +32,7 @@
     "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
     "test:home-paint": "node scripts/home-paint.e2e.mjs",
     "test:web-cli-parity": "node scripts/web-cli-parity.e2e.mjs",
+    "test:pr-agent-e2e": "node scripts/pr-agent.e2e.mjs",
     "test:crash-reporting": "node scripts/crash-reporting.e2e.mjs",
     "test:telemetry": "node scripts/telemetry.e2e.mjs",
     "test:built-in-keys": "node --test scripts/bundle-built-in-sentry-dsn.test.mjs scripts/bundle-built-in-posthog-key.test.mjs",

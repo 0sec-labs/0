@@ -178,3 +178,25 @@ describe("attached to a running engine", () => {
     } finally { unregister(); }
   });
 });
+
+describe("pull request trigger options", () => {
+  it("sends the comment and fork options only when asked, and rejects them for other kinds", async () => {
+    const posts: Array<Record<string, any>> = [];
+    const client: ConsoleClient = {
+      mode: "embedded", dispose: async () => {},
+      request: async (method, path, body) => {
+        if (method === "GET" && path === "/api/console/sentinels") return { sentinels: [{ id: "s1", name: "S", status: "active", autonomy: "propose", toolAccess: "read-only", version: 1 }] };
+        if (method === "POST") { posts.push(body as Record<string, any>); return { trigger: { id: "t1", automationId: "a", kind: "github-pr", enabled: false, version: 1, nextFireAt: null, github: (body as any).github } }; }
+        return {};
+      },
+    };
+    const { run } = harness(async () => client);
+    await run("agents", "triggers", "add", "s1", "--automation", "a", "--kind", "github-pr", "--repo", "o/r", "--json");
+    expect(posts[0]!.github).toEqual({ repo: "o/r" });
+    await run("agents", "triggers", "add", "s1", "--automation", "a", "--kind", "github-pr", "--repo", "o/r", "--comment", "--include-forks", "--base-branch", "main", "--json");
+    expect(posts[1]!.github).toEqual({ repo: "o/r", baseBranch: "main", commentOnPr: true, includeForks: true });
+    const refused = await run("agents", "triggers", "add", "s1", "--automation", "a", "--kind", "schedule", "--comment", "--json");
+    expect(refused.err).toMatch(/github-pr/);
+    expect(posts).toHaveLength(2);
+  });
+});

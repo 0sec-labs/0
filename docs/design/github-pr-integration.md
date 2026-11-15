@@ -1,6 +1,6 @@
 # GitHub pull request integration: Action, polling, webhook, App
 
-Status: proposal. The Action and the polling trigger are shipped. The webhook receiver and the per-instance GitHub App are not built and need an owner decision (section 7).
+Status: proposal. The Action and the polling trigger are shipped, and the phase 0 audit is done (section 4). The webhook receiver and the per-instance GitHub App are not built and need an owner decision (section 7).
 
 ## Question
 
@@ -59,7 +59,16 @@ Fork pitfalls documented by GitHub Security Lab: `pull_request_target` has secre
 | Publish fixes | `PrEmitter` forks a branch and runs `gh pr create` | `packages/engine/src/emit/pr-emitter.ts` |
 | Webhook receiver, check runs, manifest flow | None (grep found no `check-runs`, `x-hub-signature`, `app-manifests`) | n/a |
 
-Not verified: what the `repository-review` automation posts back after a polled run, and whether it refuses to execute fork code. Both must be checked before phase 1 ships.
+Phase 0 audit, verified with a fake `gh` on PATH, a temp HOME and database and a mock model (`scripts/pr-agent.e2e.mjs`, `pnpm test:pr-agent-e2e`):
+
+| Question | Before phase 0 | Now |
+| --- | --- | --- |
+| What does a polled run post to GitHub? | Nothing. The run only created a thread and an activation on the Agent. No `gh pr comment`, review or `gh api` call was ever made. | Still nothing by default. Trigger option `commentOnPr` (UI "Comment on the pull request", CLI `--comment`, default off) posts one share-safe summary comment per Agent and pull request, edited in place through a hidden marker, rate limited to 1 per pull request per minute and 30 per hour. |
+| Did it check out or execute fork code? | The runner never cloned or checked out anything. But a fork was treated like any pull request: it launched a normal run with the Agent's own autonomy and tools, only labelled `fork: yes` in the event. | Forks are skipped and recorded (`fork pull request`). With `includeForks` the run is forced to recon mode with GET-only requests, gets the diff through `gh pr diff`, is told it is untrusted, and its activation and comment say so. |
+| Drafts, closed, merged | Drafts launched like any pull request. `--state open` kept closed and merged out. | Drafts are skipped and recorded once per head SHA and reviewed once when marked ready. Closed and merged are ignored, also if `gh` returns them. |
+| Re-push | A new head SHA launched a new run. | Unchanged, and the comment is edited in place. |
+
+Limits that remain: recon mode is a capability gate in the console, not a process sandbox, and the process environment is not stripped for fork runs. The Agent's `gh` account posts the comment, so it shows as that user. Share-safe fields are the allowlist from `share-safe.ts` (no evidence, PoC steps or paths); titles are further stripped of links, markup and mentions.
 
 ## 5. Recommendation
 
@@ -92,7 +101,7 @@ What we do NOT do: no vendor-hosted App, no shared webhook relay, no hosted infe
 
 | Phase | Work | Size | Files |
 | --- | --- | --- | --- |
-| 0 | Audit gaps: what the polled run posts back, fork checkout behavior | S | `packages/cli/src/web/sentinel-runner.ts`, `repository-review` template |
+| 0 | Audit gaps: what the polled run posts back, fork checkout behavior. Done: see section 4 | S | `packages/cli/src/web/sentinel-runner.ts`, `repository-review` template |
 | 1 | Webhook receiver with verification, dedupe, allow-list, caps, audit | M | new `packages/cli/src/web/github-webhook.ts`, wire in `dashboard-http.ts` |
 | 1 | Route exemption from session auth, tests for exemption and rate limit | S | `packages/cli/src/web/privileged-routes.ts`, `privileged-routes.test.ts` |
 | 1 | Secret generation, rotate, show once; Settings card and status | M | `packages/web/src/components/console-control/github-publication-control.tsx`, `github-connection-model.ts` |
@@ -125,5 +134,5 @@ Phase 1 gives instant events for server mode with no new GitHub permission. Stop
 - Private key theft from the state volume. Mitigation: 0600, no API read, excluded from backups and support bundles, rotation.
 - Polling and webhook can launch the same run twice. Mitigation: shared head-SHA cursor for both.
 - Webhook delivery is not guaranteed. Mitigation: polling stays on as the backstop.
-- Fork code execution through the agent run. Unverified today (section 4); must be closed in phase 0.
+- Fork code execution through the agent run. Closed in phase 0 for the polling path: forks are skipped unless opted in, then read-only (section 4). The webhook path must reuse the same launch options.
 - Research limits: peer facts come from docs summaries, not source. Re-check permission lists against GitHub docs before copying.

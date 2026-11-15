@@ -302,6 +302,16 @@ export class SentinelStore {
       return next;
     })();
   }
+  /** Makes an enabled, idle trigger due now ("Check now"). Returns the trigger, or null when it is off or busy. */
+  requestCheck(id: string, nowMs = Date.now()): SentinelTrigger | null {
+    return this.#db.transaction(() => {
+      const current = this.getTrigger(id);
+      if (!current?.enabled || current.activeClaim) return null;
+      const next: SentinelTrigger = { ...current, nextFireAt: new Date(nowMs).toISOString(), version: current.version + 1, updatedAt: new Date(nowMs).toISOString() };
+      this.#writeTrigger(next);
+      return next;
+    })();
+  }
   deleteTrigger(id: string): boolean {
     return this.#db.prepare("DELETE FROM sentinel_triggers WHERE id = ? AND active_claim IS NULL").run(id).changes > 0;
   }

@@ -26,6 +26,7 @@ describe("agent review and budget", () => {
   it("describes triggers", () => {
     expect(describeTrigger({ kind: "schedule", summary: "Every day at 09:00" })).toBe("Every day at 09:00");
     expect(describeTrigger({ kind: "github-pr", github: { repo: "o/r", pollMs: 120000 } })).toBe("Pull requests on o/r");
+    expect(describeTrigger({ kind: "github-pr", github: { repo: "o/r", pollMs: 120000, commentOnPr: true, includeForks: true } })).toBe("Pull requests on o/r, comments on, forks included");
   });
 });
 

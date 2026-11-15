@@ -110,6 +110,8 @@ jobs:
         run: pnpm test:home-paint
       - name: Check CLI and browser share one engine
         run: pnpm test:web-cli-parity
+      - name: Check the pull request Agent end to end
+        run: pnpm test:pr-agent-e2e
       - name: Check automatic telemetry against local fakes
         run: pnpm test:telemetry
       - name: Check interactive console controls

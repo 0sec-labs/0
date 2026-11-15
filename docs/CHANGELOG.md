@@ -14,6 +14,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
+- Pull request Agents have two opt-in toggles, both off by default: **Comment on the pull request** posts one short summary (severity, title and repository-relative location only), found by a hidden marker and edited in place on later pushes, and **Include pull requests from forks** runs read-only analysis of the diff marked untrusted. Set them in the Agents page trigger dialog or with `0 agents triggers add --comment --include-forks`. `0 agents triggers check` polls a trigger now.
 - Updating a plugin installed from GitHub now says which tools were added, removed or changed since the last install. Each tool gets its own hash over its name, description, parameters and capabilities, so a changed description is caught too. The package permission hash still gates the install, and plugins installed before this change count as having all tools unreviewed.
 - **Run the web console on a server (experimental, single node).** `0 web --host 0.0.0.0 --server-mode` serves the console behind a TLS proxy. It is off by default and the loopback behaviour is unchanged. It requires sign-in (team accounts, or an access token of 32+ characters that is generated once if you do not set one), an explicit `--allowed-host` list, and `--trusted-proxy` / `--public-url` for the proxy. Anonymous visitors only ever see a sign-in page.
 - `/healthz` and `/readyz` on the web console port, and a graceful `SIGTERM` drain (`--shutdown-timeout`).
@@ -24,6 +25,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Pull request Agents now skip fork and draft pull requests by default and record a skipped activation with the reason, instead of reviewing them. A pull request marked ready for review is reviewed once. Closed and merged pull requests are ignored.
 - A connection now reads **Connected** only when the provider accepted its key. Connections, Models and Diagnostics show **Key rejected** or **Can't reach** with a one-line hint, including for keys supplied by the environment, and the check is cached and never blocks the page.
 - New threads and Home no longer default to a model on a provider whose key was rejected; a remembered choice from one is skipped.
 - An empty thread no longer keeps a model its provider stopped listing: it re-binds to a usable model on load and the model button matches. A thread with history shows "<model> is no longer available. Pick another model" and holds the send until you choose one.

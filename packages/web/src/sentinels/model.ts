@@ -102,7 +102,7 @@ export interface SentinelTrigger {
   automationId: string;
   kind: SentinelTriggerKind;
   schedule?: SentinelSchedule;
-  github?: { repo: string; baseBranch?: string; pollMs: number };
+  github?: { repo: string; baseBranch?: string; pollMs: number; commentOnPr?: boolean; includeForks?: boolean };
   enabled: boolean;
   version: number;
   nextFireAt: string | null;
@@ -226,7 +226,7 @@ export const NEEDS_REVIEW_COPY = "Its scope, model, tools or autonomy changed. I
 export const triggerKindLabel = (kind: SentinelTriggerKind): string => ({ schedule: "Schedule", manual: "Manual", "github-pr": "Pull requests" })[kind];
 export function describeTrigger(trigger: Pick<SentinelTrigger, "kind" | "summary" | "github">): string {
   if (trigger.summary) return trigger.summary;
-  if (trigger.kind === "github-pr" && trigger.github) return `Pull requests on ${trigger.github.repo}`;
+  if (trigger.kind === "github-pr" && trigger.github) return `Pull requests on ${trigger.github.repo}${trigger.github.commentOnPr ? ", comments on" : ""}${trigger.github.includeForks ? ", forks included" : ""}`;
   return triggerKindLabel(trigger.kind);
 }
 
@@ -267,21 +267,26 @@ export class SentinelApiError extends Error {
 export const isConflict = (error: unknown): boolean => error instanceof SentinelApiError && error.conflict;
 
 export function activationLabel(activation: Pick<SentinelActivation, "status" | "trigger">): string {
-  return activation.trigger.kind === "manual" ? "Manual run" : activation.trigger.kind === "automation" ? "Automation" : activation.trigger.kind === "schedule" ? "Schedule" : "Pull request";
+  if (activation.trigger.kind === "github-pr") {
+    const event = activation.trigger.event;
+    const number = event?.pr !== undefined ? ` #${event.pr}` : "";
+    return event?.skipped ? `Pull request${number} skipped` : event?.fork === "yes" ? `Pull request${number} from a fork (untrusted)` : `Pull request${number}`;
+  }
+  return activation.trigger.kind === "manual" ? "Manual run" : activation.trigger.kind === "automation" ? "Automation" : "Schedule";
 }
 
 export const fileBytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 export const TRIGGER_FREQUENCIES = [["minutes", "Every few minutes"], ["hourly", "Hourly"], ["daily", "Daily"], ["weekdays", "Weekdays"], ["weekly", "Weekly"], ["cron", "Cron"]] as const;
-export interface TriggerDraft { automationId: string; kind: "schedule" | "github-pr"; frequency: SentinelSchedule["frequency"]; every: string; time: string; weekday: string; cron: string; timezone: string; repo: string; baseBranch: string }
-export const blankTriggerDraft = (automationId = ""): TriggerDraft => ({ automationId, kind: "schedule", frequency: "daily", every: "15", time: "09:00", weekday: "1", cron: "", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", repo: "", baseBranch: "" });
+export interface TriggerDraft { automationId: string; kind: "schedule" | "github-pr"; frequency: SentinelSchedule["frequency"]; every: string; time: string; weekday: string; cron: string; timezone: string; repo: string; baseBranch: string; commentOnPr: boolean; includeForks: boolean }
+export const blankTriggerDraft = (automationId = ""): TriggerDraft => ({ automationId, kind: "schedule", frequency: "daily", every: "15", time: "09:00", weekday: "1", cron: "", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", repo: "", baseBranch: "", commentOnPr: false, includeForks: false });
 
 /** Validate the add-trigger form. New triggers always start off; enabling stays behind the approval dialog. */
-export function triggerRequestFromDraft(draft: TriggerDraft): { ok: true; request: { automationId: string; kind: "schedule" | "github-pr"; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string } } } | { ok: false; error: string } {
+export function triggerRequestFromDraft(draft: TriggerDraft): { ok: true; request: { automationId: string; kind: "schedule" | "github-pr"; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string; commentOnPr: boolean; includeForks: boolean } } } | { ok: false; error: string } {
   if (!draft.automationId) return { ok: false, error: "Choose which automation this trigger starts." };
   if (draft.kind === "github-pr") {
     if (!/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(draft.repo.trim())) return { ok: false, error: "Enter the repository as owner/name." };
-    return { ok: true, request: { automationId: draft.automationId, kind: "github-pr", github: { repo: draft.repo.trim(), ...(draft.baseBranch.trim() ? { baseBranch: draft.baseBranch.trim() } : {}) } } };
+    return { ok: true, request: { automationId: draft.automationId, kind: "github-pr", github: { repo: draft.repo.trim(), ...(draft.baseBranch.trim() ? { baseBranch: draft.baseBranch.trim() } : {}), commentOnPr: draft.commentOnPr, includeForks: draft.includeForks } } };
   }
   const schedule: SentinelSchedule = { frequency: draft.frequency, timezone: draft.timezone.trim() || "UTC" };
   if (draft.frequency === "minutes") {

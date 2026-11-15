@@ -7,7 +7,7 @@ import { consoleDefaults, consoleFlags, enc, readJsonObject, renderFields, rende
 const ROOT = "/api/console/sentinels";
 
 interface Sentinel { id: string; name: string; mission?: string; status: string; autonomy: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
-interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string }
+interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
 interface SentinelFile { path: string; revision: number; content?: string; updatedAt?: string }
 
 async function sentinel(client: ConsoleClient, reference: string): Promise<Sentinel> {
@@ -28,7 +28,7 @@ function positive(name: string, value: string | undefined): number | undefined {
 }
 const triggerTable = (rows: Trigger[]) => renderTable(rows, [
   { header: "ID", value: t => t.id }, { header: "KIND", value: t => t.kind }, { header: "AUTOMATION", value: t => t.automationId },
-  { header: "ENABLED", value: t => (t.enabled ? "yes" : "no") }, { header: "WHEN", value: t => t.summary ?? t.nextFireAt ?? "-" },
+  { header: "ENABLED", value: t => (t.enabled ? "yes" : "no") }, { header: "WHEN", value: t => t.summary ?? (t.github ? `${t.github.repo}${t.github.commentOnPr ? ", comments on" : ""}${t.github.includeForks ? ", forks" : ""}` : t.nextFireAt) ?? "-" },
 ]);
 
 /** `0 agents`: everything the Agents page does. Reads and edits work offline; runs need the engine. */
@@ -157,9 +157,17 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
     .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => ((await client.request("GET", `${ROOT}/${enc((await sentinel(client, id)).id)}/triggers`)) as { triggers: Trigger[] }).triggers, triggerTable));
   consoleFlags(triggers.command("add <id>").description("Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes")
     .option("--automation <id>", "Owned automation to start").option("--kind <kind>", "schedule | manual | github-pr")
-    .option("--file <path>", "Trigger JSON object with schedule or github settings").option("--enable", "Enable immediately").option("--yes", "Confirm that an enabled trigger was reviewed"))
-    .action((id: string, options: ConsoleFlags & { automation?: string; kind?: string; file?: string; enable?: boolean; yes?: boolean }) => withConsole(options, deps, async client => {
-      const body = { ...(options.file ? await readJsonObject(options.file, "Trigger definition") : {}), ...(options.automation ? { automationId: options.automation } : {}), ...(options.kind ? { kind: options.kind } : {}) };
+    .option("--file <path>", "Trigger JSON object with schedule or github settings").option("--enable", "Enable immediately").option("--yes", "Confirm that an enabled trigger was reviewed")
+    .option("--repo <owner/name>", "github-pr: repository to watch").option("--base-branch <branch>", "github-pr: only pull requests into this branch")
+    .option("--comment", "github-pr: comment on each pull request with one short summary, edited in place on later pushes (default: off)")
+    .option("--include-forks", "github-pr: also review pull requests from forks, read-only and marked untrusted (default: skipped)"))
+    .action((id: string, options: ConsoleFlags & { automation?: string; kind?: string; file?: string; enable?: boolean; yes?: boolean; repo?: string; baseBranch?: string; comment?: boolean; includeForks?: boolean }) => withConsole(options, deps, async client => {
+      const fromFile = options.file ? await readJsonObject(options.file, "Trigger definition") : {};
+      const flags = { ...(options.repo ? { repo: options.repo } : {}), ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}), ...(options.comment ? { commentOnPr: true } : {}), ...(options.includeForks ? { includeForks: true } : {}) };
+      const kind = options.kind ?? fromFile.kind;
+      if (Object.keys(flags).length && kind !== "github-pr") throw new UsageError("--repo, --base-branch, --comment and --include-forks apply to --kind github-pr.");
+      const github = Object.keys(flags).length ? { github: { ...(fromFile.github && typeof fromFile.github === "object" ? fromFile.github : {}), ...flags } } : {};
+      const body = { ...fromFile, ...github, ...(options.automation ? { automationId: options.automation } : {}), ...(options.kind ? { kind: options.kind } : {}) };
       if (!body.automationId || !body.kind) throw new UsageError("Provide --automation and --kind (or both in --file).");
       if (options.enable) requireYes(options.yes, "Enabling a trigger lets the Sentinel start runs unattended.");
       return ((await client.request("POST", `${ROOT}/${enc((await sentinel(client, id)).id)}/triggers`, { ...body, enabled: options.enable === true, ...(options.enable ? { approval: "enable-reviewed-trigger" } : {}) })) as { trigger: Trigger }).trigger;
@@ -174,6 +182,12 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       return ((await client.request("PATCH", `${ROOT}/${enc(owner.id)}/triggers/${enc(found.id)}`, { enabled: verb === "enable", expectedVersion: found.version, ...(verb === "enable" ? { approval: "enable-reviewed-trigger" } : {}) })) as { trigger: Trigger }).trigger;
     }, value => triggerTable([value])));
   }
+  consoleFlags(triggers.command("check <id> <trigger-id>").description("Poll a pull request trigger now instead of waiting for its next poll"))
+    .action((id: string, triggerId: string, options: ConsoleFlags) => withConsole(options, deps, async client => {
+      const owner = await sentinel(client, id);
+      const found = resolveId(((await client.request("GET", `${ROOT}/${enc(owner.id)}/triggers`)) as { triggers: Trigger[] }).triggers, triggerId, "Trigger");
+      return ((await client.request("POST", `${ROOT}/${enc(owner.id)}/triggers/${enc(found.id)}/check`, {})) as { trigger: Trigger }).trigger;
+    }, value => triggerTable([value]), { requireHost: "Checking a pull request trigger" }));
   consoleFlags(triggers.command("rm <id> <trigger-id>").description("Delete a trigger").option("--yes", "Confirm deletion"))
     .action((id: string, triggerId: string, options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
       requireYes(options.yes, "Deleting a trigger cannot be undone.");

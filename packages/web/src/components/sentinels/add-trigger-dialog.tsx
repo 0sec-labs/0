@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSentinelMutations } from "@/sentinels/api";
@@ -43,6 +44,14 @@ export function AddTriggerDialog({ sentinel, automations, open, onOpenChange }: 
         </> : <>
           <Row label="Repository" htmlFor="trigger-repo"><Input id="trigger-repo" placeholder="owner/name" value={draft.repo} onChange={event => set("repo", event.target.value)} /></Row>
           <Row label="Base branch (optional)" htmlFor="trigger-branch"><Input id="trigger-branch" value={draft.baseBranch} onChange={event => set("baseBranch", event.target.value)} /></Row>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0"><span id="trigger-comment-label" className="block text-sm">Comment on the pull request</span><span className="block text-xs text-muted-foreground-1">Posts one short summary and updates it on new commits. Off: results stay in this Agent's activity and thread.</span></div>
+            <Switch aria-labelledby="trigger-comment-label" checked={draft.commentOnPr} onCheckedChange={value => set("commentOnPr", value)} />
+          </div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0"><span id="trigger-forks-label" className="block text-sm">Include pull requests from forks</span><span className="block text-xs text-muted-foreground-1">Off: forks are skipped. On: read-only analysis of the diff, marked untrusted. Their code is never run.</span></div>
+            <Switch aria-labelledby="trigger-forks-label" checked={draft.includeForks} onCheckedChange={value => set("includeForks", value)} />
+          </div>
         </>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>

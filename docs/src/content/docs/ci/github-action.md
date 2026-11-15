@@ -96,7 +96,7 @@ The step fails when:
 
 CLI exit `3` means the AI layer was needed but could not run. Set `static-only: true` if a static-only run is what you want. `severity-threshold: none` disables only the findings gate, and execution failures still fail. A passing gate describes the reported findings. It does not prove full coverage.
 
-`report-dir` keeps `report.json`, `report.sarif`, `run.json` (invocation and revision metadata) and `0.stderr.log`. Keep the artifact private and read stderr before sharing it. The Markdown report is also added to the job summary. The action never posts comments, opens fixes or uploads SARIF itself.
+`report-dir` keeps `report.json`, `report.sarif`, `run.json` (invocation and revision metadata) and `0.stderr.log`. Keep the artifact private and read stderr before sharing it. The Markdown report is also added to the job summary. The action never posts comments, opens fixes or uploads SARIF itself. To review pull requests without a workflow, an [Agent](/agents/) can poll them instead; it posts nothing unless you turn on its comment option, and skips forks unless you turn on fork analysis.
 
 ## Pull requests
 

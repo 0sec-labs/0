@@ -130,9 +130,9 @@ function dropUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
 
-/** Project a report onto the share-safe allowlist. Throws if the result fails validation. */
-export function toShareSafeReport(report: ScanReport, options: ShareSafeOptions = {}): ShareSafeReport {
-  const findings = report.findings.map((finding) => {
+/** Project findings onto the share-safe allowlist (no evidence, PoC steps or local paths). */
+export function toShareSafeFindings(findings: ScanReport["findings"], options: ShareSafeOptions = {}): ShareSafeReport["findings"] {
+  return findings.map((finding) => {
     const loose = finding as LooseFinding;
     return dropUndefined({
       id: loose.id,
@@ -150,6 +150,11 @@ export function toShareSafeReport(report: ScanReport, options: ShareSafeOptions 
       ...(options.includeDescription ? { description: loose.description.slice(0, 4000) } : {}),
     });
   });
+}
+
+/** Project a report onto the share-safe allowlist. Throws if the result fails validation. */
+export function toShareSafeReport(report: ScanReport, options: ShareSafeOptions = {}): ShareSafeReport {
+  const findings = toShareSafeFindings(report.findings, options);
   const withheld: string[] = [...ALWAYS_WITHHELD];
   if (!options.includeDescription) withheld.push("description");
   return ShareSafeReportSchema.parse({

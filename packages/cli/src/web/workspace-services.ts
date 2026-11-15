@@ -1,7 +1,8 @@
-import { resolveOsecDbPath } from "@0/engine/storage";
+import { osecDB, resolveOsecDbPath } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
 import { isApiRuntime } from "@0/engine";
-import { homeStateDir } from "@0/engine/shared";
+import { homeStateDir, toShareSafeFindings } from "@0/engine/shared";
+import { findingFromRow } from "../state/findings-data.js";
 import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { ConsoleGateway } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
@@ -72,6 +73,10 @@ export async function createWorkspaceServices(options: Options) {
       usage: id => gateway.get(id).usage,
       exists: id => { try { gateway.get(id); return true; } catch { return false; } },
       reopen: async id => ({ id: (await gateway.resume(id)).id }),
+      findings: id => {
+        const db = new osecDB(options.dbPath);
+        try { return toShareSafeFindings(db.getFindings(id).slice(0, 200).map(findingFromRow)); } finally { db.close(); }
+      },
     }, scheduler: true });
     return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, sentinels, dispose };
   } catch (cause) { await dispose().catch(() => {}); throw cause; }

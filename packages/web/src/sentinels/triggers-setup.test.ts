@@ -22,7 +22,8 @@ describe("agent automation setup", () => {
     expect(triggerRequestFromDraft({ ...base, frequency: "cron", cron: "0 9 *" }).ok).toBe(false);
     expect(triggerRequestFromDraft({ ...base, frequency: "cron", cron: "0 9 * * 1" }).ok).toBe(true);
     expect(triggerRequestFromDraft({ ...base, kind: "github-pr", repo: "nope" }).ok).toBe(false);
-    expect(triggerRequestFromDraft({ ...base, kind: "github-pr", repo: "acme/app" })).toMatchObject({ ok: true, request: { kind: "github-pr", github: { repo: "acme/app" } } });
+    expect(triggerRequestFromDraft({ ...base, kind: "github-pr", repo: "acme/app" })).toMatchObject({ ok: true, request: { kind: "github-pr", github: { repo: "acme/app", commentOnPr: false, includeForks: false } } });
+    expect(triggerRequestFromDraft({ ...base, kind: "github-pr", repo: "acme/app", commentOnPr: true, includeForks: true })).toMatchObject({ ok: true, request: { github: { repo: "acme/app", commentOnPr: true, includeForks: true } } });
   });
 });
 

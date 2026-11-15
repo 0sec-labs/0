@@ -170,6 +170,8 @@ export class WebSentinelService {
       if (automation.ownerSentinelId !== id) throw new SentinelRequestError("This automation is not owned by this Agent.", 409);
       return { status: 201, data: { trigger: this.#triggerView(this.#store.createTrigger(id, fields, this.#now())) } };
     }
+    const checkNow = triggerId.endsWith("/check");
+    if (checkNow) triggerId = triggerId.slice(0, -"/check".length);
     const trigger = this.#store.getTrigger(triggerId);
     if (!trigger || trigger.sentinelId !== id) throw new SentinelRequestError("Trigger not found.", 404);
     this.#requireWriter(actor);
@@ -179,6 +181,11 @@ export class WebSentinelService {
       if (body.enabled === true && approval !== "enable-reviewed-trigger") throw new SentinelRequestError("Review this trigger before enabling it.", 400);
       const version = expectedVersion === undefined ? undefined : parse(z.number().int().positive(), expectedVersion);
       return { status: 200, data: { trigger: this.#triggerView(this.#store.updateTrigger(triggerId, body, version, this.#now())) } };
+    }
+    if (method === "POST" && checkNow) {
+      if (trigger.kind !== "github-pr") throw new SentinelRequestError("Only pull request triggers can be checked now.", 400);
+      if (!await this.#runner.checkNow(triggerId)) throw new SentinelRequestError("Turn the trigger on and wait for any run in progress, then check again.", 409);
+      return { status: 202, data: { trigger: this.#triggerView(this.#store.getTrigger(triggerId)!) } };
     }
     if (method === "DELETE") {
       if (!this.#store.deleteTrigger(triggerId)) throw new SentinelRequestError("Trigger is launching a run; try again in a moment.", 409);

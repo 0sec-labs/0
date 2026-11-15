@@ -301,13 +301,13 @@ describe("triggers API, ownership and deletion", () => {
 
 describe("GitHub pull request polling", () => {
   const pr = (number: number, sha: string, extra: Record<string, unknown> = {}) => ({ number, headRefOid: sha, title: `PR ${number}`, url: `https://github.com/o/r/pull/${number}`, baseRefName: "main", headRefName: `b${number}`, isCrossRepository: false, ...extra });
-  async function armedPr(gh: { run: (args: string[]) => Promise<{ stdout: string }> }) {
-    const f = fixture({ gh });
+  async function armedPr(gh: { run: (args: string[]) => Promise<{ stdout: string }> }, github: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
+    const f = fixture({ gh, ...extra });
     const created = (await f.call("POST", P, { name: "Reviewer", skills: ["pr-diff-review"] })).data as { sentinel: { id: string } };
     const id = created.sentinel.id;
     await f.call("POST", `${P}/${id}/resume`, { acknowledge: true });
     const automation = f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: id });
-    const trigger = await f.call("POST", `${P}/${id}/triggers`, { automationId: automation.id, kind: "github-pr", github: { repo: "o/r", baseBranch: "main", pollMs: 60_000 }, enabled: true, approval: "enable-reviewed-trigger" });
+    const trigger = await f.call("POST", `${P}/${id}/triggers`, { automationId: automation.id, kind: "github-pr", github: { repo: "o/r", baseBranch: "main", pollMs: 60_000, ...github }, enabled: true, approval: "enable-reviewed-trigger" });
     expect(trigger.status).toBe(201);
     return { f, id, triggerId: (trigger.data as { trigger: { id: string } }).trigger.id };
   }
@@ -324,14 +324,15 @@ describe("GitHub pull request polling", () => {
     vi.setSystemTime(T0 + 2 * MIN);
     await f.service.tick();
     const runs = await f.activations(id);
-    expect(runs.map(activation => activation.trigger.event.pr).sort()).toEqual([2, 3]);
-    expect(runs.find(activation => activation.trigger.event.pr === 3)!.trigger).toMatchObject({ kind: "github-pr", event: { fork: "yes", headSha: "ddd" } });
+    expect(runs.filter(activation => activation.status !== "skipped").map(activation => activation.trigger.event.pr)).toEqual([2]);
+    expect(runs.find(activation => activation.trigger.event.pr === 3)).toMatchObject({ status: "skipped", error: "Skipped: fork pull request.", trigger: { kind: "github-pr", event: { fork: "yes", headSha: "ddd", skipped: "fork pull request" } } });
     const seeds = f.missions.send.mock.calls.map(call => call[1]).join("\n");
     expect(seeds).toContain("untrusted data from an external system");
     expect(seeds).toContain("<event>");
     vi.setSystemTime(T0 + 4 * MIN);
     await f.service.tick();
     expect(await f.activations(id)).toHaveLength(2);
+    expect(f.missions.create).toHaveBeenCalledTimes(2); // home thread + the one review thread
     listing = [pr(1, "eee"), pr(2, "ccc"), pr(3, "ddd")];
     vi.setSystemTime(T0 + 6 * MIN);
     await f.service.tick();
@@ -346,5 +347,115 @@ describe("GitHub pull request polling", () => {
     vi.setSystemTime(T0 + 2 * MIN);
     await f.service.tick();
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  const gh = (listing: () => unknown[], calls: string[][] = [], extra: (args: string[]) => string | undefined = () => undefined) => ({
+    run: vi.fn(async (args: string[]) => {
+      calls.push(args);
+      const custom = extra(args); if (custom !== undefined) return { stdout: custom };
+      if (args[0] === "pr" && args[1] === "list") return { stdout: JSON.stringify(listing()) };
+      if (args[0] === "pr" && args[1] === "diff") return { stdout: `diff --git a/x b/x\n+eval(input)` };
+      return { stdout: "" };
+    }),
+  });
+  const poll = async (f: Awaited<ReturnType<typeof armedPr>>["f"], minutes: number) => { vi.setSystemTime(T0 + minutes * MIN); await f.service.tick(); };
+
+  it("skips forks and drafts with a recorded reason, and never launches closed or merged pull requests", async () => {
+    let listing = [pr(1, "aaa")];
+    const { f, id } = await armedPr(gh(() => listing));
+    await poll(f, 0);
+    listing = [pr(1, "aaa"), pr(2, "bbb", { isCrossRepository: true }), pr(3, "ccc", { isDraft: true }), pr(4, "ddd", { state: "MERGED" }), pr(5, "eee", { state: "CLOSED" }), pr(6, "fff")];
+    await poll(f, 2);
+    await poll(f, 4);
+    const runs = await f.activations(id);
+    const byPr = (n: number) => runs.filter(activation => activation.trigger.event.pr === n);
+    expect(byPr(2)).toMatchObject([{ status: "skipped", trigger: { event: { skipped: "fork pull request" } } }]);
+    expect(byPr(3)).toMatchObject([{ status: "skipped", trigger: { event: { skipped: "draft pull request" } } }]);
+    expect(byPr(4)).toHaveLength(0); expect(byPr(5)).toHaveLength(0);
+    expect(byPr(6)).toMatchObject([{ status: "running" }]);
+    // The draft becomes ready (same head): it is reviewed once.
+    listing = listing.map(item => (item as { number: number }).number === 3 ? pr(3, "ccc") : item);
+    await poll(f, 6); await poll(f, 8);
+    expect((await f.activations(id)).filter(activation => activation.trigger.event.pr === 3 && activation.status === "running")).toHaveLength(1);
+  });
+
+  it("reviews a re-pushed pull request again, and a fork only when the trigger opts in, read-only and marked untrusted", async () => {
+    let listing = [pr(1, "aaa"), pr(2, "bbb", { isCrossRepository: true })];
+    const { f, id } = await armedPr(gh(() => listing), { includeForks: true });
+    await poll(f, 0);
+    listing = [pr(1, "aab"), pr(2, "bbc", { isCrossRepository: true })];
+    await poll(f, 2);
+    const runs = await f.activations(id);
+    expect(runs.map(activation => activation.status)).toEqual(expect.arrayContaining(["running", "running"]));
+    expect(runs).toHaveLength(2);
+    const fork = runs.find(activation => activation.trigger.event.pr === 2)!;
+    const forkCreate = f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer") && input.autonomyMode === "recon");
+    expect(forkCreate).toMatchObject({ autonomyMode: "recon", workerPolicy: { allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] } });
+    expect(f.missions.create.mock.calls.filter(call => call[0].autonomyMode === "recon")).toHaveLength(1);
+    const seed = f.missions.send.mock.calls.map(call => call[1]).find(text => text.includes("UNTRUSTED FORK PULL REQUEST"));
+    expect(seed).toContain("<pull-request-diff>");
+    expect(fork.trigger.event).toMatchObject({ fork: "yes" });
+    expect(f.missions.send.mock.calls.filter(call => call[1].includes("UNTRUSTED FORK PULL REQUEST"))).toHaveLength(1);
+  });
+
+  it("never runs gh checkout, clone or any command that fetches pull request code", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    const { f } = await armedPr(gh(() => listing, calls), { includeForks: true });
+    await poll(f, 0);
+    listing = [pr(1, "aab", { isCrossRepository: true })];
+    await poll(f, 2);
+    expect(calls.map(args => args.slice(0, 2).join(" "))).toEqual(["pr list", "pr list", "pr diff"]);
+  });
+
+  it("posts nothing to GitHub by default", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    const { f, id } = await armedPr(gh(() => listing, calls));
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    const mission = (await f.activations(id))[0]!.missionId!;
+    f.emit(mission, { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls.some(args => args[0] === "api" || (args[0] === "pr" && args[1] === "comment"))).toBe(false);
+    expect((await f.activations(id))[0]).toMatchObject({ status: "completed" });
+  });
+
+  it("with comments on, posts one share-safe summary and edits it in place after a re-push", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    let existingId = "";
+    const findings = [{ id: "f1", templateId: "t", title: "SQL injection @everyone [x](http://evil) \n<script>", severity: "high", category: "injection", status: "open", location: { path: "src/db.ts", startLine: 12 } }, { id: "f2", templateId: "t", title: "Leak", severity: "low", category: "x", status: "open", location: { path: "/Users/me/secret.ts", startLine: 1 } }];
+    const github = gh(() => listing, calls, args => {
+      if (args[0] === "api" && args[1] === "--paginate") return existingId;
+      if (args[0] === "api" && args[1] === "--method") return "";
+      if (args[0] === "pr" && args[1] === "comment") { existingId = "777"; return ""; }
+      return undefined;
+    });
+    const { f, id } = await armedPr(github, { commentOnPr: true });
+    (f.missions as unknown as { findings: unknown }).findings = vi.fn(() => findings);
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    const first = (await f.activations(id))[0]!;
+    f.emit(first.missionId!, { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    const post = calls.find(args => args[0] === "pr" && args[1] === "comment")!;
+    expect(post.slice(0, 5)).toEqual(["pr", "comment", "1", "--repo", "o/r"]);
+    const body = post[post.indexOf("--body") + 1]!;
+    expect(body).toContain(`<!-- 0-agent-pr-review:${id} -->`);
+    expect(body).toContain("`src/db.ts:12`");
+    expect(body).not.toContain("/Users/me");
+    expect(body).not.toMatch(/<script>|evil/);
+    expect(body).not.toContain("@everyone");
+    listing = [pr(1, "aac")];
+    await poll(f, 4);
+    const second = (await f.activations(id)).find(activation => activation.id !== first.id)!;
+    f.emit(second.missionId!, { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls.filter(args => args[0] === "pr" && args[1] === "comment")).toHaveLength(1);
+    const edit = calls.find(args => args[0] === "api" && args[1] === "--method")!;
+    expect(edit).toEqual(expect.arrayContaining(["PATCH", "repos/o/r/issues/comments/777"]));
   });
 });

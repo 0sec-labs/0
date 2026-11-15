@@ -22,11 +22,14 @@ describe("Sentinel triggers", () => {
     expect(trigger).toMatchObject({ enabled: false, nextFireAt: "2026-03-02T10:30:00.000Z", version: 1 });
     const pr = store.createTrigger(s.id, { automationId: "wf1", kind: "github-pr", github: { repo: "o/r" } }, NOW);
     expect(pr.github?.pollMs).toBe(120_000);
+    expect(pr.github).toMatchObject({ commentOnPr: false, includeForks: false });
+    const opted = store.createTrigger(s.id, { automationId: "wf1", kind: "github-pr", github: { repo: "o/r", commentOnPr: true, includeForks: true } }, NOW);
+    expect(opted.github).toMatchObject({ commentOnPr: true, includeForks: true });
     for (const kind of ["github-push", "webhook", "finding-created"]) expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind }, NOW))).toBe(400);
     expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind: "schedule" }, NOW))).toBe(400);
     expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind: "github-pr", github: { repo: "nope" } }, NOW))).toBe(400);
     expect(code(() => store.createTrigger("missing", { automationId: "wf1", kind: "manual" }, NOW))).toBe(404);
-    expect(store.listTriggers(s.id)).toHaveLength(2);
+    expect(store.listTriggers(s.id)).toHaveLength(3);
     store.close();
   });
 
