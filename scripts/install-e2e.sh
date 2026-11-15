@@ -6,7 +6,8 @@
 set -euo pipefail
 
 readonly REPOSITORY="0sec-labs/0security"
-readonly IMAGE="ghcr.io/${REPOSITORY}:latest"
+# The image keeps its original package name until ghcr.io/0sec-labs/0security is published.
+readonly IMAGE="ghcr.io/0sec-labs/0:latest"
 readonly METHOD="${1:-all}"
 
 require_docker() {
