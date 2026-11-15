@@ -15,6 +15,12 @@ on the published npm package and the GitHub Release tag.
 ### Added
 
 - Updating a plugin installed from GitHub now says which tools were added, removed or changed since the last install. Each tool gets its own hash over its name, description, parameters and capabilities, so a changed description is caught too. The package permission hash still gates the install, and plugins installed before this change count as having all tools unreviewed.
+- **Run the web console on a server (experimental, single node).** `0 web --host 0.0.0.0 --server-mode` serves the console behind a TLS proxy. It is off by default and the loopback behaviour is unchanged. It requires sign-in (team accounts, or an access token of 32+ characters that is generated once if you do not set one), an explicit `--allowed-host` list, and `--trusted-proxy` / `--public-url` for the proxy. Anonymous visitors only ever see a sign-in page.
+- `/healthz` and `/readyz` on the web console port, and a graceful `SIGTERM` drain (`--shutdown-timeout`).
+- The Docker image now exposes port 48123, has a health check, keeps its state in a `/data` volume, runs under `tini`, starts the web console by default, and carries image labels. Release builds also publish `vX.Y.Z` and `X.Y` tags.
+- `deploy/compose/` holds a single-node Docker Compose file, an `.env.example` and an optional Caddy profile with automatic HTTPS. The Docker page now covers sizing, backup, upgrade and what is not supported.
+- The Docker image includes the OpenSSH client, so remote computers can be connected over SSH from a container (`0 computers deploy --ssh` now says how to install `ssh` when it is missing). The Docker page covers keys, `known_hosts`, agent forwarding, GitHub access for pull request reviews, and what a review does and does not post.
+- The audit log records console sign-ins, sign-in failures, throttling and refused hosts.
 
 ### Fixed
 

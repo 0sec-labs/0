@@ -29,7 +29,10 @@ calls models**. Every server feature is a CLI command first; the web UI is a
 view over the same API.
 
 Not in scope: hosted inference, hosted sandboxes, a hosted self-serve funnel
-(retired under the 2026-11-13 open-core direction), Postgres.
+(retired under the 2026-11-13 open-core direction), self-serve multi-tenant
+hosting, Postgres. In scope by contract (2026-11-14, `deployment-packaging.md`):
+vendor-managed single-tenant deployments of the same image, one customer per
+deployment, run from the private enterprise repository.
 
 ## What exists today (verified in code)
 
@@ -63,7 +66,7 @@ So the open-source server, if built, is **one process that exclusively owns one
 SQLite file**. Runners never open the file; they push over HTTP and the server
 serializes writes (rollback-journal mode, readers blocked during writes). That
 is acceptable for tens of runners pushing run-sized batches and not beyond.
-Self-hosting stays `docker run` plus a volume. Keep SQL portable so a Postgres
+Self-hosting stays the Docker image plus one volume; the experimental single-node `0 web --server-mode` and `deploy/compose/` (see `deployment-packaging.md`) are that story, with no Helm chart or Terraform module. Keep SQL portable so a Postgres
 backend can be added for a managed or large deployment; do not build it now.
 **Open:** whether enterprise scale-out is ever in scope.
 
@@ -130,7 +133,7 @@ A versioned JSON document for one run, derived from the Findings API shape.
 
 ## Enterprise (later, same server)
 
-SSO and RBAC beyond three roles, audit log, integrations (Slack, Jira, SIEM), longer retention, support. A hosted, managed deployment is possible but is a separate decision. `0cloud`'s `cloud-contracts` finding identity and Zod contracts are the reusable parts; its Postgres queue, Superserve, LiteLLM and billing are not.
+SSO and RBAC beyond three roles, audit log, integrations (Slack, Jira, SIEM), longer retention, support. A vendor-managed deployment is offered by contract only, single-tenant and one customer per deployment, from the enterprise repository (decided 2026-11-14, `deployment-packaging.md`); a self-serve multi-tenant hosted service is not. `0cloud`'s `cloud-contracts` finding identity and Zod contracts are the reusable parts; its Postgres queue, Superserve, LiteLLM and billing are not.
 
 ## Build order
 

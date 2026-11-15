@@ -16,7 +16,7 @@ description: What is open source in 0, what you can run on your own, what leaves
 | Findings API for your own tools | Yes, read-only, see [Findings API](/findings-api/) |
 | Team workspace with owner, editor and viewer roles and OIDC sign-in | Yes, see [Computers and teams](/engines/) |
 | Remote computers on your own servers | Yes, with limits listed on that page |
-| Docker image | Yes, see [Docker](/docker/) |
+| Docker image and a single-node web console on a server (experimental) | Yes, see [Docker](/docker/) |
 
 Scans run on your computer, in your CI or on your servers. Model calls go to the provider you choose with your own key. 0security does not run scans or model calls for you.
 
@@ -31,10 +31,10 @@ Nothing is uploaded with your findings, source code or model keys. The one autom
 
 ## What the team workspace does not do
 
-A team workspace shares one computer between members. It is not a multi-tenant service. Sessions are held in memory, so members sign in again after a restart, and results from several computers are not merged. See [Computers and teams](/engines/) for the exact limits.
+A team workspace shares one computer between members. It is not a multi-tenant service, and the Docker setup is one node with one database and no high availability. Sessions are held in memory, so members sign in again after a restart, and results from several computers are not merged. See [Computers and teams](/engines/) for the exact limits.
 
 ## Enterprise
 
-Enterprise is for organization-wide automation and use-case integrations around the same open-source engine. It is arranged with us rather than self-served. [Book a demo](https://0.security/contact/?intent=enterprise) to discuss your requirements.
+Enterprise is for organization-wide automation and use-case integrations around the same open-source engine. It is arranged with us rather than self-served. That includes running 0 on your own infrastructure with our help (on-premises) and a dedicated deployment that we operate for you: one customer per deployment, by contract. We do not publish a Helm chart or a Terraform module, and we do not offer a shared multi-tenant cloud. [Book a demo](https://0.security/contact/?intent=enterprise) to discuss your requirements.
 
 This page describes what exists today. It does not list planned features.

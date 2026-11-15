@@ -7,8 +7,12 @@ the code on `main`; open decisions are listed at the end. No prices appear here.
 
 - **Open core.** Everything that exists in `0` today stays open source. Enterprise
   adds capabilities; it never removes or degrades an open-source one.
-- **Bring your own keys and compute.** No hosted inference, no hosted sandboxes.
-  Enterprise features run on the customer's own machines and servers.
+- **Bring your own keys and compute.** No hosted inference, no hosted sandboxes,
+  no self-serve multi-tenant service. Enterprise features run on the customer's own
+  machines and servers. Vendor-managed single-tenant deployments (the same image
+  run for one customer, in their account where possible) are in scope **by contract**,
+  with a private enterprise image and private deployment artifacts in the enterprise
+  repository (`deployment-packaging.md`).
 - **One binary.** Customers run the same `0` command. Enterprise is code that the
   binary loads when a valid license is present, not a fork.
 - **CLI first.** Every enterprise feature is configurable from the CLI and a config

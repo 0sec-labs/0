@@ -1,10 +1,20 @@
-# Deployment packaging: one image, a Helm chart, a Terraform module
+# Deployment packaging: one image, one compose file
 
-Status: **proposed** (research 2026-11-14). Nothing below is built unless the "Gap list" says it exists. Decisions marked **Open** need the owners. Claims are tagged **verified** (read from source or docs) or **inferred**.
+Status: **decided** (founders, 2026-11-14); P0 (server mode, health, hardened image, compose, CI check) is built. Sections 1 to 3 are the research that led here and keep their original wording where it is still true. Claims are tagged **verified** (read from source or docs) or **inferred**.
 
 ## Goal
 
-Anyone can self-host from the open-source image. Enterprise customers get the same artifact run for them or by them. We maintain one infrastructure line, not a self-serve cloud plus a dedicated-computer line.
+Anyone can try the console on a server from the open-source image. Enterprise customers get the same image, run for them or by them under a contract. We maintain one public artifact line, not a self-serve cloud plus a dedicated-computer line.
+
+## Decisions (final)
+
+1. **The public self-host story is one artifact: the Docker image plus one `docker-compose.yml`** (`deploy/compose/`). Single node, one replica, one volume holding the SQLite state. Documented plainly: one process owns the database, there is no HA. Labelled **experimental**.
+2. **No public Helm chart and no public Terraform module.** They drift (Promptfoo's stale chart) and cost support (PostHog dropped Helm). Enterprise on-prem and vendor-managed single-tenant deployments are **by contract**, with a private enterprise image and private deployment artifacts that live in the separate enterprise repository. Nothing named `helm/` or `terraform/` is added to this repository.
+3. **No hosted inference.** Customers bring their own model keys.
+4. **`0 web` must run in a container behind a proxy.** Done through an explicit, off-by-default server mode (see "Server mode" below). Loopback behaviour is unchanged.
+5. **Vendor-managed = the same image, run single-tenant per customer** from the enterprise repository's private artifacts, in the customer's account where possible. Self-serve multi-tenant is not offered.
+
+Phases collapse to: **P0 is this work. The enterprise repository owns everything after it** (Kubernetes, Terraform, licence issuing, runbooks, SLAs). The former P1 (Helm) and P2 (Terraform) public phases are dropped.
 
 ## 1. What Promptfoo ships
 
@@ -18,7 +28,7 @@ All verified from github.com/promptfoo/promptfoo (main) and promptfoo.dev docs, 
 - Enterprise is closed: managed SaaS and "Enterprise On-Prem" (AWS/Azure/GCP), contact-us pricing. On-prem uses a separate non-public image, a dedicated runner, and SSO (SAML/OIDC) through FusionAuth. Setup instructions ship with the release, not in public docs. [Enterprise docs](https://www.promptfoo.dev/docs/enterprise/)
 - Inferred: the enterprise product is multi-service (real database, runner, identity provider), so it is not the OSS image with a flag. Architecture, licensing and upgrade mechanics are not public.
 
-Lesson: a thin, honest OSS single-node image plus a chart; the multi-tenant, SSO and runner product is delivered with the contract.
+Lesson: a thin, honest OSS single-node image; the multi-tenant, SSO and runner product is delivered with the contract. We take the image and skip the chart.
 
 ## 2. Patterns from peers
 
@@ -38,7 +48,7 @@ Exists:
 - Seams landed (#359-#363): permission policy, identity provider, audit sink, entitlements, plugin signature key. Licence verification exists (`packages/engine/src/entitlements/license.ts`) but `PINNED_LICENSE_KEYS` is empty, so it is inert.
 - State under `~/.0`; `ZERO_DB_PATH`, `ZERO_RUN_DIR`, `ZERO_TEAM_CONFIG`, `ZERO_LICENSE_FILE`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`, `ZERO_REQUIRE_SCOPE` exist.
 
-Missing:
+Missing (status after P0: items 1 to 3 and the semver part of 8 are fixed, see sections 4 and 5; items 4 to 7 remain and are documented as limits):
 1. No compose file, `helm/`, `terraform/` or systemd unit anywhere.
 2. `0 web` refuses non-loopback `--host`, and `authorizeWebRequest` returns 403 for any Host header other than the bound loopback host and port. The container cannot be reached with `-p`. Blocker for everything below.
 3. No server CMD, no HEALTHCHECK, no `/healthz` or `/readyz` (only `GET /` and a token-gated handshake).
@@ -49,71 +59,98 @@ Missing:
 8. No metrics or OTLP endpoint, no backup procedure beyond copying files, no semver tags.
 9. Principles on record: `shared-server.md` says do not build the server yet; `enterprise-edition.md` says no hosted inference, no hosted sandboxes. A vendor-run deployment holding customer vulnerability data needs a recorded decision.
 
-## 4. Recommendation
+## 4. Server mode (built)
 
-**One artifact line: the OCI image is the product.** Everything else only deploys that image.
+**One artifact line: the OCI image is the product.** Compose is the only public wrapper.
 
-- Compose is the supported minimal self-host form. A Helm chart and a Terraform module deploy the same image. No other packaging.
-- Vendor-managed offering = the same chart or module applied once per customer in the vendor's cloud account. Single-tenant. No multi-tenant control plane, no self-serve login system. Customer-managed = the customer applies the same module in their account.
-- A fleet is a list of per-customer module instances plus a runbook (state in Terraform backend), not a product.
+`0 web --host 0.0.0.0 --server-mode` (also `ZERO_SERVER_MODE=1`) is the one switch. Without it nothing changes: loopback bind only, per-start control token injected for the local operator, Host must be the bound loopback host and port.
 
-What we explicitly do not build now: self-serve multi-tenant routing, shared sandboxes across customers, inference resale (customers bring keys, as `enterprise-edition.md` states), a customer-facing signup or billing system, HA or horizontal scale (needs a storage redesign that `shared-server.md` defers).
+Flags and environment (server mode only unless noted):
 
-Isolation model (proposed):
-- Control plane (`0 web`, state, secrets) is separate from execution of hacking tools. Default deployment runs local execution inside the container for the single customer, who is the only tenant, with a NetworkPolicy or security group that limits egress to the declared scope plus the model API. `ZERO_REQUIRE_SCOPE=1` by default.
-- Stronger isolation: run the sandbox on separate worker VMs (the existing `0 computers` engine model) with no credentials and tight egress, or Kata or gVisor nodes in Kubernetes. Avoid mounting `docker.sock` or privileged pods in the default.
-- KVM and SmolVM on Linux cloud need nested virtualisation or bare metal and an x86 workbench image; treat as **inferred**, spike before promising.
+| Flag | Environment | Meaning |
+| --- | --- | --- |
+| `--server-mode` | `ZERO_SERVER_MODE=1` | Enable everything below. Off by default. |
+| `--allowed-host <name...>` | `ZERO_ALLOWED_HOSTS` | Accepted `Host` names (`name` or `name:port`). Default is only the bind host. A wildcard bind (`0.0.0.0`) with no allowed host refuses to start. Unknown Host gets 403. |
+| `--trusted-proxy <cidr...>` | `ZERO_TRUSTED_PROXY` | Peer addresses (IP, CIDR or `loopback`) whose `X-Forwarded-Proto/Host/For` are honoured. Anyone else's are ignored. |
+| `--public-url <url>` | `ZERO_PUBLIC_URL` | The public URL: Secure cookies, OIDC redirect origin, printed URL. Its host is added to the allowed hosts. |
+| `--access-token-env <name>` | `ZERO_ACCESS_TOKEN` | The access token, 32 to 4096 characters. If absent and no team sign-in is configured, 32 random bytes are generated, stored 0600 at `$HOME/.0/access-token` and printed once on first start. |
+| `--shutdown-timeout <s>` | | Drain deadline, default 20 s. |
+| (always) | `--team-config` / `ZERO_TEAM_CONFIG` | Team accounts or OIDC. When configured they are the browser credential and the access token is ignored. |
+
+### Authentication flow
+
+1. Every browser request first passes the Host allow-list, Origin and fetch-metadata checks (`ServerModeGuard.authorize`), using the forwarded host and scheme only from a trusted proxy.
+2. An anonymous visitor gets a self-contained sign-in page (no application script, no control token). Anonymous `/api/*` is 401, anonymous static files are 401. The only anonymous API exceptions are the OIDC start and callback GETs.
+3. `POST /_access/login` with `{token}` (or `{userId,password}` in team mode, delegated to the existing `TeamAuth.login`). The token is compared in constant time (SHA-256 digests with `timingSafeEqual`). On success a 32-byte random session id is stored in memory and returned as `zero_access=<id>; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200` (plus `Secure` when the request arrived over https, or `--public-url` is https). In team mode the existing team session cookie is the session.
+4. Only an authenticated `GET` for an app route receives the HTML with the control token. The control token stays per start, random, and is never logged.
+5. API calls need the cookie session plus the `X-0-Control-Token` header (the synchronizer token: only the authenticated page can read it, no ambient credential carries it) plus, for mutating methods, an `Origin` that equals the effective origin or `Sec-Fetch-Site: same-origin`. Engine bearer requests keep their own path: bearer only, default-deny on every browser-only route, the privileged-routes table unchanged.
+6. `POST /_access/logout` drops the session. Sessions last 12 hours and live in process memory (restart signs everyone out), capped at 1000.
+
+### Health, readiness, shutdown
+
+- `GET /healthz`: process is up. `GET /readyz`: 200 only when the phase is ready and the SQLite database answers (probe cached for 5 s), else 503 with `starting`, `draining` or `unavailable`. Both are unauthenticated, answer any Host (orchestrators probe by IP), and return one JSON key, `status`.
+- The listener opens after services and migrations finish, so a refused connection means starting. On `SIGTERM`/`SIGINT` the phase becomes `draining` (readyz 503), the listener stops accepting, event streams end, ordinary requests finish within the deadline, services are disposed, SQLite handles are closed and the process exits 0. A failsafe exits 1 ten seconds past the deadline.
+- Startup prints `ZERO_DASHBOARD_READY {"url":...,"mode":"server"}`.
+
+### Threat model
+
+Assets: the control token (full local control of the console, workflows and tools), model provider keys in the environment and `credentials.json`, findings data in `/data`, the engine bearer. Attacker positions and mitigations:
+
+| Threat | Mitigation | Residual |
+| --- | --- | --- |
+| Unauthenticated network visitor | No token in HTML; sign-in page only; API and assets 401; server refuses to start without a credential (team mode, or a 32+ character access token, or a generated one). | An access token holder has full console control; this is a single-trust-domain console, not per-user isolation unless team mode is used. |
+| Credential guessing | Constant-time compare; per-client exponential backoff after 5 failures (cap 15 min) plus a global lock after 100 failures a minute; 429 with `Retry-After`; audit rows `access.login_failed`, `access.throttled`. | Client identity is the socket address, or the rightmost untrusted `X-Forwarded-For` hop from a trusted proxy. Behind a proxy that is not listed, all clients share one bucket (safe, but self-locking). |
+| DNS rebinding and Host spoofing | Explicit allow-list; unknown Host gets 403 (`access.host_denied`); Origin must equal the effective origin. | Operators must list only names they control. |
+| Spoofed `X-Forwarded-*` | Honoured only from `--trusted-proxy` peers; client IP is the rightmost untrusted hop. | A proxy that does not overwrite client-supplied forwarded headers breaks this; use the shipped Caddyfile or equivalent. |
+| CSRF and login CSRF | SameSite=Strict cookie, Origin/fetch-metadata required on mutating calls and on login/logout, control token header required. | A same-site attacker (another page on the same registrable domain) is out of scope; do not share a parent domain with untrusted sites. |
+| XSS stealing the control token | The existing CSP (script-src self plus hashes), `HttpOnly` session cookie. | Same as loopback: script in the console origin equals control. |
+| Network eavesdropping | TLS is terminated by the proxy. Plain-HTTP exposure is unsafe: the token and cookie travel in clear. A loud warning prints when the bind is non-loopback and no trusted proxy is configured. | Nothing technical stops an operator from publishing the port directly; the compose file binds it to loopback by default. |
+| Log and backup leakage | Neither token nor control token is logged; the generated access token is printed exactly once to stdout and stored 0600 (it remains in container logs: rotate by deleting the file and restarting, or set `ZERO_ACCESS_TOKEN`). Audit rows hold actions, outcomes and client address only. | `credentials.json` is plaintext (gap 6). Prefer environment keys on servers. |
+| Compromised container | uid 1000, no extra capabilities requested, `no-new-privileges`, no Docker socket. Scan tooling runs locally inside the container. | A model-directed tool runs with the console's privileges inside the container; set `ZERO_REQUIRE_SCOPE=1` and egress rules on the host. |
+
+Out of scope and not supported: multiple replicas, shared volumes, HA, shared sandboxes across customers, SAML or SCIM (enterprise plugin), rate limiting of the authenticated API.
+
+## 5. Image, compose, CI (built)
+
+- `scripts/docker/Dockerfile`: `EXPOSE 48123`, `HEALTHCHECK` on `/healthz`, `VOLUME /data` with `HOME=/data` (state under `/data/.0`), tini as PID 1, uid 1000, `org.opencontainers.image.*` labels, default `CMD web --host 0.0.0.0 --server-mode`; the entrypoint still takes `scan ...`. `ZERO_ALLOWED_HOSTS` defaults to `localhost,127.0.0.1`.
+- `.github/workflows/docker-publish.yml`: adds `vX.Y.Z` and `X.Y` tags when the built commit carries the matching `vX.Y.Z` git tag; SHA, `main` and `latest` as before, both ghcr names.
+- `deploy/compose/`: `docker-compose.yml`, `.env.example`, `Caddyfile`. One service, one named volume, loopback-published port, stop grace period 40 s, optional `proxy` profile (Caddy, automatic HTTPS) with the proxy network pre-trusted.
+- `.github/workflows/docker-server.yml`: builds the image, starts it with compose-equivalent settings and runs `scripts/smoke-server-mode.mjs` (health, readiness, anonymous page has no token, bad Host 403, login, CSRF).
+
+## 6. Not built, by decision
+
+Self-serve multi-tenant routing, shared sandboxes across customers, inference resale, a customer-facing signup or billing system, HA or horizontal scale (needs a storage redesign that `shared-server.md` defers), any public Helm chart or Terraform module.
+
+Isolation model (unchanged from the proposal): the control plane and tool execution share one container for a single customer who is the only tenant; stronger isolation uses separate worker computers (`0 computers`). KVM and SmolVM on Linux cloud need nested virtualisation or bare metal and an x86 workbench image (**inferred**, not promised).
 
 Other points:
-- Upgrades: pin image by digest; semver tags and signed images first. Upgrade = stop, snapshot the volume, start the new tag. Rollback = restore the snapshot. Add a schema version table before promising in-place rollback.
-- Backup: volume snapshots (cloud disk or CSI) before upgrade and nightly; document stop-and-copy for Compose. Restore drill in CI.
-- Secrets: provider keys, engine token and OIDC secret come from env via a Secret, or a cloud secret store rendered to a 0600 env file. Never args. Treat `credentials.json` as plaintext; do not use it on servers.
-- SSO: the landed identity provider seam plus OIDC. SAML and SCIM come as a signed enterprise plugin after the extension bridge is built (`enterprise-edition.md`, build order). No FusionAuth-like dependency.
-- Licence: the landed entitlement hook. Add pinned keys and the issuing tool (private `0sec-labs/0security-enterprise`) in P3. Licence is delivered per customer as a file via `ZERO_LICENSE_FILE`. Telemetry kill switches already allow isolated installs.
-- Audit: the audit sink seam is landed, and its enterprise consumer needs the plugin bridge. Until then, structured logs (`ZERO_LOG_FORMAT`) shipped to the customer's log store.
+- Upgrades: pin the image tag or digest. Upgrade = back up, pull the new tag, restart; migrations run on start. There is no schema version table, so in-place rollback is unverified: restore the backup instead.
+- Backup: stop the container and copy `/data`, or use the SQLite online backup (see the Docker page).
+- Secrets: provider keys and the access token come from the environment or a 0600 env file, never arguments. Treat `credentials.json` as plaintext.
+- SSO: OIDC through team mode. SAML and SCIM are enterprise plugins.
+- Licence and audit export: the landed seams, delivered by the enterprise repository.
 
-## 5. Phased plan
+## 7. Enterprise and vendor-managed (by contract, separate repository)
 
-Sizes are engineer-time estimates (**inferred**), one engineer.
+Enterprise on-prem and vendor-managed single-tenant deployments use a private enterprise image built from the same open-source image and private deployment artifacts (Kubernetes manifests, Terraform, runbooks, licence issuing, backup drills, offboarding and data deletion, SLA text). They live in the enterprise repository, not here. Public docs mention only that they exist and are arranged by contract.
 
-**P0: documented Compose, hardened image, health (1 to 2 weeks).**
-- Add a trusted-proxy mode and a non-loopback bind in `dashboard.ts` and `dashboard-http.ts` (explicit flag, off by default, Host and Origin allowlist). Add `/healthz` and `/readyz`. Add a schema version table.
-- `scripts/docker/Dockerfile`: `serve` default for a server target, HEALTHCHECK, documented volume at `/home/ubuntu/.0`, semver tags, cosign signature, SBOM and provenance in `docker-publish.yml`.
-- Add `deploy/compose/compose.yml` (init, restart policy, stop grace period, volume, Caddy for TLS) and `docs/src/content/docs/self-hosting.md`.
-- CI: `docker compose up --wait` plus health curl and a restart-persistence check in a new `deploy-e2e.yml`.
+## 8. Open decisions for the owners
 
-**P1: Helm chart (1 to 2 weeks after P0).**
-- `helm/zero/`: StatefulSet (replicas 1, PVC), Service, optional Ingress, Secret and values schema (`values.schema.json`), probes, preStop, securityContext (uid 1000, fsGroup), NetworkPolicy, image pinned by digest. Publish as an OCI chart on GHCR.
-- Docs: `docs/src/content/docs/self-hosting-kubernetes.md`.
-- CI: `helm lint`, `helm template` with kubeconform, then a kind cluster install, health check, pod restart and upgrade test. Chart version tied to the app release so it cannot drift (the Promptfoo failure).
-
-**P2: Terraform modules (2 to 3 weeks).**
-- `terraform/modules/vm/` (one VM, data disk, security group on 443, DNS, ACME TLS, secret store, snapshot schedule, runs the Compose artifact by digest) and `terraform/modules/kubernetes/` (a thin wrapper that installs the P1 chart on an existing cluster; do not create clusters). Start with one cloud (**Open**: AWS recommended). `terraform/examples/`. Docs: `docs/src/content/docs/self-hosting-terraform.md`.
-- CI: `terraform fmt -check`, `terraform validate`, `tflint`, `checkov` or `trivy config`. A plan against a mocked provider; apply only in a manual workflow against a test account.
-
-**P3: managed dedicated deployment runbook and automation (3 to 4 weeks, only after the first signed customer).**
-- Private repo (`0sec-labs/0security-enterprise` or 0cloud), not this one: per-customer module instances, licence issuing with pinned keys, upgrade and rollback runbook, backup restore drill, monitoring, incident and offboarding (data deletion) procedure, SLA text. Public docs list only what exists.
-
-**Later, optional: hosted inference.** A model proxy with per-customer budgets. Reconsider only if customers ask; it conflicts with the current "bring your own keys" principle.
-
-## 6. Open decisions for the owners
-
-| Decision | Recommended default |
+| Decision | Status |
 | --- | --- |
-| Offer a vendor-run dedicated deployment at all | Yes, contract-only, single-tenant, after P2; record the decision because `shared-server.md` and `enterprise-edition.md` currently say otherwise |
+| Vendor-run single-tenant deployment | Yes, contract-only, single-tenant, from the enterprise repository |
 | Self-serve multi-tenant cloud | No |
-| First cloud for Terraform | AWS, one region pair |
+| Public Helm chart and Terraform module | No |
+| Hosted inference | No |
 | Who holds customer data | Customer account preferred; vendor account only with a data-processing agreement and a deletion SLA |
-| Default sandbox | Local execution with egress limits and mandatory scope; worker VMs for stronger isolation |
-| Helm versus Compose as the primary doc path | Compose first, Helm when the first customer asks for Kubernetes |
 | arm64 server image | Not until demanded; amd64 only and documented |
-| Public Helm chart and Terraform module | Public, MIT like the image, with no support promise for community use |
+| Signed images, SBOM, provenance in `docker-publish.yml` | Open (not part of P0) |
 
-## 7. Risks
+## 9. Risks
 
 - Legal and abuse: hosting offensive tooling for strangers carries abuse and liability risk. Contract customers only, with an acceptable-use clause, written authorisation of targets, named contacts and a termination right. No self-serve signup.
 - Scope enforcement: `ZERO_REQUIRE_SCOPE=1` and server-side admission caps by default in every packaged form; egress rules enforced by the platform, not only the app.
 - Audit: customers and the vendor both need a tamper-evident record of scans. Landed sink seam first; ship logs by default, signed export via plugin later.
 - Data: vulnerability data is sensitive. Encrypted volumes, per-customer keys, no shared storage, a documented deletion path.
-- Support cost (PostHog lesson): keep the matrix at one image, one chart, one VM module; delete anything the CI does not cover.
-- Unverified: container run of `0 web` behind a Host-rewriting proxy, OIDC redirect and Secure cookie behind TLS, Linux SmolVM, sizing (start 4 vCPU, 16 GB, 100 GB SSD, inferred), and what 0cloud already holds.
+- Support cost (PostHog lesson): keep the public matrix at one image and one compose file; delete anything the CI does not cover.
+- Unverified: OIDC redirect and Secure cookie behind real TLS with a public IdP, Linux SmolVM, sizing beyond the 2 vCPU / 4 GB minimum, and what 0cloud already holds.
