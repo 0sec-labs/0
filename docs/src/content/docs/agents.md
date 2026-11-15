@@ -1,24 +1,24 @@
 ---
-title: Sentinels
+title: Agents
 description: Standing watchers with a scope, an autonomy level, a daily budget and a review gate.
 ---
 
-A Sentinel is a named agent you configure once. It then runs missions for you on a schedule, when a GitHub pull request opens, or when you start it by hand.
+An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It then runs threads for you on a schedule, when a GitHub pull request opens, or when you start it by hand.
 
 ## Create one
 
-1. Run `0` and open **Sentinels**.
+1. Run `0` and open **Agents**.
 2. Pick a preset, or **Start from scratch**.
-3. Confirm the name. The Sentinel is created **paused**, with production targets off.
+3. Confirm the name. The Agent is created **paused**, with production targets off.
 4. On its page, set its scope, budget and instructions, then resume it. Scheduled and polled runs also need the review described below.
 
-Sentinels run on the engine behind the browser app. With no server running, nothing fires.
+Agents run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Sentinel has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Agent has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
 ## Presets
 
-A new Sentinel always starts paused, read-only and with production targets off. A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
+A new Agent always starts paused, read-only and with production targets off. A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
 | Preset | Autonomy | Tool access | Job |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ A new Sentinel always starts paused, read-only and with production targets off. 
 
 ## Budget
 
-Each Sentinel has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Sentinel and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**.
+Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Agent and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**.
 
 Records saved with older per-run cost and time caps load normally, and those two caps are ignored.
 
@@ -57,11 +57,11 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 ## Review gate
 
-Scheduled and polled runs are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
+Scheduled and polled runs are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
 
 ## API
 
-Routes sit under `/api/console` and need the dashboard control token. In team mode, viewers are read-only and editors can delete only their own Sentinels.
+Routes sit under `/api/console` and need the dashboard control token. In team mode, viewers are read-only and editors can delete only their own Agents.
 
 | Route | Purpose |
 | --- | --- |
@@ -74,6 +74,6 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 
 ## Next steps
 
-- [Automations](/automations/): the saved jobs a Sentinel can own.
-- [Skills](/skills/): instructions a Sentinel loads.
+- [Automations](/automations/): the saved jobs an Agent can own.
+- [Skills](/skills/): instructions an Agent loads.
 - [Scope](/scope/): authorization rules.

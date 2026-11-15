@@ -22,7 +22,7 @@ Resolution order, highest first: command-line flag, environment variable, projec
 
 | Value | Meaning |
 | --- | --- |
-| `local` | Default. Agents, browser and shell run on your machine. |
+| `local` | Default. Helpers, browser and shell run on your computer. |
 | `smolvm` | Everything runs inside a local Kali VM (the workbench). |
 
 Set up the workbench, then start the app:
@@ -120,7 +120,7 @@ Per-user state lives in `~/.0`.
 | `runs/<scan-id>/state.db` | Findings and state for one run. |
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
-| `console-sessions/` | One transcript JSON per mission. |
+| `console-sessions/` | One transcript JSON per thread. |
 | `engines.json` | Registered remote engines. See [Remote engines](/engines/). |
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
@@ -131,7 +131,7 @@ Project settings live in `<project>/.0/tui-settings.json`.
 
 Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
 
-Mission transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
+Thread transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
 
 ## The `0 config` command
 
@@ -149,7 +149,7 @@ Some settings are operator-global, and a project can never change them: `analyti
 
 `0 config import` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 
-Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic mission titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved missions idle for that many days when the app starts.
+Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic thread titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved threads idle for that many days when the app starts.
 
 ### Development engine updates
 
@@ -187,9 +187,9 @@ Auth errors (401, 403) are never retried. The run fails with the provider error 
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Agents requested in one batch. |
+| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Helpers requested in one batch. |
 | `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers in one audit tree. |
-| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents running at once per batch. |
+| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Helpers running at once per batch. |
 | `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth. |
 
 Values are positive integers. Restart the engine after changing them. Provider rate limits and the shared budget still apply.
@@ -267,9 +267,9 @@ These variables force everything off when set to a non-empty value other than `0
 env ZERO_ANALYTICS_LEVEL=off 0
 ```
 
-Change them in the browser app under Settings, Agents. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
+Change them in the browser app under Settings, Helpers. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
 
-`/feedback <message>` in a mission saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
+`/feedback <message>` in a thread saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 
 ## Update checks
 

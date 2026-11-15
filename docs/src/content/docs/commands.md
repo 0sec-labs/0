@@ -35,7 +35,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
     <h3>Automate</h3>
     <p>Run saved automations, use 0 in CI, and connect coding agents.</p>
     <p><a href="#automation">automation</a> · <a href="#mcp-server">mcp-server</a> · <a href="#api">api</a></p>
-    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">Agents and MCP</a></p>
+    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">MCP servers</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Investigate further</h3>

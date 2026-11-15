@@ -31,7 +31,7 @@ head:
               "name": "Can I run it on my own infrastructure?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes. 0 runs on your machine, in your CI runner or in a container, with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search."
+                "text": "Yes. 0 runs on your computer, in your CI runner or in a container, with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search."
               }
             },
             {
@@ -60,10 +60,10 @@ head:
             },
             {
               "@type": "Question",
-              "name": "What are persistent security agents (Sentinels)?",
+              "name": "What are persistent security agents (Agents)?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "A Sentinel is a named agent with a scope, a tool-access level, a daily budget and memory. It runs missions on a schedule, when a GitHub pull request opens, or when you start it by hand."
+                "text": "An Agent is a named agent with a scope, a tool-access level, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand."
               }
             },
             {
@@ -79,7 +79,7 @@ head:
               "name": "Is it safe to point at my systems?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Only scan systems you own or are authorized to test. A scope file limits live testing to the hosts you list, but it is not a sandbox. New Sentinels start paused, read-only and with production targets off."
+                "text": "Only scan systems you own or are authorized to test. A scope file limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused, read-only and with production targets off."
               }
             },
             {
@@ -87,7 +87,7 @@ head:
               "name": "How do I get started?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Install with the one-line installer, run `0`, connect a model provider and start a mission in the browser app."
+                "text": "Install with the one-line installer, run `0`, connect a model provider and start a thread in the browser app."
               }
             }
           ]
@@ -104,7 +104,7 @@ Yes. The code is licensed under MIT or Apache-2.0, at your option, and is develo
 
 ## Can I run it on my own infrastructure?
 
-Yes. 0 runs on your machine, in your CI runner or in a [container](/docker/), with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search; see [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
+Yes. 0 runs on your computer, in your CI runner or in a [container](/docker/), with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search; see [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
 
 ## Which models does it support?
 
@@ -118,9 +118,9 @@ Source repositories and pull request diffs ([Scan code](/scan-code/)), live web 
 
 A finding is a claim until verification reproduces it. A fix is accepted only when the patched code no longer reproduces the finding and your tests still pass. See [Verify and fix](/verify-and-fix/).
 
-## What are persistent security agents (Sentinels)?
+## What are persistent security agents (Agents)?
 
-A Sentinel is a named agent with a scope, a tool-access level, a daily budget and memory. It runs missions on a schedule, when a GitHub pull request opens, or when you start it by hand. See [Sentinels](/sentinels/).
+An Agent is a named agent with a scope, a tool-access level, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand. See [Agents](/agents/).
 
 ## Does it work in CI?
 
@@ -128,8 +128,8 @@ Yes. The GitHub Action runs 0 on your own runner with your own model key, applie
 
 ## Is it safe to point at my systems?
 
-Only scan systems you own or are authorized to test. A [scope file](/scope/) limits live testing to the hosts you list, but it is not a sandbox. New Sentinels start paused, read-only and with production targets off.
+Only scan systems you own or are authorized to test. A [scope file](/scope/) limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused, read-only and with production targets off.
 
 ## How do I get started?
 
-Install with the one-line installer, run `0`, connect a model provider and start a mission in the browser app. The [Quickstart](/) has the steps, and [Models and keys](/models/) covers providers.
+Install with the one-line installer, run `0`, connect a model provider and start a thread in the browser app. The [Quickstart](/) has the steps, and [Models and keys](/models/) covers providers.

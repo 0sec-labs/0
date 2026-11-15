@@ -1,5 +1,5 @@
 ---
-title: Agents and MCP
+title: MCP servers
 description: Drive 0 from Claude Code, Codex or Cursor, and give 0 tools from other MCP servers.
 ---
 
@@ -247,5 +247,5 @@ Local chats connect enabled accounts directly. SmolVM chats get only the enabled
 ## Next steps
 
 - [Automations](/automations/): the runs these tools start.
-- [Plugin security](/plugin-trust/): what an MCP server can do on your machine.
+- [Plugin security](/plugin-trust/): what an MCP server can do on your computer.
 - [Scope](/scope/): authorize targets before a live run.

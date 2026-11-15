@@ -37,21 +37,21 @@ The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community
 
 ### States
 
-A plugin is **installed** (files on disk), **enabled** (your approval for the current project) and **loaded** (its process is running). Installing runs nothing. Enabling starts nothing. Loading happens on `plugin run` or when a mission that has the plugin starts.
+A plugin is **installed** (files on disk), **enabled** (your approval for the current project) and **loaded** (its process is running). Installing runs nothing. Enabling starts nothing. Loading happens on `plugin run` or when a thread that has the plugin starts.
 
 Installed files live under `~/.0/plugins/<id>/`. Approvals live under `~/.0/plugin-enablement/`, keyed by the resolved project path. Changed capabilities need approval again. A version change with the same capabilities does not. Run `enable` from the project where you will use the plugin.
 
-### Use a plugin in a mission
+### Use a plugin in a thread
 
-Enable the plugin in your project, then run `0` from that directory. Each mission pins the plugins approved when it started. Ask the agent for the tool name (`foxguard_scan`), not the registry ID (`foxguard.scanner`). After you install, enable, disable or replace a plugin, start a new mission. Disabling does not stop a mission that already loaded the code, so close old missions when revocation must take effect now. Direct `plugin run` checks the current approval each time.
+Enable the plugin in your project, then run `0` from that directory. Each thread pins the plugins approved when it started. Ask the agent for the tool name (`foxguard_scan`), not the registry ID (`foxguard.scanner`). After you install, enable, disable or replace a plugin, start a new thread. Disabling does not stop a thread that already loaded the code, so close old threads when revocation must take effect now. Direct `plugin run` checks the current approval each time.
 
-With SmolVM execution, new missions copy approved plugins into private guest storage and load them inside the VM. The controller never runs their code. External programs a plugin calls must exist in the workbench image. The standard image includes FoxGuard.
+With SmolVM execution, new threads copy approved plugins into private guest storage and load them inside the VM. The controller never runs their code. External programs a plugin calls must exist in the workbench image. The standard image includes FoxGuard.
 
 ### Update
 
-There is no `plugin update` or `plugin uninstall`. Running `0 plugin install <id>` again writes whatever your registry now serves, over the existing copy. Read the code and `0 plugin info <id>` first. Approval covers capabilities, not exact source bytes. Local updates use `0 plugin install ./my-plugin --local`. Running missions keep the old tools.
+There is no `plugin update` or `plugin uninstall`. Running `0 plugin install <id>` again writes whatever your registry now serves, over the existing copy. Read the code and `0 plugin info <id>` first. Approval covers capabilities, not exact source bytes. Local updates use `0 plugin install ./my-plugin --local`. Running threads keep the old tools.
 
-The FoxGuard adapter needs the standalone `foxguard` executable on your machine. The registry does not install it. The adapter takes an absolute `path` and an optional `severity`, and bounds scans to 25 seconds and 8 MiB of scanner output. Results can omit findings to fit the plugin limit, so check `omittedFindings` and truncation. See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js).
+The FoxGuard adapter needs the standalone `foxguard` executable on your computer. The registry does not install it. The adapter takes an absolute `path` and an optional `severity`, and bounds scans to 25 seconds and 8 MiB of scanner output. Results can omit findings to fit the plugin limit, so check `omittedFindings` and truncation. See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js).
 
 ## Build a plugin
 
@@ -136,7 +136,7 @@ Declare what the tool does, including any program it launches.
 | `filesystem-write` | Writes files. | Local scope, not read-only |
 | `findings-write` | Changes findings state. | Not read-only |
 
-Flags combine. A tool is read-only only if every capability is `compute`, `model-call` or `filesystem-read`. Missions use these flags in authorization checks, and scope checks come from the built-in `scope` plugin (`0 plugin enable scope`, see [Scope](/scope/)). Direct `plugin run` uses only enablement and `--yes`.
+Flags combine. A tool is read-only only if every capability is `compute`, `model-call` or `filesystem-read`. Threads use these flags in authorization checks, and scope checks come from the built-in `scope` plugin (`0 plugin enable scope`, see [Scope](/scope/)). Direct `plugin run` uses only enablement and `--yes`.
 
 Declarations are not operating-system limits. The plugin runs as you with an allowlisted environment, and the host does not check that it obeys. Provider keys and target authentication are not passed to it, and `model-call` does not give it a provider. Never read credentials from the home directory.
 

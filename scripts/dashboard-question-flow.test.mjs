@@ -44,7 +44,7 @@ test('operator questions advance individually, preserve answers, and submit toge
     assert.equal(await page.getByText('Question 1 of 2', {exact:true}).count(), 1);
     assert.deepEqual(await page.evaluate(() => window.responses), []);
     await page.getByRole('radio', {name:'Local', exact:true}).check();
-    await page.getByRole('textbox', {name:'Your answer', exact:true}).fill('  Keep it on this machine  ');
+    await page.getByRole('textbox', {name:'Your answer', exact:true}).fill('  Keep it on this computer  ');
     await page.getByRole('button', {name:'Next', exact:true}).click();
     await page.getByText('Question 2 of 2', {exact:true}).waitFor();
     assert.equal(await page.locator('fieldset').count(), 1);
@@ -52,7 +52,7 @@ test('operator questions advance individually, preserve answers, and submit toge
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('type')), 'checkbox');
     await page.getByRole('button', {name:'Back', exact:true}).click();
     assert.equal(await page.getByRole('radio', {name:'Local', exact:true}).isChecked(), true);
-    assert.equal(await page.getByRole('textbox', {name:'Your answer', exact:true}).inputValue(), '  Keep it on this machine  ');
+    assert.equal(await page.getByRole('textbox', {name:'Your answer', exact:true}).inputValue(), '  Keep it on this computer  ');
     await page.getByRole('button', {name:'Next', exact:true}).click();
     await page.getByRole('checkbox', {name:'Source', exact:true}).check();
     await page.getByRole('checkbox', {name:'Dependencies', exact:true}).check();
@@ -63,7 +63,7 @@ test('operator questions advance individually, preserve answers, and submit toge
     await page.evaluate(() => window.setBusy(false));
     await page.getByRole('button', {name:'Send answers', exact:true}).click();
     assert.deepEqual(await page.evaluate(() => window.responses), [{approve:true,answers:[
-      {header:'Location',selectedLabels:['Local'],customText:'Keep it on this machine'},
+      {header:'Location',selectedLabels:['Local'],customText:'Keep it on this computer'},
       {header:'Checks',selectedLabels:['Source','Dependencies']}
     ]}]);
     await page.evaluate(() => {window.responses=[];window.replaceDecision({...window.initial,id:'new-question-batch'});});

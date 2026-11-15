@@ -9,7 +9,7 @@ One rule drives the design: reproduce before trusting. To run a scan instead, se
 
 | Component | Role |
 | --- | --- |
-| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and sentinels. |
+| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and agents. |
 | Engine (`packages/engine`) | Scan pipelines, agent loop, tools, verification, fixes, scope guard and storage. |
 | Browser app (`packages/web`) | The UI that `0` opens. Talks to the engine over a same-origin proxy. |
 | Bench (`packages/bench`) | Benchmark runners. See [Benchmarks](/benchmark/). |
@@ -58,7 +58,7 @@ The CLI, browser, schedules and MCP all use the shared automation runner. Assess
 
 An automation defines steps. A run captures the definition, bound inputs, status and returned evidence. The runner executes connected steps in order, applies automation and step deadlines, and shares provider spend. Severity and proof status are independent of whether execution completed. The control database keeps automation snapshots and combined results. Files stay on the engine that produced them.
 
-An engine connection picks the process that owns missions, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
+An engine connection picks the process that owns threads, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
 
 ```mermaid
 flowchart LR
@@ -71,7 +71,7 @@ flowchart LR
   RemoteRunner --> RemoteTools[Server workspace / SmolVM / tools]
 ```
 
-A remote engine owns its machine's execution boundaries. 0 has no remote executor, where one engine outsources tools but keeps the run, and no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
+A remote engine owns its computer's execution boundaries. 0 has no remote executor, where one engine outsources tools but keeps the run, and no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
 
 ## Scan pipeline
 
@@ -153,7 +153,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 - Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
 - Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
-See [Agents and MCP](/mcp/).
+See [MCP servers](/mcp/).
 
 ## Storage
 
