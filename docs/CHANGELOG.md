@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Removed
+
+- Remove four enterprise extension points that shipped in v0.30.0: audit event subscriptions for plugins, offline verification of signed licences (entitlements), support for an external identity provider for team sign-in, and the named-permission policy behind team roles. Enterprise will attach as a separate gateway in front of the engine, which needs none of them. None was required for open-source use: no signing key was ever bundled, so no licence was accepted, and built-in OIDC sign-in and the owner, editor and viewer roles behave as before. Ed25519 verification of plugin registry entries (`ZERO_REGISTRY_PUBLIC_KEY_FILE`) stays.
+
 ## [0.33.0] - 2026-11-15
 
 This release makes access the same two choices everywhere: Read-only or Can make changes. Asking before each command is only the global setting.

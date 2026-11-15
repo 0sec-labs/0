@@ -48,7 +48,7 @@ mapped to what `0` already has:
 
 ## Seams that were added, then mostly reverted (see the gateway decision below)
 
-All five landed as separate PRs on 2026-11-15. Four were reverted the same day; only registry signature
+All five landed as separate PRs and shipped in v0.30.0. Four were then reverted (see the changelog, Unreleased, Removed); only registry signature
 verification (5) remains. The descriptions below are kept as history.
 
 1. **Permissions, not route regexes** (#359, `team-permissions.ts`). Replace the regex lists in `authorizeTeamApi`
