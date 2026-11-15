@@ -121,6 +121,7 @@ if [ "$FAST" = 1 ]; then
   t0=$SECONDS; fastfail=0
   fast() { printf '\n\033[36m[ci-local --fast] ==> %s\033[0m\n' "$*"; "$@" || { fastfail=1; printf '\033[31m[ci-local --fast] FAILED: %s\033[0m\n' "$*" >&2; }; }
   fast pnpm check:architecture
+  fast pnpm check:release-notes
   fast pnpm lint
   for pkg in engine cli web bench; do
     if echo "$changed" | grep -q "^packages/$pkg/"; then
