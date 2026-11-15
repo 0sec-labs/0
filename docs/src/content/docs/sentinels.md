@@ -12,7 +12,7 @@ A Sentinel is a named agent you configure once. It then runs missions for you on
 3. Confirm the name. The Sentinel is created **paused**, with production targets off.
 4. On its page, set its scope, budget and instructions, then resume it. Scheduled and polled runs also need the review described below.
 
-Sentinels run on the engine behind the browser app. With no server running, nothing fires.
+Sentinels run on the computer behind the browser app. With no server running, nothing fires.
 
 Each Sentinel has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
@@ -57,7 +57,7 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 ## Review gate
 
-Scheduled and polled runs are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
+Scheduled and polled runs are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and computer. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
 
 ## API
 

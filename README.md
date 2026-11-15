@@ -114,9 +114,9 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 
 - [Documentation](https://docs.0.security/)
 - [Scan modules](https://docs.0.security/scan-code/)
-- [Supported models and connections](https://docs.0.security/models/)
+- [Models and providers](https://docs.0.security/models/)
 - [CI/CD guide](https://docs.0.security/ci/github-action/)
-- [Plugins and MCP](https://docs.0.security/plugins/)
+- [Plugins and MCP](https://docs.0.security/mcp/)
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
 - [Enterprise](https://0.security/enterprise/)

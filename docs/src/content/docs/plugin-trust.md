@@ -9,7 +9,7 @@ it. Setup is in [MCP](/mcp/) and [Plugins](/plugins/).
 
 ## What runs where
 
-- **stdio MCP server**: 0 starts the command you configured on the engine host
+- **stdio MCP server**: 0 starts the command you configured on the computer host
   whenever you press **Test** or a mission uses it. It is arbitrary code with your
   user's permissions. The environment is scrubbed to safe defaults plus the
   variables you declared, and loader variables such as `LD_PRELOAD`,
@@ -87,12 +87,12 @@ repository** share one flow:
   attribution". If no licence is declared, or it has custom terms, the skill is
   listed with **View on GitHub** and 0 does not copy it.
 
-Previewing, adding and removing are browser-only routes (engine callers get
+Previewing, adding and removing are browser-only routes (computer callers get
 `403 browser_only`); in team mode viewers cannot add skills.
 
 ## Who can approve
 
-Approval routes are browser-only: engine-bearer (agent) callers get
+Approval routes are browser-only: computer-bearer (agent) callers get
 `403 browser_only`, so an agent cannot add or approve its own tools. In team
 mode only the workspace owner can use them (`403 owner_required`).
 

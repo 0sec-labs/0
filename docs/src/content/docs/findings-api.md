@@ -3,7 +3,7 @@ title: Findings API
 description: Read retained findings and evidence through workspace-scoped integration credentials.
 ---
 
-The Findings API is read-only. It returns retained findings and evidence from the selected engine. It cannot launch scans, ingest findings, run commands or reach model credentials.
+The Findings API is read-only. It returns retained findings and evidence from the selected computer. It cannot launch scans, ingest findings, run commands or reach model credentials.
 
 ## Create a credential
 
@@ -20,7 +20,7 @@ curl --header "Authorization: Bearer $ZERO_FINDINGS_API_TOKEN" \
   "http://127.0.0.1:48123/api/v1/findings?limit=50"
 ```
 
-The engine binds to loopback. Remote integrations need your own authenticated reverse proxy or tunnel. Tokens are not accepted in URLs. They authorize only `GET` and `HEAD` on the routes below, and nothing else in the engine.
+The computer binds to loopback. Remote integrations need your own authenticated reverse proxy or tunnel. Tokens are not accepted in URLs. They authorize only `GET` and `HEAD` on the routes below, and nothing else in the computer.
 
 ## List findings
 

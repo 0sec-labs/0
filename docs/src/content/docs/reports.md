@@ -59,9 +59,9 @@ Group several runs into one handoff report in the browser app.
 3. Choose **Edit**. Fill in **Objective and scope** and **Handoff notes**, and tick the runs under **Included scans** (up to 100). **Add a scan by ID** adds older runs.
 4. Choose **Save report**, then **Export** as JSON or Markdown.
 
-Findings with the same fingerprint are combined, and each keeps its source run, finding ID and evidence. Reports are stored in the engine's workspace. Exporting does not send anything anywhere.
+Findings with the same fingerprint are combined, and each keeps its source run, finding ID and evidence. Reports are stored in the computer's workspace. Exporting does not send anything anywhere.
 
-The same reports are available over the engine API:
+The same reports are available over the computer API:
 
 | Method | Path | Result |
 |---|---|---|
@@ -72,7 +72,7 @@ The same reports are available over the engine API:
 | `GET` | `/api/engagements/:id/report` | Versioned JSON report |
 | `GET` | `/api/engagements/:id/report?format=markdown` | Markdown report |
 
-Authenticate with the engine's bearer token. See [Remote engines and teams](/engines/).
+Authenticate with the computer's bearer token. See [Computers and teams](/engines/).
 
 ## Import a CI report
 
@@ -82,7 +82,7 @@ Bring a report from CI into the browser app without re-running anything:
 0 reports import ./0-report/report.json --metadata ./0-report/run.json --db-path ~/.0/0.db
 ```
 
-`--db-path` is the browser engine's database; `~/.0/0.db` is the local default. Stop `0 web` before importing. The GitHub Action writes `report.json` and `run.json` to its report directory (`0-report` by default); `--metadata` is optional. Importing executes nothing from the report.
+`--db-path` is the web computer's database; `~/.0/0.db` is the local default. Stop `0 web` before importing. The GitHub Action writes `report.json` and `run.json` to its report directory (`0-report` by default); `--metadata` is optional. Importing executes nothing from the report.
 
 ## Send findings to GitHub
 

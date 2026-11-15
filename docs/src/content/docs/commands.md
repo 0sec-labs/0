@@ -47,7 +47,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
     <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Computers and teams</a></p>
   </section>
 </div>
 
@@ -1450,7 +1450,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1861,7 +1861,7 @@ Show retained observations and their approval/processing status
 0 improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
@@ -2597,7 +2597,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2614,7 +2614,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2631,7 +2631,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |

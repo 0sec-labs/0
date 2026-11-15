@@ -14,8 +14,8 @@ description: What is open source in 0, what you can run on your own, what leaves
 | Findings and reports (JSON, SARIF, Markdown, HTML, PDF) | Yes |
 | GitHub Action and CI reports, `0 reports import` | Yes, see [CI/CD](/ci/github-action/) |
 | Findings API for your own tools | Yes, read-only, see [Findings API](/findings-api/) |
-| Team workspace with owner, editor and viewer roles and OIDC sign-in | Yes, see [Remote engines and teams](/engines/) |
-| Remote engines on your own servers | Yes, with limits listed on that page |
+| Team workspace with owner, editor and viewer roles and OIDC sign-in | Yes, see [Computers and teams](/engines/) |
+| Remote computers on your own servers | Yes, with limits listed on that page |
 | Docker image | Yes, see [Docker](/docker/) |
 
 Scans run on your machine, in your CI or on your servers. Model calls go to the provider you choose with your own key. 0security does not run scans or model calls for you.
@@ -31,7 +31,7 @@ By default, nothing is uploaded with your findings, source code or model keys.
 
 ## What the team workspace does not do
 
-A team workspace shares one engine between members. It is not a multi-tenant service. Sessions are held in memory, so members sign in again after a restart, and results from several engines are not merged. See [Remote engines and teams](/engines/) for the exact limits.
+A team workspace shares one computer between members. It is not a multi-tenant service. Sessions are held in memory, so members sign in again after a restart, and results from several computers are not merged. See [Computers and teams](/engines/) for the exact limits.
 
 ## Enterprise
 

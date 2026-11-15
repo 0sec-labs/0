@@ -19,7 +19,7 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 | Only what changed in a branch | `0 scan source ./my-app --diff-base origin/main --changed-only` |
 | Published package (npm, PyPI, Cargo, OCI) | `0 scan package express` |
 | Multi-lens sweep that emits leads | `0 scan deep ./my-app` |
-| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#scan-repair)) |
+| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#find-fix-and-verify-a-repository)) |
 
 `0 scan <target>` picks the module for you. A local path, `source:<path>`, a `.git` URL, `git@…` or a `https://github.com/…` URL runs `scan source --depth deep`. `npm:`, `pypi:`, `cargo:` and `oci:` prefixes run `scan package`. Bare package names are rejected as ambiguous.
 

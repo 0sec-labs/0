@@ -1,13 +1,13 @@
 ---
 title: Browser app
-description: Run missions, review findings, change settings and themes in the local browser app, or run the same engine headless.
+description: Run missions, review findings, change settings and themes in the local browser app, or run the same app headless.
 ---
 
 ```bash
 0
 ```
 
-`0` (or `0 web`) starts a local engine and opens the app. No account is needed. It binds to `127.0.0.1:48123` by default.
+`0` (or `0 web`) starts the app on this computer. No account is needed. It binds to `127.0.0.1:48123` by default.
 
 | Flag | Default | Effect |
 | --- | --- | --- |
@@ -28,11 +28,11 @@ The sidebar holds:
 - **Automations**.
 - **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
 - **More…**: **Memory**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
-- Your **Sentinels**, when the engine supports them.
+- Your **Sentinels**, when this computer supports them.
 
 Two cards can appear above the account row, for local users and team owners:
 
-- **Finish setting up** has two steps: connect a model provider and start your first mission. It hides once both are done, and you can dismiss it. There is no separate onboarding page.
+- **Finish setting up** has two steps: connect a model provider and start your first mission. It hides once both are done, and you can dismiss it.
 - **Update available** shows the latest and current versions. **Copy update command** copies `0 upgrade`. Dismissing it hides that version only.
 
 ### Keyboard shortcuts
@@ -80,7 +80,7 @@ Switching to **Act without asking** also resumes actions waiting for approval. S
 
 A message you send during a response is queued. It goes out when the current response finishes, so the agent's work is kept. Press **Send now** on a queued message to interrupt and send it at once. Press **Stop response** to stop.
 
-Background agents that a mission starts keep running after its response ends. Stop them from the agents panel. They belong to the live mission and do not survive an engine restart.
+Background agents that a mission starts keep running after its response ends. Stop them from the agents panel. They belong to the live mission and do not survive a computer restart.
 
 If a model connection drops, the mission reconnects and continues from its last completed tool result. Completed tool actions are not replayed.
 
@@ -88,7 +88,7 @@ If a model connection drops, the mission reconnects and continues from its last 
 
 The agent has a `web_search` tool and decides when to use it. Queries go to [Parallel's anonymous hosted search](https://parallel.ai/mcp), with DuckDuckGo as a fallback. No search key is needed. Results are links and snippets, not proof a page was read in full.
 
-Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to turn search off by default. This controls the search tool only, not all network access.
+Set `ZERO_FEATURE_WEB_SEARCH=0` on the computer to turn search off by default. This controls the search tool only, not all network access.
 
 ### Public source
 
@@ -100,12 +100,12 @@ The **Daybreak** control next to the model settings requests an OpenAI cyber acc
 
 ## Memory
 
-**Memory** holds notes the agent saved while reading source code. Each entry records its project folder and supporting files with content fingerprints. Before an entry is reused, 0 checks those files. If a file changed or is missing, the entry is skipped.
+**Memory** holds notes the agent saved while reading source code. Each entry records its folder and supporting files with content fingerprints. Before an entry is reused, 0 checks those files. If a file changed or is missing, the entry is skipped.
 
 - Open **Supporting files** on an entry to see its evidence.
 - Press **Stop using** to keep an entry out of future context. The record stays for inspection.
 
-Memory entries are hints for the agent to check again, not verified findings. A finished mission does not become an entry on its own. Memory lives in the engine's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the engine to turn source memory off.
+Memory entries are hints for the agent to check again, not verified findings. A finished mission does not become an entry on its own. Memory lives in the computer's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the computer to turn source memory off.
 
 ## Visualizations
 
@@ -135,13 +135,13 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 
 | Group | Page | What it controls |
 | --- | --- | --- |
-| Preferences | **General** | Engine update policy, input behavior, privacy (usage metrics and problem reports), support, status and one reset for shared preferences. |
+| Preferences | **General** | Update policy, input behavior, privacy (usage metrics and problem reports), support, status and one reset for shared preferences. |
 | | **Appearance** | Theme, mode, accent color, font size and reduce motion. This browser only. |
 | | **Missions** | Summarizing long missions, title instructions, idle archiving, subagent limits, transcript options and one **Show cost and usage** switch. |
 | | **Notifications** | Browser notifications. This browser only. |
 | | **Shortcuts** | The searchable shortcut list. |
 | Agent | **Instructions** | Your own `AGENTS.md` text for every mission, plus one file per folder. |
-| | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. `/connections` redirects here. |
+| | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. |
 | | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
 | | **Computers** | The machines missions run on. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
@@ -149,7 +149,7 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |
 | | **Members** | Team mode only. |
 
-The folder and permissions page opens at `/project`. Checks that the engine, provider and tools work open from **General → Status → Details** (`/doctor`).
+The folder and permissions page opens at `/project`. Checks that the computer, provider and tools work open from **General → Status → Details** (`/doctor`).
 
 ### Themes
 
@@ -160,13 +160,13 @@ The folder and permissions page opens at `/project`. Checks that the engine, pro
 - **Font size**: Small, Default or Large.
 - **Reduce motion**: System, On or Off.
 
-Themes are stored in the browser. The engine and the CLI never see them.
+Themes are stored in the browser. The computer and the CLI never see them.
 
 ### Mission settings
 
 - **Messages while working**: queue your next message or interrupt the response.
 - **Mission title instructions**: guidance for automatic titles, such as a language or style, up to 500 characters. Credentials are still redacted.
-- **Archive idle missions after**: Off, 7, 14, 30 or 90 days. Runs when the engine starts. Archived missions stay searchable.
+- **Archive idle missions after**: Off, 7, 14, 30 or 90 days. Runs when the computer starts. Archived missions stay searchable.
 - **Concurrent subagents** (1-128, default 32), **Nested subagent depth** (1-16, default 8) and **Subagents per call** (1-4096, default 1024). `ZERO_SUBAGENT_CONCURRENCY`, `ZERO_SUBAGENT_MAX_DEPTH` and `ZERO_SUBAGENT_MAX_FANOUT` override them. A project may only lower them. See [Configuration](/configuration/).
 
 ### Operator instructions
@@ -198,7 +198,7 @@ The page also lists the repositories the account can reach (cached for five minu
 
 ## Run headless
 
-`0 console --print` runs one prompt through the same engine and exits. There is no interactive terminal UI; `0 console` without a prompt prints a pointer to the browser app.
+`0 console --print` runs one prompt through the same app process and exits. There is no interactive terminal UI; `0 console` without a prompt prints a pointer to the browser app.
 
 ```bash
 0 -p "Review the selected repository" --mode standard
@@ -222,7 +222,7 @@ Headless runs have no approval dialog. A task that needs a human decision cannot
 
 ### Continue a live mission from the terminal
 
-Send a prompt to a mission that is open on a running engine:
+Send a prompt to a mission that is open in a running app:
 
 ```bash
 0 console --chat <id> --format json \
@@ -231,13 +231,13 @@ Send a prompt to a mission that is open on a running engine:
   --print "Continue the investigation"
 ```
 
-The mission keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints engine events, then the result.
+The mission keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
 
-Manage live missions with `0 chats list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 chats cancel <id>` requests a stop; the mission reports `cancelling` until its work drains. See [Remote engines and teams](/engines/) for `--engine`.
+Manage live missions with `0 chats list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 chats cancel <id>` requests a stop; the mission reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
 
 ### Drive a running app from scripts
 
-`0 api` calls the app's backend HTTP API with the engine's normal authentication and approval checks. Keep the token in an environment variable, not on the command line:
+`0 api` calls the app's backend HTTP API with the computer's normal authentication and approval checks. Keep the token in an environment variable, not on the command line:
 
 ```bash
 export ZERO_AGENT_TOKEN="$(openssl rand -hex 32)"
@@ -252,7 +252,7 @@ The default method is `GET`. Use `--method` and `--data <json-or-@file>` (at mos
 
 ## Limits
 
-- **Local** means tools run on the engine host. Your model endpoint can still be remote. Where tools run and which model you use are separate choices.
+- **Local** means tools run on the computer host. Your model endpoint can still be remote. Where tools run and which model you use are separate choices.
 - A provider connection does not authorize a target. Scope and tool isolation are separate.
 - A source build serves the app from built assets. Rebuild after changing source.
 
@@ -260,4 +260,4 @@ The default method is `GET`. Use `--method` and `--data <json-or-@file>` (at mos
 
 - [Models and keys](/models/): connect a provider and pick models per role.
 - [Findings](/findings/): triage what a mission found.
-- [Remote engines and teams](/engines/): run the engine on another machine.
+- [Computers and teams](/engines/): run the computer on another machine.
