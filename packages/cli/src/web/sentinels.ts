@@ -4,6 +4,8 @@ import { listSessions } from "../state/session-store.js";
 import { audit } from "./audit.js";
 import { SecurityWorkflowStore, SentinelStore, SentinelStoreError } from "@0/engine/storage";
 import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelAccessLevel, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
+import { AgentApplyError, AgentFileApplier, presetAgentFile, type AgentApplyRequest, type AgentApplyResult } from "./agent-apply.js";
+import { loadAgentDocuments } from "../agent-files.js";
 import { SentinelRunError, SentinelRunner, type SentinelActor, type SentinelGhClient, type SentinelMissionRuntime } from "./sentinel-runner.js";
 
 const PREFIX = "/api/console/";
@@ -19,6 +21,10 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   if (!result.success) throw new SentinelRequestError(result.error.issues.map(issue => `${issue.path.join(".") || "request"}: ${issue.message}`).join("; "), 400);
   return result.data;
 }
+const applyBodySchema = z.strictObject({
+  documents: z.array(z.strictObject({ path: z.string().min(1).max(400), content: z.string().max(140_000), charter: z.string().max(70_000).optional() })).max(200),
+  root: z.string().min(1).max(1000), prune: z.boolean().optional(), allowChanges: z.boolean().optional(), adopt: z.boolean().optional(), force: z.boolean().optional(),
+});
 const bodyOf = (input: unknown): Record<string, unknown> => input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 4_000);
 
@@ -32,11 +38,15 @@ export class WebSentinelService {
    * `scheduler` starts the background tick (schedules, GitHub PR polling, run tracking). Off by default so tests and
    * tools that only need the HTTP surface do not run autonomous work; the dashboard turns it on.
    */
-  constructor(options: { dbPath?: string; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient }) {
+  readonly #applier: AgentFileApplier;
+  readonly #fileAccessCeiling: "read-only" | "changes" | undefined;
+  constructor(options: { dbPath?: string; /** Policy `agents.fileAccessCeiling`: "read-only" refuses files that ask for Can make changes, "changes" allows them; unset lets each apply decide. */ fileAccessCeiling?: "read-only" | "changes"; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient }) {
     this.#store = new SentinelStore(options.dbPath);
     this.#workflows = new SecurityWorkflowStore(options.dbPath);
     this.#missions = options.missions;
     this.#now = options.now ?? Date.now;
+    this.#applier = new AgentFileApplier(this.#store, this.#workflows);
+    this.#fileAccessCeiling = options.fileAccessCeiling;
     this.#runner = new SentinelRunner({ store: this.#store, workflows: this.#workflows, missions: options.missions, now: this.#now, ...(options.gh ? { gh: options.gh } : {}) });
     if (options.scheduler) this.#noteAccessUpgrade();
     if (options.scheduler) this.#runner.start(typeof options.scheduler === "object" ? options.scheduler.pollIntervalMs : undefined);
@@ -59,7 +69,7 @@ export class WebSentinelService {
 
   /** Auth (control token / team session) is enforced before this is reached; this layer adds team roles. */
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown } | null> {
-    if (pathname !== PREFIX + "sentinels" && !pathname.startsWith(PREFIX + "sentinels/") && pathname !== PREFIX + "sentinel-presets") return null;
+    if (pathname !== PREFIX + "sentinels" && !pathname.startsWith(PREFIX + "sentinels/") && pathname !== PREFIX + "sentinel-presets" && !pathname.startsWith(PREFIX + "sentinel-presets/")) return null;
     try {
       return await this.#route(pathname.slice(PREFIX.length), method, input, query, actor);
     } catch (error) {
@@ -88,13 +98,32 @@ export class WebSentinelService {
     const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : undefined);
     return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
-  #view(sentinel: Sentinel) { return { ...sentinel, access: sentinelAccessLevel(sentinel.autonomy), accessLevel: sentinelAccessLevel(sentinel.autonomy), attention: this.#attention(sentinel) }; }
+  /** Where the Agent's definition lives: a file (and whether it was edited in the app since) or the app itself. */
+  #fileState(sentinel: Sentinel) { return sentinel.managedBy ? { source: "file" as const, path: sentinel.managedBy.path, root: sentinel.managedBy.root, edited: this.#applier.isEdited(sentinel) } : { source: "app" as const }; }
+  #view(sentinel: Sentinel) { return { ...sentinel, fileState: this.#fileState(sentinel), access: sentinelAccessLevel(sentinel.autonomy), accessLevel: sentinelAccessLevel(sentinel.autonomy), attention: this.#attention(sentinel) }; }
   #automations(id: string) { return this.#workflows.list().filter(workflow => workflow.ownerSentinelId === id); }
 
   async #route(path: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
     if (path === "sentinel-presets") {
       if (method !== "GET") throw new SentinelRequestError("Use GET to list Agent presets.", 405);
       return { status: 200, data: { presets: SENTINEL_PRESETS } };
+    }
+    const presetFile = /^sentinel-presets\/([^/]+)\/file$/.exec(path);
+    if (presetFile) {
+      const preset = getSentinelPreset(decodeURIComponent(presetFile[1]!));
+      if (!preset || method !== "GET") throw new SentinelRequestError(preset ? "Use GET." : "Unknown Agent preset.", preset ? 405 : 404);
+      return { status: 200, data: presetAgentFile(preset) };
+    }
+    if (path === "sentinels/export-all") {
+      if (method !== "GET") throw new SentinelRequestError("Use GET.", 405);
+      return { status: 200, data: { files: this.#guard(() => this.#applier.exportAll()) } };
+    }
+    if (path === "sentinels/plan" || path === "sentinels/apply") {
+      if (method !== "POST") throw new SentinelRequestError("Use POST.", 405);
+      this.#requireWriter(actor);
+      if (actor?.role !== undefined && actor.role !== "owner") throw new SentinelRequestError("Only workspace owners can apply Agent files.", 403);
+      const body = parse(applyBodySchema, input);
+      return { status: 200, data: this.#applyFiles(body, path === "sentinels/plan") };
     }
     if (path === "sentinels") {
       if (method === "GET") {
@@ -148,6 +177,7 @@ export class WebSentinelService {
       const { version } = parse(z.object({ version: z.number().int().positive().optional() }).strict(), bodyOf(input));
       return { status: 200, data: { sentinel: this.#view(this.#store.acknowledge(id, version)) } };
     }
+    if (rest === "file" && method === "GET") { this.#requireSentinel(id); return { status: 200, data: this.#guard(() => this.#applier.exportAgent(id)) }; }
     if (rest === "budget" && method === "GET") {
       const sentinel = this.#requireSentinel(id);
       const now = this.#now();
@@ -163,6 +193,30 @@ export class WebSentinelService {
     if (rest === "automations" && method === "GET") { this.#requireSentinel(id); return { status: 200, data: { automations: this.#automations(id) } }; }
     if (rest === "files" || rest.startsWith("files/")) return this.#files(id, rest === "files" ? "" : rest.slice("files/".length), method, input, query, actor);
     throw new SentinelRequestError("Unsupported Agent action.", 405);
+  }
+
+  #guard<T>(run: () => T): T {
+    try { return run(); } catch (error) { if (error instanceof AgentApplyError) throw new SentinelRequestError(error.message, error.statusCode); throw error; }
+  }
+  #applyFiles(body: z.output<typeof applyBodySchema>, dryRun: boolean): AgentApplyResult {
+    const request: AgentApplyRequest = { documents: body.documents.map(doc => ({ path: doc.path, content: doc.content, ...(doc.charter !== undefined ? { charter: doc.charter } : {}) })), root: body.root, ...(body.prune ? { prune: true } : {}), ...(body.adopt ? { adopt: true } : {}), ...(body.force ? { force: true } : {}), dryRun, allowChanges: this.#fileAccessCeiling ? this.#fileAccessCeiling === "changes" : body.allowChanges === true };
+    return this.#guard(() => this.#applier.apply(request));
+  }
+  /**
+   * Applies every Agent file in a directory (server mode, at boot and on SIGHUP). Read-only mounts are fine. Audited as
+   * `agents.apply` with the content hash, never the contents. Does not throw: problems are returned and logged by the caller.
+   */
+  async applyDirectory(dir: string, options: { prune?: boolean; allowChanges?: boolean; adopt?: boolean; force?: boolean } = {}): Promise<{ ok: boolean; result?: AgentApplyResult; error?: string }> {
+    try {
+      const loaded = await loadAgentDocuments(dir);
+      if (loaded.problems.length) return { ok: false, error: loaded.problems.map(problem => `${problem.path}: ${problem.message}`).join("; ") };
+      const result = this.#guard(() => this.#applier.apply({ documents: loaded.documents, root: loaded.root, ...(options.prune ? { prune: true } : {}), ...(options.adopt ? { adopt: true } : {}), ...(options.force ? { force: true } : {}), allowChanges: this.#fileAccessCeiling ? this.#fileAccessCeiling === "changes" : options.allowChanges === true }));
+      audit({ actor: "system", action: "agents.apply", subject: loaded.root, outcome: result.ok ? "ok" : "error", detail: { source: "directory", hash: result.hash, files: loaded.documents.length, ...result.counts, prune: options.prune === true, adopt: options.adopt === true, force: options.force === true } });
+      return { ok: result.ok, result };
+    } catch (error) {
+      audit({ actor: "system", action: "agents.apply", subject: dir, outcome: "error", detail: { source: "directory" } });
+      return { ok: false, error: message(error) };
+    }
   }
 
   #triggerView(trigger: SentinelTrigger) {

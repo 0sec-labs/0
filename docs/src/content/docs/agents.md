@@ -120,8 +120,13 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 | `GET sentinels/:id/budget` | Spend against the daily cap, as `{ runs, costUsd }`. |
 | `.../triggers`, `.../triggers/:id/check`, `.../run`, `.../activations`, `.../automations`, `.../files` | Triggers, manual run, run history, owned automations, memory files. |
 
+## Agents as code
+
+An Agent can also be defined in a file in your repository, then validated, diffed, applied and exported with `0 agents validate|diff|apply|export`. See [Agents as code](/agents-as-code/).
+
 ## Next steps
 
+- [Agents as code](/agents-as-code/): define Agents in files.
 - [Automations](/automations/): the saved jobs an Agent can own.
 - [Skills](/skills/): instructions an Agent loads.
 - [Scope](/scope/): authorization rules.

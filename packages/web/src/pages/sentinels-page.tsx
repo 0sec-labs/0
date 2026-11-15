@@ -11,6 +11,7 @@ import { NotFound } from "@/ui/components/not-found";
 import { useTeamAccess } from "@/components/team-access";
 import { CreateSentinelDialog } from "@/components/sentinels/create-sentinel-dialog";
 import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sentinel-avatar";
+import { AgentFileNote, AgentMenu } from "@/components/sentinels/agent-file";
 import { SentinelFiles } from "@/components/sentinels/sentinel-files";
 import { SentinelActivations, SentinelAutomations, SentinelOverview, SentinelSettings } from "@/components/sentinels/sentinel-views";
 import { GitHubWebhookControl } from "@/components/console-control/github-webhook-control";
@@ -67,7 +68,9 @@ export function SentinelPage() {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 truncate font-sans text-2xl font-medium tracking-tight">{sentinel.name}</h1><SentinelStatusBadge sentinel={sentinel} /></div>
         <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No thread yet."}</p>
+        <AgentFileNote sentinel={sentinel} />
       </div>
+      {sentinel.status !== "archived" && <AgentMenu sentinel={sentinel} />}
     </header>
     <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
       <TabsList variant="line" aria-label="Agent views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>

@@ -1,0 +1,474 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "0security/v1",
+      "description": "Schema version of this file."
+    },
+    "kind": {
+      "default": "Agent",
+      "type": "string",
+      "const": "Agent"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "Stable identity of this Agent across applies. Renaming the Agent does not change it; changing it creates a different Agent."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "description": {
+      "default": "",
+      "description": "One-line job of the Agent.",
+      "type": "string",
+      "maxLength": 160
+    },
+    "preset": {
+      "description": "Built-in preset this Agent started from.",
+      "type": "string",
+      "enum": [
+        "pen-tester",
+        "pr-security-reviewer",
+        "dependency-watcher",
+        "fix-engineer",
+        "secrets-hunter",
+        "attack-surface-monitor",
+        "cloud-posture-auditor",
+        "incident-triage",
+        "regression-tester",
+        "release-gate"
+      ]
+    },
+    "access": {
+      "default": "read-only",
+      "description": "read-only, or changes (Can make changes). Applying a file that asks for changes needs the operator to allow it.",
+      "type": "string",
+      "enum": [
+        "read-only",
+        "changes"
+      ]
+    },
+    "web": {
+      "default": false,
+      "description": "A Read-only Agent may browse the web.",
+      "type": "boolean"
+    },
+    "status": {
+      "default": "paused",
+      "description": "Agents from files start paused unless the file says active.",
+      "type": "string",
+      "enum": [
+        "active",
+        "paused"
+      ]
+    },
+    "skills": {
+      "default": [],
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 384,
+        "pattern": "^[A-Za-z0-9_.:/-]+$"
+      }
+    },
+    "instructions": {
+      "description": "Charter file next to this file, instead of the Markdown body.",
+      "type": "string",
+      "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.?(?:\\/|$))[A-Za-z0-9_][A-Za-z0-9._/-]{0,198}\\.md$"
+    },
+    "scope": {
+      "default": {
+        "repos": [],
+        "targets": [],
+        "domains": [],
+        "outOfScope": []
+      },
+      "type": "object",
+      "properties": {
+        "repos": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "targets": {
+          "default": [],
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "domains": {
+          "default": [],
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "outOfScope": {
+          "default": [],
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "budget": {
+      "default": {
+        "dailyUsd": 10,
+        "maxRunsPerDay": 20
+      },
+      "type": "object",
+      "properties": {
+        "dailyUsd": {
+          "default": 10,
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10000
+        },
+        "maxRunsPerDay": {
+          "default": 20,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "memory": {
+      "default": true,
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            },
+            "autoLearn": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "model": {
+      "description": "A hint. Used only when this Computer has that provider connected.",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reasoning": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "additionalProperties": false
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "channels": {
+          "default": [
+            "in-app"
+          ],
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "in-app",
+              "github",
+              "slack"
+            ]
+          }
+        },
+        "on": {
+          "default": [
+            "finding-high",
+            "needs-you",
+            "run-failed"
+          ],
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "finding-high",
+              "needs-you",
+              "run-failed",
+              "fix-ready"
+            ]
+          }
+        },
+        "quiet": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "avatar": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,23}$"
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "additionalProperties": false
+    },
+    "triggers": {
+      "default": [],
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "on": {
+                "type": "string",
+                "const": "schedule"
+              },
+              "id": {
+                "description": "Name of this trigger within the file; defaults to its kind and position.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+              },
+              "template": {
+                "description": "Automation template the trigger starts; defaults to the preset's suggestion or repository-review.",
+                "type": "string",
+                "enum": [
+                  "repository-review",
+                  "dependency-review",
+                  "api-security",
+                  "web-configuration",
+                  "scoped-penetration-test",
+                  "package-behavior",
+                  "contract-review",
+                  "native-code-review",
+                  "secrets-config-review",
+                  "finding-verification",
+                  "fix-candidate",
+                  "security-research",
+                  "deep-source-review"
+                ]
+              },
+              "enabled": {
+                "default": true,
+                "description": "Only takes effect while the Agent is active.",
+                "type": "boolean"
+              },
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "minutes",
+                  "hourly",
+                  "daily",
+                  "weekdays",
+                  "weekly",
+                  "cron"
+                ]
+              },
+              "every": {
+                "type": "integer",
+                "minimum": 5,
+                "maximum": 1440
+              },
+              "time": {
+                "description": "HH:MM, 24-hour.",
+                "type": "string"
+              },
+              "weekday": {
+                "description": "0 is Sunday.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "cron": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "timezone": {
+                "default": "UTC",
+                "description": "IANA timezone.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "on",
+              "frequency"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "on": {
+                "type": "string",
+                "const": "github-pr"
+              },
+              "id": {
+                "description": "Name of this trigger within the file; defaults to its kind and position.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+              },
+              "template": {
+                "description": "Automation template the trigger starts; defaults to the preset's suggestion or repository-review.",
+                "type": "string",
+                "enum": [
+                  "repository-review",
+                  "dependency-review",
+                  "api-security",
+                  "web-configuration",
+                  "scoped-penetration-test",
+                  "package-behavior",
+                  "contract-review",
+                  "native-code-review",
+                  "secrets-config-review",
+                  "finding-verification",
+                  "fix-candidate",
+                  "security-research",
+                  "deep-source-review"
+                ]
+              },
+              "enabled": {
+                "default": true,
+                "description": "Only takes effect while the Agent is active.",
+                "type": "boolean"
+              },
+              "repo": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,100}\\/[A-Za-z0-9_.-]{1,100}$"
+              },
+              "baseBranch": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "pollMs": {
+                "default": 120000,
+                "type": "integer",
+                "minimum": 60000,
+                "maximum": 3600000
+              },
+              "commentOnPr": {
+                "default": false,
+                "type": "boolean"
+              },
+              "includeForks": {
+                "default": false,
+                "description": "Also review pull requests from forks, read-only and marked untrusted.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "on",
+              "repo"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "on": {
+                "type": "string",
+                "const": "manual"
+              },
+              "id": {
+                "description": "Name of this trigger within the file; defaults to its kind and position.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+              },
+              "template": {
+                "description": "Automation template the trigger starts; defaults to the preset's suggestion or repository-review.",
+                "type": "string",
+                "enum": [
+                  "repository-review",
+                  "dependency-review",
+                  "api-security",
+                  "web-configuration",
+                  "scoped-penetration-test",
+                  "package-behavior",
+                  "contract-review",
+                  "native-code-review",
+                  "secrets-config-review",
+                  "finding-verification",
+                  "fix-candidate",
+                  "security-research",
+                  "deep-source-review"
+                ]
+              },
+              "enabled": {
+                "default": true,
+                "description": "Only takes effect while the Agent is active.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "on"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "apiVersion",
+    "id",
+    "name"
+  ],
+  "additionalProperties": false,
+  "$id": "https://docs.0security.com/schemas/agent.v1.json",
+  "title": "0security Agent file",
+  "description": "Frontmatter of an Agent file (Markdown). The Markdown body is the Agent's charter."
+}
