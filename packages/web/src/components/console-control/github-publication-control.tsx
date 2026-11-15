@@ -1,28 +1,20 @@
 import { queryKeys } from "@/queries";
-import { ControlDisclosure } from "./control-disclosure";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCcw } from "lucide-react";
 import { CapyArrowUpRightIcon as ExternalLink, CapyBranchIcon as GitBranch } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { ControlCard, Feedback, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
+import {
+  GITHUB_INSTALL_COMMAND, GITHUB_INSTALL_URL, defaultGitHubMethod, deviceStatusText, formatExpiry, githubCardKind, githubHeadline, githubMethods, guidedTokenUrl, safeDeviceUrl, validToken,
+  type GitHubMethod, type GitHubPublicationAccount,
+} from "./github-connection-model";
 
-export interface GitHubPublicationAccount {
-  available: boolean;
-  connected: boolean;
-  account: string | null;
-  scopes: string[];
-  deviceAuth: {
-    phase: "idle" | "running" | "connected" | "failed" | "cancelled" | "unavailable";
-    message: string;
-    verificationUrl?: string;
-    userCode?: string;
-  };
-}
+export type { GitHubPublicationAccount } from "./github-connection-model";
 interface GitHubAccountResponse { github: GitHubPublicationAccount }
+type Action = "connect" | "sign-in" | "refresh" | "cancel";
 
 export function useGitHubPublicationAccount() {
   const { webFetchJson } = useBackendApi();
@@ -33,60 +25,89 @@ export function useGitHubPublicationAccount() {
   });
 }
 
-export function GitHubPublicationControl({ secondary = false }: { secondary?: boolean } = {}) {
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return <Button type="button" variant="outline" aria-label={label} onClick={() => { void navigator.clipboard?.writeText(text).then(() => setCopied(true), () => undefined); }}>{copied ? "Copied" : "Copy"}</Button>;
+}
+
+/** The single GitHub connection card. Sign-in and token storage always happen on the computer this console is attached to. */
+export function GitHubPublicationControl({ secondary: _secondary = false }: { secondary?: boolean } = {}) {
   const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const account = useGitHubPublicationAccount();
   const [token, setToken] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const running = account.data?.deviceAuth.phase === "running";
-  let verificationUrl: string | null = null;
-  if (account.data?.deviceAuth.verificationUrl) {
-    try {
-      const url = new URL(account.data.deviceAuth.verificationUrl);
-      if (url.protocol === "https:" && url.hostname === "github.com" && !url.username && !url.password && !url.port && /^\/login\/device\/?$/.test(url.pathname)) verificationUrl = url.href;
-    } catch { /* Invalid authorization URLs are never opened. */ }
-  }
+  const [picked, setPicked] = useState<GitHubMethod | null>(null);
+  const data = account.data;
+  const method: GitHubMethod = data ? (githubMethods(data).some(item => item.value === picked) ? picked! : defaultGitHubMethod(data)) : "sign-in";
+  const running = data?.deviceAuth.phase === "running";
+
   const mutation = useMutation({
-    mutationFn: async (action: "connect" | "device" | "cancel") => {
+    mutationFn: async (action: Action) => {
       if (action === "connect") {
-        const submittedToken = token.trim();
+        const submitted = token.trim();
         setToken("");
-        if (!submittedToken || submittedToken.length > 16384 || /\s/.test(submittedToken)) throw new Error("Enter a GitHub token without whitespace.");
-        return webFetchJson<GitHubAccountResponse>("/api/console/github/connect", jsonBody({ token: submittedToken }));
+        if (!validToken(submitted)) throw new Error("Enter a GitHub token without spaces.");
+        return webFetchJson<GitHubAccountResponse>("/api/console/github/connect", jsonBody({ token: submitted }));
       }
-      return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", { method: action === "cancel" ? "DELETE" : "POST", body: "{}" });
+      if (action === "cancel") return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", { method: "DELETE", body: "{}" });
+      return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", jsonBody(action === "refresh" ? { mode: "refresh" } : {}));
     },
-    onSuccess: (data, action) => {
-      queryClient.setQueryData(queryKeys.consoleGithubPublication(), data.github);
-      setMessage(action === "connect"
-        ? data.github.connected ? "GitHub connected." : "GitHub isn't connected yet. Check the status below."
-        : data.github.deviceAuth.message);
+    onSuccess: (result, action) => {
+      queryClient.setQueryData(queryKeys.consoleGithubPublication(), result.github);
+      if (action === "connect") setPicked(null);
     },
     onSettled: () => { setToken(""); },
   });
+  const busy = mutation.isPending;
+  const act = (action: Action) => { mutation.reset(); mutation.mutate(action); };
+
+  if (!data) return <ControlCard title="GitHub"><QueryState pending={account.isPending} error={account.error} retry={account.refetch} /></ControlCard>;
+
+  const kind = githubCardKind(data);
+  const expiry = formatExpiry(data.expiresAt);
+  const status = deviceStatusText(data.deviceAuth);
+  const deviceUrl = safeDeviceUrl(data.deviceAuth.verificationUrl);
+  const methods = githubMethods(data);
 
   return <ControlCard title="GitHub">
-    <QueryState pending={account.isPending} error={account.error} retry={account.refetch} />
-    {account.data && <>
-      <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium"><GitBranch className="size-4" />{account.data.account ?? "GitHub.com"}</div><Badge variant={account.data.connected ? "secondary" : "outline"}>{account.data.connected ? "Connected" : "Not connected"}</Badge></div>
-      {account.data.deviceAuth.phase !== "idle" && account.data.deviceAuth.phase !== "connected" && <p role="status" className="text-sm leading-relaxed text-muted-foreground">{account.data.deviceAuth.message}</p>}
-      {!account.data.available && <p className="rounded-md border border-border bg-muted/20 p-3 text-sm">GitHub isn't available on this computer. <Link to="/doctor" className="underline">Check requirements</Link>.</p>}
-      <section className="space-y-3">
-        {account.data.deviceAuth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-md border-[0.5px] border-border-2 px-3 py-2 text-lg tracking-widest">{account.data.deviceAuth.userCode}</code></div>}
-        {verificationUrl && <Button variant="outline" render={<a href={verificationUrl} target="_blank" rel="noopener noreferrer" />}>Open GitHub<ExternalLink className="size-4" /></Button>}
-        {account.data.deviceAuth.verificationUrl && !verificationUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}
-        <div className="flex flex-wrap gap-2">{running
-          ? <SubmitButton variant="outline" pending={mutation.isPending && mutation.variables === "cancel"} disabled={mutation.isPending} onClick={() => mutation.mutate("cancel")}>Cancel sign-in</SubmitButton>
-          : <SubmitButton variant={secondary ? "outline" : "default"} pending={mutation.isPending && mutation.variables === "device"} disabled={mutation.isPending || !account.data.available} onClick={() => { setMessage(null); mutation.mutate("device"); }}>{account.data.connected ? "Use another account" : "Sign in with GitHub"}</SubmitButton>}
-          <Button variant="ghost" disabled={account.isFetching || mutation.isPending} onClick={() => void account.refetch()}><RefreshCcw className="size-4" />Refresh</Button>
-        </div>
-      </section>
-      <ControlDisclosure title={<>Use a token instead</>}><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); setMessage(null); mutation.mutate("connect"); }}>
-        <TextField label="GitHub token" type="password" autoComplete="off" spellCheck={false} value={token} required maxLength={16384} disabled={mutation.isPending || running || !account.data.available} onChange={event => setToken(event.target.value)} hint="Stored locally on this computer." />
-        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" variant="secondary" pending={mutation.isPending && mutation.variables === "connect"} disabled={!token.trim() || mutation.isPending || running || !account.data.available}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setToken(""); setMessage(null); mutation.reset(); }}>Clear</Button></div>
-      </form></ControlDisclosure>
-    </>}
-    <Feedback error={mutation.error} message={message} />
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2 text-sm font-medium"><GitBranch className="size-4 shrink-0" /><span id="github-headline" className="min-w-0 break-words">{githubHeadline(data)}</span></div>
+      <Badge variant="outline">Computer: {data.computer}</Badge>
+    </div>
+    {expiry && data.connected && <p className="text-xs text-muted-foreground">Expires {expiry}</p>}
+    {kind === "needs-permissions" && <div className="flex flex-wrap items-center gap-2">
+      <code className="rounded-md border-[0.5px] border-border-2 px-2 py-1 text-xs">{data.refreshCommand}</code>
+      <SubmitButton variant="outline" pending={busy && mutation.variables === "refresh"} disabled={busy} onClick={() => act("refresh")}>Update permissions</SubmitButton>
+    </div>}
+
+    {!running && <Select aria-label="Connect with" size="sm" className="w-full sm:w-auto sm:min-w-56" value={method} disabled={busy} onValueChange={value => setPicked(value as GitHubMethod)} options={methods} />}
+
+    {method === "cli" && !running && <p className="text-sm text-muted-foreground">Using the GitHub CLI login on {data.computer}.</p>}
+
+    {(method === "sign-in" || running) && <section className="space-y-3">
+      {!data.available
+        ? <div className="space-y-2"><p className="text-sm">GitHub CLI isn't installed on {data.computer}.</p>
+          <div className="flex flex-wrap items-center gap-2"><code className="rounded-md border-[0.5px] border-border-2 px-2 py-1 text-xs">{GITHUB_INSTALL_COMMAND}</code><CopyButton text={GITHUB_INSTALL_COMMAND} label="Copy install command" /><Button variant="outline" render={<a href={GITHUB_INSTALL_URL} target="_blank" rel="noopener noreferrer" />}>Get GitHub CLI<ExternalLink className="size-4" /></Button></div></div>
+        : <>
+          {data.deviceAuth.userCode && <div className="flex flex-wrap items-center gap-2"><code aria-label="One-time code" className="rounded-md border-[0.5px] border-border-2 px-3 py-2 text-lg tracking-widest">{data.deviceAuth.userCode}</code><CopyButton text={data.deviceAuth.userCode} label="Copy code" /></div>}
+          {status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}
+          <div className="flex flex-wrap gap-2">
+            {deviceUrl && <Button variant="outline" render={<a href={deviceUrl} target="_blank" rel="noopener noreferrer" />}>Open GitHub<ExternalLink className="size-4" /></Button>}
+            {data.deviceAuth.verificationUrl && !deviceUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}
+            {running
+              ? <SubmitButton variant="outline" pending={busy && mutation.variables === "cancel"} disabled={busy} onClick={() => act("cancel")}>Cancel</SubmitButton>
+              : <SubmitButton variant="outline" pending={busy && mutation.variables === "sign-in"} disabled={busy} onClick={() => act("sign-in")}>{data.connected ? "Sign in with another account" : "Sign in with GitHub"}</SubmitButton>}
+          </div>
+          {!running && !status && <p className="text-xs text-muted-foreground">Signs in on {data.computer}</p>}
+        </>}
+    </section>}
+
+    {method === "token" && !running && <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (validToken(token)) act("connect"); }}>
+      <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" render={<a href={guidedTokenUrl(data.computer)} target="_blank" rel="noopener noreferrer" />}>Create token on GitHub<ExternalLink className="size-4" /></Button></div>
+      <TextField label="GitHub token" type="password" autoComplete="off" spellCheck={false} value={token} required maxLength={16384} disabled={busy || !data.available} onChange={event => setToken(event.target.value)} hint={`Checked, then stored on ${data.computer}.`} />
+      <div className="flex flex-wrap gap-2"><SubmitButton type="submit" variant="outline" pending={busy && mutation.variables === "connect"} disabled={!validToken(token) || busy || !data.available}>Connect</SubmitButton></div>
+    </form>}
+
+    <Feedback error={mutation.error} />
   </ControlCard>;
 }

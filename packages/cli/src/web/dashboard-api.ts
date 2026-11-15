@@ -13,7 +13,7 @@ import { audit, auditActor, auditConsoleRequest, auditDatabaseReset, handleAudit
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
-import { GitHubPublicationAuth } from "./github-auth.js";
+import { GitHubPublicationAuth, parseAuthMode } from "./github-auth.js";
 import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
@@ -157,7 +157,9 @@ export async function handleWebConsoleApiRequest(
     if (repositories) { json(res, repositories.status, repositories.data); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
-    if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }
+    if (path === "github/device-auth" && method === "POST") {
+      json(res, 202, { github: await github.start(parseAuthMode(input)) }); return true;
+    }
     if (path === "github/device-auth" && method === "DELETE") { json(res, 200, { github: await github.cancel() }); return true; }
     const trigger = await triggers.handle(method, requestUrl, input);
     if (trigger) { json(res, trigger.status, trigger.data); return true; }

@@ -86,6 +86,7 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   if (/^mcp-servers(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (/^plugins\/(?:install|install-github|enable|disable|run)(?:\/|$)/.test(path)) return method !== "GET";
   if (/^service-plugins(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
+  if (/^github(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (path === "connections") return method === "POST";
   if (/^connections\/(?:order|spread)$/.test(path)) return method !== "GET";
   if (/^connections\/[^/]+(?:\/models)?$/.test(path)) return method === "PATCH" || method === "PUT";
