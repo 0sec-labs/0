@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.30.0",
-  "description": "0security is a framework for building security agents.",
+  "description": "0security is an open-source framework for building and deploying security agents.",
   "bin": {
     "0": "dist/0.js"
   },
