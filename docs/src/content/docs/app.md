@@ -1,6 +1,6 @@
 ---
 title: Browser app
-description: Run missions, review findings, change settings and themes in the local browser app, or run the same app headless.
+description: Run threads, review findings, change settings and themes in the local browser app, or run the same app headless.
 ---
 
 ```bash
@@ -28,11 +28,11 @@ The sidebar holds:
 - **Automations**.
 - **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
 - **More…**: **Memory**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
-- Your **Sentinels**, when this computer supports them.
+- Your **Agents**, when this computer supports them.
 
 Two cards can appear above the account row, for local users and team owners:
 
-- **Finish setting up** has two steps: connect a model provider and start your first mission. It hides once both are done, and you can dismiss it.
+- **Finish setting up** has two steps: connect a model provider and start your first thread. It hides once both are done, and you can dismiss it.
 - **Update available** shows the latest and current versions. **Copy update command** copies `0 upgrade`. Dismissing it hides that version only.
 
 ### Keyboard shortcuts
@@ -80,7 +80,7 @@ Switching to **Act without asking** also resumes actions waiting for approval. S
 
 A message you send during a response is queued. It goes out when the current response finishes, so the agent's work is kept. Press **Send now** on a queued message to interrupt and send it at once. Press **Stop response** to stop.
 
-Background agents that a mission starts keep running after its response ends. Stop them from the agents panel. They belong to the live mission and do not survive a computer restart.
+Background agents that a thread starts keep running after its response ends. Stop them from the agents panel. They belong to the live thread and do not survive a computer restart.
 
 If a model connection drops, the thread reconnects and continues from its last completed tool result. Completed tool actions are not replayed.
 
@@ -105,7 +105,7 @@ The **Daybreak** control next to the model settings requests an OpenAI cyber acc
 - Open **Supporting files** on an entry to see its evidence.
 - Press **Stop using** to keep an entry out of future context. The record stays for inspection.
 
-Memory entries are hints for the agent to check again, not verified findings. A finished mission does not become an entry on its own. Memory lives in the computer's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the computer to turn source memory off.
+Memory entries are hints for the agent to check again, not verified findings. A finished thread does not become an entry on its own. Memory lives in the computer's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the computer to turn source memory off.
 
 ## Visualizations
 
@@ -140,10 +140,10 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Threads** | Summarizing long threads, title instructions, idle archiving, subagent limits, transcript options and one **Show cost and usage** switch. |
 | | **Notifications** | Browser notifications. This browser only. |
 | | **Shortcuts** | The searchable shortcut list. |
-| Agent | **Instructions** | Your own `AGENTS.md` text for every mission, plus one file per folder. |
+| Agent | **Instructions** | Your own `AGENTS.md` text for every thread, plus one file per folder. |
 | | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. |
 | | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
-| | **Computers** | The machines missions run on. |
+| | **Computers** | The machines threads run on. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
 | Activity | **Usage** | Estimated spend and tokens by model and by thread. |
 | | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |
@@ -165,8 +165,8 @@ Themes are stored in the browser. The computer and the CLI never see them.
 ### Thread settings
 
 - **Messages while working**: queue your next message or interrupt the response.
-- **Mission title instructions**: guidance for automatic titles, such as a language or style, up to 500 characters. Credentials are still redacted.
-- **Archive idle missions after**: Off, 7, 14, 30 or 90 days. Runs when the computer starts. Archived missions stay searchable.
+- **Thread title instructions**: guidance for automatic titles, such as a language or style, up to 500 characters. Credentials are still redacted.
+- **Archive idle threads after**: Off, 7, 14, 30 or 90 days. Runs when the computer starts. Archived threads stay searchable.
 - **Concurrent subagents** (1-128, default 32), **Nested subagent depth** (1-16, default 8) and **Subagents per call** (1-4096, default 1024). `ZERO_SUBAGENT_CONCURRENCY`, `ZERO_SUBAGENT_MAX_DEPTH` and `ZERO_SUBAGENT_MAX_FANOUT` override them. A project may only lower them. See [Configuration](/configuration/).
 
 ### Operator instructions
@@ -222,7 +222,7 @@ Headless runs have no approval dialog. A task that needs a human decision cannot
 
 ### Continue a live thread from the terminal
 
-Send a prompt to a mission that is open in a running app:
+Send a prompt to a thread that is open in a running app:
 
 ```bash
 0 console --chat <id> --format json \
@@ -231,22 +231,22 @@ Send a prompt to a mission that is open in a running app:
   --print "Continue the investigation"
 ```
 
-The mission keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
+The thread keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
 
-Manage live missions with `0 chats list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 chats cancel <id>` requests a stop; the mission reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
+Manage live threads with `0 threads list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 threads cancel <id>` requests a stop; the thread reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
 
-### Manage missions from the terminal
+### Manage threads from the terminal
 
-`0 missions` does what the mission menu does, against the app started by `0 web`:
+`0 threads` does what the thread menu does, against the app started by `0 web`:
 
 ```bash
-id=$(0 missions start "Map the login flow" --folder ~/code/app --mode recon)
-0 missions set "$id" --effort high
-0 missions stop "$id"            # --force if owned execution does not drain
-0 missions retry "$id"
-0 missions rename "$id" "Login flow"
-0 missions export "$id" --format md -o login-flow.md
-0 missions delete "$id" --yes
+id=$(0 threads start "Map the login flow" --folder ~/code/app --mode recon)
+0 threads set "$id" --effort high
+0 threads stop "$id"            # --force if owned execution does not drain
+0 threads retry "$id"
+0 threads rename "$id" "Login flow"
+0 threads export "$id" --format md -o login-flow.md
+0 threads delete "$id" --yes
 ```
 
 `start --wait` blocks until the turn ends and prints the reply. `clear` and `delete` need `--yes`. Every command takes `--json`. Exit code 0 means success, 1 means the request failed, 2 means a usage error. A remote token cannot change settings the browser protects.
@@ -275,5 +275,5 @@ The default method is `GET`. Use `--method` and `--data <json-or-@file>` (at mos
 ## Next
 
 - [Models and keys](/models/): connect a provider and pick models per role.
-- [Findings](/findings/): triage what a mission found.
+- [Findings](/findings/): triage what a thread found.
 - [Computers and teams](/engines/): run the computer on another machine.

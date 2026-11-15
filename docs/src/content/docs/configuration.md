@@ -120,7 +120,7 @@ Per-user state lives in `~/.0`.
 | `runs/<scan-id>/state.db` | Findings and state for one run. |
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
-| `console-sessions/` | One transcript JSON per mission. |
+| `console-sessions/` | One transcript JSON per thread. |
 | `engines.json` | Registered remote computers. See [Remote computers](/engines/). |
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |

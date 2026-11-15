@@ -36,7 +36,7 @@ Open **Memory** in the browser app (`/memory`).
 
 `0 memory import` always shows what would be imported first, and imported memories start disabled. These are the Memory page's entries. False-positive and evaluation memories stay under `0 findings triage memory`.
 
-Finished missions stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
+Finished threads stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
 
 ```bash
 0 improve learning status --json

@@ -19,7 +19,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Skill** | A folder of instructions the agent loads when a task needs it. A skill is not code. See [Skills](/skills/). |
 | **Theme** | A light and dark color palette for the browser app. Themes live in the browser only. See [Browser app](/app/#themes). |
 | **Memory** | Source-backed notes the agent saved and can recall. See [Browser app](/app/#memory). |
-| **Computer** | The machine where missions run and tools execute: this one, a VM or a remote server. See [Computers and teams](/engines/). |
+| **Computer** | The machine where threads run and tools execute: this one, a VM or a remote server. See [Computers and teams](/engines/). |
 
 ## How they fit together
 

@@ -10,7 +10,7 @@ it. Setup is in [MCP](/mcp/) and [Plugins](/plugins/).
 ## What runs where
 
 - **stdio MCP server**: 0 starts the command you configured on the computer host
-  whenever you press **Test** or a mission uses it. It is arbitrary code with your
+  whenever you press **Test** or a thread uses it. It is arbitrary code with your
   user's permissions. The environment is scrubbed to safe defaults plus the
   variables you declared, and loader variables such as `LD_PRELOAD`,
   `DYLD_*` and `NODE_OPTIONS` are rejected. The working directory is a

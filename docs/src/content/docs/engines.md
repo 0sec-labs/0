@@ -3,7 +3,7 @@ title: Computers and teams
 description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and share a computer with teammates.
 ---
 
-A computer owns missions, automation runs, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
+A computer owns threads, automation runs, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
 
 ## Deploy a worker
 
@@ -94,11 +94,11 @@ Start the browser app with the registry and pick the computer in the selector:
 0 web --engines-config /absolute/path/engines.json
 ```
 
-Missions, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
+Threads, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
 
 ### Local Codex model for a remote thread
 
-A browser mission can run its tools on a remote computer while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that mission. Provider tokens stay on your machine. Prompts, tool results and responses pass through a mission-scoped relay, and they can contain remote workspace data.
+A browser thread can run its tools on a remote computer while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that thread. Provider tokens stay on your machine. Prompts, tool results and responses pass through a thread-scoped relay, and they can contain remote workspace data.
 
 Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP automations still use the server's own provider.
 
@@ -144,13 +144,13 @@ For a direct call to a computer API, use `0 api`:
 
 - The computer owns run state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
 - Cancel on the owning computer. Ctrl-C in the foreground CLI sends the request. Losing a proxy or disposing an MCP adapter does not.
-- An approval for one computer, mission, request or fix candidate cannot authorize another.
+- An approval for one computer, thread, request or fix candidate cannot authorize another.
 - Keep the computer process running. There is no crash recovery or detached executor. Stopping the computer ends its in-process work. Saved records and files survive.
 - A remote computer uses its own local or VM executors. Giving a local computer an arbitrary remote executor is not implemented.
 
 ## Team workspaces
 
-Local use needs no account. Use team mode when several people share one computer and its missions.
+Local use needs no account. Use team mode when several people share one computer and its threads.
 
 In the browser app, choose **Team**, enter a workspace name, your display name, account ID and password, and you are signed in as owner. Add editors and viewers from **Team settings** in the account menu. Only owners add accounts.
 
@@ -163,11 +163,11 @@ From a terminal:
 0 web --team-config ./team.json
 ```
 
-Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open missions.
+Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open threads.
 
 Owners and editors can change work. Viewers can read. Messages keep their authors, and avatars show who is viewing or typing.
 
-Limits: members share one computer workspace, not separate tenants. Each team gets its own mission directory, findings database and reports by default. Existing personal missions are not imported. Use `--db-path` to choose the database to share. The computer binds to loopback. Remote access and a reverse proxy are your deployment work.
+Limits: members share one computer workspace, not separate tenants. Each team gets its own thread directory, findings database and reports by default. Existing personal threads are not imported. Use `--db-path` to choose the database to share. The computer binds to loopback. Remote access and a reverse proxy are your deployment work.
 
 ### OIDC sign-in
 

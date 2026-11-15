@@ -90,7 +90,7 @@ Run a template without saving a copy, or run a saved automation pinned to a revi
 | `--time-cap <ms>` | Time cap for the whole run. |
 | `--cost-cap <usd>` | Estimated cost cap for the whole run. |
 | `--allow-apply` | Allow supported patch-apply steps. |
-| `--chat <id>` | Attach the run to an existing mission on the selected computer. |
+| `--chat <id>` | Attach the run to an existing thread on the selected computer. |
 
 The command stays in the foreground. Ctrl-C cancels the run. Cost accounting is an estimate, so in-flight calls can pass the cap before 0 stops more work.
 
@@ -126,7 +126,7 @@ Run `0 automation list --templates` for the catalog your build ships. A template
 0 runs cancel RUN_ID
 ```
 
-Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing mission when the computer supports it. It does not restart an automation graph.
+Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing thread when the computer supports it. It does not restart an automation graph.
 
 ## Attach to a running computer
 
@@ -140,7 +140,7 @@ A CLI or MCP client that starts its own computer ends that computer when it exit
   --chat SESSION_ID
 ```
 
-If a web computer already owns the control database and workspace, CLI and MCP clients find it through local metadata and attach on their own. A computer that cannot be reached or authenticated is an error. The client never starts a replacement. Use `--engine production` for a registered connection (see [Computers](/engines/)). The computer supplies its own workspace, scope, model and execution profile, and targets and paths are read on that computer. A mission you name with `--chat` must already exist.
+If a web computer already owns the control database and workspace, CLI and MCP clients find it through local metadata and attach on their own. A computer that cannot be reached or authenticated is an error. The client never starts a replacement. Use `--engine production` for a registered connection (see [Computers](/engines/)). The computer supplies its own workspace, scope, model and execution profile, and targets and paths are read on that computer. A thread you name with `--chat` must already exist.
 
 Disconnecting an attached client leaves the computer running. A foreground `automation run` still cancels on Ctrl-C.
 
