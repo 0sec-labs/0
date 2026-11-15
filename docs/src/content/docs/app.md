@@ -27,7 +27,7 @@ The sidebar holds:
 - **Findings**, with a count of open findings.
 - **Automations**.
 - **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
-- **More…**: **Lessons**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
+- **More…**: **Memory**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
 - Your **Sentinels**, when the engine supports them.
 
 Two cards can appear above the account row, for local users and team owners:
@@ -98,14 +98,14 @@ With **Act without asking**, the agent can clone a public HTTPS repository to re
 
 The **Daybreak** control next to the model settings requests an OpenAI cyber access program (**Daybreak Blue** or **Daybreak Red**) for eligible OpenAI and ChatGPT Codex connections. **Automatic** clears the request. See [Models and keys](/models/#cyber-access-programs).
 
-## Lessons
+## Memory
 
-**Lessons** hold lessons the agent saved while reading source code. Each lesson records its project folder and supporting files with content fingerprints. Before a lesson is reused, 0 checks those files. If a file changed or is missing, the lesson is skipped.
+**Memory** holds notes the agent saved while reading source code. Each entry records its project folder and supporting files with content fingerprints. Before an entry is reused, 0 checks those files. If a file changed or is missing, the entry is skipped.
 
-- Open **Supporting files** on a lesson to see its evidence.
-- Press **Stop using** to keep a lesson out of future context. The record stays for inspection.
+- Open **Supporting files** on an entry to see its evidence.
+- Press **Stop using** to keep an entry out of future context. The record stays for inspection.
 
-Lessons are hints for the agent to check again, not verified findings. A finished mission does not become a lesson on its own. Lessons live in the engine's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the engine to turn source lessons off.
+Memory entries are hints for the agent to check again, not verified findings. A finished mission does not become an entry on its own. Memory lives in the engine's private state, outside your repository, and are sent to your model as context when recalled. Set `ZERO_DISABLE_HUNT_MEMORY=1` on the engine to turn source memory off.
 
 ## Visualizations
 

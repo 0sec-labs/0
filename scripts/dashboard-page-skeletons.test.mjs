@@ -12,13 +12,13 @@ test("page placeholders expose a single loading status and keep cached skills vi
   await build({stdin:{resolveDir:dashboard,loader:"tsx",contents:`import React from 'react';import{renderToStaticMarkup}from'react-dom/server';import{LoadingState}from'./src/components/state-panel';import{MemoryRouter}from'react-router-dom';import{SkillsLibrary}from'./src/components/skills-library';export const loading=props=>renderToStaticMarkup(React.createElement(LoadingState,props));export const skills=props=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(SkillsLibrary,{onSelect(){},onCreate(){},...props})));`},outfile:output,bundle:true,platform:"node",format:"esm",packages:"external",jsx:"automatic",loader:{".css":"empty"},alias:{"@":resolve(dashboard,"src")},logLevel:"silent"});
   const {loading,skills}=await import(pathToFileURL(output).href);
   for (const variant of ["list","cards"]) {
-   const html=loading({label:"Loading lessons…",variant});
+   const html=loading({label:"Loading memory…",variant});
    assert.match(html,/data-slot="skeleton-panel"/);assert.match(html,/role="status"/);assert.match(html,/aria-busy="true"/);
-   assert.match(html,/class="sr-only">Loading lessons…/);assert.match(html,/data-slot="skeleton"/);assert.doesNotMatch(html,/animate-spin|lucide-loader/);
+   assert.match(html,/class="sr-only">Loading memory…/);assert.match(html,/data-slot="skeleton"/);assert.doesNotMatch(html,/animate-spin|lucide-loader/);
    assert.match(html,/delay-\[250ms\]/);assert.match(html,/starting:opacity-0/);assert.match(html,/animate-skeleton-pulse/);
    assert.equal((html.match(/animate-skeleton-pulse/g)||[]).length,1);assert.doesNotMatch(html,/bg-\(image|gradient/);
   }
-  for (const variant of ["detail","form"]) assert.equal(loading({label:"Loading lessons…",variant}),"");
+  for (const variant of ["detail","form"]) assert.equal(loading({label:"Loading memory…",variant}),"");
   const cached=skills({loading:true,skills:[{id:"cached",name:"Cached skill",description:"Ready to use",scope:"personal",fileCount:1,writable:true,revision:"v1",source:"local"}]});
   assert.match(cached,/Open skill Cached skill/);assert.doesNotMatch(cached,/data-slot="skeleton-panel"/);
   const empty=skills({loading:true,skills:[]});assert.match(empty,/data-slot="skeleton-panel"/);assert.doesNotMatch(empty,/No installed skills/);

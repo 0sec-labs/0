@@ -12,6 +12,14 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
+
+### Removed
+
+- Remove the Suggestions view from Memory, and the Learning section from the Automation page. The Memory page now lists saved memory only.
+
 ## [0.30.0] - 2026-11-14
 
 This release reorganises the web console around a shorter sidebar and a Models page, adds a guided GitHub connection and a What's new dialog, and gives Automations eight ready-made starting points. It also adds hooks for enterprise add-ons and faster, safer releases.

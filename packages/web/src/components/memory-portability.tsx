@@ -39,7 +39,7 @@ export function MemoryPortability() {
     setBusy(kind); setError(""); setStatus("");
     return { signal: controller.signal, version: ++generation.current };
   };
-  const exportLessons = async () => {
+  const exportMemory = async () => {
     const { signal, version } = start("export");
     try {
       const data = await webFetchJson<MemoryArchive>("/api/console/learning/export", { signal });
@@ -47,8 +47,8 @@ export function MemoryPortability() {
       const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       const link = document.createElement("a"); link.href = url; link.download = `zero-memory-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus("Lessons exported.");
-    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t export lessons.")); }
+      setStatus("Memory exported.");
+    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t export memory.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   const chooseFile = async (file: File | undefined) => {
@@ -59,7 +59,7 @@ export function MemoryPortability() {
       const data: unknown = JSON.parse(await file.text());
       if (version !== generation.current) return;
       if (!data || typeof data !== "object" || (data as MemoryArchive).format !== "zero-memory" || (data as MemoryArchive).version !== 1 || !Array.isArray((data as MemoryArchive).knowledge)) throw new Error("Choose a version 1 Zero memory export.");
-      if ((data as MemoryArchive).knowledge.length > 200) throw new Error("Import up to 200 lessons at a time.");
+      if ((data as MemoryArchive).knowledge.length > 200) throw new Error("Import up to 200 memories at a time.");
       setArchive(data as MemoryArchive);
     } catch (cause) { if (version === generation.current) setError(cause instanceof SyntaxError ? "This file isn’t valid JSON." : errorText(cause, "Couldn’t read this file.")); }
     finally { if (version === generation.current) setBusy(null); }
@@ -73,7 +73,7 @@ export function MemoryPortability() {
     } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t review this import.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
-  const importLessons = async () => {
+  const importMemory = async () => {
     if (!archive || !preview || readOnly) return;
     const { signal, version } = start("import");
     try {
@@ -81,22 +81,22 @@ export function MemoryPortability() {
       if (version !== generation.current) return;
       await cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) });
       if (version !== generation.current) return;
-      setOpen(false); setStatus(`${data.result.imported} ${data.result.imported === 1 ? "lesson imported" : "lessons imported"}. Imported lessons are not in use.`); reset();
-    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t import lessons.")); }
+      setOpen(false); setStatus(`${data.result.imported} ${data.result.imported === 1 ? "memory imported" : "memories imported"}. Imported memory is not in use.`); reset();
+    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t import memory.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   return <div className="flex flex-col items-end gap-2">
-    <DropdownMenu><DropdownMenu.Trigger render={<Button variant="outline" size="icon-sm" aria-label="Lessons actions" />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-48"><DropdownMenu.Item icon={<Download />} disabled={busy !== null} onClick={() => void exportLessons()}>{busy === "export" ? "Exporting…" : "Export lessons"}</DropdownMenu.Item><DropdownMenu.Item icon={<Upload />} disabled={readOnly || busy !== null} onClick={() => { reset(); setStatus(""); setOpen(true); }}>Import lessons</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu>
+    <DropdownMenu><DropdownMenu.Trigger render={<Button variant="outline" size="icon-sm" aria-label="Memory actions" />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-48"><DropdownMenu.Item icon={<Download />} disabled={busy !== null} onClick={() => void exportMemory()}>{busy === "export" ? "Exporting…" : "Export memory"}</DropdownMenu.Item><DropdownMenu.Item icon={<Upload />} disabled={readOnly || busy !== null} onClick={() => { reset(); setStatus(""); setOpen(true); }}>Import memory</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu>
     {status && <p role="status" className="text-xs text-muted-foreground">{status}</p>}
     {error && !open && <p role="alert" className="text-xs text-destructive">{error}</p>}
     <Dialog open={open} onOpenChange={value => { if (busy === "import") return; if (!value) reset(); setOpen(value); }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg" showCloseButton={busy !== "import"}>
-        <DialogHeader><DialogTitle>{preview ? "Review imported lessons" : "Import lessons"}</DialogTitle></DialogHeader>
-        <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Lessons export JSON file" className="hidden" onChange={event => void chooseFile(event.currentTarget.files?.[0])} />
-        <div className="flex min-w-0 items-center gap-3 rounded-[var(--radius-panel)] bg-muted/40 p-3"><FileJson aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate text-sm">{filename || "Select a Zero memory export"}</p><p className="mt-0.5 text-xs text-muted-foreground">{archive ? `${archive.knowledge.length} ${archive.knowledge.length === 1 ? "lesson" : "lessons"}` : "JSON · up to 1 MB · 200 lessons"}</p></div><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => fileInput.current?.click()}>{filename ? "Change file" : "Choose file"}</Button></div>
-        {preview && <div className="space-y-3"><dl className="grid grid-cols-3 gap-3 text-xs"><div><dt className="text-muted-foreground">New lessons</dt><dd className="mt-1 text-lg tabular-nums">{preview.importable}</dd></div><div><dt className="text-muted-foreground">Already saved</dt><dd className="mt-1 text-lg tabular-nums">{preview.duplicates}</dd></div><div><dt className="text-muted-foreground">Projects</dt><dd className="mt-1 text-lg tabular-nums">{preview.projects.length}</dd></div></dl><ul aria-label="Lessons to import" className="max-h-56 space-y-2 overflow-y-auto">{preview.knowledge.map(note => <li key={note.id} className="rounded-[var(--radius-control)] border border-border p-3"><p className="whitespace-pre-wrap break-words text-xs leading-5">{note.summary}</p><p className="mt-1 text-xs text-muted-foreground">{note.sourceCount} {note.sourceCount === 1 ? "source" : "sources"} · {note.duplicate ? "Already saved" : "Not in use after import"}</p></li>)}</ul>{preview.warnings.length > 0 && <ul aria-label="Import notes" className="space-y-1 text-xs leading-5 text-muted-foreground">{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
+        <DialogHeader><DialogTitle>{preview ? "Review imported memory" : "Import memory"}</DialogTitle></DialogHeader>
+        <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Memory export JSON file" className="hidden" onChange={event => void chooseFile(event.currentTarget.files?.[0])} />
+        <div className="flex min-w-0 items-center gap-3 rounded-[var(--radius-panel)] bg-muted/40 p-3"><FileJson aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate text-sm">{filename || "Select a Zero memory export"}</p><p className="mt-0.5 text-xs text-muted-foreground">{archive ? `${archive.knowledge.length} ${archive.knowledge.length === 1 ? "memory" : "memories"}` : "JSON · up to 1 MB · 200 memories"}</p></div><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => fileInput.current?.click()}>{filename ? "Change file" : "Choose file"}</Button></div>
+        {preview && <div className="space-y-3"><dl className="grid grid-cols-3 gap-3 text-xs"><div><dt className="text-muted-foreground">New memories</dt><dd className="mt-1 text-lg tabular-nums">{preview.importable}</dd></div><div><dt className="text-muted-foreground">Already saved</dt><dd className="mt-1 text-lg tabular-nums">{preview.duplicates}</dd></div><div><dt className="text-muted-foreground">Projects</dt><dd className="mt-1 text-lg tabular-nums">{preview.projects.length}</dd></div></dl><ul aria-label="Memory to import" className="max-h-56 space-y-2 overflow-y-auto">{preview.knowledge.map(note => <li key={note.id} className="rounded-[var(--radius-control)] border border-border p-3"><p className="whitespace-pre-wrap break-words text-xs leading-5">{note.summary}</p><p className="mt-1 text-xs text-muted-foreground">{note.sourceCount} {note.sourceCount === 1 ? "source" : "sources"} · {note.duplicate ? "Already saved" : "Not in use after import"}</p></li>)}</ul>{preview.warnings.length > 0 && <ul aria-label="Import notes" className="space-y-1 text-xs leading-5 text-muted-foreground">{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <DialogFooter><Button variant="ghost" disabled={busy === "import"} onClick={() => { reset(); setOpen(false); }}>Cancel</Button>{preview ? <Button disabled={readOnly || busy !== null || preview.importable === 0} onClick={() => void importLessons()}><Upload className="size-3.5" />{busy === "import" ? "Importing…" : `Import ${preview.importable} ${preview.importable === 1 ? "lesson" : "lessons"}`}</Button> : <Button disabled={readOnly || busy !== null || !archive} onClick={() => void reviewImport()}>{busy === "review" ? "Reviewing…" : "Review import"}</Button>}</DialogFooter>
+        <DialogFooter><Button variant="ghost" disabled={busy === "import"} onClick={() => { reset(); setOpen(false); }}>Cancel</Button>{preview ? <Button disabled={readOnly || busy !== null || preview.importable === 0} onClick={() => void importMemory()}><Upload className="size-3.5" />{busy === "import" ? "Importing…" : `Import ${preview.importable} ${preview.importable === 1 ? "memory" : "memories"}`}</Button> : <Button disabled={readOnly || busy !== null || !archive} onClick={() => void reviewImport()}>{busy === "review" ? "Reviewing…" : "Review import"}</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;

@@ -110,7 +110,7 @@ export function ConsoleNavigationRail({
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/explore"]);
-  const moreDestinations = pick(hasRemoteComputer ? ["/learning", "/computers"] : ["/learning"]);
+  const moreDestinations = pick(hasRemoteComputer ? ["/memory", "/computers"] : ["/memory"]);
   const active = (to: string) =>
     to === "/plugins/explore" ? currentPath.startsWith("/plugins") : currentPath === to || currentPath.startsWith(`${to}/`);
   const moreActive = moreDestinations.some(({ to }) => active(to));

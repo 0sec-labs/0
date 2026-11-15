@@ -26,7 +26,7 @@ import { WorkflowGraph } from "@/components/workflow-graph";
 import { WorkflowChat } from "@/components/workflow-chat";
 import { WorkflowDefinitionEditor, advanceWorkflowDraftBase, workflowDraftHasConflict } from "@/components/workflow-definition-editor";
 import { workflowInput } from "@/components/workflow-editing";
-import { LearningPanel, WorkflowVersions } from "@/components/learning-panel";
+import { WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
 import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, knownProjects, validateAutomationDraft } from "./automation-model";
 import { usePersistentState } from "@/lib/use-persistent-state";
@@ -169,9 +169,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
         </CollapsibleSection>
         <CollapsibleSection id="workflow-versions" data-workflow-section="versions" title="Versions">
           <WorkflowVersions disabled={locked} workflowId={workflow.id} revision={workflow.revision} onRestore={onRestore} />
-        </CollapsibleSection>
-        <CollapsibleSection id="workflow-learning" data-workflow-section="learning" title="Learning">
-          <LearningPanel workflowId={workflow.id} />
         </CollapsibleSection>
         <CollapsibleSection id="workflow-definition" data-workflow-section="definition" title="Definition">
           <WorkflowDefinitionEditor key={workflow.id} definition={workflow} busy={locked} onSave={onSave} />

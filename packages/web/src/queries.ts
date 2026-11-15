@@ -58,7 +58,6 @@ export const queryKeys = {
   // Automations
   workflowDefinitions: key("workflow-definitions"),
   workflowVersions: key("workflow-versions"),
-  suggestionVersions: key("suggestion-versions"),
   workflowTriggers: key("workflow-triggers"),
   workflowTriggerSessions: key("workflow-trigger-sessions"),
   workflowExecutions: key("workflow-executions"),
