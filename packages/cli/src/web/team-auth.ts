@@ -4,6 +4,7 @@ import type { IncomingMessage } from "node:http";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { getTeamIdentityProvider, type IdentityProviderContext } from "./team-identity-provider.js";
 
 const scrypt = promisify(scryptCallback);
 const COOKIE = "zero_team_session";
@@ -115,7 +116,7 @@ export class TeamAuth {
   }
   resolveSession(req: Pick<IncomingMessage, "headers">): TeamIdentity | null { return this.resolveSessionId(getSessionId(req)); }
   status(req: Pick<IncomingMessage, "headers">) {
-    return { enabled: this.enabled, ...(this.config ? { workspace: this.config.workspace } : {}), user: this.resolveSession(req), sso: !!this.config?.oidc };
+    return { enabled: this.enabled, ...(this.config ? { workspace: this.config.workspace } : {}), user: this.resolveSession(req), sso: !!this.config?.oidc || !!getTeamIdentityProvider() };
   }
   private issueSession(userId: string) {
     for (const [id, session] of this.sessions) if (session.expires <= this.now()) this.sessions.delete(id);
@@ -157,7 +158,15 @@ export class TeamAuth {
     for (const endpoint of [data.authorization_endpoint, data.token_endpoint, data.jwks_uri]) this.requireProviderURL(endpoint);
     this.discovery = data; this.keys = createRemoteJWKSet(new URL(data.jwks_uri)); return data;
   }
+  private providerContext(): IdentityProviderContext {
+    return { origin: this.origin, now: this.now, cookie: (name, value, seconds) => this.cookie(name, value, seconds), lookupUser: id => this.lookupUser(id) };
+  }
   async beginSSO(): Promise<{ url: string; setCookie: string }> {
+    const external = getTeamIdentityProvider();
+    if (external && this.config) {
+      const started = await external.begin(this.providerContext());
+      return { url: started.url, setCookie: started.setCookie };
+    }
     const discovery = await this.getDiscovery(); const oidc = this.config!.oidc!;
     for (const [id, pending] of this.pending) if (pending.expires <= this.now()) this.pending.delete(id);
     if (this.pending.size >= 1000) throw new TeamAuthError("Too many pending sign-ins", 429);
@@ -168,6 +177,13 @@ export class TeamAuth {
     return { url: url.href, setCookie: this.cookie(SSO_COOKIE, browser, SSO_MS / 1000) };
   }
   async callback(params: URLSearchParams, req: Pick<IncomingMessage, "headers">) {
+    const external = getTeamIdentityProvider();
+    if (external && this.config) {
+      const { userId, clearCookies = [] } = await external.complete(params, req, this.providerContext());
+      if (!this.lookupUser(userId)) throw new TeamAuthError("This SSO account is not a workspace member", 403);
+      const session = this.issueSession(userId);
+      return { ...session, setCookies: [session.setCookie, ...clearCookies], redirect: "/" };
+    }
     const state = params.get("state") ?? ""; const pending = this.pending.get(state);
     const browser = parseCookies(req.headers.cookie)[SSO_COOKIE];
     if (!pending || pending.expires <= this.now() || browser !== pending.browser) throw new TeamAuthError("Invalid or expired SSO sign-in");

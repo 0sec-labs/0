@@ -13,6 +13,7 @@ import { useTeamAccess } from "@/components/team-access";
 import { useProviders } from "@/components/console-control/connections-control";
 import { CapyCheckIcon, CapyCloseIcon } from "@/ui/icons/capy";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard, type SetupStep } from "./setup-checklist-model";
+import { SidebarWhatsNewCard } from "@/components/sidebar-whats-new-card";
 import { UPDATE_COMMAND, normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
 
 const card = "relative overflow-hidden rounded-(--radius-card) border-[0.5px] border-border-2 bg-card text-[13px] leading-[1.3] text-foreground";
@@ -21,8 +22,8 @@ const dismissButton = "absolute top-2 right-2 size-6 text-muted-foreground-2";
 /** Update and setup cards above the account row. Local users and team owners only. */
 export function SidebarCards() {
   const team = useTeamAccess();
-  if (!canSeeSetupCards(team)) return null;
-  return <div data-slot="sidebar-cards" className="flex shrink-0 flex-col gap-2 p-2 pb-0"><UpdateCard /><SetupChecklistCard /></div>;
+  const owner = canSeeSetupCards(team);
+  return <div data-slot="sidebar-cards" className="flex shrink-0 flex-col gap-2 p-2 pb-0 empty:hidden">{owner && <UpdateCard />}<SidebarWhatsNewCard />{owner && <SetupChecklistCard />}</div>;
 }
 
 function UpdateCard() {

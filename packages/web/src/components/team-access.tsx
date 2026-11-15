@@ -13,6 +13,8 @@ import { CapyApiKeyIcon as KeyRound, CapyAppearanceIcon as Palette, CapyBuilding
 import { useWebTheme, type WebTheme } from "@/lib/web-theme";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/ui/components/kbd";
+import { useOpenWhatsNew } from "@/lib/use-open-whats-new";
+import { Sparkles } from "lucide-react";
 import { openShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { BrandMark } from "@/components/brand-mark";
 import { ShellFrame } from "@/components/shell-skeleton";
@@ -61,6 +63,7 @@ export function TeamAccess({ children }: { children: ReactNode }) {
 export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolean; collapsed?: boolean }) {
   const team = useTeamAccess();
   const navigate = useNavigate();
+  const openWhatsNew = useOpenWhatsNew();
   const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +87,7 @@ export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolea
     <DropdownMenu.Content side={rail && collapsed ? "right" : "top"} align={rail && !collapsed ? "start" : "end"} sideOffset={8}>
       <DropdownMenu.Group>
       <DropdownMenu.Label><span className="block truncate">{displayName}</span><span className="block truncate font-normal">{team.workspace?.name}</span></DropdownMenu.Label>
+      <DropdownMenu.Item onClick={openWhatsNew}><Sparkles strokeWidth={1.5} className="size-(--icon-sm)" />What's new</DropdownMenu.Item>
       <DropdownMenu.Item onClick={() => navigate("/team")}><Users className="size-(--icon-sm)" />Members</DropdownMenu.Item>
       {team.user?.role === "owner" && <DropdownMenu.Item onClick={() => navigate("/api-access")}><KeyRound className="size-(--icon-sm)" />Findings API</DropdownMenu.Item>}
       <DropdownMenu.Item disabled={busy} onClick={() => void signOut()}><LogOut className="size-(--icon-sm)" />{busy ? "Signing out…" : "Sign out"}</DropdownMenu.Item>
@@ -104,6 +108,7 @@ const menuSeparator = <MenuPrimitive.Separator className="-mx-1 my-1 h-px bg-bor
 export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: string }) {
   const team = useTeamAccess();
   const navigate = useNavigate();
+  const openWhatsNew = useOpenWhatsNew();
   const cache = useQueryClient();
   const [theme, setTheme] = useWebTheme();
   const [busy, setBusy] = useState(false);
@@ -136,6 +141,7 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
             <MenuPrimitive.SubmenuTrigger className={menuItemClasses}><Palette aria-hidden="true" />Appearance<ChevronRight aria-hidden="true" className="ml-auto" /></MenuPrimitive.SubmenuTrigger>
             <MenuPrimitive.Portal><MenuPrimitive.Positioner side="right" align="start" sideOffset={4} className="z-[60] outline-none"><MenuPrimitive.Popup className={cn(menuSurfaceClasses, "min-w-32")}>{themeItem("system", "System")}{themeItem("light", "Light")}{themeItem("dark", "Dark")}</MenuPrimitive.Popup></MenuPrimitive.Positioner></MenuPrimitive.Portal>
           </MenuPrimitive.SubmenuRoot>
+          <MenuPrimitive.Item className={menuItemClasses} onClick={openWhatsNew}><Sparkles strokeWidth={1.5} aria-hidden="true" />What's new</MenuPrimitive.Item>
           <MenuPrimitive.Item className={menuItemClasses} onClick={openShortcutsDialog}><Keyboard aria-hidden="true" />Keyboard shortcuts<Kbd aria-hidden="true" className="ml-auto">?</Kbd></MenuPrimitive.Item>
           {user && <>
             {menuSeparator}
