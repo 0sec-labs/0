@@ -16,9 +16,12 @@ import { PLUGIN_DIR_MODE, PLUGIN_ENTRY_FILE, PLUGIN_FILE_MODE, PLUGIN_MANIFEST_F
  */
 export interface FetchedPlugin { sha: string; manifest: Buffer; entry: Buffer }
 export type PluginFetcher = (repo: string, ref: string | undefined) => Promise<FetchedPlugin>;
+
 interface Review {
   reviewId: string; repo: string; ref: string | null; sha: string; id: string; name: string; version: string;
-  capabilities: string[]; tools: Array<{ name: string; description: string; capabilities: string[] }>;
+  capabilities: string[];
+  tools: Array<{ name: string; description: string; capabilities: string[] }>;
+  toolHashes: Record<string, string>;
   permissionHash: string; entrySha256: string; entryBytes: number; alreadyInstalled: boolean; expiresAt: string;
 }
 interface Staged { review: Review; manifest: Buffer; entry: Buffer; expires: number }
@@ -88,6 +91,9 @@ export class GithubPluginInstaller {
     if (!isSafePluginId(manifest.id) || getBuiltinPlugin(manifest.id)) throw new InstallError(409, "invalid_manifest", "The plugin id is not allowed.");
     const capabilities = aggregateCapabilities(manifest) as string[];
     const tools = manifest.tools.map(tool => ({ name: tool.name, description: tool.description, capabilities: [...tool.capabilities].sort() }));
+    const toolHashes: Record<string, string> = Object.fromEntries(
+      tools.map(tool => [tool.name, sha256(JSON.stringify({ name: tool.name, capabilities: tool.capabilities }))])
+    );
     const entrySha256 = sha256(fetched.entry);
     const permissionHash = sha256(JSON.stringify({ id: manifest.id, version: manifest.version, sha: fetched.sha, capabilities, tools: tools.map(tool => [tool.name, tool.capabilities]), entrySha256 }));
     const now = this.#now();
@@ -95,14 +101,14 @@ export class GithubPluginInstaller {
     if (this.#staged.size >= 16) this.#staged.delete(this.#staged.keys().next().value!);
     const review: Review = {
       reviewId: randomUUID(), repo, ref: ref ?? null, sha: fetched.sha, id: manifest.id, name: manifest.name ?? manifest.id, version: manifest.version,
-      capabilities, tools, permissionHash, entrySha256, entryBytes: fetched.entry.length,
+      capabilities, tools, toolHashes, permissionHash, entrySha256, entryBytes: fetched.entry.length,
       alreadyInstalled: existsSync(join(pluginsRootDir(this.#homeDir), manifest.id)), expiresAt: new Date(now + TTL_MS).toISOString(),
     };
     this.#staged.set(review.reviewId, { review, manifest: fetched.manifest, entry: fetched.entry, expires: now + TTL_MS });
     return { review };
   }
 
-  approve(input: unknown): { ok: true; id: string; version: string; sha: string; state: "installed"; message: string } {
+  approve(input: unknown): { ok: true; id: string; version: string; sha: string; state: "installed"; message: string; changedTools?: string[] } {
     const body = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
     const staged = typeof body.reviewId === "string" ? this.#staged.get(body.reviewId) : undefined;
     if (!staged) throw new InstallError(409, "review_expired", "Review this plugin again before installing.");
@@ -116,10 +122,30 @@ export class GithubPluginInstaller {
     const target = join(root, review.id);
     const exists = existsSync(target);
     if (exists && body.replaceExisting !== true) throw new InstallError(409, "already_installed", "This plugin is already installed. Review again with replaceExisting to update it.");
+
+    let changedTools: string[] = [];
+    if (exists) {
+      try {
+        const oldSource = JSON.parse(readFileSync(join(target, "source.json"), "utf8")) as { toolHashes?: Record<string, string> };
+        if (oldSource.toolHashes) {
+          changedTools = Object.keys(review.toolHashes).filter(name => oldSource.toolHashes![name] !== review.toolHashes[name]);
+        } else {
+          changedTools = Object.keys(review.toolHashes);
+        }
+      } catch { changedTools = Object.keys(review.toolHashes); }
+    }
+
     const temporary = join(root, `.install-${randomUUID()}`);
     try {
       mkdirSync(temporary, { mode: PLUGIN_DIR_MODE }); chmodSync(temporary, PLUGIN_DIR_MODE);
-      for (const [name, bytes] of [[PLUGIN_MANIFEST_FILE, staged.manifest], [PLUGIN_ENTRY_FILE, staged.entry], ["source.json", Buffer.from(JSON.stringify({ source: "github", repo: review.repo, ref: review.ref, sha: review.sha, permissionHash: review.permissionHash, installedAt: new Date(this.#now()).toISOString() }, null, 2) + "\n")]] as const) {
+      const sourceJson = {
+        source: "github", repo: review.repo, ref: review.ref, sha: review.sha,
+        permissionHash: review.permissionHash,
+        entrySha256: review.entrySha256,
+        toolHashes: review.toolHashes,
+        installedAt: new Date(this.#now()).toISOString(),
+      };
+      for (const [name, bytes] of [[PLUGIN_MANIFEST_FILE, staged.manifest], [PLUGIN_ENTRY_FILE, staged.entry], ["source.json", Buffer.from(JSON.stringify(sourceJson, null, 2) + "\n")]] as const) {
         const file = join(temporary, name); writeFileSync(file, bytes, { mode: PLUGIN_FILE_MODE }); chmodSync(file, PLUGIN_FILE_MODE);
       }
       if (exists) rmSync(target, { recursive: true, force: true });
@@ -127,7 +153,14 @@ export class GithubPluginInstaller {
     } catch { throw new InstallError(500, "install_failed", "Could not write the plugin files."); }
     finally { rmSync(temporary, { recursive: true, force: true }); }
     this.#staged.delete(review.reviewId);
-    return { ok: true, id: review.id, version: review.version, sha: review.sha, state: "installed", message: `Installed ${review.id} at ${review.sha.slice(0, 12)}. NOT enabled: enable it separately and review its capabilities.` };
+
+    return {
+      ok: true, id: review.id, version: review.version, sha: review.sha, state: "installed",
+      changedTools,
+      message: exists
+        ? `Updated ${review.id}. Changed tools requiring re-review: ${changedTools.join(", ") || "none"}. NOT enabled: enable it separately.`
+        : `Installed ${review.id} at ${review.sha.slice(0, 12)}. NOT enabled: enable it separately and review its capabilities.`,
+    };
   }
 
   async handle(path: string, method: string, input: unknown): Promise<{ status: number; data: unknown } | null> {

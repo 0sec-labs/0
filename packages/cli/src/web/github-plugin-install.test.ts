@@ -75,4 +75,49 @@ describe("GitHub plugin install", () => {
     const failed = await post("plugins/install-github", { repo: "acme/scan" });
     expect(failed?.status).toBe(409); expect(JSON.stringify(failed)).not.toContain("ghp_secret");
   });
+
+  it("detects changed tools and invalidates approval only for them on update", async () => {
+    const firstManifest = {
+      id: "update-plugin", name: "Update Plugin", version: "1.0.0",
+      tools: [
+        { name: "tool_a", description: "Tool A", parameters: {}, capabilities: ["compute"] },
+        { name: "tool_b", description: "Tool B", parameters: {}, capabilities: ["network"] }
+      ]
+    };
+
+    fetcher.mockResolvedValueOnce({ sha: "a".repeat(40), manifest: Buffer.from(JSON.stringify(firstManifest)), entry });
+
+    const res1 = await post("plugins/install-github", { repo: "owner/repo" });
+    const first = (res1!.data as { review: Record<string, any> }).review;
+
+    expect(first.toolHashes["tool_a"]).toBeDefined();
+    expect(first.toolHashes["tool_b"]).toBeDefined();
+
+    await post("plugins/install-github/approve", {
+      reviewId: first.reviewId, approved: true, sha: "a".repeat(40), permissionHash: first.permissionHash
+    });
+
+    const updatedManifest = {
+      ...firstManifest,
+      version: "1.0.1",
+      tools: [
+        { name: "tool_a", description: "Tool A", parameters: {}, capabilities: ["compute"] },
+        { name: "tool_b", description: "Tool B", parameters: {}, capabilities: ["network", "filesystem-read"] }
+      ]
+    };
+
+    fetcher.mockResolvedValueOnce({ sha: "b".repeat(40), manifest: Buffer.from(JSON.stringify(updatedManifest)), entry });
+
+    const res2 = await post("plugins/install-github", { repo: "owner/repo" });
+    const second = (res2!.data as { review: Record<string, any> }).review;
+
+    expect(second.toolHashes["tool_a"]).toBe(first.toolHashes["tool_a"]);
+    expect(second.toolHashes["tool_b"]).not.toBe(first.toolHashes["tool_b"]);
+
+    const result = await post("plugins/install-github/approve", {
+      reviewId: second.reviewId, approved: true, sha: "b".repeat(40), permissionHash: second.permissionHash, replaceExisting: true
+    });
+
+    expect((result!.data as Record<string, any>).changedTools).toEqual(["tool_b"]);
+  });
 });
