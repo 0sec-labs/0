@@ -12,43 +12,53 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-14
+
+This release renames Missions to Threads and Sentinels to Agents, brings most of the console to the CLI under 14 top-level commands, and shows whether a model connection really works. It also adds an experimental single-node server mode and automatic anonymous usage and crash reports.
+
 ### Added
 
+- The CLI has 14 top-level commands: `web`, `scan`, `findings`, `threads`, `agents`, `automation`, `models`, `computers`, `skills`, `plugin`, `memory`, `config`, `doctor` and `api`. Old command names keep working as hidden aliases with the same behaviour.
+- New CLI groups cover what the console does: `threads`, `agents`, `automation`, `findings export` and `findings keys`, `skills`, `memory`, `config get` and `config set`, `computers list`, and `models` with connections and usage.
+- `plugin connectors`, `plugin mcp` and `plugin github install` manage plugin connectors, MCP servers and GitHub installs, and `config audit-log` reads the audit log.
+- **Experimental single-node server mode.** `0 web --host 0.0.0.0 --server-mode` serves the console behind a TLS proxy. It is off by default and local use is unchanged.
+- Server mode requires sign-in (team accounts, or an access token of 32 or more characters), an explicit `--allowed-host` list, and `--trusted-proxy` and `--public-url` for the proxy.
+- The web console port answers `/healthz` and `/readyz`, and a `SIGTERM` drains running work gracefully (`--shutdown-timeout`). The audit log records console sign-ins, failed sign-ins, throttling and refused hosts.
+- The Docker image now serves the web console by default, exposes port 48123, has a health check, keeps its state in a `/data` volume, runs under `tini` and carries image labels. Release builds also publish `vX.Y.Z` and `X.Y` tags.
+- `deploy/compose/` holds a single-node Docker Compose file, an `.env.example` and an optional Caddy profile with automatic HTTPS.
+- The Docker image includes the OpenSSH client, so remote computers can be connected over SSH from a container. `0 computers deploy --ssh` now says how to install `ssh` when it is missing.
+- Anonymous usage and crash reports are on by default in official release builds, with a notice on first run. Usage holds counts only: tool and error counts, findings by severity, turns, time, cost, version, operating system and a random install ID. Crashes hold the error class and scrubbed locations in 0's own code.
+- Reports never hold targets, findings, code, prompts, file paths or error messages. Turn them off with `ZERO_NO_TELEMETRY=1`, or `0 config set analyticsLevel off` and `0 config set diagnosticReporting off`, or in Settings, Privacy. See [Telemetry](/configuration/#telemetry).
+- Updating a plugin installed from GitHub says which tools were added, removed or changed. Each tool has its own hash over its name, description, parameters and capabilities, so a changed description is caught too. Plugins installed earlier count as having all tools unreviewed. Thanks to @Amresh-01 (#367).
 - Pull request Agents have two opt-in toggles, both off by default: **Comment on the pull request** posts one short summary (severity, title and repository-relative location only), found by a hidden marker and edited in place on later pushes, and **Include pull requests from forks** runs read-only analysis of the diff marked untrusted. Set them in the Agents page trigger dialog or with `0 agents triggers add --comment --include-forks`. `0 agents triggers check` polls a trigger now.
-- Updating a plugin installed from GitHub now says which tools were added, removed or changed since the last install. Each tool gets its own hash over its name, description, parameters and capabilities, so a changed description is caught too. The package permission hash still gates the install, and plugins installed before this change count as having all tools unreviewed.
-- **Run the web console on a server (experimental, single node).** `0 web --host 0.0.0.0 --server-mode` serves the console behind a TLS proxy. It is off by default and the loopback behaviour is unchanged. It requires sign-in (team accounts, or an access token of 32+ characters that is generated once if you do not set one), an explicit `--allowed-host` list, and `--trusted-proxy` / `--public-url` for the proxy. Anonymous visitors only ever see a sign-in page.
-- `/healthz` and `/readyz` on the web console port, and a graceful `SIGTERM` drain (`--shutdown-timeout`).
-- The Docker image now exposes port 48123, has a health check, keeps its state in a `/data` volume, runs under `tini`, starts the web console by default, and carries image labels. Release builds also publish `vX.Y.Z` and `X.Y` tags.
-- `deploy/compose/` holds a single-node Docker Compose file, an `.env.example` and an optional Caddy profile with automatic HTTPS. The Docker page now covers sizing, backup, upgrade and what is not supported.
-- The Docker image includes the OpenSSH client, so remote computers can be connected over SSH from a container (`0 computers deploy --ssh` now says how to install `ssh` when it is missing). The Docker page covers keys, `known_hosts`, agent forwarding, GitHub access for pull request reviews, and what a review does and does not post.
-- The audit log records console sign-ins, sign-in failures, throttling and refused hosts.
+
+### Changed
+
+- Missions are now Threads and Sentinels are now Agents, in the console, the CLI and the docs. `0 missions` and `0 sentinels` still work. The Settings page that was called Agents is now Helpers, and "this machine" now says "this computer".
+- Memory has its name back after 0.30.0 renamed it. `/memory` is the page address again, and `/learning` redirects to it.
+- Automation templates no longer talk about a separate place to run, and automations run in the current folder.
+- A connection reads **Connected** only when the provider accepted its key. Connections, Models and Diagnostics show **Key rejected** or **Can't reach** with a one-line hint, including for keys set in the environment. The check is cached and never blocks the page, and Connections says when an environment variable wins over a saved key.
+- Choosing Desktop, Documents, Downloads, iCloud Drive or an external drive on macOS waits for the permission prompt instead of accepting the folder after three seconds. The picker shows checking, waiting, blocked and retry states, and the folder changes only once access is granted.
+- GitHub Releases are now titled with the bare tag, for example v0.31.0.
+
+### Removed
+
+- The Suggestions view in Memory and the Learning section on the Automation page are gone. Memory lists saved memory only.
 
 ### Fixed
 
 - Pull request Agents now skip fork and draft pull requests by default and record a skipped activation with the reason, instead of reviewing them. A pull request marked ready for review is reviewed once. Closed and merged pull requests are ignored.
-- A connection now reads **Connected** only when the provider accepted its key. Connections, Models and Diagnostics show **Key rejected** or **Can't reach** with a one-line hint, including for keys supplied by the environment, and the check is cached and never blocks the page.
-- New threads and Home no longer default to a model on a provider whose key was rejected; a remembered choice from one is skipped.
-- An empty thread no longer keeps a model its provider stopped listing: it re-binds to a usable model on load and the model button matches. A thread with history shows "<model> is no longer available. Pick another model" and holds the send until you choose one.
-- A message that fails with a rejected key names the provider and model and offers **Switch to** a working model (resending the message) and **Manage connection**.
-- **Ask 0 to get started** no longer sends into a connection that cannot answer: with no working model it shows **Connect a model to get started** and resumes once one is added.
-- Connections says when an environment variable wins over a saved key (**From environment** and **Not in use**).
+- New threads and Home no longer default to a model from a provider whose key was rejected, and a remembered choice from one is skipped.
+- An empty thread no longer keeps a model its provider stopped listing. It switches to a usable model and the model button matches. A thread with history says the model is no longer available and waits until you pick another.
+- A message that fails with a rejected key names the provider and model and offers **Switch to** a working model, which resends the message, and **Manage connection**. **Ask 0 to get started** shows **Connect a model to get started** when no model works.
+- macOS privacy blocks on protected folders are explained: the picker names the app to allow and offers **Open Privacy settings**.
+- Folder fixes: the chooser no longer opens for a browser on another computer or without a desktop session, closing the popover closes the chooser, and a switch to a symlinked, differently cased or decomposed-unicode path no longer waits 8 seconds.
+- Home shows its composer at once, loading shows a thread-shaped skeleton, and loads no longer stick or flicker.
 - A browser tab left open across an update reloads itself once instead of showing "Something went wrong".
 
-### Changed
+### Security
 
-- The CLI now has 14 top-level commands (`web`, `scan`, `findings`, `threads`, `agents`, `automation`, `models`, `computers`, `skills`, `plugin`, `memory`, `config`, `doctor`, `api`); the old names keep working as hidden aliases with identical behaviour. `fix`, `verify`, `deps`, `eval`, `agent-assure` and `disclose` moved under `scan`, `reports` under `findings`, `connections` and `usage` under `models`, `audit-log`, `team`, `db` and `github` under `config`, `upgrade`, `workbench` and `checks` under `doctor`, and the developer commands `research`, `improve`, `console`, `mcp-server` and `runs` under a hidden `lab` group.
-- Missions are now Threads and Sentinels are now Agents; `0 missions` and `0 sentinels` keep working as aliases. The Settings page that was called Agents (helper limits and where tools run) is now Helpers, and "this machine" now says "this computer".
-- Choosing Desktop, Documents, Downloads, iCloud or an external drive now waits for the macOS permission prompt instead of accepting the folder after three seconds. The picker shows checking, waiting for macOS, blocked and retry states, the folder chip changes only once access is granted, and a blocked working folder is reported before the first message instead of as an error mid-turn.
-- Automation templates no longer mention projects; automations run in the current folder.
-- Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
-
-### Removed
-
-- Remove the Suggestions view from Memory, and the Learning section from the Automation page. The Memory page now lists saved memory only.
-
-### Fixed
-
-- Choosing Desktop, Documents, Downloads, iCloud Drive or an external drive on macOS now says when macOS privacy protection is the blocker, names the app to allow, and offers **Open Privacy settings**. The folder chooser no longer opens for a browser on another computer or without a desktop session, closing the popover closes the chooser, and a switch to a symlinked, differently cased or decomposed-unicode path no longer waits 8 seconds before the popover closes.
+- Plugin updates report per-tool changes, so a tool whose description changed is visible when you review the update (#367).
 
 ## [0.30.0] - 2026-11-14
 

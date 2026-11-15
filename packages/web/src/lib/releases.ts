@@ -8,6 +8,19 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.31.0",
+    date: "2026-11-14",
+    title: "Threads, Agents and a leaner CLI",
+    summary: "Missions are now Threads, Sentinels are now Agents, and the CLI has 14 commands.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ListChecks", title: "Threads and Agents", text: "Missions are now Threads and Sentinels are now Agents. The old CLI names still work, and Memory has its name back." },
+      { icon: "Wrench", title: "A leaner CLI", text: "14 top-level commands now cover threads, agents, automation, models, skills, memory and plugins, with the old names kept as aliases." },
+      { icon: "KeyRound", title: "Connections that tell the truth", text: "A model shows Key rejected when its key does not work, and a failed message offers a working model to switch to." },
+      { icon: "Cloud", title: "Run it on a server", text: "An experimental single-node server mode, a Docker image that serves the console, and anonymous usage and crash reports you can turn off." },
+    ],
+  },
+  {
     version: "0.30.0",
     date: "2026-11-14",
     title: "Simpler navigation, GitHub sign-in",
