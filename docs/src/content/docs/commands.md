@@ -46,7 +46,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#computers">computers</a> · <a href="#team">team</a></p>
     <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
