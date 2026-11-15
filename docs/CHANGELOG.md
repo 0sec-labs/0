@@ -12,6 +12,10 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Updating a plugin installed from GitHub now says which tools were added, removed or changed since the last install. Each tool gets its own hash over its name, description, parameters and capabilities, so a changed description is caught too. The package permission hash still gates the install, and plugins installed before this change count as having all tools unreviewed.
+
 ### Fixed
 
 - A connection now reads **Connected** only when the provider accepted its key. Connections, Models and Diagnostics show **Key rejected** or **Can't reach** with a one-line hint, including for keys supplied by the environment, and the check is cached and never blocks the page.

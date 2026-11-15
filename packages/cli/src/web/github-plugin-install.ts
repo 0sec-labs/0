@@ -21,6 +21,7 @@ interface Review {
   reviewId: string; repo: string; ref: string | null; sha: string; id: string; name: string; version: string;
   capabilities: string[];
   tools: Array<{ name: string; description: string; capabilities: string[] }>;
+  /** sha256 per tool name over its full definition; see toolHash. */
   toolHashes: Record<string, string>;
   permissionHash: string; entrySha256: string; entryBytes: number; alreadyInstalled: boolean; expiresAt: string;
 }
@@ -62,6 +63,64 @@ const gitPluginFetcher: PluginFetcher = async (repo, ref) => {
 
 const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 
+/** JSON with object keys sorted at every depth, so equal values always serialise to the same text. */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).filter(key => record[key] !== undefined).sort();
+  return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+}
+
+export interface HashableTool { name: string; description: string; parameters?: unknown; required?: string[]; capabilities: string[] }
+
+/**
+ * Hash of everything that defines one tool for the model and the sandbox: name, description,
+ * parameters, required list and capabilities (sorted). The manifest declares no separate output
+ * or prompt fields; if it ever does, add them here and bump the version prefix.
+ */
+export function toolHash(tool: HashableTool): string {
+  const canonical = canonicalJson({
+    name: tool.name, description: tool.description, parameters: tool.parameters ?? {},
+    required: [...(tool.required ?? [])].sort(), capabilities: [...tool.capabilities].sort(),
+  });
+  return sha256(Buffer.concat([Buffer.from("0:plugin-tool:v1\0", "utf8"), Buffer.from(canonical, "utf8")]));
+}
+
+export interface ToolChanges { legacy: boolean; added: string[]; removed: string[]; changed: string[] }
+
+/**
+ * Compare reviewed tool hashes with the ones recorded at the last install. `previous` is null for
+ * installs that predate per-tool hashes: then every tool counts as unreviewed (safe default).
+ */
+export function compareToolHashes(previous: Record<string, string> | null, next: Record<string, string>): ToolChanges {
+  const names = Object.keys(next).sort();
+  if (!previous) return { legacy: true, added: [], removed: [], changed: names };
+  const old = Object.keys(previous).sort();
+  return {
+    legacy: false,
+    added: names.filter(name => !Object.hasOwn(previous, name)),
+    removed: old.filter(name => !Object.hasOwn(next, name)),
+    changed: names.filter(name => Object.hasOwn(previous, name) && previous[name] !== next[name]),
+  };
+}
+
+function readRecordedToolHashes(dir: string): Record<string, string> | null {
+  try {
+    const hashes = (JSON.parse(readFileSync(join(dir, "source.json"), "utf8")) as { toolHashes?: unknown }).toolHashes;
+    if (!hashes || typeof hashes !== "object" || Array.isArray(hashes)) return null;
+    const entries = Object.entries(hashes as Record<string, unknown>);
+    return entries.every(([, value]) => typeof value === "string") ? Object.fromEntries(entries) as Record<string, string> : null;
+  } catch { return null; }
+}
+
+function describeChanges(changes: ToolChanges): string {
+  if (changes.legacy) return "The earlier install did not record tool hashes, so all tools count as unreviewed: " + (changes.changed.join(", ") || "none") + ".";
+  const lists: Array<[string, string[]]> = [["Changed", changes.changed], ["Added", changes.added], ["Removed", changes.removed]];
+  const parts = lists.filter(([, list]) => list.length).map(([label, list]) => `${label} tools: ${list.join(", ")}.`);
+  return parts.length ? parts.join(" ") : "No tool changed.";
+}
+
 export class GithubPluginInstaller {
   readonly #staged = new Map<string, Staged>();
   readonly #fetcher: PluginFetcher;
@@ -91,9 +150,10 @@ export class GithubPluginInstaller {
     if (!isSafePluginId(manifest.id) || getBuiltinPlugin(manifest.id)) throw new InstallError(409, "invalid_manifest", "The plugin id is not allowed.");
     const capabilities = aggregateCapabilities(manifest) as string[];
     const tools = manifest.tools.map(tool => ({ name: tool.name, description: tool.description, capabilities: [...tool.capabilities].sort() }));
-    const toolHashes: Record<string, string> = Object.fromEntries(
-      tools.map(tool => [tool.name, sha256(JSON.stringify({ name: tool.name, capabilities: tool.capabilities }))])
-    );
+    const names = manifest.tools.map(tool => tool.name);
+    const duplicate = names.find((name, index) => names.indexOf(name) !== index);
+    if (duplicate) throw new InstallError(409, "invalid_manifest", `The tool name "${duplicate}" is used more than once in plugin.json.`);
+    const toolHashes: Record<string, string> = Object.fromEntries(manifest.tools.map(tool => [tool.name, toolHash(tool)]));
     const entrySha256 = sha256(fetched.entry);
     const permissionHash = sha256(JSON.stringify({ id: manifest.id, version: manifest.version, sha: fetched.sha, capabilities, tools: tools.map(tool => [tool.name, tool.capabilities]), entrySha256 }));
     const now = this.#now();
@@ -108,7 +168,7 @@ export class GithubPluginInstaller {
     return { review };
   }
 
-  approve(input: unknown): { ok: true; id: string; version: string; sha: string; state: "installed"; message: string; changedTools?: string[] } {
+  approve(input: unknown): { ok: true; id: string; version: string; sha: string; state: "installed"; message: string; changedTools?: string[]; addedTools?: string[]; removedTools?: string[] } {
     const body = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
     const staged = typeof body.reviewId === "string" ? this.#staged.get(body.reviewId) : undefined;
     if (!staged) throw new InstallError(409, "review_expired", "Review this plugin again before installing.");
@@ -123,17 +183,10 @@ export class GithubPluginInstaller {
     const exists = existsSync(target);
     if (exists && body.replaceExisting !== true) throw new InstallError(409, "already_installed", "This plugin is already installed. Review again with replaceExisting to update it.");
 
-    let changedTools: string[] = [];
-    if (exists) {
-      try {
-        const oldSource = JSON.parse(readFileSync(join(target, "source.json"), "utf8")) as { toolHashes?: Record<string, string> };
-        if (oldSource.toolHashes) {
-          changedTools = Object.keys(review.toolHashes).filter(name => oldSource.toolHashes![name] !== review.toolHashes[name]);
-        } else {
-          changedTools = Object.keys(review.toolHashes);
-        }
-      } catch { changedTools = Object.keys(review.toolHashes); }
-    }
+    // Why the update needs a second look. The package-level permission hash (commit, entry file and
+    // capabilities) is what gates this install; this only explains what changed. A source.json without
+    // toolHashes predates per-tool hashes, so every tool counts as unreviewed.
+    const changes: ToolChanges | null = exists ? compareToolHashes(readRecordedToolHashes(target), review.toolHashes) : null;
 
     const temporary = join(root, `.install-${randomUUID()}`);
     try {
@@ -156,9 +209,9 @@ export class GithubPluginInstaller {
 
     return {
       ok: true, id: review.id, version: review.version, sha: review.sha, state: "installed",
-      changedTools,
-      message: exists
-        ? `Updated ${review.id}. Changed tools requiring re-review: ${changedTools.join(", ") || "none"}. NOT enabled: enable it separately.`
+      ...(changes ? { changedTools: changes.changed, addedTools: changes.added, removedTools: changes.removed } : {}),
+      message: changes
+        ? `Updated ${review.id}. ${describeChanges(changes)} NOT enabled: enable it separately.`
         : `Installed ${review.id} at ${review.sha.slice(0, 12)}. NOT enabled: enable it separately and review its capabilities.`,
     };
   }
