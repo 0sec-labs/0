@@ -181,6 +181,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=0
           cache-to: type=gha,mode=max,scope=0
+          # Public ingestion keys embedded in the bundle, passed as BuildKit
+          # secrets so they stay out of layers, history and logs. This workflow
+          # never runs on pull_request, so PR/fork builds embed nothing.
+          secrets: |
+            zero_release_sentry_dsn=${{ secrets.ZERO_RELEASE_SENTRY_DSN }}
+            zero_release_posthog_key=${{ secrets.ZERO_RELEASE_POSTHOG_KEY }}
           no-cache: ${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Re-authenticate to GHCR before retry
@@ -205,6 +211,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=0
           cache-to: type=gha,mode=max,scope=0
+          # Public ingestion keys embedded in the bundle, passed as BuildKit
+          # secrets so they stay out of layers, history and logs. This workflow
+          # never runs on pull_request, so PR/fork builds embed nothing.
+          secrets: |
+            zero_release_sentry_dsn=${{ secrets.ZERO_RELEASE_SENTRY_DSN }}
+            zero_release_posthog_key=${{ secrets.ZERO_RELEASE_POSTHOG_KEY }}
           no-cache: true
 
       # Buildx can refresh the registry session used for the push. Re-login

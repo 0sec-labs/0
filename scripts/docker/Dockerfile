@@ -16,6 +16,9 @@
 # Build args:
 #   INSTALL_SECLISTS=1     include SecLists wordlists (~1GB extra, off by default)
 #   AZUREHOUND_VERSION=vX  pin the AzureHound release (checksum-verified, see below)
+# Build secrets (optional, official publishes only; a plain build embeds no telemetry keys):
+#   --secret id=zero_release_sentry_dsn,env=ZERO_RELEASE_SENTRY_DSN
+#   --secret id=zero_release_posthog_key,env=ZERO_RELEASE_POSTHOG_KEY
 
 # Shared Node payload; the toolbox does not depend on application compilation.
 FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
@@ -42,7 +45,22 @@ COPY vendor ./vendor
 COPY LICENSE-APACHE LICENSE-MIT README.md ./
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm build
+# Release keys arrive as BuildKit secrets (never ARG/ENV), so they are absent from
+# layer history, build logs and cache metadata. They are exported for this one
+# command only; a missing or empty secret leaves the variables unset and the bundle
+# embeds nothing, exactly like a source build.
+RUN --mount=type=secret,id=zero_release_sentry_dsn,required=false \
+    --mount=type=secret,id=zero_release_posthog_key,required=false \
+    set -eu; \
+    if [ -s /run/secrets/zero_release_sentry_dsn ]; then \
+        ZERO_RELEASE_SENTRY_DSN="$(cat /run/secrets/zero_release_sentry_dsn)"; \
+        export ZERO_RELEASE_SENTRY_DSN; \
+    fi; \
+    if [ -s /run/secrets/zero_release_posthog_key ]; then \
+        ZERO_RELEASE_POSTHOG_KEY="$(cat /run/secrets/zero_release_posthog_key)"; \
+        export ZERO_RELEASE_POSTHOG_KEY; \
+    fi; \
+    pnpm build
 
 # Install native runtime dependencies with their required build lifecycle.
 WORKDIR /app/dist
