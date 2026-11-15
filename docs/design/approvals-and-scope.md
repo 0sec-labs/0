@@ -1,6 +1,6 @@
 # Approvals and scope: one simple model
 
-Status: proposal for the product owner. Date: 2026-11-14. No code changed.
+Status: decided and implemented (see section 8). Date: 2026-11-14.
 Sources: Capy's live app (read-only, logged-in session, screenshots kept
 outside the repo) and docs.capy.ai (`admin/security`, `machines`, `desktop`,
 `secrets`), plus an audit of `origin/main` at c66f2121. No credentials were read.
@@ -312,3 +312,42 @@ The web and docs rename alone, without the safety fix, is about 3 to 4 days.
    commands, "Report only" derived; migrate `observe` Agents to Read and web.
    Alternative: keep the three-way Approval select but relabel it to Ask / Auto /
    Report only (smaller change, keeps the Approval x Access redundancy).
+
+## 8. Owner decisions and what shipped
+
+The owner chose the simpler of the options in section 7. These supersede the
+recommendations above where they differ.
+
+1. **Approvals default is always Auto**, like Capy. Threads never ask before
+   running commands and the composer has no approvals control (the tune button
+   held only the mode menu and was removed). The one safety valve is a single
+   setting, **Ask before running commands** (Settings, Helpers; key `approvals`,
+   `ask|auto`, default `auto`, operator-only). It reuses the engine modes: when
+   on, a thread whose stored mode is `yolo` or `copilot` runs as `standard`;
+   recon is unchanged; it is re-evaluated at every turn and lifts when switched
+   off. CLI: `--approvals ask|auto` on `0 lab console` and `0 threads start|set`.
+2. **No "YOLO" in user-visible text.** `--yolo` and `--mode` remain hidden
+   aliases. Stored values are read, never migrated (`yolo` and `copilot` read as
+   Auto, `standard` as Ask first, `recon` as Read-only). Internal enum names stay.
+3. **Third-party target authorization stays optional** (the scope plugin is off by
+   default; the always-on Targets flow was not built). Scope means one thing in
+   the UI: what a scan or Agent may target. The thread Permissions card became
+   the Scope card, its two confirmation checkboxes and "Limited to" text are
+   gone, the scan detail card is "Run details", and the local folder is always
+   allowed with no prompt (auto local grants are silent; the two network-scope
+   notices remain).
+4. **Agents are access-first**: Read-only, Can run commands, Can open pull
+   requests. Mapping from stored autonomy: `observe` to Read-only; `propose` and
+   the new `run` to Can run commands; `act` to Can open pull requests. Existing
+   Agents keep their stored values, so behavior is identical (`propose` keeps
+   asking before every action). `run` is the only new stored value: it runs
+   commands in auto (ask-first when the setting is on), blocks mutating web
+   requests and instructs the Agent not to publish. The API keeps `autonomy` and
+   `toolAccess` and adds a derived `accessLevel` (also accepted as an input alias).
+5. **Prerequisite done first**: capability flags were extracted from `yolo` into
+   `ExecutionPolicy` (`shared/approvals.ts`) with a golden table test; the
+   existing engine suites pass unchanged against it.
+
+**Security note.** With Auto by default, commands run as the user on a local
+computer with no confirmation. The workbench sandbox isolates them when used.
+Third-party target authorization remains an optional plugin.
