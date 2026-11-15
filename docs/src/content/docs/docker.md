@@ -17,14 +17,15 @@ Tags:
 ```
 ghcr.io/0sec-labs/0security:latest
 ghcr.io/0sec-labs/0security:<sha>
-ghcr.io/0sec-labs/0security:main
+ghcr.io/0sec-labs/0security:edge      # nightly build of the newest green main commit
 ghcr.io/0sec-labs/0security:v0.30.1   # releases only
+ghcr.io/0sec-labs/0security:0.30.1    # releases only
 ghcr.io/0sec-labs/0security:0.30      # releases only, follows the latest 0.30.x
 ```
 
 **Sources:** [`Dockerfile`](https://github.com/0sec-labs/0security/blob/main/scripts/docker/Dockerfile),
 [`docker-publish.yml`](https://github.com/0sec-labs/0security/blob/main/.github/workflows/docker-publish.yml).
-Use a version tag, a digest or a short-SHA tag when you need repeatable runs. `latest` follows eligible main builds, not a stable release.
+Use a version tag, a digest or a short-SHA tag when you need repeatable runs. `latest` is the most recent release; use `edge` for the nightly main build.
 
 ## Image contents
 

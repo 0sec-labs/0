@@ -92,7 +92,9 @@ pnpm --filter @0/bench test:targets
 ## Main runs may be superseded
 
 A newer push to `main` cancels the still-running `Main` of the previous commit, so an older main commit can show "cancelled" instead of a verdict.
-The newest commit contains the older one, so its green run covers both. Docker publish and install E2E only follow a successful `Main`; a cancelled run publishes nothing.
+The newest commit contains the older one, so its green run covers both. Images are published only for releases (a green `Main` on the `vX.Y.Z` tag) and as a nightly `:edge` of the newest green main commit; a cancelled run publishes nothing.
+
+CI is path-aware to save runner minutes: Windows storage, dependency audit, Docker smokes and the Release dry run run only for the paths they cover (plus scheduled runs), and a docs-only diff skips the test groups of `Main` (static checks still run). `scripts/check-workflow-triggers.mjs` guards these triggers.
 Releases are gated on the release commit's own green `Main` and Release dry run (see below).
 
 ## Cutting a release
@@ -102,7 +104,8 @@ Releases are gated on the release commit's own green `Main` and Release dry run 
 3. Add the matching entry to `packages/web/src/lib/releases.ts` (once it exists) for the in-app What's new.
 4. `pnpm check:release-notes` must pass; preview with `node scripts/release-notes.mjs`.
 5. Tag `vx.y.z`. The Release workflow publishes the binaries and uses the generated notes.
-6. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled.
+6. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled. `Main` always runs every group on a code commit and on the `vX.Y.Z` tag itself; the Release dry run triggers on release-related paths and nightly, so for a release commit that touches none of them run it by hand (`Release` workflow, `dry_run: true`) before tagging.
+7. After the tag, `Main` re-runs on it; its success publishes `:X.Y.Z`, `:X.Y` and `:latest` (highest version only), then Installation E2E runs.
 
 ## Attack templates
 
