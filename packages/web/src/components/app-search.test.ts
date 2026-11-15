@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  filterAppSearch, footerHints, highlightParts, LOCAL_RECENT_GROUP, matchScore, nextTab, parseRecents, pushRecent, RECENT_GROUP, SEARCH_TABS, wrapIndex,
+  filterAppSearch, footerHints, highlightParts, LOCAL_RECENT_GROUP, matchScore, nextTab, parseRecents, pushRecent, RECENT_GROUP, SEARCH_GROUPS, SEARCH_TABS, searchKeywords, wrapIndex,
   type RecentEntry, type SearchableItem,
 } from "./app-search";
 
@@ -98,5 +98,36 @@ describe("footerHints", () => {
     expect(labels({ hasSelection: false, canOpenInTab: false, hasQuery: false, mod: "⌘" })).toEqual(["←/→", "esc"]);
     expect(labels({ hasSelection: true, canOpenInTab: false, hasQuery: false, mod: "⌘" })).toEqual(["↵", "←/→", "esc"]);
     expect(labels({ hasSelection: true, canOpenInTab: true, hasQuery: true, mod: "⌘" })).toEqual(["↵", "⌘↵", "Tab", "←/→", "esc"]);
+  });
+});
+
+describe("entity coverage and keyword selection", () => {
+  it("includes each workspace entity category and matches all words across selected fields", () => {
+    const index = SEARCH_GROUPS.map(group => item(group, `${group} example`, "", ["security audit"]));
+    expect(filterAppSearch(index, "example audit").map(result => result.group)).toEqual(SEARCH_GROUPS.filter(group => group !== LOCAL_RECENT_GROUP));
+    expect(filterAppSearch([item("Skills", "Review source", "", ["security audit"])], "source security")).toHaveLength(1);
+    expect(filterAppSearch([item("Skills", "Review source", "", ["security audit"])], "source missing")).toEqual([]);
+    expect(filterAppSearch([item("Skills", "Review source")], "skills source")).toHaveLength(1);
+  });
+  it("matches before section limits, including entities beyond the old fourteen-row cutoff", () => {
+    const findings = Array.from({ length: 50 }, (_, index) => item("Findings", `Finding ${index}`));
+    expect(filterAppSearch(findings, "49").map(result => result.label)).toEqual(["Finding 49"]);
+    expect(filterAppSearch(findings, "finding")).toHaveLength(8);
+    expect(filterAppSearch(findings, "")).toHaveLength(4);
+  });
+  it("offers bounded groups when empty while chat mode preserves paginated server full-text results", () => {
+    const chats = Array.from({ length: 30 }, (_, index) => item(RECENT_GROUP, `Chat ${index}`));
+    const index = [...chats, ...Array.from({ length: 12 }, (_, i) => item("Pages", `Page ${i}`)), item("Memory", "Lesson")];
+    expect(filterAppSearch(index, "").filter(result => result.group === RECENT_GROUP)).toHaveLength(6);
+    expect(filterAppSearch(index, "").filter(result => result.group === "Pages")).toHaveLength(6);
+    expect(filterAppSearch(index, "body-only match", "chats")).toEqual(chats);
+  });
+  it("ignores absent keyword fields and never serializes arbitrary objects", () => {
+    expect(searchKeywords("description", undefined, null, "", " ", "target")).toEqual(["description", "target"]);
+  });
+  it("derives the recent group label from the mission vocabulary", async () => {
+    const { VOCAB, v } = await import("../lib/vocabulary");
+    expect(RECENT_GROUP).toBe(`Recent ${VOCAB.mission.plural}`);
+    expect(v("Open {a mission}")).toBe(`Open a ${VOCAB.mission.singular}`);
   });
 });

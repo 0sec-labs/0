@@ -62,3 +62,19 @@ describe("resolveSessionAlias", () => {
     expect(resolveSessionAlias("old")).toBe("live3");
   });
 });
+
+describe("staleSessionRecovery (migrated edge cases)", () => {
+  it("finds already resumed history by saved id", () => {
+    expect(staleSessionRecovery("old", [live("new", { savedId: "old" })], [], {})).toEqual({ kind: "live", id: "new", durableId: "old" });
+    expect(staleSessionRecovery("ephemeral", [live("new", { savedId: "durable" })], [], { ephemeral: { savedId: "durable", messageCount: 20 } })?.id).toBe("new");
+  });
+  it("does not blank a history-bearing alias", () => {
+    expect(staleSessionRecovery("history", [], [], { history: { savedId: "saved", messageCount: 10 } })).toBeUndefined();
+    expect(staleSessionRecovery("unknown", [], [], {})).toBeUndefined();
+  });
+  it("moves root and worker drafts and attachment values without overwriting newer drafts", () => {
+    expect(remapSessionDrafts({ "old:root": "unsent", "old:worker": "worker text", "new:root": "newer" }, "old", "new")).toMatchObject({ "new:root": "newer", "new:worker": "worker text" });
+    const image = { id: "image", value: "data:image/png;base64,abcd" };
+    expect(remapSessionDrafts({ "old:root": [image] }, "old", "new")["new:root"]).toEqual([image]);
+  });
+});

@@ -43,8 +43,8 @@ of a transport implemented in a different release.
 ## Baseline before connection routing
 
 The dashboard originally had a single same-origin engine. `packages/web/src/api.ts`
-owns the local control token and HTTP transport. `packages/web/src/lib/event-stream.ts`
-owns authenticated SSE. `packages/web/src/console/use-console-workspace.ts`
+owns the local control token and HTTP transport.
+`packages/web/src/console/use-console-workspace.ts`
 polls session snapshots and events. `packages/cli/src/commands/dashboard.ts`
 constructs one gateway, workflow service, operator service, and scheduler against
 local stores.

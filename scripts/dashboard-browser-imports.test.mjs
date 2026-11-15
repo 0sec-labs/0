@@ -16,7 +16,6 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
     entryPoints: [
       "packages/web/src/components/access-milestone.tsx",
       "packages/web/src/components/event-timeline.tsx",
-      "packages/web/src/lib/hunt-stream.ts",
       "packages/web/src/pages/engagements-page.tsx",
       "packages/web/src/pages/skills-page.tsx",
       "packages/web/src/console/team-collaboration.tsx",

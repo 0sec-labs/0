@@ -1,9 +1,8 @@
-import { it as test, vi } from "vitest";
+import { it as test } from "vitest";
 import assert from "node:assert/strict";
 import { QueryClient } from "../node_modules/@tanstack/react-query/build/modern/index.js";
 import { BackendClient, backendRoute, backendStorageKey } from "../src/lib/backend-client";
 import { createBackendApi } from "../src/api";
-import { eventStream } from "../src/lib/event-stream";
 
 const descriptor = (id: string, capabilities = ["sessions", "approvals", "workflows"]) => ({ id, name: id, transport: "http" as const, status: "connected" as const, protocolVersion: 1, capabilities });
 
@@ -67,30 +66,4 @@ test("a backend switch during JSON decoding cannot complete a stale mutation", a
     api.client.dispose(); release({ session: { id: "shared" } });
     await assert.rejects(pending, /disconnected/);
   } finally { Object.assign(globalThis, { fetch: oldFetch, window: oldWindow, document: oldDocument }); }
-});
-
-test("SSE reconnect stays on its owner and replays the acknowledged event ID", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout"] });
-  const oldWindow = globalThis.window;
-  Object.assign(globalThis, { window: { location: { origin: "http://localhost", href: "http://localhost/b/lab/live" } } });
-  const headers: Headers[] = [];
-  let reconnect!: () => void;
-  const reconnected = new Promise<void>(resolve => { reconnect = resolve; });
-  const client = new BackendClient("lab", async (_path, init) => {
-    headers.push(new Headers(init?.headers));
-    if (headers.length === 2) reconnect();
-    return new Response("id: 17\ndata: evidence\n\n", { headers: { "content-type": "text/event-stream" } });
-  });
-  const stream = eventStream("/api/events/stream", client);
-  let received!: () => void;
-  const message = new Promise<void>(resolve => { received = resolve; });
-  stream.onmessage = event => { assert.equal(event.lastEventId, "17"); received(); };
-  try {
-    await message;
-    await new Promise<void>(resolve => { stream.onerror = () => resolve(); });
-    vi.advanceTimersByTime(3000);
-    await reconnected;
-    assert.equal(headers[0]!.get("Last-Event-ID"), null);
-    assert.equal(headers[1]!.get("Last-Event-ID"), "17");
-  } finally { stream.close(); client.dispose(); Object.assign(globalThis, { window: oldWindow }); vi.useRealTimers(); }
 });

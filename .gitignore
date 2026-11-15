@@ -47,3 +47,5 @@ services/
 
 # Self-edit preview state (worktrees, scratch homes)
 .0-self-edit/
+__pycache__/
+*.pyc
