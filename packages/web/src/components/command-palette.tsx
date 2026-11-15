@@ -201,7 +201,7 @@ export function CommandPalette({
         ["engagements", "Reports", "Assessment reports and handoff notes"],
         ["doctor", "Diagnostics", "Check that everything works"],
         ["tools", "Tools", "What 0 can use"],
-        ["project", "Folder", "Folder and permissions"],
+        ["project", "Folder", "Folder and scope"],
         ["fix", "Fix", "Review and apply a code fix"],
       ].map(([route, label, meta]): PaletteAction => ({
         id: `control-${route}`, group: "Pages", href: `/${route}`, label: label!, meta: meta!, icon: route === "settings" ? CapySettingsIcon : route === "workers" ? CapyDevicesIcon : CapySlidersIcon,

@@ -11,8 +11,7 @@ const optionDescriptions = new Map([
   ["0 scan web|--require-scope", "Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled."],
   ["0 scan web|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0 scan source|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
-  ["0 lab console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
-  ["0 lab console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
+  ["0 lab console|--approvals", "ask puts each command or change to you first (headless runs cannot answer, so effectful tools are refused). auto, the default, runs commands without asking. Credential, private-network and sandbox protections apply either way. Overrides the approvals setting."],
   ["0 scan repair|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
   ["0 scan repair|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
   ["0 scan web|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
@@ -22,7 +21,7 @@ const optionDescriptions = new Map([
   ["0 lab research ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
   ["0 lab console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
   ["0 lab console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
-  ["0 lab console|--scope", "Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation."],
+  ["0 lab console|--scope", "Initial authorization scope. Headless auto approvals require at least one in_scope entry when scope enforcement is active; scope is not OS isolation."],
   ["0 lab console|--model", "Model selection for headless chat; saved-session model takes precedence when resuming."],
   ["0 scan source|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
   ["0 api|--method", "GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals."],
@@ -51,7 +50,7 @@ function collect(command) {
 }
 
 // Deprecated spellings kept as hidden aliases of renamed flags; other hidden options stay documented.
-const renamedAliases = new Set(["--backend", "--backends-config", "--session", "--workflows"]);
+const renamedAliases = new Set(["--backend", "--backends-config", "--session", "--workflows", "--yolo", "--mode", "--autonomy", "--tool-access"]);
 const isRenamedAlias = (option) => option.hidden && renamedAliases.has(option.long);
 
 function optionTable(command) {

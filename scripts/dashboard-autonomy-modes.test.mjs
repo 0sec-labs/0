@@ -7,14 +7,14 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
 const dashboard = fileURLToPath(new URL('../packages/web/', import.meta.url));
-test('autonomy controls offer only Standard and YOLO without changing saved legacy modes', async () => {
+test('thread settings show one Scope card: no autonomy select, no confirmation checkboxes, no folder-limit text, and saving never changes the stored mode', async () => {
   let server, browser;
   try {
     const bundle = await build({ stdin: { resolveDir: dashboard, loader: 'tsx', contents: `
       import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
       import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {MemoryRouter} from 'react-router-dom';
       import {DEFAULT_AUTONOMY_MODE} from '@0/engine/dist/shared/desktop-console.js';
-      import {BackendApiContext} from './src/backend-context';import {ModePicker} from './src/console/mode-picker';
+      import {BackendApiContext} from './src/backend-context';
       import {ProjectControl} from './src/components/console-control/system-control';
       const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
       let record={id:'legacy',target:'source:/fixture',role:'audit',autonomyMode:'recon',status:'ready'};
@@ -27,10 +27,10 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
         throw Error('Unexpected fixture request '+path);
       }};
       const workspace={perform:async action=>action()};
-      function App(){const[mode,setMode]=useState(DEFAULT_AUTONOMY_MODE),[disabled,setDisabled]=useState(false),[deferred,setDeferred]=useState(false),[view,setView]=useState('picker'),[sessionId,setSessionId]=useState(undefined);
+      function App(){const[mode,setMode]=useState(DEFAULT_AUTONOMY_MODE),[disabled,setDisabled]=useState(false),[deferred,setDeferred]=useState(false),[view,setView]=useState('settings'),[sessionId,setSessionId]=useState(undefined);
         window.setMode=setMode;window.setDisabled=setDisabled;window.setDeferred=setDeferred;window.fixtureDeferred=deferred;
         window.openSettings=id=>{setSessionId(id);setView('settings');};
-        return <MemoryRouter><QueryClientProvider client={client}><BackendApiContext.Provider value={api}>{view==='picker'?<ModePicker workspace={workspace} sessionId="fixture" mode={mode} disabled={disabled}/>:<ProjectControl key={sessionId??'new'} sessionId={sessionId}/>}</BackendApiContext.Provider></QueryClientProvider></MemoryRouter>;
+        return <MemoryRouter><QueryClientProvider client={client}><BackendApiContext.Provider value={api}><ProjectControl key={sessionId??'new'} sessionId={sessionId}/></BackendApiContext.Provider></QueryClientProvider></MemoryRouter>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
     ` }, bundle: true, write: false, platform: 'browser', format: 'iife', jsx: 'automatic', alias: { '@': resolve(dashboard, 'src') }, loader: { '.css': 'empty', '.svg': 'dataurl' }, logLevel: 'silent' });
@@ -39,67 +39,20 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    assert.equal(await page.evaluate(() => window.defaultMode), 'yolo');
-    const menuChoices = async () => {
-      await page.getByRole('menuitem', { name: /^Ask before acting/ }).waitFor();
-      assert.deepEqual((await page.getByRole('menuitem').allTextContents()).map(text => /^(Ask before acting|Act without asking)/.exec(text)?.[1] ?? text), ['Ask before acting', 'Act without asking']);
-      assert.equal(await page.getByText(/Changes apply|Pending approvals still need your response/).count(), 0);
-    };
-    await page.getByRole('button', { name: 'Mode: Act without asking', exact: true }).click();
-    await page.getByRole('menuitem', { name: /^Ask before acting/ }).waitFor();
-    await menuChoices();
-    await page.getByRole('menuitem', { name: /^Ask before acting/ }).click();
-    await page.getByRole('button', { name: 'Mode: Ask before acting', exact: true }).waitFor();
-    assert.deepEqual(await page.evaluate(() => window.configures), [{ id: 'fixture', input: { autonomyMode: 'standard' } }]);
-    await page.getByRole('button', { name: 'Mode: Ask before acting', exact: true }).click();
-    await page.getByRole('menuitem', { name: /^Ask before acting/ }).click();
-    assert.equal(await page.evaluate(() => window.configures.length), 1, 'choosing the current mode never reconfigures');
-    await page.getByRole('button', { name: 'Mode: Ask before acting', exact: true }).click();
-    await menuChoices();
-    await page.evaluate(() => window.setDisabled(true));
-    await page.waitForFunction(() => document.querySelector('[role="menuitem"][aria-disabled="true"]'));
-    await page.getByRole('menuitem', { name: /^Act without asking/ }).evaluate(item => item.click());
-    assert.equal(await page.evaluate(() => window.configures.length), 1, 'an already open menu cannot configure after becoming disabled');
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('[role="menuitem"]'), null, { timeout: 5000 });
-    const disabled = page.getByRole('button', { name: 'Mode: Ask before acting', exact: true });
-    await page.waitForFunction(() => document.querySelector('[aria-label="Mode: Ask before acting"]')?.disabled);
-    assert.equal(await disabled.isDisabled(), true);
-    await disabled.evaluate(button => button.click());
-    assert.equal(await page.getByRole('menuitem').count(), 0);
-    await page.evaluate(() => { window.setDisabled(false); window.setMode('recon'); });
-    await page.getByRole('button', { name: 'Mode: Recon', exact: true }).click();
-    await menuChoices();
-    await page.keyboard.press('Escape');
-    await page.evaluate(() => window.setMode('copilot'));
-    await page.getByRole('button', { name: 'Mode: Auto', exact: true }).waitFor();
-    assert.equal(await page.evaluate(() => window.configures.length), 1, 'loading legacy modes never changes their authority');
-    await page.evaluate(() => { window.setMode('yolo'); window.setDeferred(true); });
-    await page.getByRole('button', { name: 'Mode: Act without asking', exact: true }).click();
-    await menuChoices();
-    await page.getByRole('menuitem', { name: /^Ask before acting/ }).click();
-    assert.equal(await page.evaluate(() => window.configures.length), 2);
-    await page.getByRole('button', { name: 'Mode: Act without asking', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.defaultMode), 'yolo', 'the stored default stays internal; it is shown as Auto');
     await page.evaluate(() => window.openSettings('legacy'));
-    const select = page.getByRole('combobox', { name: 'Autonomy', exact: true });
-    await page.waitForFunction(() => document.querySelector('[aria-label="Autonomy"]')?.textContent?.includes('Ask before acting'));
-    await page.getByText('Saved mode: Recon. The selected mode applies only when you save.', { exact: true }).waitFor();
-    assert.deepEqual(await page.evaluate(() => window.saves), []);
-    await select.click();
-    await page.getByRole('option').first().waitFor({timeout:3000}).catch(()=>{});
-    assert.deepEqual(await page.getByRole('option').allTextContents(), ['Ask before acting', 'Act without asking']);
-    await page.getByRole('option', { name: 'Act without asking', exact: true }).click();
-    await page.getByRole('button', { name: 'Reset form', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('[aria-label="Autonomy"]')?.textContent?.includes('Ask before acting'));
-    assert.deepEqual(await page.evaluate(() => window.saves), [], 'resetting a legacy draft never applies it');
-    await page.getByRole('checkbox', { name: 'Folder and scope reviewed', exact: true }).check();
+    await page.getByText('Scope', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).waitFor();
+    const text = await page.locator('body').innerText();
+    assert.doesNotMatch(text, /yolo|act without asking|ask before acting|autonomy|permissions|limited to|folder and scope reviewed|confirm actions run/i);
+    assert.equal(await page.getByRole('combobox', { name: 'Autonomy' }).count(), 0);
+    assert.equal(await page.getByRole('checkbox', { name: /reviewed|confirm/i }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), false);
+    assert.deepEqual(await page.evaluate(() => window.saves), [], 'opening settings never writes configuration');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page.waitForFunction(() => window.saves.length === 1);
-    assert.equal((await page.evaluate(() => window.saves))[0].autonomyMode, 'standard');
-    await page.evaluate(() => window.openSettings(undefined));
-    await page.waitForFunction(() => document.querySelector('[aria-label="Autonomy"]')?.textContent?.includes('Act without asking'));
-    assert.equal(await page.getByRole('button', { name: 'Create settings', exact: true }).isDisabled(), true);
-    assert.equal(await page.evaluate(() => window.saves.length), 1, 'opening new settings never writes configuration');
+    const saved = (await page.evaluate(() => window.saves))[0];
+    assert.equal('autonomyMode' in saved, false, 'saving scope never rewrites the stored mode (legacy recon stays recon)');
   } finally {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));

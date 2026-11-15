@@ -8,7 +8,8 @@
  * (type-only, so nothing from the engine enters the bundle). Keep new fields in sync by hand until then.
  */
 export type SentinelStatus = "active" | "paused" | "archived";
-export type SentinelAutonomy = "observe" | "propose" | "act";
+export type SentinelAutonomy = "observe" | "propose" | "act" | "run";
+export type SentinelAccessLevel = "read-only" | "commands" | "pull-requests";
 export type SentinelToolAccess = "read-only" | "read-web" | "exec";
 
 export interface SentinelScope { repos: string[]; targets: string[]; domains: string[]; outOfScope: string[]; production: boolean }
@@ -128,16 +129,20 @@ export const DEFAULT_FILES = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 
-export const AUTONOMY_OPTIONS: ReadonlyArray<{ value: SentinelAutonomy; label: string; hint: string }> = [
-  { value: "observe", label: "Report only", hint: "Drafts findings and reports; changes nothing." },
-  { value: "propose", label: "Ask first", hint: "Prepares changes and waits for your approval." },
-  { value: "act", label: "Act on its own", hint: "Publishes without per-item approval." },
+/** What an Agent can do. Mirrors the engine's `sentinelAccessLevel`: observe is Read-only, propose and run are Can run commands, act is Can open pull requests. */
+export const ACCESS_OPTIONS: ReadonlyArray<{ value: SentinelAccessLevel; label: string; hint: string }> = [
+  { value: "read-only", label: "Read-only", hint: "Reads and reports. Runs nothing and changes nothing." },
+  { value: "commands", label: "Can run commands", hint: "Also runs tools and commands. Does not open pull requests or post comments." },
+  { value: "pull-requests", label: "Can open pull requests", hint: "Also publishes fixes and comments on pull requests." },
 ];
-export const TOOL_ACCESS_OPTIONS: ReadonlyArray<{ value: SentinelToolAccess; label: string; hint: string }> = [
-  { value: "read-only", label: "Read only", hint: "Reads files and records. No network requests beyond reads." },
-  { value: "read-web", label: "Read and web", hint: "Adds web lookups and in-scope target requests." },
-  { value: "exec", label: "Run commands", hint: "May run commands in its sandbox. Highest trust." },
-];
+export function accessLevelOf(autonomy: SentinelAutonomy): SentinelAccessLevel {
+  return autonomy === "observe" ? "read-only" : autonomy === "act" ? "pull-requests" : "commands";
+}
+/** The stored fields for a level; a level the Agent already has keeps its stored autonomy and web access. */
+export function accessFields(level: SentinelAccessLevel, current: { autonomy: SentinelAutonomy; toolAccess: SentinelToolAccess }): { autonomy: SentinelAutonomy; toolAccess: SentinelToolAccess } {
+  if (accessLevelOf(current.autonomy) === level) return { autonomy: current.autonomy, toolAccess: current.toolAccess };
+  return level === "read-only" ? { autonomy: "observe", toolAccess: "read-only" } : level === "commands" ? { autonomy: "run", toolAccess: "exec" } : { autonomy: "act", toolAccess: "exec" };
+}
 
 /** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production, finite daily budget. */
 export const DEFAULT_BUDGET: SentinelBudget = { dailyUsd: 10, maxRunsPerDay: 20 };

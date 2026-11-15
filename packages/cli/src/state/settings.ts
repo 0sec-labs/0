@@ -69,6 +69,8 @@ export interface TuiSettings {
   onboardingCompleted: boolean;
   /** Operator-global execution boundary; never granted by a project checkout. */
   executionProfile: "local" | "smolvm";
+  /** `auto` runs commands without asking (default); `ask` puts each effectful action to the operator. Operator-only: a project cannot change it. */
+  approvals: "ask" | "auto";
   /** Let sibling subagents message each other directly (child↔child channel). */
   allowSubagentPeerMessaging: boolean;
   /** Let a subagent send a message to the operator's transcript (child→operator). */
@@ -214,7 +216,8 @@ type TuiSettingDef =
   | EnumSettingDef<"analyticsLevel">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
-  | EnumSettingDef<"executionProfile">;
+  | EnumSettingDef<"executionProfile">
+  | EnumSettingDef<"approvals">;
 
 /**
  * The narrowly-typed table. `SETTING_DEFS` re-exports it under the public,
@@ -386,6 +389,15 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Updates",
   },
   {
+    key: "approvals",
+    label: "Ask before running commands",
+    description: "auto runs commands and tools without asking (default). ask puts each command or change to you first. Applies to new turns on this computer; A project can't change it.",
+    kind: "enum",
+    default: "auto",
+    choices: ["auto", "ask"],
+    group: "Helpers",
+  },
+  {
     key: "executionProfile",
     label: "Execution profile",
     description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 doctor workbench setup. Applies to this computer on next launch; failures never fall back to running on your computer.",
@@ -460,6 +472,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   busyInputMode: "queue",
   onboardingCompleted: false,
   executionProfile: "local",
+  approvals: "auto",
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
   toolCardStyle: "compact",
@@ -622,6 +635,7 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "updatePolicy"
     || key === "allowDevSourceUpdates"
     || key === "executionProfile"
+    || key === "approvals"
     || key === "archiveIdleDays"
     || key === "modelPreference";
 }
@@ -752,6 +766,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     busyInputMode: enumAt(raw, "busyInputMode"),
     onboardingCompleted: booleanAt(raw, "onboardingCompleted"),
     executionProfile: enumAt(raw, "executionProfile"),
+    approvals: enumAt(raw, "approvals"),
     allowSubagentPeerMessaging: booleanAt(raw, "allowSubagentPeerMessaging"),
     allowSubagentOperatorMessaging: booleanAt(raw, "allowSubagentOperatorMessaging"),
     toolCardStyle: enumAt(raw, "toolCardStyle"),

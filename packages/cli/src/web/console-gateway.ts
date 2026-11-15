@@ -23,7 +23,7 @@ import {
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
-  DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
+  DEFAULT_AUTONOMY_MODE, effectiveEngineMode, executionPolicy, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleWorkerPolicy, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
@@ -1241,12 +1241,12 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -1260,7 +1260,7 @@ export class ConsoleGateway {
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
@@ -1394,8 +1394,8 @@ export class ConsoleGateway {
         return response.approve ? resolution : null;
       },
       requestLocalScope: async (request) => {
-        // YOLO means "don't ask": allow the directory, except the filesystem/home root.
-        if (managed.autonomyMode === "yolo" && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
+        // Auto means "don't ask": allow the directory, except the filesystem/home root.
+        if (executionPolicy(managed.session?.autonomyMode ?? effectiveEngineMode(managed.autonomyMode, getSettings().approvals)).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this thread only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
@@ -1425,6 +1425,11 @@ export class ConsoleGateway {
     }
     if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410);
+    // "Ask before running commands": the setting tightens a thread that stores an auto mode, and is lifted again when switched off.
+    {
+      const wanted = effectiveEngineMode(managed.autonomyMode, getSettings().approvals);
+      if (session.autonomyMode !== wanted) await session.setAutonomyMode(wanted);
+    }
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
     // Provisional deterministic label while the first turn runs; `titleSource`

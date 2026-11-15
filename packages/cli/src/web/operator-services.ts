@@ -413,6 +413,7 @@ const GUARDED_SETTING_ORDER: Partial<Record<keyof TuiSettings, readonly unknown[
   diagnosticReporting: ["off", "ask", "automatic"],
   updatePolicy: ["off", "notify", "automatic"],
   executionProfile: ["smolvm", "local"],
+  approvals: ["ask", "auto"],
   allowModelSelfExtension: [false, true],
   allowDevSourceUpdates: [false, true],
 };

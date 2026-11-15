@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: Standing watchers with a scope, an autonomy level, a daily budget and a review gate.
+description: Standing watchers with a scope, an access level, a daily budget and a review gate.
 ---
 
 An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It then runs threads for you on a schedule, when a GitHub pull request opens, or when you start it by hand.
@@ -14,29 +14,29 @@ An Agent is a persistent agent with a name, a standing job, a scope, files and a
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Agent has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Agent has a scope, an access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
 ## Presets
 
-A new Agent always starts paused, read-only and with production targets off. A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
+A new Agent always starts paused, read-only and with production targets off. A preset fills in the job, skills and access level. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
-| Preset | Autonomy | Tool access | Job |
-| --- | --- | --- | --- |
-| `pen-tester` | observe | `read-web` | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
-| `pr-security-reviewer` | propose | `read-only` | Review each opened or updated pull request diff and draft comments. |
-| `dependency-watcher` | propose | `read-only` | Watch lockfiles and advisories and propose safe upgrades. |
-| `fix-engineer` | propose | `read-only` | Turn a confirmed finding into a tested draft fix for review. |
-| `secrets-hunter` | observe | `read-only` | Find leaked credentials in code and git history, reported redacted. |
-| `attack-surface-monitor` | observe | `read-web` | Re-map the in-scope external surface daily and report what is new. |
-| `cloud-posture-auditor` | observe | `read-only` | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
-| `incident-triage` | propose | `read-only` | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
-| `regression-tester` | observe | `read-web` | Re-check known findings and API spec drift to catch regressions. |
-| `release-gate` | propose | `read-only` | Review what changed since the last release before you ship. |
+| Preset | Access | Job |
+| --- | --- | --- |
+| `pen-tester` | Read-only | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
+| `pr-security-reviewer` | Can run commands | Review each opened or updated pull request diff and draft comments. |
+| `dependency-watcher` | Can run commands | Watch lockfiles and advisories and propose safe upgrades. |
+| `fix-engineer` | Can run commands | Turn a confirmed finding into a tested draft fix for review. |
+| `secrets-hunter` | Read-only | Find leaked credentials in code and git history, reported redacted. |
+| `attack-surface-monitor` | Read-only | Re-map the in-scope external surface daily and report what is new. |
+| `cloud-posture-auditor` | Read-only | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
+| `incident-triage` | Can run commands | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
+| `regression-tester` | Read-only | Re-check known findings and API spec drift to catch regressions. |
+| `release-gate` | Can run commands | Review what changed since the last release before you ship. |
 
-## Autonomy, tools and scope
+## Access, tools and scope
 
-- **Autonomy.** `observe` produces read-only drafts. `propose` (the default) queues proposals that wait for your approval. `act` may publish without per-item approval. No preset defaults to `act`.
-- **Tool access.** `read-only` (default), `read-web` or `exec`.
+- **Access.** One choice per Agent. **Read-only** can read and report. **Can run commands** also runs tools and commands, but does not open pull requests or post comments. **Can open pull requests** also publishes fixes and comments. No preset defaults to opening pull requests.
+- **Ask before running commands.** When this setting is on (Settings, Helpers), an Agent's commands need your approval, as in threads.
 - **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on.
 
 ## Budget
@@ -77,7 +77,7 @@ The Agent's `gh` account needs permission to comment when `--comment` is on. A f
 
 ## Review gate
 
-Scheduled and polled runs are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
+Scheduled and polled runs are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, access level, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
 
 
 ## From the CLI
@@ -86,8 +86,8 @@ Everything on the Agents page works from `0 agents`. Commands attach to a runnin
 
 ```bash
 0 agents presets
-0 agents create --preset pen-tester --name "Nightly probe"
-0 agents set AGENT_ID --daily-usd 5 --autonomy observe
+0 agents create --preset pen-tester --name "Nightly probe" --access read-only
+0 agents set AGENT_ID --daily-usd 5 --access read-only
 0 agents files put AGENT_ID reports/scope.md --file ./scope.md
 0 agents resume AGENT_ID --acknowledge
 0 agents run AGENT_ID --task "Re-test the login flow" --yes
@@ -115,3 +115,15 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 - [Automations](/automations/): the saved jobs an Agent can own.
 - [Skills](/skills/): instructions an Agent loads.
 - [Scope](/scope/): authorization rules.
+
+## Access levels and older Agents
+
+The API keeps its field names (`autonomy`, `toolAccess`) and adds a derived `accessLevel`. A request may send `accessLevel` instead of `autonomy`; an explicit `autonomy` wins. Stored values are never rewritten, so existing Agents keep exactly their behavior.
+
+| Access level | Stored `autonomy` | What runs |
+| --- | --- | --- |
+| Read-only | `observe` | Passive reads and reports. Commands are refused. |
+| Can run commands | `run` (new), `propose` (older Agents) | Runs commands. Mutating web requests are blocked. Its instructions forbid pull requests, pushes and comments. `propose` Agents keep asking before every action, as before. |
+| Can open pull requests | `act` | Publishes without per-item approval. |
+
+For Read-only, an Agent keeps the web lookups its preset allows. Moving an Agent to another level in the form uses the standard values for that level and never widens it past the level you pick. Untrusted fork pull requests always run read-only. Commands under **Can run commands** are not technically unable to publish, so keep GitHub credentials off machines that should not publish.

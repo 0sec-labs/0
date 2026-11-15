@@ -105,14 +105,13 @@ Guide: [Read the workflow](/app/).
 | `--engine-token-env <name>` | — | Environment variable holding the engine token |
 | `--format <format>` | `text` | Output format: text, json, ndjson |
 | `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
-| `--scope <file>` | — | Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
+| `--scope <file>` | — | Initial authorization scope. Headless auto approvals require at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
 | `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
 | `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
 | `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
-| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
-| `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
+| `--approvals <ask\|auto>` | — | ask puts each command or change to you first (headless runs cannot answer, so effectful tools are refused). auto, the default, runs commands without asking. Credential, private-network and sandbox protections apply either way. Overrides the approvals setting. |
 | `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker. |
@@ -122,9 +121,9 @@ Guide: [Read the workflow](/app/).
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
 | `--chat <id>` | — | Send to an existing live engine chat |
 
-#### Autonomy modes
+#### Approvals
 
-See [Browser app](/app/) for Standard, Recon, Co-pilot, and YOLO behavior. No mode grants testing authorization.
+See [Browser app](/app/#approvals) for Ask and Auto behavior. Approvals never grant testing authorization.
 
 #### Approval prompts
 
@@ -821,7 +820,7 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 ### scan campaign
 
 Run a sequence of objective-driven security-testing threads for an authorized target.
-Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
+Provide a JSON scope policy with `--scope`; iterations run with automatic approvals and appear in
 an attached local engine's console. If no engine is available on the selected
 database, the supervisor falls back to headless chat children.
 
@@ -848,7 +847,7 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 | `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and threads |
 | `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
-| `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
+| `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run with automatic approvals) |
 | `--db-path <path>` | — | Findings db (default: &lt;target-sanitized&gt;.db in cwd) |
 | `--journal <path>` | — | Campaign journal (default: &lt;db-path&gt;.campaign.json) |
 | `--rate-limit <spec>` | `5` | Rate limit passthrough for --with-scan (default 5) |
@@ -4919,7 +4918,7 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | --- | --- | --- |
 | `--model <model>` | — | Model for this thread |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--approvals <ask\|auto>` | — | Ask before running commands, or run them automatically (default auto) |
 | `--folder <path>` | — | Folder the thread works in |
 | `--target <target>` | — | Authorized target |
 | `--scope <path>` | — | Scope policy JSON file |
@@ -5010,7 +5009,7 @@ Change a thread's model, reasoning effort, mode or folder. A computer is chosen 
 | --- | --- | --- |
 | `--model <model>` | — | Model |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--approvals <ask\|auto>` | — | Ask before running commands, or run them automatically (default auto) |
 | `--folder <path>` | — | Folder the thread works in |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
@@ -5258,6 +5257,7 @@ Create a Agent from a preset or a JSON definition.
 | --- | --- | --- |
 | `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
 | `--name <name>` | — | Name |
+| `--access <level>` | — | Access level: read-only \| commands \| pull-requests |
 | `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
@@ -5278,8 +5278,7 @@ Change a Agent's settings.
 | --- | --- | --- |
 | `--name <name>` | — | Name |
 | `--mission <text>` | — | One-line mission |
-| `--autonomy <level>` | — | observe \| propose \| act |
-| `--tool-access <level>` | — | read-only \| read-web \| exec |
+| `--access <level>` | — | Access level: read-only \| commands \| pull-requests |
 | `--daily-usd <usd>` | — | Daily budget in USD |
 | `--max-runs <n>` | — | Maximum runs per day |
 | `--file <path>` | — | Patch JSON object |

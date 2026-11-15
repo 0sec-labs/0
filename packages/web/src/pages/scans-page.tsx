@@ -76,7 +76,7 @@ function ScanDetail({
         </div>
       </div>
       <Card>
-        <CardHeader><CardTitle className="font-sans text-base font-medium">Scope</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="font-sans text-base font-medium">Run details</CardTitle></CardHeader>
         <CardContent>
           <CardList>
             <MetaTile label="Target" value={scan.target} />

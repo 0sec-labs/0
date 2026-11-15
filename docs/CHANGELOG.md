@@ -23,6 +23,10 @@ on the GitHub Release tag.
 - Chat slash commands are now the CLI commands: `/threads start`, `/threads list`, `/findings list`, `/models default`, `/config get`, `/agents list`, `/doctor` and more mirror `0 threads start` and so on. The `/` menu is grouped, filterable and shows the CLI command for each entry. Old names such as `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings` and `/model` still work.
 - Removed the stale `/onboard`, `/chat`, `/launcher`, `/ops`, `/back` and `/scope` commands. `/exit` is now `/threads close`.
 - Thread message actions (time, Reply, Copy, More) now sit in reserved space above each message instead of covering its first line, with ghost icon buttons, tooltips, a "Copied" confirmation and keyboard and touch access. Icon-only buttons across the app share the same tooltip, and the code block copy button shows one too.
+- Approvals are simplified. Threads and Agents run commands automatically and never ask first. The one safety valve is a single setting, **Ask before running commands** (Settings, Helpers; `0 config set approvals ask`), also `--approvals ask|auto` on `0 lab console` and `0 threads start|set`. Threads saved earlier keep working: stored values are read, never rewritten.
+- On a local computer, commands run as your user with no confirmation. The workbench sandbox isolates them when used. Third-party target authorization remains an optional plugin.
+- Agents are access-first: **Read-only**, **Can run commands** or **Can open pull requests** replace Report only, Ask first and Act on its own. Create with `0 agents create --access read-only|commands|pull-requests`. Existing Agents keep exactly their behavior; the API adds a derived `accessLevel` and keeps `autonomy`.
+- Scope now means one thing in the app: what a scan or Agent may target. The thread Permissions card is the Scope card, and its folder confirmation and "Limited to" text are gone. Your chosen folder is always allowed.
 
 ### Fixed
 
@@ -33,6 +37,8 @@ on the GitHub Release tag.
 
 ### Removed
 
+- The composer options menu (Ask before acting, Act without asking) and the two confirmation checkboxes in thread settings.
+- The old approval wording from the app, CLI help, errors and docs. `--yolo` and `--mode` still work as hidden aliases.
 - The auto-granted scope notice is no longer shown in threads.
 - npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.
 

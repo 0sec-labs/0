@@ -2,8 +2,6 @@ import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ControlDisclosure } from "./control-disclosure";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
-import { autonomyModeDraft, SELECTABLE_AUTONOMY_MODES } from "@/console/autonomy-options";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,10 +16,6 @@ import type { CheckItem, ChecksResponse, ProjectResponse, Provider, SessionSnaps
 import { DiagnosticReportControl } from "./diagnostic-report-control";
 
 import { healthHint, providerUnusable } from "@/console/provider-health";
-export const autonomyDescriptions: Record<string, string> = {
-  standard: "Asks you before each action.",
-  yolo: "Runs tools without per-action prompts. Can still ask for context or necessary decisions.",
-};
 
 /** Targets are shown as plain folders; an absolute folder is stored in the engine's source form. */
 const plainTarget = (target: string): string => target.replace(/^source:/, "");
@@ -47,47 +41,35 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
   const [path, setPath] = useState("");
   const [inspected, setInspected] = useState("");
   const [target, setTarget] = useState("");
-  const [mode, setMode] = useState(autonomyModeDraft(DEFAULT_AUTONOMY_MODE));
-  const [autonomyApproved, setAutonomyApproved] = useState(false);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [approveNew, setApproveNew] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inScope, setInScope] = useState("");
   const [outOfScope, setOutOfScope] = useState("");
-  const [scopeApproved, setScopeApproved] = useState(false);
   const project = useQuery({ queryKey: queryKeys.consoleProject(inspected), retry: false, queryFn: ({ signal }) => webFetchJson<ProjectResponse>(`/api/console/project?path=${encodeURIComponent(inspected)}`, { signal }) });
   // A failed lookup must not replace the project already shown: keep the last good one beside an inline error.
   const [shown, setShown] = useState<ProjectResponse | undefined>();
   useEffect(() => { if (project.data) { setShown(project.data); if (!inspected) setPath(current => current || project.data!.path); } }, [project.data]);
   const checks = useQuery({ queryKey: queryKeys.consoleChecks(shown?.path), enabled: !!shown, queryFn: ({ signal }) => webFetchJson<ChecksResponse>(`/api/console/checks?path=${encodeURIComponent(shown!.path)}`, { signal }) });
   const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(sessionId), enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot });
-  useEffect(() => { if (snapshot.data) { setTarget(plainTarget(snapshot.data.session.target)); setMode(autonomyModeDraft(snapshot.data.session.autonomyMode)); setInScope(snapshot.data.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data.scope?.out_of_scope?.join("\n") ?? ""); } }, [snapshot.data?.session.id]);
-  const savedMode = snapshot.data?.session.autonomyMode;
-  const legacyMode = savedMode === "recon" ? "Recon" : savedMode === "copilot" ? "Auto" : undefined;
+  useEffect(() => { if (snapshot.data) { setTarget(plainTarget(snapshot.data.session.target)); setInScope(snapshot.data.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data.scope?.out_of_scope?.join("\n") ?? ""); } }, [snapshot.data?.session.id]);
   const configuration = useMutation({ mutationFn: async () => {
-    if (mode === "yolo" && !autonomyApproved) throw new Error("Confirm the autonomy mode first.");
-    if (!scopeApproved) throw new Error("Review and approve the scope first.");
-    const owner = sessionId ?? (await webFetchJson<{ session: SessionSummary }>("/api/console/sessions", jsonBody({ target: engineTarget(target), autonomyMode: mode }))).session.id;
-    return (await webFetchJson<{ session: SessionSummary }>(`/api/console/sessions/${encodeURIComponent(owner)}/configuration`, { method: "PATCH", body: JSON.stringify({ target: engineTarget(target), autonomyMode: mode, scope: { in_scope: inScope.split("\n").map(rule => rule.trim()).filter(Boolean), out_of_scope: outOfScope.split("\n").map(rule => rule.trim()).filter(Boolean) } }) })).session;
+    const owner = sessionId ?? (await webFetchJson<{ session: SessionSummary }>("/api/console/sessions", jsonBody({ target: engineTarget(target) }))).session.id;
+    return (await webFetchJson<{ session: SessionSummary }>(`/api/console/sessions/${encodeURIComponent(owner)}/configuration`, { method: "PATCH", body: JSON.stringify({ target: engineTarget(target), scope: { in_scope: inScope.split("\n").map(rule => rule.trim()).filter(Boolean), out_of_scope: outOfScope.split("\n").map(rule => rule.trim()).filter(Boolean) } }) })).session;
   }, onSuccess: async session => { setMessage(session.pendingConfiguration ? "Saved. Takes effect after the current step." : "Saved."); await queryClient.invalidateQueries({ queryKey: queryKeys.consoleControlSession() }); if (onApplied) onApplied(session); else if (!sessionId) { const params = new URLSearchParams(location.search); params.set("session", session.id); params.set("return", `/chats/${session.id}`); navigate(`${location.pathname}?${params}`, { replace: true }); } } });
   const changeCheck = useMutation({ mutationFn: (mutation: Record<string, unknown>) => webFetchJson<ChecksResponse>("/api/console/checks", jsonBody({ path: shown!.path, mutation })), onSuccess: result => { queryClient.setQueryData(queryKeys.consoleChecks(shown!.path), result); setName(""); setPrompt(""); setApproveNew(false); setMessage("Checks updated."); } });
   return <div className="flex flex-col gap-10"><ControlCard title="Folder"><form className="flex flex-col items-end gap-3 sm:flex-row" onSubmit={event => { event.preventDefault(); setInspected(path.trim()); }}><div className="w-full"><TextField label="Folder" value={path} onChange={event => setPath(event.target.value)} placeholder="Folder to inspect" /></div><SubmitButton type="submit" variant="outline" pending={project.isFetching && !project.isPending} disabled={!path.trim()}>Open</SubmitButton></form>{project.error ? <Feedback error={inspected ? "Folder not found." : project.error} /> : <QueryState pending={project.isPending && !shown} error={null} retry={project.refetch} />}{shown && <><Facts entries={[["Project", <Tooltip content={shown.path}><span tabIndex={0}>{shown.name}</span></Tooltip>], ["Branch", shown.git.branch ?? "Not a Git repo"], ["Changes", shown.git.dirty ? "Uncommitted changes" : "Clean"]]} />{shown.git.error && <Feedback error={shown.git.error} />}<Button variant="outline" onClick={() => setTarget(shown.path)}>Use as target</Button></>}</ControlCard>
-    <ControlCard title="Permissions">
+    <ControlCard title="Scope">
       <QueryState pending={!!sessionId && snapshot.isPending} error={snapshot.error} retry={snapshot.refetch} />
-      {snapshot.data && !snapshot.data.scopeEnforcement.enabled && <p className="text-xs text-muted-foreground">Scope is not enforced.</p>}
-      {snapshot.data?.localScopePath && <p className="text-xs text-muted-foreground">Limited to <span className="break-all">{snapshot.data.localScopePath}</span></p>}
+      {snapshot.data && !snapshot.data.scopeEnforcement.enabled && <p className="text-xs text-muted-foreground">Scope rules apply once the scope plugin is on. Your own folder is always allowed.</p>}
       <form className="space-y-4" onSubmit={event => { event.preventDefault(); configuration.mutate(); }}>
-        <TextField label="Focus (optional)" value={target} onChange={event => { setTarget(event.target.value); setScopeApproved(false); }} maxLength={4096} placeholder="Website or folder to focus on" />
-        <ControlDisclosure key={snapshot.data?.session.id ?? "new"} defaultOpen={!!(snapshot.data?.scope?.in_scope?.length || snapshot.data?.scope?.out_of_scope?.length)} title={<>Scope rules</>}><div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <Field label="In scope"><Textarea rows={4} placeholder="One per line" value={inScope} onChange={event => { setInScope(event.target.value); setScopeApproved(false); }} /></Field>
-          <Field label="Out of scope"><Textarea rows={4} placeholder="One per line" value={outOfScope} onChange={event => { setOutOfScope(event.target.value); setScopeApproved(false); }} /></Field>
+        <TextField label="Focus (optional)" value={target} onChange={event => setTarget(event.target.value)} maxLength={4096} placeholder="Website or folder to focus on" />
+        <ControlDisclosure key={snapshot.data?.session.id ?? "new"} defaultOpen={!!(snapshot.data?.scope?.in_scope?.length || snapshot.data?.scope?.out_of_scope?.length)} title={<>Scope rules for outside targets</>}><div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <Field label="Allowed targets"><Textarea rows={4} placeholder="One per line" value={inScope} onChange={event => setInScope(event.target.value)} /></Field>
+          <Field label="Off limits"><Textarea rows={4} placeholder="One per line" value={outOfScope} onChange={event => setOutOfScope(event.target.value)} /></Field>
         </div></ControlDisclosure>
-        {legacyMode && <p className="text-xs text-muted-foreground">Saved mode: {legacyMode}. The selected mode applies only when you save.</p>}
-        <Field label="Autonomy"><Select aria-label="Autonomy" value={mode} onValueChange={value => { setMode(autonomyModeDraft(value)); setAutonomyApproved(false); }} options={SELECTABLE_AUTONOMY_MODES.map(option => ({ value: option.value, label: option.value === "yolo" ? "Act without asking" : "Ask before acting" }))} /></Field>
-        {mode === "yolo" && <Check checked={autonomyApproved} onChange={setAutonomyApproved}>I confirm actions run without asking first</Check>}
-        <Check checked={scopeApproved} onChange={setScopeApproved}>Folder and scope reviewed</Check>
-        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={configuration.isPending} disabled={!scopeApproved || (mode === "yolo" && !autonomyApproved)}>{sessionId ? "Save settings" : "Create settings"}</SubmitButton><Button type="button" variant="outline" onClick={() => { setTarget(plainTarget(snapshot.data?.session.target ?? "")); setMode(autonomyModeDraft(snapshot.data?.session.autonomyMode ?? DEFAULT_AUTONOMY_MODE)); setInScope(snapshot.data?.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data?.scope?.out_of_scope?.join("\n") ?? ""); setScopeApproved(false); setAutonomyApproved(false); configuration.reset(); }}>Reset form</Button></div>
+        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={configuration.isPending}>{sessionId ? "Save settings" : "Create settings"}</SubmitButton><Button type="button" variant="outline" onClick={() => { setTarget(plainTarget(snapshot.data?.session.target ?? "")); setInScope(snapshot.data?.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data?.scope?.out_of_scope?.join("\n") ?? ""); configuration.reset(); }}>Reset form</Button></div>
       </form><Feedback error={configuration.error} message={message} />
     </ControlCard>
     {shown && <ControlCard title="Review checks"><QueryState pending={checks.isPending} error={checks.error} retry={checks.refetch} />{checks.data?.checks.length === 0 && <Empty>No checks yet.</Empty>}{checks.data?.checks.map(item => <ReviewCheckRow key={item.id} item={item} busy={changeCheck.isPending} mutate={mutation => changeCheck.mutate(mutation)} />)}<ControlDisclosure className="border-t border-border pt-4" key={checks.data ? "loaded-checks" : "loading-checks"} defaultOpen={checks.data?.checks.length === 0} title={<>Add a check</>}><form className="mt-4 space-y-4" onSubmit={event => { event.preventDefault(); changeCheck.mutate({ action: approveNew ? "add" : "propose", name: name.trim(), prompt: prompt.trim(), ...(approveNew ? { approved: true } : {}) }); }}><TextField label="New check name" value={name} onChange={event => setName(event.target.value)} required maxLength={120} /><Field label="What to check"><Textarea value={prompt} onChange={event => setPrompt(event.target.value)} required maxLength={2000} rows={4} /></Field><Check checked={approveNew} onChange={setApproveNew}>Turn on now (otherwise saved as a draft).</Check><SubmitButton type="submit" variant="outline" pending={changeCheck.isPending} disabled={!name.trim() || !prompt.trim()}>{approveNew ? "Add check" : "Save draft"}</SubmitButton></form></ControlDisclosure><Feedback error={changeCheck.error} /></ControlCard>}

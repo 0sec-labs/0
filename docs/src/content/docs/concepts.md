@@ -12,9 +12,9 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Finding** | A security issue with evidence. An unconfirmed finding is a **lead**. See [Findings](/findings/). |
 | **Report** | The result of one run of a scan or an automation: status, evidence and linked findings. It opens at `/runs/<id>`; the CLI calls it a run (`0 lab runs`). |
 | **Automation** | A saved list of steps that runs by hand, on a trigger or on a schedule. Starter automations are templates. See [Automations](/automations/). |
-| **Agent** | A persistent agent with a name, a standing job, a scope, files, a schedule, an autonomy level and a daily budget. It runs threads on a schedule, on a pull request or by hand. See [Agents](/agents/). |
+| **Agent** | A persistent agent with a name, a standing job, a scope, files, a schedule, an access level and a daily budget. It runs threads on a schedule, on a pull request or by hand. See [Agents](/agents/). |
 | **Helper** | A helper agent a thread starts for a part of its work (a subagent). Limits live under Settings, Helpers. |
-| **Scope** | The records that authorize live testing: targets, exclusions and approvals. See [Scope and authorization](/scope/). |
+| **Scope** | What a scan or Agent may target: the target list or URL on an automation or Agent, with its exclusions. It is optional and enforced by the scope plugin. Your chosen folder is always allowed. See [Scope and authorization](/scope/). |
 | **Plugin** | Installable code that extends 0: a tool plugin or an MCP server plugin. A plugin can bundle skills. See [Plugins](/plugins/). |
 | **Skill** | A folder of instructions the agent loads when a task needs it. A skill is not code. See [Skills](/skills/). |
 | **Theme** | A light and dark color palette for the browser app. Themes live in the browser only. See [Browser app](/app/#themes). |

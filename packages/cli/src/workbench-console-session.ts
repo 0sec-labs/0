@@ -212,15 +212,15 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
   // Guest state never creates authority. Only the host's initial grant and approval callback do.
   // Initial host workspace authorization is independent of later mode RPCs.
-  const explicitYoloSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
-  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitYoloSourceGrant ? workspace : undefined);
+  const explicitAutoSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
+  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitAutoSourceGrant ? workspace : undefined);
   const authorizedSourceRoot = (guestPath: unknown): string | undefined => {
     if (!sourceScopePath || typeof guestPath !== "string") return undefined;
     try {
       const requested = realpathSync(hostWorkspacePath(guestPath, workspace));
       const approved = realpathSync(sourceScopePath);
       if (!statSync(requested).isDirectory()) return undefined;
-      if (requested === approved || (explicitYoloSourceGrant && (requested === workspace || requested.startsWith(workspace + sep)))) return requested;
+      if (requested === approved || (explicitAutoSourceGrant && (requested === workspace || requested.startsWith(workspace + sep)))) return requested;
     } catch { /* Unknown or foreign scope is not authority. */ }
     return undefined;
   };
@@ -262,7 +262,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     if (name === "sourceLessons") {
       if (!sourceLearningEnabled || !sourceScopePath || !options.readSourceLessons || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "") || args.length !== 1 || typeof args[0] !== "string") return [];
       const requested = authorizedSourceRoot(args[0]);
-      if (!requested) return []; // Only exact scope or a subtree of an explicit host YOLO grant.
+      if (!requested) return []; // Only exact scope or a subtree of an explicit host auto grant.
       await flushSourceContext();
       const notes = await options.readSourceLessons({ workspaceRoot: workspace, scopePath: requested });
       return notes.slice(0, 6).flatMap(note => {

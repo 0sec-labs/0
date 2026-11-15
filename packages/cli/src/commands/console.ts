@@ -2,7 +2,8 @@ import { loadServicePluginConnections } from "../web/service-plugins.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { stdin } from "node:process";
 
-import type { Command } from "commander";
+import { Option, type Command } from "commander";
+import { getSettings } from "../state/settings-store.js";
 import { chatOption, engineOptions } from "./shared-options.js";
 import chalk from "chalk";
 import {
@@ -21,7 +22,7 @@ import type {
   ToolCall,
   ToolResult,
 } from "@0/engine";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared";
+import { DEFAULT_AUTONOMY_MODE, approvalsFromMode, modeFromApprovals, parseApprovals } from "@0/engine/shared";
 import {
   processPresentationOutput,
   type ProcessPresentationOutput,
@@ -49,6 +50,7 @@ interface ConsoleOptions {
   role?: string;
   mode?: string;
   yolo?: boolean;
+  approvals?: string;
   maxToolCalls?: string;
   allowScanners?: boolean;
   /** `--resume [id]`: a session id/prefix to reopen, or `true` for the picker. */
@@ -79,38 +81,47 @@ type ConsoleAutonomyResolution =
   | { ok: false; error: string };
 
 /**
- * Resolve the console's launch autonomy mode from the two surfaces that set
- * it, without changing what any mode permits:
- *   --mode <mode>     canonical, discoverable option
- *   --yolo            convenience shortcut, equivalent to --mode yolo
+ * Resolve the console's launch approvals from the surfaces that set it,
+ * without changing what any engine mode permits:
+ *   --approvals ask|auto   the documented option (auto is the default)
+ *   --mode <mode>          hidden alias, accepts the stored engine values
+ *   --yolo                 hidden alias for --approvals auto
  *
- * Precedence: --mode > --yolo > default "yolo". A conflicting
- * `--mode <x> --yolo` (x !== yolo) is a clear error rather than a silent pick.
+ * Precedence: --mode > --yolo > --approvals > the `approvals` setting > auto.
+ * Conflicting options are a clear error rather than a silent pick.
  * Scope admission is supplied only by the explicitly enabled scope plugin;
  * the interactive Bun console can then request scope while headless cannot.
  */
 export function resolveConsoleAutonomyMode(opts: {
   mode?: string;
   yolo?: boolean;
+  approvals?: string;
+  /** The saved `approvals` setting; only consulted when no flag decides. */
+  settingApprovals?: string;
 }): ConsoleAutonomyResolution {
-  const choices = CONSOLE_AUTONOMY_MODES.join(", ");
+  const approvals = opts.approvals === undefined ? undefined : parseApprovals(opts.approvals);
+  if (opts.approvals !== undefined && !approvals) {
+    return { ok: false, error: `Invalid --approvals '${opts.approvals}': expected ask or auto.` };
+  }
+  const conflict = { ok: false as const, error: "Conflicting approval options. Use --approvals ask or --approvals auto on its own." };
 
   if (opts.mode !== undefined) {
     if (!isConsoleAutonomyMode(opts.mode)) {
-      return { ok: false, error: `Invalid --mode '${opts.mode}': expected one of ${choices}.` };
+      return { ok: false, error: `Invalid --mode '${opts.mode}': use --approvals ask or --approvals auto.` };
     }
-    if (opts.yolo && opts.mode !== "yolo") {
-      return {
-        ok: false,
-        error: `Conflicting flags: --yolo with --mode ${opts.mode}. Pass only one (use --mode yolo, or drop --yolo).`,
-      };
-    }
+    if (opts.yolo && opts.mode !== "yolo") return conflict;
+    if (approvals && approvalsFromMode(opts.mode) !== approvals) return conflict;
     return { ok: true, mode: opts.mode };
   }
 
-  if (opts.yolo) return { ok: true, mode: "yolo" };
+  if (opts.yolo) {
+    if (approvals === "ask") return conflict;
+    return { ok: true, mode: "yolo" };
+  }
+  if (approvals) return { ok: true, mode: modeFromApprovals(approvals) };
 
-  return { ok: true, mode: DEFAULT_AUTONOMY_MODE };
+  const saved = parseApprovals(opts.settingApprovals);
+  return { ok: true, mode: saved ? modeFromApprovals(saved) : DEFAULT_AUTONOMY_MODE };
 }
 
 /**
@@ -139,8 +150,9 @@ export function registerConsoleCommand(program: Command): void {
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
-    .option("--mode <mode>", "Approval mode: standard|recon|copilot|yolo (default yolo)")
-    .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
+    .option("--approvals <ask|auto>", "Ask before running commands, or run them automatically (default auto). Credential, private-network and sandbox protections apply either way.")
+    .addOption(new Option("--mode <mode>", "Alias for --approvals using stored engine values").hideHelp())
+    .addOption(new Option("--yolo", "Alias for --approvals auto").hideHelp())
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
@@ -191,6 +203,8 @@ export function registerConsoleCommand(program: Command): void {
       const autonomyResolution = resolveConsoleAutonomyMode({
         mode: opts.mode,
         yolo: opts.yolo,
+        approvals: opts.approvals,
+        settingApprovals: getSettings().approvals,
       });
       if (!autonomyResolution.ok) {
         console.error(chalk.red(autonomyResolution.error));
@@ -213,7 +227,7 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       if (scopeEnforcement.enabled && autonomyMode === "yolo" && !hasConfiguredScope(scope)) {
-        console.error(chalk.red("YOLO mode requires --scope <file> with at least one in_scope entry."));
+        console.error(chalk.red("Auto approvals require --scope <file> with at least one in_scope entry."));
         process.exitCode = 2;
         return;
       }
@@ -433,7 +447,7 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
   if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires --engine.");
   if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
   if (options.engine && options.engineUrl) throw new Error("Select either --engine or --engine-url.");
-  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
+  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.approvals || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
     throw new Error("Attached console uses the chat's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
   }
   const runtime = await deps.runtime(options);

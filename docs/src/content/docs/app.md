@@ -99,14 +99,15 @@ Chat-only commands have no CLI form: `/help`, `/status`, `/tools`, `/explain [to
 
 Slash commands never skip a confirmation. Anything that changes or deletes asks you first, exactly as the page does. `0 scan`, `0 api` and `0 web` are CLI-only. Old names still work: `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings`, `/model`, `/keybindings` and `/exit` map to their new commands.
 
-### Modes
+### Approvals
 
-| Mode | CLI name | Behavior |
-| --- | --- | --- |
-| **Act without asking** | `yolo` | Runs tools without per-action prompts. The default for new threads. |
-| **Ask before acting** | `standard` | Asks you to approve each action. |
+Threads never ask before running a command. There is no approvals control in the composer. The agent reads and edits files and runs commands as you, in the folder you chose.
 
-Switching to **Act without asking** also resumes actions waiting for approval. Scope grants, folder grants and questions the agent asks you stay separate decisions. Existing threads keep their mode until you change it. Credential, private-network and sandbox protections apply in both modes.
+> **Security note.** On a local computer, commands run as your user with no confirmation. The workbench sandbox isolates them when you use it. Third-party target authorization stays an optional plugin; see [Scope](/scope/).
+
+To get a safety valve, open **Settings, Helpers** and turn on **Ask before running commands**. New turns then ask you to approve each command or change. The same switch is the `approvals` setting (`0 config set approvals ask`) and the `--approvals ask|auto` option of `0 lab console`. It applies to this computer, and a project cannot change it.
+
+Your chosen folder is always allowed, so it never prompts for folder access. Questions the agent asks you and scope decisions about outside targets are separate. Credential, private-network and sandbox protections apply either way. Threads saved before this change keep working: the older stored values are read as Auto (run without asking) or Ask first, and are never rewritten.
 
 ### Sending while the agent works
 
@@ -124,7 +125,7 @@ Set `ZERO_FEATURE_WEB_SEARCH=0` on the computer to turn search off by default. T
 
 ### Public source
 
-With **Act without asking**, the agent can clone a public HTTPS repository to review it. Cloning does not add the hosting service to your scope. Scope exclusions and private-network restrictions still apply. See [Scope and authorization](/scope/#local-workflows-and-strict-scope-mode).
+The agent can clone a public HTTPS repository to review it. Cloning does not add the hosting service to your scope. Scope exclusions and private-network restrictions still apply. See [Scope and authorization](/scope/#local-workflows-and-strict-scope-mode).
 
 ### Access programs
 
@@ -245,7 +246,7 @@ printf '%s' 'Summarize the selected findings' | 0 lab console --print
 | --- | --- |
 | `--format <text\|json\|ndjson>` | Output format. Default `text`. |
 | `-m, --model <id>` | Model to use. |
-| `--mode <mode>` | `standard`, `recon`, `copilot` or `yolo`. Default `yolo`. |
+| `--approvals <ask\|auto>` | `ask` puts each command to you first, `auto` runs them without asking. Default `auto`, or your `approvals` setting. |
 | `--target <url>`, `--scope <file>` | Target and scope policy for the run. |
 | `--finding <id>`, `--finding-intent <intent>` | Focus on one saved finding: `investigate`, `verify`, `draft_fix` or `impact`. |
 | `--max-tool-calls <n>` | Tool-call rounds per message. Unlimited by default. |

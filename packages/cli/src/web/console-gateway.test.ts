@@ -1,3 +1,4 @@
+import { previewSetting, reloadSettings } from "../state/settings-store.js";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -489,6 +490,23 @@ describe("ConsoleGateway", () => {
       await instance.closeAll();
       expect(store.listKnowledge()).toEqual([]);
     } finally { store.close(); }
+  });
+  it("Ask before running commands tightens automatic threads to ask-first and lifts again when switched off", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    previewSetting("approvals", "ask");
+    try {
+      const created = instance.create({ title: "Ask first", role: "audit" });
+      expect(created.autonomyMode).toBe("yolo");
+      await instance.send(created.id, "Run the tests.");
+      await idle(instance, created.id);
+      expect(createSession.mock.calls[0]?.[0].autonomyMode).toBe("standard");
+      expect(instance.get(created.id).session.autonomyMode).toBe("standard");
+      previewSetting("approvals", "auto");
+      await instance.send(created.id, "Again.");
+      await idle(instance, created.id);
+      expect(instance.get(created.id).session.autonomyMode).toBe("yolo");
+    } finally { reloadSettings(); }
   });
   it("starts new web chats in YOLO and applies Auto through the copilot engine mode", async () => {
     const createSession = vi.fn(engine);

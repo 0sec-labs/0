@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createSentinelClient } from "../src/sentinels/api";
 import {
-  SentinelApiError, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
+  SentinelApiError, accessFields, accessLevelOf, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
   type Sentinel, type SentinelPreset,
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
@@ -96,5 +96,23 @@ describe("client", () => {
     await client.setPaused("s1", false, 3); await client.update("s1", 3, { name: "n" }); await client.remove("s1", 3);
     expect(calls.map(call => [call.init?.method, call.path])).toEqual([["POST", "/api/console/sentinels/s1/resume"], ["PATCH", "/api/console/sentinels/s1"], ["DELETE", "/api/console/sentinels/s1?version=3"]]);
     expect(JSON.parse(String(calls[1]!.init!.body))).toEqual({ version: 3, name: "n" });
+  });
+});
+
+describe("Agent access levels", () => {
+  test("maps stored autonomy to the level users see", () => {
+    expect(accessLevelOf("observe")).toBe("read-only");
+    expect(accessLevelOf("propose")).toBe("commands");
+    expect(accessLevelOf("run")).toBe("commands");
+    expect(accessLevelOf("act")).toBe("pull-requests");
+  });
+  test("keeps stored values when the level is unchanged, so editing never alters behaviour", () => {
+    expect(accessFields("commands", { autonomy: "propose", toolAccess: "read-only" })).toEqual({ autonomy: "propose", toolAccess: "read-only" });
+    expect(accessFields("read-only", { autonomy: "observe", toolAccess: "read-web" })).toEqual({ autonomy: "observe", toolAccess: "read-web" });
+  });
+  test("uses canonical values only when the user picks another level", () => {
+    expect(accessFields("pull-requests", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "act", toolAccess: "exec" });
+    expect(accessFields("commands", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "run", toolAccess: "exec" });
+    expect(accessFields("read-only", { autonomy: "act", toolAccess: "exec" })).toEqual({ autonomy: "observe", toolAccess: "read-only" });
   });
 });

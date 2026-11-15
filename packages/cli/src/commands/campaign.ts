@@ -364,7 +364,7 @@ async function runEngineChatIteration(options: {
 }): Promise<ChatIterationResult> {
   const { engine, brief, title, target, scopeJson, timeoutMs, out } = options;
   // A configured engine owns its scope; a plain engine takes ours so
-  // yolo sessions are scope-bounded. Fall back if the engine insists.
+  // automatic-approval sessions are scope-bounded. Fall back if the engine insists.
   const createConfig: Record<string, unknown> = { target, title, autonomyMode: "yolo", ...(scopeJson ? { scope: scopeJson } : {}) };
   let created: { id?: unknown } | null;
   try {
@@ -775,7 +775,7 @@ export function registerCampaignCommand(program: Command, deps: CampaignDependen
     .option("--model <id>", "Model id for objective generation and threads", DEFAULT_MODEL)
     .option("--identities <file>", "Passed through to --with-scan and referenced by briefs")
     .option("--access-control-fixtures <file>", "Passed through to --with-scan and referenced by briefs")
-    .requiredOption("--scope <file>", "REQUIRED: JSON scope policy (chat sessions run in yolo mode)")
+    .requiredOption("--scope <file>", "REQUIRED: JSON scope policy (chat sessions run with automatic approvals)")
     .option("--db-path <path>", "Findings db (default: <target-sanitized>.db in cwd)")
     .option("--journal <path>", "Campaign journal (default: <db-path>.campaign.json)")
     .option("--rate-limit <spec>", "Rate limit passthrough for --with-scan (default 5)", "5")
@@ -817,7 +817,7 @@ export function registerCampaignCommand(program: Command, deps: CampaignDependen
           noDocsTriage: raw.docsTriage === false,
         };
         if (!existsSync(options.scope)) {
-          err(chalk.red(`--scope '${options.scope}' does not exist — chat sessions run in yolo mode and require a scope policy.\n`));
+          err(chalk.red(`--scope '${options.scope}' does not exist — chat sessions run with automatic approvals and require a scope policy.\n`));
           process.exitCode = 2;
           return;
         }

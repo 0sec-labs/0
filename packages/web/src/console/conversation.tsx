@@ -47,7 +47,6 @@ import { ReasoningPicker } from "./reasoning-picker";
 import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { FilePathPicker } from "./file-path-picker";
 import { QueuedMessages } from "./queued-messages";
-import { ModePicker } from "./mode-picker";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
 import { ConnectModelStep } from "./connect-model-step";
@@ -1280,14 +1279,6 @@ export function Composer({
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu>
-                )}
-                {!worker && (
-                  <ModePicker
-                    workspace={workspace}
-                    sessionId={snapshot.session.id}
-                    mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode}
-                    disabled={workspace.busy || closed || pending || !canWrite}
-                  />
                 )}
                 {!worker && (
                   <DropdownMenu

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SecurityWorkflowStore, SentinelStore, SentinelStoreError } from "@0/engine/storage";
-import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
+import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelAccessLevel, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
 import { SentinelRunError, SentinelRunner, type SentinelActor, type SentinelGhClient, type SentinelMissionRuntime } from "./sentinel-runner.js";
 
 const PREFIX = "/api/console/";
@@ -72,7 +72,7 @@ export class WebSentinelService {
     const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : undefined);
     return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
-  #view(sentinel: Sentinel) { return { ...sentinel, attention: this.#attention(sentinel) }; }
+  #view(sentinel: Sentinel) { return { ...sentinel, accessLevel: sentinelAccessLevel(sentinel.autonomy), attention: this.#attention(sentinel) }; }
   #automations(id: string) { return this.#workflows.list().filter(workflow => workflow.ownerSentinelId === id); }
 
   async #route(path: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {

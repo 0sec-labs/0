@@ -21,9 +21,10 @@ describe("statusSummary", () => {
 });
 
 describe("autonomyModeLabel", () => {
-  it("uses the composer wording, never the internal mode name", () => {
-    expect(autonomyModeLabel("yolo")).toBe("Act without asking");
-    expect(autonomyModeLabel("standard")).toBe("Ask before acting");
-    expect(autonomyModeLabel("copilot")).toBe("Ask before acting");
+  it("uses the approvals wording, never the internal mode name", () => {
+    expect(autonomyModeLabel("yolo")).toBe("Auto");
+    expect(autonomyModeLabel("standard")).toBe("Asks first");
+    expect(autonomyModeLabel("copilot")).toBe("Auto");
+    expect(autonomyModeLabel("recon")).toBe("Read-only");
   });
 });

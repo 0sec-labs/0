@@ -157,6 +157,24 @@ describe("headless machine output", () => {
 });
 
 describe("resolveConsoleAutonomyMode", () => {
+  it("defaults to automatic approvals (stored as yolo) when nothing is set", () => {
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "auto" })).toEqual({ ok: true, mode: "yolo" });
+  });
+
+  it("honours --approvals and the saved approvals setting, flags first", () => {
+    expect(resolveConsoleAutonomyMode({ approvals: "ask" })).toEqual({ ok: true, mode: "standard" });
+    expect(resolveConsoleAutonomyMode({ approvals: "auto" })).toEqual({ ok: true, mode: "yolo" });
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "ask" })).toEqual({ ok: true, mode: "standard" });
+    expect(resolveConsoleAutonomyMode({ approvals: "auto", settingApprovals: "ask" })).toEqual({ ok: true, mode: "yolo" });
+  });
+
+  it("rejects an invalid --approvals and conflicts with the hidden aliases", () => {
+    expect(resolveConsoleAutonomyMode({ approvals: "maybe" })).toMatchObject({ ok: false });
+    expect(resolveConsoleAutonomyMode({ approvals: "ask", yolo: true })).toMatchObject({ ok: false });
+    expect(resolveConsoleAutonomyMode({ approvals: "ask", mode: "yolo" })).toMatchObject({ ok: false });
+    expect(resolveConsoleAutonomyMode({ approvals: "auto", mode: "copilot" })).toEqual({ ok: true, mode: "copilot" });
+  });
+
   it("defaults to yolo when no flag is given", () => {
     // The commander option no longer carries a default; the resolver
     // fallback is the shared constant.
@@ -181,7 +199,8 @@ describe("resolveConsoleAutonomyMode", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("Invalid --mode 'foo'");
-      expect(result.error).toContain("standard, recon, copilot, yolo");
+      expect(result.error).toContain("--approvals ask or --approvals auto");
+      expect(result.error.toLowerCase()).not.toContain("yolo");
     }
   });
 
@@ -196,7 +215,8 @@ describe("resolveConsoleAutonomyMode", () => {
     const result = resolveConsoleAutonomyMode({ mode: "copilot", yolo: true });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("Conflicting flags");
+      expect(result.error).toContain("Conflicting approval options");
+      expect(result.error.toLowerCase()).not.toContain("yolo");
     }
   });
 });

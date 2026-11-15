@@ -227,6 +227,23 @@ describe("config get/set/reset through the embedded operator transport", () => {
     } finally { await h.client.dispose(); }
   });
 
+  it("`/config set approvals` is the one approvals setting: auto by default, ask or auto only", async () => {
+    const home = mkdtempSync(join(tmpdir(), "config-home-")); temp.push(home);
+    const h = await embeddedDeps(home);
+    try {
+      const read: string[] = [];
+      const reader = { homeDir: home, out: (l: string) => read.push(l), err: (l: string) => read.push(l) };
+      runConfigGet("approvals", reader);
+      expect(read).toEqual(["auto"]);
+      await runConfigSet("approvals", "ask", {}, h.deps);
+      expect(last(h.codes)).toBe(0);
+      const saved = JSON.parse(readFileSync(join(home, ".0", "tui-settings.json"), "utf8")) as Record<string, unknown>;
+      expect(saved.approvals).toBe("ask");
+      await runConfigSet("approvals", "yolo", {}, h.deps);
+      expect(last(h.codes)).not.toBe(0);
+    } finally { await h.client.dispose(); }
+  });
+
   it("sets, reads and resets a setting, enforcing the web's validation", async () => {
     const home = mkdtempSync(join(tmpdir(), "config-home-")); temp.push(home);
     const h = await embeddedDeps(home);

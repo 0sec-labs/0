@@ -152,7 +152,9 @@ Thread transcripts hold target hostnames, scope, findings and raw request and re
 
 Layers, highest first: project, global, default. Unknown keys are dropped and invalid values reset to the default when settings load.
 
-Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development source updates and `executionProfile`.
+Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development source updates, `executionProfile` and `approvals`.
+
+`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under Settings, Helpers, and `--approvals ask|auto` on `0 lab console` overrides it for one run. Reset all leaves it alone.
 
 `0 config import` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 
