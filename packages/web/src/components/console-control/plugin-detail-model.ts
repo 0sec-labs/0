@@ -65,7 +65,7 @@ const clean = (value: string | undefined | null) => (value ?? "").trim();
 /** Real descriptions only: a list of tool ids or a bare tool name is not a description. */
 export const cleanDescription = (item: Pick<PluginItem, "description">, toolNames: readonly string[] = []) => {
   const text = clean(item.description);
-  return text && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(text) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(text) && !toolNames.includes(text) ? text : "";
+  return text && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(text) && !/^\d+ tools?:/i.test(text) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(text) && !toolNames.includes(text) ? text : "";
 };
 
 export function mcpPermissions(item: McpServerEntry): string[] {
@@ -83,7 +83,7 @@ export function buildPluginView(source: PluginSource, opts: { toolNames?: readon
     const verified = item.signature === "verified";
     const rail: RailEntry[] = [];
     if (github && item.repo) rail.push({ label: "Repository", value: item.sha ? `${item.repo} @ ${item.sha.slice(0, 12)}` : item.repo, mono: true, ...(GITHUB_REPO.test(item.repo) ? { href: `https://github.com/${item.repo}` } : {}) });
-    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "Listed in the plugin registry" });
+    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "The 0 team" });
     if (verified) rail.push({ label: "Verified by", value: "Registry signature" });
     if (item.version) rail.push({ label: "Version", value: github && item.sha ? `${item.version} (pinned, never updates by itself)` : item.version });
     const tools = (item.tools ?? []).map(tool => ({ name: tool.name, description: tool.description }));
@@ -132,7 +132,7 @@ export interface ExploreEntry {
   installable: boolean; added: boolean;
 }
 export const INSTALLED_CATEGORY = "Installed";
-export const REGISTRY_CATEGORY = "Registry";
+export const REGISTRY_CATEGORY = "Plugins";
 const CATEGORY_ORDER = ["Code", "Security", "Issues", "Cloud", "Messaging", REGISTRY_CATEGORY, INSTALLED_CATEGORY];
 export const EXPLORE_PAGE_SIZE = 40;
 

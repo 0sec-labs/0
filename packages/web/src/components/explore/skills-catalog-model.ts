@@ -8,7 +8,7 @@ export type CatalogPublisher = { name: string; url: string; avatar: string };
 export type CatalogResponse = { generated: string; publishers: Record<string, CatalogPublisher>; skills: CatalogSkill[] };
 export type CatalogFilter = "all" | "security";
 
-export const VERIFIED_BY_0 = "Verified by 0";
+export const VERIFIED_BY_0 = "Verified by the 0 team";
 export const VERIFIED_HINT = "Listed and pinned by 0. Review a skill before adding it.";
 
 /** 323876 -> "323.9k", 8188 -> "8.2k", 346 -> "346", 1_250_000 -> "1.3M". */
@@ -70,4 +70,15 @@ export type CatalogPreview = {
 export function splitSkillMarkdown(text: string): { frontmatter: string; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
   return match ? { frontmatter: match[1]!.trim(), body: text.slice(match[0].length).replace(/^\s+/, "") } : { frontmatter: "", body: text };
+}
+
+/** A summary the catalog cut mid-sentence ends at the last full sentence or word instead. */
+export function cleanSummary(summary: string): string {
+  const text = summary.replace(/\s+/g, " ").trim();
+  if (!/(?:\.\.\.|…)$/.test(text)) return text;
+  const body = text.replace(/(?:\.\.\.|…)$/, "").trimEnd();
+  const sentence = body.match(/^(.*[.!?])\s/s)?.[1];
+  if (sentence) return sentence;
+  const word = body.slice(0, body.lastIndexOf(" ")).replace(/\s*\([^)]*$/, "").replace(/[\s,;:]+$/, "");
+  return word ? `${word}…` : body;
 }

@@ -150,7 +150,7 @@ export function ExplorePage() {
       </Tabs>
       <div className="flex shrink-0 items-center gap-2">
       {tab === "skills" && <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>Add from GitHub</Button>}
-      {tab !== "themes" && categories.length > 0 && <Select aria-label="Categories" size="sm" className="w-28 shrink-0 sm:w-40" value={category} onValueChange={value => update({ category: value || null, page: null })} options={[{ value: "", label: "All categories" }, ...categories]} />}
+      {tab !== "themes" && categories.length > 0 && <Select aria-label="Categories" size="sm" className="w-36 shrink-0 sm:w-40" value={category} onValueChange={value => update({ category: value || null, page: null })} options={[{ value: "", label: "All categories" }, ...categories]} />}
       </div>
     </div>
     {tab === "plugins" && <PluginsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) }, true)} />}

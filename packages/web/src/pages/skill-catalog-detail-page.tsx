@@ -13,7 +13,7 @@ import { Feedback } from "@/components/console-control/control-ui";
 import { CardHeaderRow } from "@/components/console-control/connection-ui";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { AddSkillDialog, CatalogTile, SkillMarkdown, useSkillsCatalog, usePreview } from "@/components/explore/skills-catalog";
-import { abbreviateStars, githubCommitUrl, githubTreeUrl, VERIFIED_BY_0, VERIFIED_HINT } from "@/components/explore/skills-catalog-model";
+import { cleanSummary, abbreviateStars, githubCommitUrl, githubTreeUrl, VERIFIED_BY_0, VERIFIED_HINT } from "@/components/explore/skills-catalog-model";
 
 function RailFact({ label, children }: { label: string; children: ReactNode }) {
   return <div className="flex min-w-0 flex-col gap-1"><dt className="text-sm text-muted-foreground-2">{label}</dt><dd className="min-w-0 text-sm break-words text-foreground">{children}</dd></div>;
@@ -56,7 +56,7 @@ export function SkillCatalogDetailPage() {
               </DropdownMenu>}
             </div>
           </div>
-          <p className="text-base text-muted-foreground-1">{skill.summary}</p>
+          <p className="text-base text-muted-foreground-1">{cleanSummary(skill.summary)}</p>
           {!skill.installable && <p className="text-sm text-muted-foreground-2">{data?.licence.notice ?? "No open licence is declared, so 0 links to the original instead of copying it."}</p>}
           {!canWrite && <p className="text-sm text-muted-foreground-2">Viewers cannot add skills.</p>}
         </header>

@@ -20,7 +20,7 @@ export function PageHeader({
       <div className="min-w-0 space-y-1.5">
         <div>
           <h1 className="break-words font-sans text-2xl font-medium tracking-tight text-foreground">{title}</h1>
-          {summary ? <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{summary}</p> : null}
+          {summary ? <p className="mt-1 max-w-3xl text-sm break-words leading-6 text-muted-foreground">{summary}</p> : null}
         </div>
       </div>
       {(actions || illustration) ? <div className={cn("min-w-0 shrink-0 items-center gap-3 sm:max-w-[55%] sm:justify-end", actions ? "flex" : "hidden sm:flex")}>{actions ? <div className="flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div> : null}{illustration}</div> : null}

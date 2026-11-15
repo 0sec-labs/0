@@ -90,7 +90,7 @@ export class SkillsCatalogService {
     catch (cause) {
       const text = cause instanceof Error ? `${cause.message} ${(cause as { stderr?: string }).stderr ?? ""}` : "";
       if (/404|Not Found/i.test(text)) throw new CatalogError("Repository not found. Check the address, folder and revision.", 404);
-      if (/auth|login|401|403|rate limit/i.test(text)) throw new CatalogError("GitHub did not allow the request. Run gh auth login in a terminal, or try again later.", 424);
+      if (/auth|login|401|403|rate limit/i.test(text)) throw new CatalogError("GitHub did not allow the request. Try again in a few minutes.", 424);
       throw new CatalogError("Could not reach GitHub.", 424);
     }
   }

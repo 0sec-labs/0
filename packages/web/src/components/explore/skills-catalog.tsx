@@ -61,7 +61,7 @@ export function GithubSkillsSection({ query }: { query: string }) {
     <h2 className="text-sm font-medium text-foreground">From GitHub</h2>
     {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
-    {data && rows.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "Nothing on GitHub matches your search." : "No skills are listed in this view."}</p>}
+    {data && rows.length === 0 && !query.trim() && <p className="text-sm text-muted-foreground-2">No skills are listed in this view.</p>}
     {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
   </section>;
 }

@@ -71,7 +71,7 @@ export function FormDialog({ submitLabel, submitDisabled = false, onSubmit, erro
   const pending = Boolean(frame.pending);
   const admit = useSubmitGuard(pending);
   return <Frame {...frame}>
-    <form className={cn("space-y-4", formClassName)} onSubmit={event => { if (admit(event)) onSubmit(event); }}>
+    <form className={cn("min-w-0 space-y-4", formClassName)} onSubmit={event => { if (admit(event)) onSubmit(event); }}>
       {children}
       {error}
       <DialogFooter className={footerClassName}>

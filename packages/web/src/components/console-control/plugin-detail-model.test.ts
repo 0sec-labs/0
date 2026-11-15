@@ -89,7 +89,7 @@ describe("explore", () => {
     mcp: [mcp()],
   });
   it("files each entry once under a derived category", () => {
-    expect(exploreSections(entries).map(section => section.category)).toEqual(["Cloud", "Messaging", "Registry", "Installed"]);
+    expect(exploreSections(entries).map(section => section.category)).toEqual(["Cloud", "Messaging", "Plugins", "Installed"]);
     expect(entries).toHaveLength(6);
     expect(exploreCategories(entries)).toContain("Installed");
   });
