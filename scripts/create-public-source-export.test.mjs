@@ -143,11 +143,17 @@ test("public source export contains build inputs and excludes private material",
     const triggerBoundary = publishWorkflow.indexOf("\npermissions:");
     assert.notEqual(triggerBoundary, -1, "publisher workflow must declare permissions after triggers");
     const publishTriggers = publishWorkflow.slice(0, triggerBoundary);
-    assert.doesNotMatch(
-      publishTriggers,
-      /^\s*workflow_dispatch:/m,
-      "the package-writer must not be manually dispatchable on an arbitrary ref",
-    );
+    // Manual dispatch is allowed only because the plan job refuses any ref but main
+    // and builds only the newest commit whose own Main run is green.
+    if (/^\s*workflow_dispatch:/m.test(publishTriggers)) {
+      assert.match(
+        publishWorkflow,
+        /\[ "\$REF" = refs\/heads\/main \] \|\| skip/,
+        "a dispatchable package-writer must refuse refs other than main",
+      );
+      assert.match(publishWorkflow, /gh run list --workflow main\.yml --branch main --event push --status success/, "edge builds must resolve a green Main commit");
+    }
+    assert.match(publishTriggers, /branches:\s*\["v\*"\]/, "workflow_run publishing is limited to release tags");
     assert.doesNotMatch(
       publishTriggers,
       /^\s*push:/m,
@@ -164,16 +170,12 @@ test("public source export contains build inputs and excludes private material",
       "version tags require a separately reviewed release path",
     );
     for (const requiredTrustPredicate of [
-      "github.event.workflow_run.conclusion == 'success'",
-      "github.event.workflow_run.event == 'push'",
-      "github.event.workflow_run.head_branch == 'main'",
-      "github.event.workflow_run.head_repository.full_name == github.repository",
+      '[ "$RUN_CONCLUSION" = success ]',
+      '[ "$RUN_EVENT" = push ]',
+      '[ "$RUN_REPO" = "$GITHUB_REPOSITORY" ]',
+      '[ "$TAG_SHA" = "$RUN_SHA" ]',
     ]) {
-      assert.match(
-        publishWorkflow,
-        new RegExp(requiredTrustPredicate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `trusted publisher predicate missing: ${requiredTrustPredicate}`,
-      );
+      assert.ok(publishWorkflow.includes(requiredTrustPredicate), `trusted publisher predicate missing: ${requiredTrustPredicate}`);
     }
   } finally {
     await rm(tempDir, { recursive: true, force: true });
