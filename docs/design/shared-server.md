@@ -1,8 +1,25 @@
 # Shared server: push, runners, schedules and policy
 
-Status: proposal. Nothing here is built. It records what exists today, the gaps
+Status: **deferred** (decision recorded 2026-11-15). The share-safe export shipped; the server, runner, schedules and policy below are not built and are not planned until the triggers in "Decision" are met. It records what exists today, the gaps
 found by a code audit on 2026-11-14, and a staged plan. Decisions marked
 **Open** need an owner (Fabian for pricing and positioning, Doruk for engineering).
+
+## Decision: do not build the server yet
+
+Reasons, from the audit and the promptfoo comparison:
+
+- Adoption comes from the local CLI, the browser app and CI. promptfoo's own docs say its self-hosted server is not for production; its revenue is enterprise and hosted, which matches `GTM.md`: make individual use valuable, then sell team operations.
+- What exists already covers the need: the GitHub Action (report, SARIF, `run.json` artifacts), `0 reports import`, `0 reports export`, the Findings API, the team workspace and remote engines, automations and sentinels. A new server would mostly duplicate the team workspace.
+- A server that stores customers' vulnerability data is a high-value target. Results staying in the customer's own artifacts and engine is a feature.
+- No customer demand for cross-engine aggregation has been recorded.
+
+Build the server only when at least one of these is true, and write the API spec first:
+
+- A pilot or paying customer needs results from several engines or runners in one view.
+- A customer needs central schedules or policy across many runners.
+- The team workspace's single-engine limit blocks a real deployment.
+
+Meanwhile, improve what exists: an optional share-safe output from the GitHub Action, durable team sessions, and the gaps listed in `engines.md`.
 
 ## Principle
 
@@ -25,7 +42,7 @@ Not in scope: hosted inference, hosted sandboxes, a hosted self-serve funnel
 | Teams | `0 team init`, `0 web --team-config`; owner/editor/viewer; scrypt accounts in a JSON file; OIDC; sessions in memory | `packages/cli/src/web/team-*.ts` |
 | Remote engines | The console dials out to engines with a static bearer token per engine; engines never dial in | `backend-connections.ts` |
 | Scope | `ScopePolicy` matcher with an injectable `opts.scope`; off unless the scope plugin is enabled | `packages/engine/src/scope` |
-| Telemetry | Level defaults to `usage`; only sends to a configured cloud host (inferred, not fully verified) | `telemetry/analytics-level.ts` |
+| Telemetry | Level defaults to `usage`; only sends when a cloud token is configured (no credentials is a silent no-op; verified in analytics-pipeline.ts and cloud/credentials.ts) | `telemetry/analytics-level.ts` |
 
 ## Gaps
 
@@ -108,7 +125,7 @@ A versioned JSON document for one run, derived from the Findings API shape.
 
 ## 5. Telemetry and privacy
 
-- **Open:** make analytics opt-in (or off whenever no server or cloud is configured). Today the default level is `usage`.
+- **Decided (2026-11-15):** analytics stay as they are. The default level is `usage` and it only sends when a 0security cloud token is configured; `ZERO_ANALYTICS_LEVEL=off`, `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY` and `DO_NOT_TRACK` turn it off. promptfoo does the same (on by default, `PROMPTFOO_DISABLE_TELEMETRY=1` to disable, no prompts, outputs or keys collected).
 - Document what leaves the machine: nothing by default; with `push`, only the allowlisted envelope; with run contribution, what its terms state.
 
 ## Enterprise (later, same server)
@@ -125,7 +142,6 @@ SSO and RBAC beyond three roles, audit log, integrations (Slack, Jira, SIEM), lo
 
 ## Open decisions
 
-- Telemetry opt-in or opt-out (Doruk and Fabian).
 - One open-source server with a license-gated enterprise tier, or a separate private enterprise layer (recommended: separate).
 - Advisory versus mandatory policy enforcement.
 - Whether enterprise scale-out (Postgres) is ever in scope.
