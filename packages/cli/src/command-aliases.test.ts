@@ -22,8 +22,8 @@ function resolves(program: Command, path: readonly string[]): boolean {
 describe("command tree", () => {
   it("keeps the visible top-level surface small", () => {
     // Preserve the independently shipped reports importer alongside consolidation.
-    // `skills` and `memory` are top-level nouns because they are top-level pages in the app.
-    expect(tree().commands.length).toBeLessThanOrEqual(29);
+    // `skills`, `memory`, `missions`, `sentinels`, `connections`, `models`, `github`, `usage` and `audit-log` are top-level nouns because they mirror web UI pages.
+    expect(tree().commands.length).toBeLessThanOrEqual(36);
   });
 
   it("registers the nested groups", () => {
