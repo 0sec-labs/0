@@ -10,13 +10,13 @@ const high = {id:'high-1', title:'Untrusted path', severity:'high', description:
 function run({report={findings:[]}, exit=0, inputs={}, prepare}={}) {
   const root = mkdtempSync(join(tmpdir(),'0-ci-fixture-'));
   const bin = join(root,'fake 0');
-  writeFileSync(bin, `#!/usr/bin/env node\nconst fs=require('node:fs');if(process.argv[2]==='--version'){console.log('0 fixture');process.exit(0);}fs.writeFileSync(process.env.FAKE_ARGS,JSON.stringify(process.argv.slice(2)));process.stderr.write('private-secret');process.stdout.write(process.env.FAKE_REPORT);process.exit(Number(process.env.FAKE_EXIT));\n`, {mode:0o755});
+  writeFileSync(bin, `#!/usr/bin/env node\nconst fs=require('node:fs');if(process.argv[2]==='--version'){console.log('0 fixture');process.exit(0);}if(process.argv[2]==='reports'){if(process.env.FAKE_EXPORT_FAIL)process.exit(2);fs.writeFileSync(process.argv[process.argv.indexOf('--output')+1],'{"kind":"0.share-safe-report"}');process.exit(0);}fs.writeFileSync(process.env.FAKE_ARGS,JSON.stringify(process.argv.slice(2)));process.stderr.write('private-secret');process.stdout.write(process.env.FAKE_REPORT);process.exit(Number(process.env.FAKE_EXIT));\n`, {mode:0o755});
   mkdirSync(join(root,'source'));
   prepare?.(root);
   const env = {...process.env, ZERO_ACTION_ROOT:actionRoot, GITHUB_OUTPUT:join(root,'outputs'), GITHUB_SHA:'event-sha', GITHUB_REF:'refs/heads/main', GITHUB_RUN_ID:'123', GITHUB_REPOSITORY:'example/app', INPUT_CLI_PATH:bin, INPUT_PATH:join(root,'source'), INPUT_REPORT_DIR:join(root,'report'), FAKE_ARGS:join(root,'args'), FAKE_REPORT:typeof report==='string'?report:JSON.stringify(report), FAKE_EXIT:String(exit), ...(typeof inputs==='function'?inputs(root):inputs)};
   const result = spawnSync('bash',[join(actionRoot,'scripts/run-github-action.sh')],{env,encoding:'utf8',cwd:root});
   const read = path => existsSync(join(root,path)) ? readFileSync(join(root,path),'utf8') : undefined;
-  const value = {status:result.status,stdout:result.stdout,stderr:result.stderr, output:read('outputs'), sarif:read('report/report.sarif'), metadata:read('report/run.json'), args:read('args'), summary:read('summary'), root};
+  const value = {status:result.status,stdout:result.stdout,stderr:result.stderr, output:read('outputs'), sarif:read('report/report.sarif'), metadata:read('report/run.json'), share:read('report/report.share.json'), args:read('args'), summary:read('summary'), root};
   rmSync(root,{recursive:true,force:true});
   return value;
 }
@@ -124,4 +124,19 @@ test('empty diff skips cleanly with outputs and summary, without running the CLI
 test('rendered report is appended to GITHUB_STEP_SUMMARY without the comment marker',()=>{
   const r=run({report:{findings:[high]},inputs:root=>({GITHUB_STEP_SUMMARY:join(root,'summary')})});
   assert.equal(r.status,1); assert.match(r.summary,/## 0 review report/); assert.match(r.summary,/Untrusted path/); assert.doesNotMatch(r.summary,/0-action -->/);
+});
+
+test('share-report writes a share-safe copy and exposes its path without touching the gate',()=>{
+  const r=run({inputs:{INPUT_SHARE_REPORT:'true'}}); assert.equal(r.status,0,r.stderr);
+  assert.equal(JSON.parse(r.share).kind,'0.share-safe-report'); assert.match(r.output,/share-report-file=.*report\.share\.json/);
+});
+test('share-report is off by default',()=>{
+  const r=run(); assert.equal(r.status,0,r.stderr); assert.equal(r.share,undefined); assert.doesNotMatch(r.output,/share-report-file/);
+});
+test('a failing export only warns and never changes the gate result',()=>{
+  const r=run({inputs:{INPUT_SHARE_REPORT:'true',FAKE_EXPORT_FAIL:'1'}}); assert.equal(r.status,0,r.stderr);
+  assert.equal(r.share,undefined); assert.match(r.stdout,/::warning::share-report was requested/); assert.doesNotMatch(r.output,/share-report-file/);
+});
+test('invalid share-report is rejected',()=>{
+  assert.notEqual(run({inputs:{INPUT_SHARE_REPORT:'maybe'}}).status,0);
 });
