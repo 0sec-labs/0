@@ -1,24 +1,32 @@
-name: "0: Publish Docker image"
-
 # Build + push the 0 engine image to ghcr.io/<owner>/0security.
 #
-# Trigger model — mirrors dashboard-build.yml / services-publish.yml so
-# merged engine work doesn't drift out of production (see #522):
+# Trigger model (cost: an image build per main commit was the single largest
+# avoidable spend; main moves hundreds of commits a day):
 #
-#   - successful 0: Main on main → SHA-tagged image + :main + refreshed
-#                                       :latest. This is the rolling-main path
-#                                       the worker-controller pins by default
-#                                       (ZERO_IMAGE=…/0:latest).
+#   - release  successful `0: Main` on a v<semver> TAG -> :<sha>, :X.Y.Z, :X.Y
+#              and :latest (only when X.Y.Z is the highest released version).
+#              `latest` therefore means "last release".
+#   - edge     nightly schedule, or manual dispatch -> :<sha> and :edge for the
+#              newest main commit whose Main run is green, only when that commit
+#              is not already the image behind :edge (dispatch `force` rebuilds).
 #
-# Main publishes are chained from `0: Main` instead of running directly on
-# push, so a bad engine cannot refresh :latest before the CI suite has passed.
-# The publisher has no direct tag or manual trigger. Every credentialed build
-# starts only after trusted main CI succeeds.
+# Every credentialed build still starts only after trusted CI succeeded for the
+# exact commit: release builds are chained from `0: Main` on the tag; edge builds
+# resolve the newest GREEN Main run on main. A tag push never runs source on the
+# publisher unless that same commit's Main passed and the tag matches package.json.
 on:
   workflow_run:
     workflows: ["0: Main"]
     types: [completed]
-    branches: [main]
+    branches: ["v*"]
+  schedule:
+    - cron: "11 1 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild :edge even if main has not changed since the last image"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,9 +44,75 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: plan (what to publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      mode: ${{ steps.plan.outputs.mode }}
+      sha: ${{ steps.plan.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      minor: ${{ steps.plan.outputs.minor }}
+      latest: ${{ steps.plan.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Decide release, edge or nothing
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ needs.plan.outputs.sha }}
+          RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          FORCE: ${{ inputs.force }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          out() { printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; }
+          skip() { echo "Nothing to publish: $1"; out publish false; exit 0; }
+          OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER}/0security"
+          if [ "$EVENT" = workflow_run ]; then
+            [ "$RUN_CONCLUSION" = success ] || skip "Main concluded $RUN_CONCLUSION"
+            [ "$RUN_EVENT" = push ] || skip "Main event was $RUN_EVENT"
+            [ "$RUN_REPO" = "$GITHUB_REPOSITORY" ] || skip "Main ran for a fork"
+            printf '%s' "$RUN_BRANCH" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || skip "$RUN_BRANCH is not a release tag"
+            VERSION="${RUN_BRANCH#v}"
+            TAG_SHA="$(git ls-remote origin "refs/tags/${RUN_BRANCH}^{}" "refs/tags/${RUN_BRANCH}" | tail -n1 | cut -f1)"
+            [ "$TAG_SHA" = "$RUN_SHA" ] || skip "tag $RUN_BRANCH does not point at the commit Main verified"
+            # :latest only moves for the highest released version.
+            HIGHEST="$(git ls-remote --tags origin 'refs/tags/v*' | grep -v '\^{}' | sed 's|.*refs/tags/v||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+            out publish true; out mode release; out sha "$RUN_SHA"
+            out version "$VERSION"; out minor "${VERSION%.*}"
+            [ "$HIGHEST" = "$VERSION" ] && out latest true || out latest false
+            exit 0
+          fi
+          # schedule / dispatch: edge from the newest green main commit.
+          [ "$REF" = refs/heads/main ] || skip "edge images are built from main only (ref is $REF)"
+          SHA="$(gh run list --workflow main.yml --branch main --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          [ -n "$SHA" ] || skip "no green Main run on main"
+          CURRENT="$(docker buildx imagetools inspect "$IMAGE:edge" --format '{{json .Image}}' 2>/dev/null \
+            | jq -r '[.. | .Labels? | select(. != null) | .["org.opencontainers.image.revision"] // empty] | first // ""' 2>/dev/null || true)"
+          echo "newest green main: $SHA; image behind :edge: ${CURRENT:-none}"
+          if [ "$CURRENT" = "$SHA" ] && [ "$FORCE" != true ]; then skip ":edge already built from $SHA"; fi
+          out publish true; out mode edge; out sha "$SHA"; out version ""; out minor ""; out latest false
+
   build-and-push:
-    if: >-
-      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
     # Isolate build/pull storage from the shared runner pool. Layers are reused
     # through the scoped Actions cache below; amd64 requires no emulation.
     runs-on: ubuntu-24.04
@@ -55,7 +129,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ needs.plan.outputs.sha }}
 
       - name: Set up Docker Buildx
         id: buildx
@@ -76,54 +150,26 @@ jobs:
           # 0security is the only image name; ghcr.io/<owner>/0 is no longer updated.
           echo "name=ghcr.io/${OWNER}/0security" >> "$GITHUB_OUTPUT"
 
-      # :latest only moves when this build IS the current main tip.
-      # workflow_run publishes check out the TRIGGERING CI run's head_sha;
-      # with main moving fast, an older CI completing later would otherwise
-      # publish older content over a newer :latest (measured 2026-07-17:
-      # the 21:58 :latest shipped d3ee0b45-era content, missing a fix that
-      # had merged 40min earlier, while looking green). The immutable :sha
-      # tag is stamped on every build regardless, so any image's exact
-      # content stays identifiable/testable.
-      - name: Verify source and resolve :latest eligibility
-        id: latest_eligible
+      # The plan job already proved CI passed for this exact commit. Re-check
+      # that the checkout is that commit, and for a release that package.json
+      # carries the tagged version.
+      - name: Verify source
+        id: source
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
-          CI_SHA="${{ github.event.workflow_run.head_sha }}"
-          if [ "$(git rev-parse HEAD)" != "$CI_SHA" ]; then
-            echo "::error::Checked-out source does not match successful main CI."
+          if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
+            echo "::error::Checked-out source does not match the CI-verified commit."
             exit 1
           fi
-          printf 'short_sha=%s\n' "${CI_SHA:0:7}" >> "$GITHUB_OUTPUT"
-          TIP_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
-          if [ "$CI_SHA" = "$TIP_SHA" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo ":latest moves (CI head == main tip: $CI_SHA)"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo ":latest HELD (CI head $CI_SHA is not main tip $TIP_SHA) — stamping :sha only"
+          if [ "$MODE" = release ] && [ "$(node -p "require('./package.json').version")" != "$VERSION" ]; then
+            echo "::error::package.json version does not match tag v$VERSION."
+            exit 1
           fi
-
-      # Semver tags (v0.30.1, 0.30) are published only for a commit that carries the
-      # matching release tag; a plain main build never moves them. The version comes
-      # from the checked-out package.json, the tag is looked up on the remote.
-      - name: Resolve semver tags
-        id: semver
-        run: |
-          set -euo pipefail
-          CI_SHA="${{ github.event.workflow_run.head_sha }}"
-          VERSION="$(node -p "require('./package.json').version")"
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          TAG_SHA="$(git ls-remote origin "refs/tags/v${VERSION}^{}" "refs/tags/v${VERSION}" | tail -n1 | cut -f1)"
-          if [ "$TAG_SHA" = "$CI_SHA" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "No v${VERSION} tag on ${CI_SHA}: semver tags not published."
-          fi
+          printf 'short_sha=%s\n' "${SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata
         id: meta
@@ -134,29 +180,26 @@ jobs:
           images: |
             ${{ steps.image.outputs.name }}
           # Tag plan:
-          #   - sha          (every trusted-main build)       abc1234
-          #   - branch ref   (trusted-main build)             main
-          #   - :latest      (tip-gated — see eligibility)    latest
-          #   - semver       (only when the commit has the    v0.30.1, 0.30
-          #                   matching v<version> git tag)
-          # Public version-tag publishing is a separately reviewed release
-          # path; a tag push must never execute arbitrary source on the
-          # credentialed publisher.
+          #   - sha     (every build)                          abc1234
+          #   - edge    (nightly / dispatch, newest green main)
+          #   - release (v<semver> tag whose Main passed)      v0.31.0, 0.31.0, 0.31
+          #   - latest  (release only, highest version)        = last release
           tags: |
-            type=raw,value=${{ steps.latest_eligible.outputs.short_sha }}
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ steps.latest_eligible.outputs.enabled }}
-            type=raw,value=v${{ steps.semver.outputs.version }},enable=${{ steps.semver.outputs.enabled }}
-            type=raw,value=${{ steps.semver.outputs.minor }},enable=${{ steps.semver.outputs.enabled }}
+            type=raw,value=${{ steps.source.outputs.short_sha }}
+            type=raw,value=edge,enable=${{ needs.plan.outputs.mode == 'edge' }}
+            type=raw,value=v${{ needs.plan.outputs.version }},enable=${{ needs.plan.outputs.mode == 'release' }}
+            type=raw,value=${{ needs.plan.outputs.version }},enable=${{ needs.plan.outputs.mode == 'release' }}
+            type=raw,value=${{ needs.plan.outputs.minor }},enable=${{ needs.plan.outputs.mode == 'release' }}
+            type=raw,value=latest,enable=${{ needs.plan.outputs.mode == 'release' && needs.plan.outputs.latest == 'true' }}
           labels: |
-            org.opencontainers.image.version=${{ steps.semver.outputs.version || steps.latest_eligible.outputs.short_sha }}
-            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.version || steps.source.outputs.short_sha }}
+            org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
             org.opencontainers.image.title=0
             org.opencontainers.image.description=Open-source security harness that fixes what it finds.
             org.opencontainers.image.source=https://github.com/0sec-labs/0security
             org.opencontainers.image.licenses=MIT OR Apache-2.0
           annotations: |
-            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+            org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
 
       - name: Build and push
         id: build

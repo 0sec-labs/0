@@ -1,8 +1,9 @@
 name: "0: Installation E2E"
 
 # Verify the public commands in README.md and Getting Started, not a build-tree
-# approximation. The image-publish completion trigger makes this run after the
-# public :latest image is refreshed; the daily run catches upstream registry,
+# approximation. The image-publish completion trigger makes this run after a
+# RELEASE publish refreshes :latest (nightly :edge publishes do not retrigger
+# it, see the event check below); the daily run catches upstream registry,
 # GitHub Release, and base-image drift.
 on:
   workflow_dispatch:
@@ -24,7 +25,7 @@ jobs:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.event == 'workflow_run' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     name: ${{ matrix.method }} install
     runs-on: ubuntu-latest
