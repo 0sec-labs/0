@@ -295,7 +295,7 @@ export function Conversation({
           ref={scroller}
           data-scrolled={scrolled}
           data-more-below={moreBelow}
-          className={`console-transcript-scroller scroll-fade-y min-h-0 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 ${empty ? "flex-none" : "flex-1"}`}
+          className={`console-transcript-scroller md:scroll-fade-top min-h-0 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 ${empty ? "flex-none" : "flex-1"}`}
           onScroll={() => {
             const node = scroller.current;
             if (!node) return;
@@ -443,7 +443,7 @@ export function Conversation({
                   ? `Scroll to latest, ${unseen} new ${unseen === 1 ? "message" : "messages"}`
                   : "Scroll to latest"
               }
-              className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-3 inline-flex h-8 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-lg border-[0.5px] border-border-2 bg-card px-3 text-[13px] font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
+              className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-2 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-lg border-[0.5px] border-border-2 bg-card px-2.5 text-xs font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
               onClick={() => {
                 const node = scroller.current;
                 if (node) node.scrollTop = node.scrollHeight;
@@ -906,7 +906,7 @@ export function Composer({
       </div>
     );
   return (
-    <div className={`shrink-0 bg-transparent ${worker || home ? "p-0" : "p-3 sm:px-6"}`}>
+    <div className={`shrink-0 bg-transparent ${worker || home ? "p-0" : "px-3 pb-[calc(0.25rem+env(safe-area-inset-bottom))] sm:px-6"}`}>
       <div className={`mx-auto ${home ? "max-w-none" : "max-w-[896px]"}`}>
         {!worker &&
           feedback?.active &&
@@ -1501,7 +1501,7 @@ export function Composer({
         {!worker && !home && (
           <div
             data-composer-status
-            className="@container/rail flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 px-4 pt-1 text-xs text-muted-foreground-2"
+            className="@container/rail flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 px-4 text-xs text-muted-foreground-2"
           >
             <BackendConnectionPicker rail />
             <FilePathPicker

@@ -25,6 +25,18 @@
     animation-range: 0 var(--sf-size, 24px), calc(100% - var(--sf-size, 24px)) 100%;
   }
 }
+/* Top-only edge fade for the transcript: the bottom stops cleanly at the composer so the last lines are never dimmed or clipped. */
+@utility scroll-fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sf-top), #000 100%);
+  @supports (animation-timeline: scroll()) {
+    animation-name: sf-top;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self block);
+    animation-range: 0 var(--sf-size, 24px);
+  }
+}
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

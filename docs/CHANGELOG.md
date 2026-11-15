@@ -16,6 +16,7 @@ on the GitHub Release tag.
 
 - The sidebar has seven items and no More menu: New thread, Findings, Automations, Skills, Memory, Computers and Explore. Computers is always listed and no longer appears under Settings.
 - Skills has its own sidebar entry with **Installed** and **Browse** tabs. The GitHub skills directory moved from Explore to Skills > Browse, and Explore keeps Plugins and Themes. Old `/plugins/explore?tab=skills` links redirect to Skills > Browse.
+- The thread composer dock is tighter and cleaner: the transcript no longer dims its last lines above the composer, there is less empty space under the footer row, and the Scroll to latest pill is smaller and sits clear of the card.
 - The container image is published only as `ghcr.io/0sec-labs/0security`; `ghcr.io/0sec-labs/0` is no longer updated, switch to the new name.
 - Chat slash commands are now the CLI commands: `/threads start`, `/threads list`, `/findings list`, `/models default`, `/config get`, `/agents list`, `/doctor` and more mirror `0 threads start` and so on. The `/` menu is grouped, filterable and shows the CLI command for each entry. Old names such as `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings` and `/model` still work.
 - Removed the stale `/onboard`, `/chat`, `/launcher`, `/ops`, `/back` and `/scope` commands. `/exit` is now `/threads close`.
