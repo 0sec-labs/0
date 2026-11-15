@@ -3,6 +3,7 @@ import { errorText } from "@/lib/api-error";
 import { Link, useNavigate } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { v } from "@/lib/vocabulary";
+import { AgentFileEditWarning } from "@/components/sentinels/agent-file";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -246,6 +247,7 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
       </div>
     </Section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {!readOnly && <AgentFileEditWarning sentinel={sentinel} />}
     <div className="flex items-center gap-3">
       <Button type="button" variant="secondary" disabled={readOnly || archived || !dirty || update.isPending} onClick={() => void save()}>{update.isPending ? "Saving" : "Save changes"}</Button>
       {saved && <span role="status" className="text-sm text-muted-foreground-1">Saved</span>}

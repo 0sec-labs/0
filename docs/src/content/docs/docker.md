@@ -213,3 +213,15 @@ docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:fu
 The published image embeds the project's telemetry keys like the release binaries do. Building the Dockerfile yourself embeds nothing unless you pass the `zero_release_sentry_dsn` and `zero_release_posthog_key` BuildKit secrets.
 
 Next: [CI/CD](/ci/github-action/), [Scan web and APIs](/scan-web/).
+
+## Agents from files
+
+Mount a folder of [Agent files](/agents-as-code/) and the server applies it when it starts and again on `SIGHUP`. The mount can be read-only.
+
+```bash
+docker run -d --name zero -v zero-data:/data -v "$PWD/.0/agents:/agents:ro" \
+  -e ZERO_AGENTS_DIR=/agents ghcr.io/0sec-labs/0security:latest
+docker kill --signal=HUP zero   # re-apply after the folder changed
+```
+
+Files that ask for `access: changes` need `-e ZERO_AGENTS_ALLOW_CHANGES=1`. Validate files without a server: `docker run --rm -v "$PWD:/work:ro" -w /work ghcr.io/0sec-labs/0security:latest agents validate .0/agents`.

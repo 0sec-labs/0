@@ -187,6 +187,7 @@ export default defineConfig({
           items: [
             { label: "Automations", slug: "automations" },
             { label: "Agents", slug: "agents" },
+            { label: "Agents as code", slug: "agents-as-code" },
             { label: "CI/CD", slug: "ci/github-action" },
             { label: "MCP servers", slug: "mcp" },
             { label: "Plugins", slug: "plugins" },

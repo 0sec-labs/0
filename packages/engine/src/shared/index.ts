@@ -19,6 +19,7 @@ export * from "./security-workflow-templates.js";
 export * from "./sentinels.js";
 export * from "./sentinel-presets.js";
 export * from "./sentinel-triggers.js";
+export * from "./agent-file.js";
 
 export * from "./service-plugins.js";
 

@@ -1,4 +1,8 @@
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, join, resolve as resolvePath } from "node:path";
+import { parseAgentFile } from "@0/engine/shared";
+import { loadAgentDocuments } from "../agent-files.js";
+import type { AgentApplyResult, AgentPlanItem } from "../web/agent-apply.js";
 import { Option, type Command } from "commander";
 import { normalizeSentinelAccessLevel, SENTINEL_ACCESS_LEVELS, SENTINEL_AUTONOMY, SENTINEL_STATUSES, SENTINEL_TOOL_ACCESS } from "@0/engine/shared";
 import type { ConsoleClient } from "../console-embed-client.js";
@@ -11,16 +15,32 @@ const webhookText = (view: WebhookView): string => !view.serverMode ? "Not avail
   : renderFields({ configured: view.configured ? "yes" : "no (run: 0 agents webhook secret rotate --yes)", "payload URL": view.payloadUrl ?? "set --public-url on the server", "content type": "application/json", events: "Pull requests", "last delivery": view.lastDeliveryAt ? `${view.lastDeliveryAt} ${view.lastResult}${view.lastReason ? ` (${view.lastReason})` : ""}` : "none yet", "old secret valid until": view.graceUntil })
     + (view.deliveries?.length ? `\n\n${renderTable(view.deliveries, [{ header: "TIME", value: d => d.at }, { header: "RESULT", value: d => d.result }, { header: "EVENT", value: d => d.event }, { header: "REASON", value: d => d.reason }])}` : "");
 
-interface Sentinel { id: string; name: string; mission?: string; status: string; autonomy: string; access?: string; accessLevel?: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
+interface Sentinel { managedBy?: { id: string }; fileState?: { source: "app" | "file"; path?: string; edited?: boolean }; id: string; name: string; mission?: string; status: string; autonomy: string; access?: string; accessLevel?: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
 interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
 interface SentinelFile { path: string; revision: number; content?: string; updatedAt?: string }
 
 async function sentinel(client: ConsoleClient, reference: string): Promise<Sentinel> {
   const all = ((await client.request("GET", ROOT)) as { sentinels: Sentinel[] }).sentinels;
-  return resolveId(all, reference, "Sentinel");
+  return all.find(item => item.managedBy?.id === reference) ?? resolveId(all, reference, "Agent");
 }
 const view = (value: { sentinel: Sentinel }) => value.sentinel;
-const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, status: item.status, mission: item.mission, access: accessText(item), "tool access": item.toolAccess, version: item.version, "daily budget (USD)": item.budget?.dailyUsd, "max runs per day": item.budget?.maxRunsPerDay, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
+const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, definition: fileStateText(item), status: item.status, mission: item.mission, access: accessText(item), "tool access": item.toolAccess, version: item.version, "daily budget (USD)": item.budget?.dailyUsd, "max runs per day": item.budget?.maxRunsPerDay, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
+/** One line: where the Agent is defined. */
+const fileStateText = (item: Sentinel): string => item.fileState?.source === "file" ? `Managed by ${item.fileState.path}${item.fileState.edited ? " (edited since last apply)" : ""}` : "Edited in the app";
+const planLine = (item: AgentPlanItem): string => {
+  const mark = { create: "+", adopt: ">", update: "~", unchanged: "=", prune: "-", error: "!" }[item.action];
+  const head = `${mark} ${item.action} ${item.id || item.path}${item.id ? ` (${item.path})` : ""}`;
+  const lines = [head + (item.drift ? "  [edited in the app since last apply]" : "")];
+  for (const detail of item.details) lines.push(`    ${detail.field}: ${detail.instance ?? ""} -> ${detail.file ?? ""}`);
+  if (!item.details.length) for (const change of item.changes) lines.push(`    ${change}`);
+  for (const error of item.errors ?? []) lines.push(`    ${item.path}${error.line ? `:${error.line}` : ""}: ${error.message}`);
+  for (const warning of item.warnings ?? []) lines.push(`    note: ${warning}`);
+  return lines.join("\n");
+};
+const renderPlan = (result: AgentApplyResult): string => {
+  const c = result.counts;
+  return [...result.items.map(planLine), `${result.dryRun ? "Would change" : "Applied"}: ${c.create} create, ${c.adopt} adopt, ${c.update} update, ${c.unchanged} unchanged, ${c.prune} prune, ${c.error} error.${result.dryRun ? "" : ` Content hash ${result.hash.slice(0, 12)}.`}`].join("\n");
+};
 const ACCESS_TEXT: Record<string, string> = { "read-only": "Read-only", changes: "Can make changes" };
 /** Plain access text: Read-only or Can make changes. */
 const accessText = (item: Sentinel): string => ACCESS_TEXT[item.access ?? item.accessLevel ?? ""] ?? item.access ?? item.accessLevel ?? item.autonomy;
@@ -55,7 +75,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
     .action((options: ConsoleFlags & { status?: string }) => withConsole(options, deps, async client => {
       const status = oneOf("--status", SENTINEL_STATUSES, options.status);
       return ((await client.request("GET", `${ROOT}${status ? `?status=${status}` : ""}`)) as { sentinels: Sentinel[] }).sentinels;
-    }, rows => renderTable(rows, [{ header: "ID", value: s => s.id }, { header: "NAME", value: s => s.name }, { header: "STATUS", value: s => s.status }, { header: "ACCESS", value: s => accessText(s) }, { header: "NEEDS YOU", value: s => (s.attention?.needsYou ? "yes" : "") }])));
+    }, rows => renderTable(rows, [{ header: "ID", value: s => s.id }, { header: "NAME", value: s => s.name }, { header: "STATUS", value: s => s.status }, { header: "DEFINED IN", value: s => s.fileState?.source === "file" ? `${s.fileState.path}${s.fileState.edited ? " (edited)" : ""}` : "app" }, { header: "ACCESS", value: s => accessText(s) }, { header: "NEEDS YOU", value: s => (s.attention?.needsYou ? "yes" : "") }])));
 
   consoleFlags(group.command("show <id>").description("Show a Sentinel (full or prefix ID)"))
     .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => sentinel(client, id), detail));
@@ -140,6 +160,70 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       const current = await sentinel(client, id);
       return await client.request("GET", `${ROOT}/${enc(current.id)}/budget`) as { budget: { dailyUsd: number; maxRunsPerDay: number }; usage: { costUsd?: number; runs?: number }; pauseReason: { message: string } | null };
     }, value => renderFields({ "daily budget (USD)": value.budget.dailyUsd, "max runs per day": value.budget.maxRunsPerDay, "spent (24h, USD)": value.usage.costUsd, "runs (24h)": value.usage.runs, paused: value.pauseReason?.message })));
+
+  const fileOptions = (command: Command): Command => command.option("--adopt", "Take over an unmanaged Agent with the same name instead of reporting a duplicate")
+    .option("--allow-changes", "Allow files that ask for access: changes (the operator decision)").option("--prune", "Also remove Agents this folder managed before but no longer has a file for");
+  const toRequest = async (path: string, options: { adopt?: boolean; allowChanges?: boolean; prune?: boolean; force?: boolean }) => {
+    const loaded = await loadAgentDocuments(path).catch((error: Error) => { throw new UsageError(error.message); });
+    if (loaded.problems.length) throw new UsageError(loaded.problems.map(problem => `${problem.path}: ${problem.message}`).join("\n"));
+    return { documents: loaded.documents, root: loaded.root, ...(options.adopt ? { adopt: true } : {}), ...(options.allowChanges ? { allowChanges: true } : {}), ...(options.prune ? { prune: true } : {}), ...(options.force ? { force: true } : {}) };
+  };
+
+  consoleFlags(group.command("validate <path...>").description("Check Agent files (files or folders) without touching any Agent"))
+    .action(async (paths: string[], options: ConsoleFlags) => {
+      const report: Array<{ path: string; id?: string; ok: boolean; errors: Array<{ message: string; line?: number; path: string }>; warnings: string[] }> = [];
+      try {
+        for (const target of paths) {
+          const loaded = await loadAgentDocuments(target);
+          for (const problem of loaded.problems) report.push({ path: join(target, problem.path), ok: false, errors: [{ message: problem.message, path: "" }], warnings: [] });
+          for (const document of loaded.documents) {
+            const parsed = parseAgentFile(document.content);
+            report.push({ path: join(loaded.root, document.path), ok: parsed.ok, ...(parsed.ok ? { id: parsed.file.id } : {}), errors: parsed.ok ? [] : parsed.errors, warnings: parsed.ok ? parsed.warnings.map(warning => warning.message) : [] });
+          }
+        }
+      } catch (error) { deps.err(error instanceof Error ? error.message : String(error)); process.exitCode = 2; return; }
+      const ok = report.length > 0 && report.every(item => item.ok);
+      deps.out(options.json ? JSON.stringify({ ok, files: report }, null, 2) : [...report.map(item => item.ok ? `ok  ${item.path} (${item.id})${item.warnings.map(warning => `\n    note: ${warning}`).join("")}` : `bad ${item.path}\n${item.errors.map(error => `    ${item.path}${error.line ? `:${error.line}` : ""}: ${error.message}`).join("\n")}`), report.length ? `${report.filter(item => item.ok).length} of ${report.length} valid.` : "No Agent files found."].join("\n"));
+      if (!ok) process.exitCode = 1;
+    });
+
+  fileOptions(consoleFlags(group.command("diff <path>").description("Show what applying Agent files would change, field by field, including edits made in the app since the last apply")))
+    .action((path: string, options: ConsoleFlags & { adopt?: boolean; allowChanges?: boolean; prune?: boolean }) => withConsole(options, deps, async client => {
+      const result = await client.request("POST", `${ROOT}/plan`, await toRequest(path, options)) as AgentApplyResult;
+      if (!result.ok) process.exitCode = 1;
+      return result;
+    }, renderPlan));
+
+  fileOptions(consoleFlags(group.command("apply <path>").description("Create or update Agents from files; safe to repeat. Files own the Agents they manage")
+    .option("--dry-run", "Only show what would change").option("--force", "Overwrite edits made in the app since the last apply").option("--yes", "Confirm --prune")))
+    .action((path: string, options: ConsoleFlags & { adopt?: boolean; allowChanges?: boolean; prune?: boolean; force?: boolean; dryRun?: boolean; yes?: boolean }) => withConsole(options, deps, async client => {
+      if (options.prune && !options.dryRun) requireYes(options.yes, "Pruning removes Agents that no longer have a file.");
+      const result = await client.request("POST", `${ROOT}/${options.dryRun ? "plan" : "apply"}`, await toRequest(path, options)) as AgentApplyResult;
+      if (!result.ok) process.exitCode = 1;
+      return result;
+    }, renderPlan));
+
+  consoleFlags(group.command("export [id]").description("Write an Agent (or all of them, or a preset) as a file. Exporting changes nothing; the Agent becomes managed by the file after the first apply")
+    .option("--all", "Every Agent").option("--dir <dir>", "With --all: write one file per Agent into this folder (default .0/agents)").option("--preset <id>", "A built-in preset instead of an Agent").option("--force", "With --dir: overwrite files that already exist"))
+    .action((id: string | undefined, options: ConsoleFlags & { all?: boolean; dir?: string; preset?: string; force?: boolean }) => withConsole(options, deps, async client => {
+      if ([Boolean(id), Boolean(options.all), Boolean(options.preset)].filter(Boolean).length !== 1) throw new UsageError("Name one Agent, or use --all, or use --preset <id>.");
+      if (options.dir && !options.all) throw new UsageError("--dir goes with --all.");
+      if (options.preset) return { files: [(await client.request("GET", `/api/console/sentinel-presets/${enc(options.preset)}/file`)) as { path: string; content: string }], written: [] as string[] };
+      if (!options.all) return { files: [(await client.request("GET", `${ROOT}/${enc((await sentinel(client, id!)).id)}/file`)) as { path: string; content: string }], written: [] as string[] };
+      const files = ((await client.request("GET", `${ROOT}/export-all`)) as { files: Array<{ path: string; content: string }> }).files;
+      const dir = resolvePath(options.dir ?? ".0/agents");
+      const written: string[] = [];
+      await mkdir(dir, { recursive: true });
+      for (const item of files) {
+        const target = join(dir, item.path);
+        if (dirname(target) !== dir) throw new UsageError(`Refusing to write outside ${dir}.`);
+        const exists = await stat(target).then(() => true, () => false);
+        if (exists && !options.force) { deps.err(`Skipped ${target}: it exists (use --force to overwrite).`); continue; }
+        await writeFile(target, item.content, { mode: 0o644 });
+        written.push(target);
+      }
+      return { files: files.map(item => ({ path: item.path })), written };
+    }, value => value.written.length || (value.files.length > 1) ? `Wrote ${value.written.length} of ${value.files.length} files. Next: \`0 agents diff <dir> --adopt\`, then \`0 agents apply <dir> --adopt\`.` : (value.files[0] as { content?: string }).content ?? ""));
 
   const files = group.command("files").description("Read and edit a Sentinel's instructions and memory files");
   consoleFlags(files.command("list <id>").description("List files"))

@@ -39,6 +39,8 @@ export function createSentinelClient(webFetch: Fetch) {
       }
     },
     presets: (signal?: AbortSignal) => call<{ presets: SentinelPreset[] }>("sentinel-presets", { signal }).then(data => data.presets),
+    /** The Agent as an Agent file (text). */
+    exportFile: (sentinelId: string) => call<{ path: string; content: string }>(`sentinels/${id(sentinelId)}/file`),
     get: (sentinelId: string, signal?: AbortSignal) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}`, { signal }).then(data => data.sentinel),
     create: (input: Record<string, unknown>) => call<{ sentinel: Sentinel; suggestedAutomations?: SentinelPresetAutomation[] }>("sentinels", body("POST", input)),
     update: (sentinelId: string, version: number, fields: Record<string, unknown>) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}`, body("PATCH", { version, ...fields })).then(data => data.sentinel),
