@@ -25,7 +25,7 @@ describe("registry", () => {
     expect(parseBackdrop("waves")).toBe("waves")
     expect(isBackdrop("none")).toBe(true)
     for (const item of BACKDROPS) expect(PEAK_ALPHA[item.id]).toBe(item.id === "none" ? 0 : PEAK_ALPHA[item.id])
-    expect(BACKDROPS.filter(item => item.id !== "none").every(item => PEAK_ALPHA[item.id] > 0 && PEAK_ALPHA[item.id] <= 0.3)).toBe(true)
+    expect(BACKDROPS.filter(item => item.id !== "none").every(item => PEAK_ALPHA[item.id] > 0 && PEAK_ALPHA[item.id] <= 0.45)).toBe(true)
   })
 })
 

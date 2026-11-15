@@ -23,5 +23,5 @@ export const parseBackdrop = (value: unknown): BackdropKind => isBackdrop(value)
  * this: the ink over the page background at this alpha is the brightest frame the text can sit on.
  */
 export const PEAK_ALPHA: Record<BackdropKind, number> = {
-  none: 0, dither: 0.15, aurora: 0.2, grid: 0.2, topography: 0.2, constellation: 0.24, scanline: 0.12, "code-rain": 0.26, waves: 0.2, ripple: 0.22,
+  none: 0, dither: 0.15, aurora: 0.3, grid: 0.34, topography: 0.34, constellation: 0.42, scanline: 0.2, "code-rain": 0.42, waves: 0.34, ripple: 0.38,
 }

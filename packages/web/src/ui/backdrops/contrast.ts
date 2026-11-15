@@ -7,7 +7,7 @@ const mix = (ink: Rgb, page: Rgb, alpha: number): Rgb => ({ r: ink.r * alpha + p
  * frame, which is the ink at that opacity. A palette whose own text is already under AA may lose at most 0.2 of a ratio point.
  */
 export function safeAlpha(peak: number, ink: Rgb, page: Rgb, text: Rgb, minimum = 4.5): number {
-  const need = Math.min(minimum, contrastRatio(text, page) - 0.2)
+  const need = Math.min(minimum, contrastRatio(text, page) - 0.2) + 0.03
   if (contrastRatio(text, mix(ink, page, peak)) >= need) return peak
   let low = 0, high = peak
   for (let step = 0; step < 12; step++) { const middle = (low + high) / 2; if (contrastRatio(text, mix(ink, page, middle)) >= need) low = middle; else high = middle }
