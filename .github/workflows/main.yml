@@ -50,6 +50,8 @@ jobs:
         run: |
           pnpm check:architecture
           node --test scripts/check-architecture.test.mjs
+      - name: Check no npm publishing
+        run: pnpm check:no-npm-publish
       - name: Build CLI
         run: pnpm build
       - name: Type-check

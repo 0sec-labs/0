@@ -110,7 +110,7 @@ const buildResult = await build({
     // tree-sitter and its C grammar load native .node bindings relative to
     // their installed package directories. Bundling their CommonJS loaders
     // into an ESM chunk removes __dirname and breaks even `0 --help`.
-    // Keep both packages intact and declare them in the published tarball.
+    // Keep both packages intact and declare them in the dist runtime manifest.
     "tree-sitter",
     "tree-sitter-c",
     // Direct native-addon requires exist only for Bun's standalone compiler.
@@ -224,8 +224,7 @@ const publishPkg = {
   type: "module",
   description: rootPkg.description,
   bin: { "0": "0.js" },
-  // npm resolves nested local tarballs before extracting their parent package.
-  // Bundle the patched parser and its peer grammar as real source so `npm ci`
+  // Bundle the patched parser and its peer grammar as real source so the install
   // never fetches an unpatched peer or depends on an unavailable file: path.
   // Both native install hooks stay enabled.
   bundledDependencies: ["tree-sitter", "tree-sitter-c"],

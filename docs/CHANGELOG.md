@@ -8,9 +8,13 @@ old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and 0 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-on the published npm package and the GitHub Release tag.
+on the GitHub Release tag.
 
 ## [Unreleased]
+
+### Removed
+
+- npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.
 
 ## [0.31.0] - 2026-11-14
 

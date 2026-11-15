@@ -52,7 +52,7 @@ const direct = (f, isTest) => {
 
 const steps = [];
 const pnpm = (...a) => ({ cmd: "pnpm", args: a });
-steps.push({ name: "architecture check", ...pnpm("check:architecture") }, { name: "architecture tests", cmd: "node", args: ["--test", "scripts/check-architecture.test.mjs"] });
+steps.push({ name: "architecture check", ...pnpm("check:architecture") }, { name: "architecture tests", cmd: "node", args: ["--test", "scripts/check-architecture.test.mjs"] }, { name: "no-npm-publish check", ...pnpm("check:no-npm-publish") });
 
 let summary;
 let hits = [];

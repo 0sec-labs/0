@@ -57,7 +57,7 @@ STDERR_LOG="$REPORT_DIR/0.stderr.log"
 # Do not retain a previous invocation's SARIF after an unsuccessful invocation.
 rm -f -- "$SARIF_REPORT" "$REPORT_DIR/report.share.json"
 # Use the compatibility spellings accepted by published releases and the new command tree.
-# The action can update before npm latest ships the consolidated scan modules.
+# The action can update before the latest release ships the consolidated scan modules.
 COMMON_ARGS=(--depth "$DEPTH" --format json --runtime "$RUNTIME" --timeout "$TIMEOUT" --cost-ceiling "$COST_CEILING")
 case "$MODE" in
   review)

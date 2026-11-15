@@ -3,17 +3,11 @@
   "version": "0.31.0",
   "description": "0security CLI: build and deploy security agents that find vulnerabilities, prove them, fix them, verify the fix and keep watching.",
   "license": "MIT OR Apache-2.0",
+  "private": true,
   "type": "module",
   "bin": {
     "0": "dist/index.js"
   },
-  "files": [
-    "dist",
-    "!dist/**/*.map",
-    "!dist/**/*.d.ts",
-    "LICENSE-MIT",
-    "LICENSE-APACHE"
-  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "tsc --watch -p tsconfig.build.json",
