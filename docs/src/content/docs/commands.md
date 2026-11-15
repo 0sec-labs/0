@@ -158,6 +158,12 @@ Guide: [Read the workflow](/app/).
 | `--engine-allow-apply` | — | Admit explicitly approved patch application in persistent workflow calls |
 | `--engine-time-cap <ms>` | — | Server workflow deadline ceiling (default 600000 ms) |
 | `--engine-cost-cap <usd>` | — | Server workflow estimated cost ceiling (default $5) |
+| `--server-mode` | — | Serve the console to a network behind a TLS proxy: requires sign-in, an allowed-host list and a single node (off by default) |
+| `--allowed-host <host...>` | — | Server mode: accepted Host header names (default: only the bind host); also ZERO_ALLOWED_HOSTS |
+| `--trusted-proxy <cidr...>` | — | Server mode: proxy addresses or CIDRs whose X-Forwarded-* headers are trusted; also ZERO_TRUSTED_PROXY |
+| `--public-url <url>` | — | Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL |
+| `--access-token-env <name>` | — | Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated |
+| `--shutdown-timeout <seconds>` | — | Server mode: seconds to finish in-flight requests on SIGTERM (default 20) |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
 | `--engines-config <path>` | — | Trusted engine connection registry JSON (default ~/.0/engines.json) |
