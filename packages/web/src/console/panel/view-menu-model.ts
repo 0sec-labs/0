@@ -10,7 +10,7 @@ export type ViewMenuRow =
   | { kind: "view"; id: PanelViewId; view: PanelView; badge?: string }
   | { kind: "agent"; id: PanelViewId; agent: PanelAgentSummary }
   | { kind: "show-all"; hidden: number };
-export type ViewMenuSection = { label: "Views" | "Agents"; rows: ViewMenuRow[] };
+export type ViewMenuSection = { label: "Views" | "Helpers"; rows: ViewMenuRow[] };
 
 const matches = (query: string, ...parts: readonly (string | undefined)[]) => parts.some(part => part?.toLowerCase().includes(query));
 
@@ -43,7 +43,7 @@ export function buildViewMenu(input: { counts?: PanelViewCounts; agents?: readon
   }
   const sections: ViewMenuSection[] = [];
   if (viewRows.length) sections.push({ label: "Views", rows: viewRows });
-  if (agentRows.length) sections.push({ label: "Agents", rows: agentRows });
+  if (agentRows.length) sections.push({ label: "Helpers", rows: agentRows });
   return sections;
 }
 

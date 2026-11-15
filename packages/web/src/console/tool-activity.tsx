@@ -12,7 +12,7 @@ import { useDisplaySettings } from "@/lib/display-settings";
 
 function toolKind(name: string): string {
   if (/todo|plan|checklist/i.test(name)) return "Plan";
-  if (/spawn|delegate|agent.*create/i.test(name)) return "Agents";
+  if (/spawn|delegate|agent.*create/i.test(name)) return "Helpers";
   if (/message|send.*agent/i.test(name)) return "Messages";
   if (/browser|web|fetch|http/i.test(name)) return "Web";
   return "Tools";
