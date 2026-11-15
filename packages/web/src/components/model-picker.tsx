@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Clock, Sparkles } from "lucide-react";
+import { ChevronDown, Clock, SquareTerminal, Sparkles } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "../ui/components/tooltip";
@@ -14,6 +14,8 @@ export const MODEL_OFF_HINT = "Turned off in Connections";
 /** A per-role pick from the engine's recommendation catalog (see recommendModels). */
 export interface RecommendedModel { role: string; label: string; why?: string; providerId: string; model: string }
 export interface CatalogProvider { id: string; label: string }
+/** Subscription-based OpenAI providers share the OpenAI mark; the rail tells them apart from the API provider. */
+const isOpenAiBrand = (id: string) => ["chatgpt-plan", "chatgpt-codex", "codex", "chatgpt"].includes(id);
 export function providerLabel(id: string): string {
   return ({ "chatgpt-plan": "ChatGPT plan", "chatgpt-codex": "ChatGPT / Codex", openai: "OpenAI API", anthropic: "Anthropic", google: "Google", openrouter: "OpenRouter", deepseek: "DeepSeek", xai: "xAI", "z-ai": "Z.ai", kimi: "Kimi", qwen: "Qwen", azure: "Azure OpenAI", opencode: "OpenCode", together: "Together AI" } as Record<string, string>)[id] ?? id;
 }
@@ -179,7 +181,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     }} /><div role="separator" className="-mx-1 my-1 h-px bg-border-1" /></div>
     <div className="flex min-h-0 flex-1">
       {rail.length > 0 && <div role="group" aria-label="Providers" className="flex w-10 shrink-0 flex-col items-center gap-0.5 overflow-y-auto scroll-fade-y border-r border-border-1 pr-1">
-        {rail.map(entry => <Tooltip key={entry.id} content={entry.label} side="right"><DropdownMenu.Item closeOnClick={false} aria-label={entry.label} aria-current={!searching && entry.id === activeTab ? "true" : undefined} className={`size-8 min-h-8 w-8 shrink-0 justify-center px-0 ${!searching && entry.id === activeTab ? "bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))]" : ""} ${entry.kind === "connect" ? "opacity-60" : ""}`} onClick={() => { setTab(entry.id); setQuery(""); }}>{entry.kind === "recommended" ? <Sparkles aria-hidden="true" className="size-4" /> : entry.kind === "recent" ? <Clock aria-hidden="true" className="size-4" /> : <ProviderIcon providerId={entry.id} className="size-4" />}</DropdownMenu.Item></Tooltip>)}
+        {rail.map(entry => <Tooltip key={entry.id} content={entry.label} side="right"><DropdownMenu.Item closeOnClick={false} aria-label={entry.label} aria-current={!searching && entry.id === activeTab ? "true" : undefined} className={`size-8 min-h-8 w-8 shrink-0 justify-center px-0 ${!searching && entry.id === activeTab ? "bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))]" : ""} ${entry.kind === "connect" ? "opacity-60" : ""}`} onClick={() => { setTab(entry.id); setQuery(""); }}>{entry.kind === "recommended" ? <Sparkles aria-hidden="true" className="size-4" /> : entry.kind === "recent" ? <Clock aria-hidden="true" className="size-4" /> : entry.id !== "openai" && isOpenAiBrand(entry.id) && rail.some(other => other.id === "openai") ? <SquareTerminal aria-hidden="true" className="size-4" /> : <ProviderIcon providerId={entry.id} className="size-4" />}</DropdownMenu.Item></Tooltip>)}
       </div>}
       <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-fade-y pl-1" aria-label="Available models" aria-busy={initialLoading || undefined}>
         {initialLoading && <p role="status" className="px-3 py-3 text-xs text-muted-foreground">Loading</p>}

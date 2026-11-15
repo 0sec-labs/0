@@ -95,7 +95,7 @@ export interface ConsoleWorkspace {
   setRootDraft(value: string): void;
   forgetDrafts(id: string): void;
   refresh(): void;
-  perform<T>(action: () => Promise<T>, owner?: string, failure?: string): Promise<T | undefined>;
+  perform<T>(action: () => Promise<T>, owner?: string, failure?: string, removesSession?: boolean): Promise<T | undefined>;
   /** `retry` re-runs the last turn in place instead of appending a second copy of its message. */
   send(input: ConsoleMessageInput, options?: { retry?: boolean }): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
@@ -499,19 +499,24 @@ export function useConsoleWorkspace(
     return () => controller.abort();
   }, [sessionId, revision, snapshotKey, queryClient]);
 
-  const refresh = () => {
+  const refresh = (listsOnly = false) => {
+    if (listsOnly) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
+      return;
+    }
     if (sessionId) void queryClient.invalidateQueries({ queryKey: snapshotKey, exact: true, refetchType: "none" });
     setRevision((value) => value + 1);
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
   };
-  const perform = async <T>(action: () => Promise<T>, owner = sessionId, failure = "Couldn't do that. Check your connection and try again."): Promise<T | undefined> => {
+  const perform = async <T>(action: () => Promise<T>, owner = sessionId, failure = "Couldn't do that. Check your connection and try again.", removesSession = false): Promise<T | undefined> => {
     const key = owner ?? "global";
     setPending((items) => [...items, key]);
     setError(null);
     try {
       const result = await action();
-      refresh();
+      refresh(removesSession); // a deleted mission has no snapshot left to refetch
       return result;
     } catch (cause) {
       if (isRequestCancellation(cause)) return undefined;

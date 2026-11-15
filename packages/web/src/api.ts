@@ -331,7 +331,7 @@ function resolveConsoleDecision(id: string, decisionId: string, response: Deskto
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/decisions/${encodeURIComponent(decisionId)}`, { method: "POST", body: JSON.stringify(response) });
 }
 
-function controlConsoleSession(id: string, action: "cancel" | "force-stop" | "clear" | "workers/stop" | "title/regenerate"): Promise<{ session: DesktopConsoleSession }> {
+function controlConsoleSession(id: string, action: "cancel" | "force-stop" | "clear" | "workers/stop" | "title/regenerate"): Promise<{ session: DesktopConsoleSession; source?: "model" | "fallback" }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });
 }
 

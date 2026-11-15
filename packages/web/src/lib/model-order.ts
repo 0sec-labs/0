@@ -139,5 +139,6 @@ export function searchRelevance(model: Pick<OrderableModel, "id">, terms: readon
 /** Stable relevance ordering that falls back to the normal picker order on ties. */
 export function rankSearch<T extends OrderableModel>(models: readonly T[], query: string): T[] {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return [...models].sort((a, b) => searchRelevance(a, terms) - searchRelevance(b, terms) || compareModels(a, b));
+  // Array.prototype.sort is stable, so ties keep the unfiltered picker order.
+  return orderModels(models).sort((a, b) => searchRelevance(a, terms) - searchRelevance(b, terms));
 }

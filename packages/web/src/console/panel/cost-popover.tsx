@@ -20,7 +20,7 @@ function CostBar({ rows }: { rows: CostRow[] }) {
 export function CostButton({ snapshot }: { snapshot: ConsoleSessionSnapshot | undefined }) {
   const { showCost, showTokenUsage } = useDisplaySettings();
   const breakdown = snapshot ? costBreakdown(snapshot) : undefined;
-  if (!breakdown || !showCost) return null;
+  if (!breakdown || !showCost || !(breakdown.totalUsd > 0)) return null;
   const total = formatCost(breakdown.totalUsd)!;
   return <Popover>
     <Popover.Trigger render={<Button variant="ghost" size="sm" />} aria-label={`Chat cost ${total}`} data-chat-cost className="h-7 px-2 text-xs tabular-nums text-muted-foreground">{total}</Popover.Trigger>

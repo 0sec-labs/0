@@ -15,7 +15,7 @@ const names = [
   "capabilities",
   "status",
   "tools",
-  "new-chat",
+  "new-mission",
   "clear",
   "findings",
   "settings",
@@ -26,7 +26,7 @@ const names = [
 ];
 const commands = names.map((name) => ({
   name,
-  aliases: name === "new-chat" ? ["new"] : [],
+  aliases: name === "new-mission" ? ["new"] : [],
 }));
 
 describe("slash curation", () => {
@@ -34,7 +34,7 @@ describe("slash curation", () => {
     const { items, hidden } = curateSlashCommands(commands, "", false);
     expect(items.map((c) => c.name)).toEqual([
       "model",
-      "new-chat",
+      "new-mission",
       "status",
       "findings",
       "plugins",
@@ -52,7 +52,7 @@ describe("slash curation", () => {
   });
   it("a typed query searches every command, including aliases", () => {
     expect(curateSlashCommands(commands, "u", false).items.map((c) => c.name)).toEqual(["usage"]);
-    expect(curateSlashCommands(commands, "new", false).items.map((c) => c.name)).toEqual(["new-chat"]);
+    expect(curateSlashCommands(commands, "new", false).items.map((c) => c.name)).toEqual(["new-mission"]);
   });
 });
 

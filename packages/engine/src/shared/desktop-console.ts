@@ -84,6 +84,8 @@ export interface DesktopConsoleSession {
   titleSource?: "default" | "auto" | "user";
   /** Transcript messages plus queued operator messages; 0 means the conversation is still blank. */
   messageCount?: number;
+  /** The most recent turn ended with an error (for example a rejected key or a rate limit). */
+  lastTurnFailed?: boolean;
   runtime?: ConsoleRuntimeSnapshot;
   execution?: ConsoleExecutionSnapshot;
   pendingConfiguration?: ConsoleSessionConfiguration;

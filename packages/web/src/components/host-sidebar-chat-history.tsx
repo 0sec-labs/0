@@ -122,7 +122,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const isSaved = row.kind === "saved";
           const selected = slice.openingId === session.id || hostId === host.id && props.selectedId === session.id;
           const live = row.kind === "live" ? row.session.status : undefined;
-          const attention = live ? ATTENTION[live] : undefined;
+          const attention = live ? ATTENTION[live] ?? ((row.session as { lastTurnFailed?: boolean }).lastTurnFailed ? "Last turn failed" : undefined) : undefined;
           const working = live === "working" || live === "cancelling";
           const count = (row.session as { messageCount?: number }).messageCount;
           // Every row gets a second line (like Capy's thread rows): attention/detail text first, else a quiet status summary.

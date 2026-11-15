@@ -100,8 +100,8 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
 
   {
-    name: "new-chat",
-    aliases: ["new"],
+    name: "new-mission",
+    aliases: ["new", "new-chat"],
     category: "navigation",
     description: "Start a fresh audit",
     tuiOnly: true,

@@ -533,7 +533,7 @@ const COMMAND_SUMMARIES: Record<string, string> = {
   capabilities: "Explore what 0 can do",
   status: v("Check this {mission}"),
   tools: "Browse available tools",
-  "new-chat": v("Start a new {mission}"),
+  "new-mission": v("Start a new {mission}"),
   onboard: "Open guided setup",
   clear: v("Clear this {mission}"),
   history: "Browse run reports",

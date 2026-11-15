@@ -3,7 +3,7 @@
 /** Commands shown first when the slash menu opens with no query. */
 export const CURATED_SLASH_COMMANDS = [
   "model",
-  "new-chat",
+  "new-mission",
   "status",
   "findings",
   "plugins",
