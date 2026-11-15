@@ -62,3 +62,6 @@ export { registerCampaignCommand } from "./campaign.js";
 
 export { registerReportsCommand } from "./reports.js";
 export { registerCommandTree } from "./tree.js";
+export { registerSkillsCommand } from "./skills.js";
+export { registerMemoryCommand } from "./memory.js";
+export { registerPluginConnectCommands } from "./plugin-connect.js";
