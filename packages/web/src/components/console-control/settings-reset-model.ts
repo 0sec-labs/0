@@ -27,12 +27,12 @@ export function describeSettingValue(key: string, value: unknown): string {
 }
 
 /**
- * `scope`: "display" resets display and behaviour settings only; "protected" resets only safety and privacy settings;
+ * `scope`: "all" resets every shared setting; "display" resets display and behaviour settings only; "protected" resets only safety and privacy settings;
  * an explicit key list resets exactly those keys. Settings already at their default are not listed.
  */
-export function planReset(scope: "display" | "protected" | string[], definitions: Definition[], values: Record<string, unknown>): ResetPlan {
+export function planReset(scope: "display" | "protected" | "all" | string[], definitions: Definition[], values: Record<string, unknown>): ResetPlan {
   const shared = new Set(sharedSettingKeys(definitions.map(def => def.key)));
-  const wanted = (def: Definition) => shared.has(def.key) && (Array.isArray(scope) ? scope.includes(def.key) : scope === "protected" ? isProtectedSetting(def.key) : !isProtectedSetting(def.key));
+  const wanted = (def: Definition) => shared.has(def.key) && (Array.isArray(scope) ? scope.includes(def.key) : scope === "all" ? true : scope === "protected" ? isProtectedSetting(def.key) : !isProtectedSetting(def.key));
   const candidates = definitions.filter(wanted);
   const changes = candidates.filter(def => values[def.key] !== def.default).map(def => ({ key: def.key, label: settingLabel(def), from: describeSettingValue(def.key, values[def.key]), to: describeSettingValue(def.key, def.default) }));
   const untouched: ResetPlan["untouched"] = [];

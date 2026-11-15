@@ -21,7 +21,8 @@ import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { Feedback, QueryState, jsonBody } from "./control-ui";
 import { NumberSettingControl, TextSettingControl } from "./thread-setting-controls";
 import { SettingsRow, SettingsSection } from "./settings-section";
-import { planReset } from "./settings-reset-model";
+import { StatusSettings } from "./status-row";
+import { isProtectedSetting, planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
 
 export function useConsoleSettings() {
@@ -32,9 +33,15 @@ export function useConsoleSettings() {
 }
 
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
-import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
+import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
-function SettingRow({ definition, value, scope, pending, isolatedReady, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; isolatedReady?: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
+function SettingRow({ definition, value, scope, pending, isolatedReady, apply, group }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; isolatedReady?: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void; group?: { keys: string[]; values: Record<string, unknown> } }) {
+  if (group && group.keys.length > 1) {
+    const label = settingLabel(definition);
+    return <SettingsRow id={`setting-${definition.key}`} label={label} description={webSettingDetails(definition.key)?.description}>
+      <Switch aria-label={label} checked={group.keys.some(key => group.values[key] === true)} disabled={pending} onCheckedChange={next => group.keys.forEach(key => apply(key, next, scope))} />
+    </SettingsRow>;
+  }
   const label = settingLabel(definition);
   const numberChoices = definition.key === "archiveIdleDays" ? archiveIdleChoices : undefined;
   const description = webSettingDetails(definition.key)?.description ?? "";
@@ -45,12 +52,12 @@ function SettingRow({ definition, value, scope, pending, isolatedReady, apply }:
   const applyValue = (next: unknown) => apply(definition.key, next, definition.operatorOnly ? "global" : scope);
   // A mapped switch is on for any value other than its off value, so a terminal-chosen variant keeps showing as on.
   const switchOn = definition.kind === "boolean" ? value === true : mapped ? value !== disabledChoice : value === enabledChoice;
-  return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This computer" : undefined}>
+  return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This computer only" : undefined}>
     {definition.kind === "number" ? <NumberSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} choices={numberChoices} /> : definition.kind === "text" ? <TextSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} /> : isToggle ? <Switch aria-label={label} checked={switchOn} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : disabledChoice)} /> : <Select aria-label={label} size="sm" className="w-auto min-w-36 shrink-0" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: `${settingChoiceLabel(definition.key, choice)}${definition.key === "executionProfile" && choice === "smolvm" && choice !== value && isolatedReady === false ? " (needs setup)" : ""}`, disabled: definition.key === "executionProfile" && choice === "smolvm" && choice !== value && isolatedReady === false })) ?? []} />}
   </SettingsRow>;
 }
 
-/** Whether an isolated workspace can be used right now; undefined while unknown. */
+/** Whether the sandbox can be used right now; undefined while unknown. */
 function useIsolatedReady(): boolean | undefined {
   const { client, webFetchJson } = useBackendApi();
   const status = useQuery({ queryKey: queryKeys.consoleExecution(client.backendId), queryFn: ({ signal }) => webFetchJson<ConsoleExecutionStatus>("/api/console/execution", { signal }), refetchInterval: 5000 });
@@ -67,10 +74,10 @@ function ExecutionControl() {
   return <div className="space-y-3 p-4">
     <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
     {execution && <>
-      <div className="space-y-1"><p className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-medium">Tool environment</span><span className="text-xs text-muted-foreground">{ready ? "Ready" : "Needs setup"}</span></p>{!ready && <p role="status" className="max-w-lg text-xs leading-5 text-muted-foreground">{execution.platformSupported === false ? "Isolated workspaces are unavailable on this computer." : "Set up an isolated workspace before using it."}</p>}</div>
+      <div className="space-y-1"><p className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-medium">Sandbox</span><span className="text-xs text-muted-foreground">{ready ? "Ready" : "Needs setup"}</span></p>{!ready && <p role="status" className="max-w-lg text-xs leading-5 text-muted-foreground">{execution.platformSupported === false ? "The sandbox is unavailable on this computer." : "Set up the sandbox before using it."}</p>}</div>
       {isolated && !ready && <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" render={<Link to="/doctor" />}>Check setup</Button><Button size="sm" variant="ghost" render={<Link to="/computers" />}>Choose host</Button></div>}
       <Disclosure summary="Details" triggerClassName="rounded-[var(--radius-control)] px-1 py-2 text-xs text-muted-foreground hover:text-foreground" contentClassName="space-y-3 px-1 pb-2"><dl className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
-        {isolated && <><dt className="text-muted-foreground">Workspace setup</dt><dd>{execution.configured ? "Configured" : "Not configured"}</dd><dt className="text-muted-foreground">Runtime</dt><dd>{execution.runtimeReady ? "Available" : "Unavailable"}</dd><dt className="text-muted-foreground">Image</dt><dd>{execution.imageApproved ? "Approved" : "Not approved"}</dd></>}
+        {isolated && <><dt className="text-muted-foreground">Setup</dt><dd>{execution.configured ? "Configured" : "Not configured"}</dd><dt className="text-muted-foreground">Runtime</dt><dd>{execution.runtimeReady ? "Available" : "Unavailable"}</dd><dt className="text-muted-foreground">Image</dt><dd>{execution.imageApproved ? "Approved" : "Not approved"}</dd></>}
         {execution.imageDigest && <><dt className="text-muted-foreground">Image digest</dt><dd className="break-all">{execution.imageDigest}</dd></>}
         {execution.resources && <><dt className="text-muted-foreground">Resources</dt><dd>{execution.resources.cpus} CPUs · {execution.resources.memoryMb} MiB memory · {execution.resources.storageGb} GiB storage</dd></>}
       </dl>{execution.error && <p className="text-xs leading-5 text-muted-foreground">{execution.error}</p>}</Disclosure>
@@ -85,9 +92,9 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   const queryClient = useQueryClient();
   const location = useLocation();
   const scope = "global" as const;
-  const [resetScope, setResetScope] = useState<"display" | "protected" | null>(null);
+  const [resetScope, setResetScope] = useState<"all" | null>(null);
   const resetTriggerRef = useRef<HTMLElement | null>(null);
-  const openReset = (scope: "display" | "protected") => { reset.reset(); resetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setResetScope(scope); };
+  const openReset = (scope: "all") => { reset.reset(); resetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setResetScope(scope); };
   const [message, setMessage] = useState<string | null>(null);
   const save = useMutation({ scope: { id: "console-settings" }, mutationFn: async (input: { key: string; value: unknown; scope: "global" | "project" }) => {
     if (!visibleWebSetting(input)) throw new Error("This preference is not managed by the web app.");
@@ -104,8 +111,8 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   }, onSuccess: data => { queryClient.setQueryData(settings.queryKey, data); setResetScope(null); setMessage("Reset to defaults."); } });
   const allDefinitions = settings.data?.definitions.filter(def => visibleWebSetting(def) && !presentationOnly) ?? [];
   const resetPlan = resetScope && settings.data ? planReset(resetScope, allDefinitions, settings.data.settings) : null;
-  const displayPlan = settings.data ? planReset("display", allDefinitions, settings.data.settings) : null;
-  const protectedPlan = settings.data ? planReset("protected", allDefinitions, settings.data.settings) : null;
+  const allPlan = settings.data ? planReset("all", allDefinitions, settings.data.settings) : null;
+  const resetsProtected = resetPlan?.keys.some(isProtectedSetting) ?? false;
   useEffect(() => {
     if (!settings.isSuccess || presentationOnly) return;
     let anchor = location.hash.slice(1);
@@ -125,28 +132,28 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <Feedback error={save.error ?? (resetScope === null ? reset.error : null)} message={message} />
     <ConfirmDialog open={resetScope !== null} onOpenChange={open => { if (!open) setResetScope(null); }} pending={reset.isPending} spinner destructive
-      title={resetScope === "protected" ? "Reset safety and privacy settings?" : "Reset display and behavior settings?"}
-      description={resetScope === "protected" ? "These settings return to their defaults, which can be less restrictive." : "Only the settings listed here change."}
+      title="Reset all settings?"
+      description={resetsProtected ? "Safety and privacy settings return to their defaults, which can be less restrictive." : "Only the settings listed here change."}
       onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}
       error={<Feedback error={reset.error} />} confirmLabel="Reset" confirmDisabled={!resetPlan?.keys.length} onConfirm={() => reset.mutate()}>
       {resetPlan && (resetPlan.changes.length ? <ul aria-label="Settings that will change" className="flex flex-col gap-1 text-sm">{resetPlan.changes.map(change => <li key={change.key} className="flex min-w-0 justify-between gap-4"><span className="min-w-0 break-words [overflow-wrap:anywhere]">{change.label}</span><span className="max-w-[55%] shrink-0 break-words text-right text-muted-foreground-2 [overflow-wrap:anywhere]">{change.from} to {change.to}</span></li>)}</ul> : <p role="status" className="text-sm text-muted-foreground-2">Everything here already has its default value.</p>)}
       {resetPlan && resetPlan.untouched.length > 0 && <div><h4 className="text-sm font-medium">Unchanged</h4><ul aria-label="Settings left unchanged" className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground-2">{resetPlan.untouched.map(item => <li key={item.key} className="flex min-w-0 justify-between gap-4"><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.label}</span><span className="max-w-[55%] shrink-0 break-words text-right [overflow-wrap:anywhere]">{item.value}</span></li>)}</ul></div>}
     </ConfirmDialog>
     {settingsCategories.filter(section => categoriesOfPage(category).includes(section.id)).map(section => {
-      const definitions = allDefinitions.filter(def => categoryFor(def) === section.id && !(def.key === "compactionThreshold" && settings.data?.settings.autoCompaction === false));
+      const definitions = allDefinitions.filter(def => categoryFor(def) === section.id && !hiddenInto(def.key) && !(def.key === "compactionThreshold" && settings.data?.settings.autoCompaction === false));
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
       if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
       return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} quiet={categoriesOfPage(category).length === 1}>
         {section.id === "appearance" && <>
           <AppearanceRows />
         </>}
-        {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={reset.isPending} isolatedReady={isolatedReady} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
+        {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={reset.isPending} isolatedReady={isolatedReady} group={{ keys: settingGroup(def.key).filter(key => settings.data!.definitions.some(item => item.key === key)), values: settings.data!.settings }} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}
       </SettingsSection>;
     })}
-    {!presentationOnly && settings.data && category === "general" && <SettingsSection id="settings-reset" title="Reset settings">
-      <SettingsRow id="setting-reset" label="Display and behavior"><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !displayPlan?.keys.length} onClick={() => openReset("display")}>Reset</Button></SettingsRow>
-      <SettingsRow id="setting-reset-protected" label="Safety and privacy"><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !protectedPlan?.keys.length} onClick={() => openReset("protected")}>Reset safety and privacy</Button></SettingsRow>
+    {!presentationOnly && category === "general" && <StatusSettings />}
+    {!presentationOnly && settings.data && category === "general" && <SettingsSection id="settings-reset" title="Reset">
+      <SettingsRow id="setting-reset" label="Reset all settings"><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !allPlan?.keys.length} onClick={() => openReset("all")}>Reset</Button></SettingsRow>
     </SettingsSection>}
   </div>;
 }

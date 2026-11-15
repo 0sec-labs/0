@@ -5,7 +5,7 @@ describe("settings pages", () => {
   it("stay a short list", () => { expect(settingsPages.length).toBeLessThanOrEqual(10); });
   it("redirect removed sections to the closest page or route", () => {
     expect(settingsRedirect("transcript")).toBe("/settings?section=missions");
-    expect(settingsRedirect("privacy")).toBe("/settings?section=agents");
+    expect(settingsRedirect("privacy")).toBe("/settings?section=general");
     expect(settingsRedirect("repositories")).toBe("/settings?section=git");
     expect(settingsRedirect("finding-states")).toBe("/findings");
     expect(settingsRedirect("integrations")).toBe("/plugins");
@@ -22,7 +22,8 @@ describe("settings pages", () => {
   });
   it("show merged categories as sections of one page", () => {
     expect(categoriesOfPage("missions")).toEqual(["conversation", "transcript", "telemetry"]);
-    expect(categoriesOfPage("agents")).toEqual(["agents", "privacy"]);
+    expect(categoriesOfPage("agents")).toEqual(["agents"]);
+    expect(categoriesOfPage("general")).toEqual(["general", "input", "privacy"]);
   });
   it("search reaches rows on merged pages", () => {
     const hits = searchSettings("elapsed");

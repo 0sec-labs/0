@@ -66,11 +66,10 @@ export function GitHubPublicationControl({ secondary = false }: { secondary?: bo
     onSettled: () => { setToken(""); },
   });
 
-  return <ControlCard title="GitHub" description="Optional. Needed only to open pull requests.">
+  return <ControlCard title="GitHub">
     <QueryState pending={account.isPending} error={account.error} retry={account.refetch} />
     {account.data && <>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium"><GitBranch className="size-4" />{account.data.account ?? "GitHub.com"}</div><Badge variant={account.data.connected ? "secondary" : "outline"}>{account.data.connected ? "Connected" : "Not connected"}</Badge></div>
-      {account.data.connected && account.data.scopes.length > 0 && <p className="text-xs text-muted-foreground">Permissions: {account.data.scopes.join(", ")}</p>}
       {account.data.deviceAuth.phase !== "idle" && account.data.deviceAuth.phase !== "connected" && <p role="status" className="text-sm leading-relaxed text-muted-foreground">{account.data.deviceAuth.message}</p>}
       {!account.data.available && <p className="rounded-md border border-border bg-muted/20 p-3 text-sm">GitHub isn't available on this computer. <Link to="/doctor" className="underline">Check requirements</Link>.</p>}
       <section className="space-y-3">

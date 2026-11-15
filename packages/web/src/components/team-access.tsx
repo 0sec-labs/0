@@ -84,7 +84,7 @@ export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolea
     <DropdownMenu.Content side={rail && collapsed ? "right" : "top"} align={rail && !collapsed ? "start" : "end"} sideOffset={8}>
       <DropdownMenu.Group>
       <DropdownMenu.Label><span className="block truncate">{displayName}</span><span className="block truncate font-normal">{team.workspace?.name}</span></DropdownMenu.Label>
-      <DropdownMenu.Item onClick={() => navigate("/team")}><Users className="size-(--icon-sm)" />Workspace settings</DropdownMenu.Item>
+      <DropdownMenu.Item onClick={() => navigate("/team")}><Users className="size-(--icon-sm)" />Members</DropdownMenu.Item>
       {team.user?.role === "owner" && <DropdownMenu.Item onClick={() => navigate("/api-access")}><KeyRound className="size-(--icon-sm)" />Findings API</DropdownMenu.Item>}
       <DropdownMenu.Item disabled={busy} onClick={() => void signOut()}><LogOut className="size-(--icon-sm)" />{busy ? "Signing out…" : "Sign out"}</DropdownMenu.Item>
       {error && <p role="alert" className="px-3 py-2 text-xs text-destructive">{error}</p>}
@@ -139,7 +139,7 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
           <MenuPrimitive.Item className={menuItemClasses} onClick={openShortcutsDialog}><Keyboard aria-hidden="true" />Keyboard shortcuts<Kbd aria-hidden="true" className="ml-auto">?</Kbd></MenuPrimitive.Item>
           {user && <>
             {menuSeparator}
-            <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate("/team")}><Users aria-hidden="true" />Workspace settings</MenuPrimitive.Item>
+            <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate("/team")}><Users aria-hidden="true" />Members</MenuPrimitive.Item>
             {user.role === "owner" && <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate("/api-access")}><KeyRound aria-hidden="true" />Findings API</MenuPrimitive.Item>}
             <MenuPrimitive.Item className={cn(menuItemClasses, "text-destructive data-[highlighted]:bg-destructive/10 [&_svg]:text-destructive")} disabled={busy} closeOnClick={false} onClick={() => void signOut()}><LogOut aria-hidden="true" />{busy ? "Signing out…" : "Sign out"}</MenuPrimitive.Item>
             {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}

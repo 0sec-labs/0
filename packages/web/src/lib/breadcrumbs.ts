@@ -6,7 +6,7 @@ import { settingsPageId, settingsPages } from "@/components/console-control/sett
 export type Crumb = { label: string; to?: string };
 
 const SETTINGS_LEAVES: Record<string, string> = {
-  connections: "Connections", models: "Models", tools: "Tools", project: "Workspace", doctor: "Diagnostics", fix: "Fix",
+  connections: "Connections", models: "Models", tools: "Tools", project: "Scope", doctor: "Diagnostics", fix: "Fix",
 };
 const SETTINGS_PREFIXES = new Set(["settings", ...Object.keys(SETTINGS_LEAVES)]);
 
