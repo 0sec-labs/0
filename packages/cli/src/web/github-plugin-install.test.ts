@@ -210,6 +210,17 @@ describe("GitHub plugin install", () => {
       }
     });
 
+    it("returns the tool changes at review time, before anything is approved", async () => {
+      const review = async (nextTools: unknown[], sha: string) => {
+        fetcher.mockResolvedValueOnce({ sha, manifest: Buffer.from(JSON.stringify({ id: "up", name: "Up", version: "1.0.0", tools: nextTools })), entry });
+        return ((await post("plugins/install-github", { repo: "o/r" }))!.data as { review: { toolChanges: unknown } }).review.toolChanges;
+      };
+      expect(await review(tools, "a".repeat(40))).toBeNull();
+      await install(tools, "a".repeat(40));
+      expect(await review([{ ...tools[0], description: "changed" }, { name: "tool_c", description: "C", parameters: {}, capabilities: ["compute"] }], "b".repeat(40)))
+        .toEqual({ legacy: false, added: ["tool_c"], removed: ["tool_b"], changed: ["tool_a"] });
+    });
+
     it("rejects duplicate tool names as an invalid manifest", async () => {
       fetcher.mockResolvedValueOnce({ sha: SHA, manifest: Buffer.from(JSON.stringify({ ...manifest, tools: [tools[0], { ...tools[1], name: "tool_a" }] })), entry });
       const result = await post("plugins/install-github", { repo: "o/r" });

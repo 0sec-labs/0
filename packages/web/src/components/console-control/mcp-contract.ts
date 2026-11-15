@@ -41,12 +41,18 @@ export function normalizeApproval(raw: unknown): McpApproval {
 export interface McpTestResult { toolCount: number; resourceCount: number; serverVersion?: string; tools: McpToolInfo[]; durationMs?: number }
 export const normalizeTest = (raw: unknown): McpTestResult => { const item = asRecord(raw); const parsed = tools(item.tools); return { toolCount: asNumber(item.toolCount) ?? parsed.length, resourceCount: asNumber(item.resourceCount) ?? list(item.resources).length, serverVersion: asString(item.serverVersion), tools: parsed, durationMs: asNumber(item.durationMs) }; };
 
-export interface GithubReview { reviewId: string; repo: string; ref: string; sha: string; id: string; name: string; version?: string; capabilities: string[]; tools: (McpToolInfo & { capabilities: string[] })[]; permissionHash: string; entryBytes?: number; alreadyInstalled: boolean; expiresAt?: string }
+export interface GithubToolChanges { legacy: boolean; added: string[]; removed: string[]; changed: string[] }
+export interface GithubReview { reviewId: string; repo: string; ref: string; sha: string; id: string; name: string; version?: string; capabilities: string[]; tools: (McpToolInfo & { capabilities: string[] })[]; permissionHash: string; entryBytes?: number; alreadyInstalled: boolean; toolChanges: GithubToolChanges | null; expiresAt?: string }
+function normalizeToolChanges(raw: unknown): GithubToolChanges | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = asRecord(raw);
+  return { legacy: item.legacy === true, added: strings(item.added), removed: strings(item.removed), changed: strings(item.changed) };
+}
 export function normalizeReview(raw: unknown): GithubReview {
   const item = asRecord(asRecord(raw).review); const reviewId = asString(item.reviewId); const sha = asString(item.sha); const permissionHash = asString(item.permissionHash);
   if (!reviewId || !sha || !permissionHash) throw new Error("The computer did not return a reviewable commit and permission set.");
   return { reviewId, sha, permissionHash, repo: asString(item.repo) ?? "", ref: asString(item.ref) ?? "HEAD", id: asString(item.id) ?? "", name: asString(item.name) ?? asString(item.id) ?? asString(item.repo) ?? "Plugin", version: asString(item.version), capabilities: strings(item.capabilities),
-    tools: list(item.tools).flatMap(entry => { const tool = asRecord(entry); const name = asString(tool.name); return name ? [{ name, description: asString(tool.description) ?? "", capabilities: strings(tool.capabilities) }] : []; }), entryBytes: asNumber(item.entryBytes), alreadyInstalled: item.alreadyInstalled === true, expiresAt: asString(item.expiresAt) };
+    tools: list(item.tools).flatMap(entry => { const tool = asRecord(entry); const name = asString(tool.name); return name ? [{ name, description: asString(tool.description) ?? "", capabilities: strings(tool.capabilities) }] : []; }), entryBytes: asNumber(item.entryBytes), alreadyInstalled: item.alreadyInstalled === true, toolChanges: normalizeToolChanges(item.toolChanges), expiresAt: asString(item.expiresAt) };
 }
 
 const send = (method: string, body?: unknown): RequestInit => ({ method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) });
