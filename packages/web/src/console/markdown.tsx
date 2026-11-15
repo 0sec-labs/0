@@ -13,6 +13,7 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markd
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { HighlightedCode } from "./formatted-code";
 import { VizFence } from "./viz/visualization";
 import { vizKindForFence } from "./viz/parse";
@@ -95,19 +96,21 @@ function PlainCodeBlock({ children, language }: { children: ReactNode; language:
       data-slot="code-block"
       className="group/code relative my-3 min-w-0 overflow-hidden rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card"
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        className={`absolute top-1 right-1 z-10 bg-card/80 opacity-0 transition-opacity group-hover/code:opacity-100 group-focus-within/code:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100${status === "copied" ? " text-primary-text" : ""}`}
-        onClick={() => void copy()}
-        aria-label={status === "failed" ? "Copy failed; try again" : "Copy code"}
-      >
-        {status === "copied" ? <Check /> : <Copy />}
-        <span className="sr-only" aria-live="polite">
-          {status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : "Copy"}
-        </span>
-      </Button>
+      <Tooltip content={status === "copied" ? "Copied" : "Copy code"} side="top">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className={`absolute top-1 right-1 z-10 bg-card/80 opacity-0 transition-opacity group-hover/code:opacity-100 group-focus-within/code:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100${status === "copied" ? " text-primary-text" : ""}`}
+          onClick={() => void copy()}
+          aria-label={status === "failed" ? "Copy failed; try again" : "Copy code"}
+        >
+          {status === "copied" ? <Check /> : <Copy />}
+          <span className="sr-only" aria-live="polite">
+            {status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : "Copy"}
+          </span>
+        </Button>
+      </Tooltip>
       {status === "failed" && (
         <p role="alert" className="px-2.5 py-1.5 text-xs text-destructive">
           Could not copy code. Select the code below to copy it manually, or try again.

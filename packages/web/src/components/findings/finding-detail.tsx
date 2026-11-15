@@ -144,8 +144,8 @@ function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onN
       </div>
       {onPrev || onNext ? (
         <>
-          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Previous finding" disabled={!onPrev} onClick={onPrev}><ChevronLeft /></Button>
-          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Next finding" disabled={!onNext} onClick={onNext}><ChevronRight /></Button>
+          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Previous finding" tooltip="Previous finding" disabled={!onPrev} onClick={onPrev}><ChevronLeft /></Button>
+          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Next finding" tooltip="Next finding" disabled={!onNext} onClick={onNext}><ChevronRight /></Button>
         </>
       ) : null}
       <CopyButton text={shareUrl} label="link" />
@@ -154,7 +154,7 @@ function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onN
       ) : exportId ? (
         <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(exportId)}`} />
       ) : null}
-      {onClose ? <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Close finding panel" onClick={onClose}><X /></Button> : null}
+      {onClose ? <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Close finding panel" tooltip="Close finding panel" onClick={onClose}><X /></Button> : null}
     </header>
   );
 }

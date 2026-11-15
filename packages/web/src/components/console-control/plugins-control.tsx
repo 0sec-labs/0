@@ -72,7 +72,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
 
     <SettingsSection id="mcp-plugins" title="Shared on this computer">
       <CardHeaderRow title={`${entries.length} added`}>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" tooltip="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Add" />}><Plus /></DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" sideOffset={4}>

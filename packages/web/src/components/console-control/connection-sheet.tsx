@@ -161,7 +161,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
         </div>
       </> : <>
         <SheetHeader className="flex-row items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="Back to providers" onClick={back}><ArrowLeft /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Back to providers" tooltip="Back to providers" onClick={back}><ArrowLeft /></Button>
           <ProviderIcon providerId={picked.id} className="size-5" />
           <SheetTitle>{isConnected(picked) ? "Reconnect" : "Connect"} {providerTitle(picked)}</SheetTitle>
           <SheetDescription className="sr-only">Connection on {hostName}.</SheetDescription>

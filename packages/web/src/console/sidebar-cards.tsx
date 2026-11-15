@@ -84,7 +84,7 @@ function SetupChecklistCard() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="min-w-0 truncate font-medium">Finish setting up</h2>
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground-2">{progress.done} of {progress.total}</span>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Dismiss setup checklist" onClick={() => setDismissed(true)} className="-my-1 -mr-1.5 size-6 text-muted-foreground-2"><CapyCloseIcon aria-hidden="true" /></Button>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Dismiss setup checklist" tooltip="Dismiss setup checklist" onClick={() => setDismissed(true)} className="-my-1 -mr-1.5 size-6 text-muted-foreground-2"><CapyCloseIcon aria-hidden="true" /></Button>
       </div>
       <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.action}</Button>
     </section>

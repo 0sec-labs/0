@@ -498,7 +498,7 @@ export function CommandPalette({
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
             <CommandPrimitive.Input autoFocus value={query} onValueChange={setQuery} placeholder={tab === "chats" ? v("Search {missions}") : "Search anything…"} aria-label={tab === "chats" ? v("Search {missions}") : "Search anything"} className="min-w-0 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none placeholder:text-muted-foreground" />
-            {query && <Button variant="ghost" size="icon-sm" aria-label="Clear search" onClick={() => setQuery("")}><X className="size-3.5" /></Button>}
+            {query && <Button variant="ghost" size="icon-sm" aria-label="Clear search" tooltip="Clear search" onClick={() => setQuery("")}><X className="size-3.5" /></Button>}
             <Select aria-label="Search in" size="sm" value={tab} onValueChange={value => chooseTab(value as SearchTab)} options={SEARCH_TABS.map(entry => ({ value: entry.id, label: entry.label }))} className="w-32 shrink-0" />
           </div>
           <CommandPrimitive.List className={`max-h-[min(460px,60dvh)] min-w-0 w-full scroll-py-2 scroll-fade-y overflow-x-hidden overflow-y-auto px-2 pb-2 max-sm:max-h-[calc(100dvh-8.5rem)] ${loading && !orderedItems.length ? "min-h-32" : ""}`} aria-label="Search results" aria-busy={openingChat || loading}>

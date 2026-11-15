@@ -96,7 +96,7 @@ export function AgentsPanel({
           </Dialog>
         )}
         {onClose && (
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close agents">
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close agents" tooltip="Close agents">
             <X className="size-4" />
           </Button>
         )}

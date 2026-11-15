@@ -30,7 +30,7 @@ export function FindingsBulkBar({ count, busy, exportPath, onStatus, onDismiss, 
       <Button variant="ghost" size="sm" disabled={busy} onClick={onDismiss}><ShieldOff />Dismiss</Button>
       {onAddToMission ? <Button variant="ghost" size="sm" onClick={onAddToMission}><MessageSquarePlus />{v("Add to {mission}")}</Button> : null}
       <ReportExportControl label="Export" path={exportPath} />
-      <Button variant="ghost" size="icon-sm" aria-label="Clear selection" onClick={onClear}><X /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="Clear selection" tooltip="Clear selection" onClick={onClear}><X /></Button>
     </div>
   );
 }

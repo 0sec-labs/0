@@ -5,6 +5,7 @@ import { cn } from "../lib/utils.js"
 import { useRender } from "@base-ui/react/use-render"
 import { useIntrinsicWidthMotion } from "../motion.js"
 import { Loader } from "./loader.js"
+import { Tooltip } from "./tooltip.js"
 
 /* Variant recipes. Colour arrives through --intent-* variables; the fallback after each comma is the neutral value. */
 const SOLID = "border-[color:var(--intent-border-solid,var(--intent-border,var(--border-2)))] bg-[color:var(--intent-bg,var(--button))] text-[color:var(--intent-text-on-bg,var(--foreground))] [--focus-ring:var(--intent-text-on-bg,var(--ring))] shadow-[inset_0_1px_var(--intent-highlight,var(--highlight-top)),var(--sh-plate)] hover:bg-[color:var(--intent-bg-solid-hover,var(--button-hover))] aria-expanded:bg-[color:var(--intent-bg-solid-hover,var(--button-hover))] active:shadow-none"
@@ -88,6 +89,7 @@ function Button({
   variant = "default",
   size = "default",
   animateWidth = false,
+  tooltip,
   render,
   children,
   ref,
@@ -98,6 +100,8 @@ function Button({
     render?: React.ReactElement
     /** Animate an intrinsic label/content change; ordinary controls remain observer-free. */
     animateWidth?: boolean
+    /** Label shown in the shared tooltip (300ms hover intent, instant between neighbours); use on icon-only buttons that are not menu triggers. */
+    tooltip?: React.ReactNode
   }) {
   // A changed element kind must rebind the observer to the replacement node.
   const motionRef = React.useMemo<React.RefObject<HTMLElement | null>>(() => ({ current: null }), [render?.type])
@@ -115,7 +119,7 @@ function Button({
   }, [ref, motionRef])
   useIntrinsicWidthMotion(motionRef, animateWidth)
 
-  return useRender({
+  const element = useRender({
     defaultTagName: "button",
     render,
     ref: composedRef,
@@ -128,6 +132,7 @@ function Button({
       children,
     },
   })
+  return tooltip ? <Tooltip content={tooltip}>{element}</Tooltip> : element
 }
 
 export { Button, ButtonIcon, buttonVariants }

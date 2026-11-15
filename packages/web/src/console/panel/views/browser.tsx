@@ -109,7 +109,7 @@ function LivePane({
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-0.5">
           {view.liveAvailable && (
-            <Button type="button" variant="ghost" size="icon-xs" aria-label="Reconnect live view" onClick={reconnect}>
+            <Button type="button" variant="ghost" size="icon-xs" aria-label="Reconnect live view" tooltip="Reconnect live view" onClick={reconnect}>
               <RotateCw className="size-3" />
             </Button>
           )}

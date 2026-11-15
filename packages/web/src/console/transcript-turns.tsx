@@ -134,7 +134,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
               )}
               {!synthetic && (turn.user.text || turn.user.attachments?.length) && (
                 <div data-slot="user-message" className="flex min-w-0 flex-col items-end">
-                  <div className="group/rail relative flex min-w-0 max-w-[77%] flex-col items-end in-data-[show-timestamps=true]:mt-6">
+                  <div className="group/rail relative flex min-w-0 max-w-[77%] flex-col items-end pt-7">
                     <MessageToolbar
                       iso={turn.startedAt}
                       text={turn.user.text}

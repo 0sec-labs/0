@@ -172,7 +172,7 @@ export const TurnTimeline = memo(function TurnTimeline({
         .slice(0, lastWork + 1)
         .flatMap((segment, index) => (segment.type === "visual" ? [render(segment, index)] : []))}
       {answer.length > 0 && (
-        <div data-slot="agent-message" className="group/rail relative min-w-0 in-data-[show-timestamps=true]:mt-6">
+        <div data-slot="agent-message" className="group/rail relative min-w-0 pt-7">
           {!streaming && answerText && (
             <MessageToolbar
               iso={turn.endedAt ?? turn.startedAt}

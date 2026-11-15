@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { Check, Copy, Link2, MoreHorizontal, Reply, FileText } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import { plainText, quoteBlock, toolbarActions } from "./transcript-actions";
 import { cn } from "@/lib/utils";
 
@@ -37,8 +38,13 @@ export function DayStamp({ iso }: { iso?: string }) {
   );
 }
 
-const iconButton =
-  "inline-flex size-5 items-center justify-center rounded-[var(--radius-inner,4px)] text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset";
+/** Height reserved above every message for the toolbar, so revealing it never moves or covers text. Matches the bar's h-7. */
+export const MESSAGE_TOOLBAR_GUTTER = "pt-7";
+
+/** Ghost icon button with the shared tooltip; `label` is both the accessible name and the tooltip. */
+function BarButton({ label, ...props }: { label: string } & Omit<ComponentProps<typeof Button>, "aria-label" | "size" | "variant" | "tooltip">) {
+  return <Button type="button" variant="ghost" size="icon-xs" aria-label={label} tooltip={label} className="rounded" {...props} />;
+}
 
 /**
  * Hover/focus toolbar floating above a message: time, Reply, Copy and a More menu.
@@ -82,31 +88,25 @@ export function MessageToolbar({
       data-slot="message-toolbar"
       data-menu-open={menuOpen || undefined}
       className={cn(
-        "absolute -top-[22px] z-10 flex h-7 items-center gap-0.5 rounded-[var(--radius,6px)] border-[0.5px] border-border-2 bg-card px-1 text-xs text-muted-foreground-2 shadow-sm opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 data-[menu-open]:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100 in-data-[show-timestamps=true]:opacity-100",
+        "absolute top-0 z-10 flex h-7 items-center gap-0.5 rounded-[var(--radius,6px)] border-[0.5px] border-border-2 bg-card px-0.5 text-xs text-muted-foreground-2 shadow-sm opacity-0 transition-opacity duration-150 ease-[cubic-bezier(.4,0,.2,1)] group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 data-[menu-open]:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100 in-data-[show-timestamps=true]:opacity-100",
         align === "right" ? "right-0" : "left-0",
       )}
     >
-      {time && <span className="px-1 tabular-nums">{time}</span>}
+      {time && <span className="px-1.5 tabular-nums">{time}</span>}
       {actions.reply && onReply && (
-        <button type="button" aria-label="Reply" title="Reply" onClick={() => onReply(quoteBlock(text))} className={iconButton}>
-          <Reply aria-hidden="true" className="size-3.5" />
-        </button>
+        <BarButton label="Reply" onClick={() => onReply(quoteBlock(text))}>
+          <Reply aria-hidden="true" />
+        </BarButton>
       )}
       {actions.copy && (
-        <button
-          type="button"
-          aria-label={copied ? "Copied" : "Copy message"}
-          title="Copy message"
-          onClick={() => void copy(plainText(text))}
-          className={iconButton}
-        >
-          {copied ? <Check aria-hidden="true" className="size-3.5" /> : <Copy aria-hidden="true" className="size-3.5" />}
-        </button>
+        <BarButton label={copied ? "Copied" : "Copy message"} onClick={() => void copy(plainText(text))}>
+          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        </BarButton>
       )}
       {(actions.copyMarkdown || actions.copyLink) && (
         <DropdownMenu onOpenChange={setMenuOpen}>
-          <DropdownMenu.Trigger render={<button type="button" aria-label="More" title="More" className={iconButton} />}>
-            <MoreHorizontal aria-hidden="true" className="size-3.5" />
+          <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-xs" aria-label="More" className="rounded" />}>
+            <MoreHorizontal aria-hidden="true" />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" sideOffset={4}>
             {actions.copyMarkdown && (
