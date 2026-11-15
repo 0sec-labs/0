@@ -2,7 +2,10 @@ name: "0: Main"
 
 # One required check: `verify`. It aggregates the parallel jobs below and
 # passes only if each one succeeded or was legitimately skipped by `changes`.
-# On main and tags nothing is ever skipped (scripts/ci-changed.sh).
+# Tags never skip anything. On main and branches only a diff that is entirely
+# docs skips the test groups (static still runs: it checks docs and image names);
+# see scripts/ci-changed.sh. The main diff base is the last GREEN Main run, so a
+# cancelled code commit can never hide behind a later docs-only commit.
 # scripts/ci-local.sh replays these jobs (steps are read from this file).
 
 on:
@@ -10,6 +13,8 @@ on:
     # Repository branch pushes are authenticated before code can reach this
     # workflow. Fork PRs retain the protected public-PR policy-only lane.
     branches: ["**"]
+    # A tag run is never path-gated: it is the full gate a release depends on.
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -23,11 +28,13 @@ concurrency:
 
 jobs:
   changes:
-    # Skipped on main/tags: nothing is path-gated there, and a skipped job
-    # resolves instantly without a runner, so dependents do not wait for it.
-    if: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
+    # Skipped on tags: a release tag always runs the whole suite.
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: graphide
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
@@ -37,7 +44,19 @@ jobs:
           fetch-depth: 0
       - id: diff
         name: Select affected groups
-        run: bash scripts/ci-changed.sh "${{ github.event.before }}" | tee -a "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base="$BEFORE"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            # Diff against the last green Main, not the previous commit: a
+            # superseded (cancelled) run must not leave its changes untested.
+            base="$(gh run list --workflow main.yml --branch main --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty' 2>/dev/null || true)"
+            git cat-file -e "${base:-x}^{commit}" 2>/dev/null || base=""
+            [ -n "$base" ] || base="$(git rev-parse HEAD)"   # unknown: empty diff makes the script run everything
+          fi
+          bash scripts/ci-changed.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
   static:
     name: static checks
@@ -74,7 +93,7 @@ jobs:
   engine:
     name: engine and bench tests
     needs: changes
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.engine == 'true')) }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.engine == 'true')) }}
     runs-on: graphide
     timeout-minutes: 30
     steps:
@@ -100,7 +119,7 @@ jobs:
   browser:
     name: dashboard and browser checks
     needs: changes
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 20
     steps:
@@ -130,7 +149,7 @@ jobs:
   smoke:
     name: built CLI smoke
     needs: changes
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 20
     steps:
@@ -151,7 +170,7 @@ jobs:
   unit:
     name: package and script tests
     needs: changes
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 30
     steps:
