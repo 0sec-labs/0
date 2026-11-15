@@ -105,6 +105,28 @@ jobs:
             echo ":latest HELD (CI head $CI_SHA is not main tip $TIP_SHA) — stamping :sha only"
           fi
 
+      # Semver tags (v0.30.1, 0.30) are published only for a commit that carries the
+      # matching release tag; a plain main build never moves them. The version comes
+      # from the checked-out package.json, the tag is looked up on the remote.
+      - name: Resolve semver tags
+        id: semver
+        run: |
+          set -euo pipefail
+          CI_SHA="${{ github.event.workflow_run.head_sha }}"
+          VERSION="$(node -p "require('./package.json').version")"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          TAG_SHA="$(git ls-remote origin "refs/tags/v${VERSION}^{}" "refs/tags/v${VERSION}" | tail -n1 | cut -f1)"
+          if [ "$TAG_SHA" = "$CI_SHA" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "No v${VERSION} tag on ${CI_SHA}: semver tags not published."
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -118,6 +140,8 @@ jobs:
           #   - sha          (every trusted-main build)       abc1234
           #   - branch ref   (trusted-main build)             main
           #   - :latest      (tip-gated — see eligibility)    latest
+          #   - semver       (only when the commit has the    v0.30.1, 0.30
+          #                   matching v<version> git tag)
           # Public version-tag publishing is a separately reviewed release
           # path; a tag push must never execute arbitrary source on the
           # credentialed publisher.
@@ -125,7 +149,10 @@ jobs:
             type=raw,value=${{ steps.latest_eligible.outputs.short_sha }}
             type=ref,event=branch
             type=raw,value=latest,enable=${{ steps.latest_eligible.outputs.enabled }}
+            type=raw,value=v${{ steps.semver.outputs.version }},enable=${{ steps.semver.outputs.enabled }}
+            type=raw,value=${{ steps.semver.outputs.minor }},enable=${{ steps.semver.outputs.enabled }}
           labels: |
+            org.opencontainers.image.version=${{ steps.semver.outputs.version || steps.latest_eligible.outputs.short_sha }}
             org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
             org.opencontainers.image.title=0
             org.opencontainers.image.description=Open-source security harness that fixes what it finds.

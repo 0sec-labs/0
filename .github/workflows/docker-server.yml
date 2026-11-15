@@ -1,0 +1,100 @@
+name: "0: Docker server smoke"
+
+# Builds the image and checks the experimental single-node server story end to end:
+# health and readiness, an anonymous page that never carries the control token,
+# bad Host => 403, sign-in with the access token, CSRF refusal, and a clean SIGTERM.
+# Push events cover trusted repository branches. Do not add pull_request_target
+# checkout/execution: fork code remains subject to the separate public-PR policy.
+on:
+  push:
+    paths:
+      - '.github/workflows/docker-server.yml'
+      - 'scripts/docker/**'
+      - 'scripts/smoke-server-mode.mjs'
+      - 'deploy/compose/**'
+      - 'packages/cli/src/web/server-mode*.ts'
+      - 'packages/cli/src/web/dashboard-http.ts'
+      - 'packages/cli/src/commands/dashboard.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Image serves the web console safely
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+      DOCKER_BUILD_SUMMARY: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Validate the compose file
+        run: |
+          set -euo pipefail
+          cp deploy/compose/.env.example deploy/compose/.env
+          docker compose -f deploy/compose/docker-compose.yml config -q
+          ZERO_DOMAIN=0.example.com docker compose -f deploy/compose/docker-compose.yml --profile proxy config -q
+          rm deploy/compose/.env
+      - uses: docker/setup-buildx-action@v4
+        id: buildx
+      - name: Build the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./scripts/docker/Dockerfile
+          platforms: linux/amd64
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          tags: zero-server-smoke:ci
+          cache-from: |
+            type=gha,scope=0
+            type=gha,scope=docker-server
+          cache-to: type=gha,mode=max,scope=docker-server
+      - name: Tools the server story depends on
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint ssh zero-server-smoke:ci -V
+          docker run --rm --entrypoint scp zero-server-smoke:ci -h 2>&1 | head -1 || true
+          docker run --rm --entrypoint gh zero-server-smoke:ci --version
+          docker run --rm --entrypoint git zero-server-smoke:ci --version
+          # one-shot use still works: arguments replace the default command
+          docker run --rm zero-server-smoke:ci --help >/dev/null
+      - name: Start like the compose service does
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -base64 32)"
+          echo "::add-mask::$TOKEN"
+          echo "ZERO_TEST_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          docker volume create zero-smoke-data >/dev/null
+          docker run -d --name zero-smoke -p 127.0.0.1:48123:48123 -v zero-smoke-data:/data \
+            -e ZERO_ACCESS_TOKEN="$TOKEN" -e ZERO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e ZERO_TRUSTED_PROXY=172.17.0.0/16 -e ZERO_NO_TELEMETRY=1 \
+            zero-server-smoke:ci web --host 0.0.0.0 --server-mode
+      - name: Probe health, anonymous access, Host rules and sign-in
+        run: node scripts/smoke-server-mode.mjs --port 48123 --host-name localhost --token "$ZERO_TEST_TOKEN"
+      - name: Container health status and logs
+        if: always()
+        run: |
+          docker inspect --format 'health={{.State.Health.Status}}' zero-smoke || true
+          if docker logs zero-smoke 2>&1 | grep -qF "$ZERO_TEST_TOKEN"; then echo "::error::access token found in container logs"; exit 1; fi
+      - name: SIGTERM drains and exits 0
+        run: |
+          set -euo pipefail
+          docker stop --time 30 zero-smoke >/dev/null
+          code="$(docker inspect --format '{{.State.ExitCode}}' zero-smoke)"
+          echo "exit code: $code"
+          test "$code" = "0"
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs zero-smoke 2>&1 | sed "s|$ZERO_TEST_TOKEN|[token]|g" | tail -80 || true

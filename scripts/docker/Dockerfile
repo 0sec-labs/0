@@ -182,9 +182,35 @@ COPY --from=builder /app/dist /app/dist
 RUN ln -s /app/dist/0.js /usr/local/bin/0 \
     && chmod +x /app/dist/0.js
 
-# App code remains root-owned; only the workspace is writable by the worker.
+# tini is PID 1 so SIGTERM reaches `0 web` (graceful drain) and zombies are reaped.
+# openssh-client: `0 computers deploy --ssh` runs ssh and scp (host key checking stays on).
+RUN apt-get update && apt-get install -y --no-install-recommends tini openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# State for the web console: HOME=/data puts everything under /data/.0 (database,
+# credentials, access token). Created and owned before VOLUME so a fresh named
+# volume inherits uid 1000. One process owns this volume: never mount it twice.
+RUN install -d -o ubuntu -g ubuntu -m 0700 /data
+ENV HOME=/data \
+    ZERO_ALLOWED_HOSTS=localhost,127.0.0.1
+
+LABEL org.opencontainers.image.title="0" \
+      org.opencontainers.image.description="Open-source security harness that fixes what it finds." \
+      org.opencontainers.image.source="https://github.com/0sec-labs/0security" \
+      org.opencontainers.image.documentation="https://0security.dev/docs/docker" \
+      org.opencontainers.image.licenses="MIT OR Apache-2.0" \
+      org.opencontainers.image.vendor="0sec-labs"
+
+# App code remains root-owned; only the workspace and /data are writable by the worker.
 USER ubuntu
 WORKDIR /work
 
-ENTRYPOINT ["node", "/app/dist/0.js"]
-CMD ["--help"]
+# Web console (experimental, single node). The port is only published when you ask for it.
+EXPOSE 48123
+VOLUME /data
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:48123/healthz >/dev/null || exit 1
+
+# `docker run image scan ...` still works: the arguments replace CMD.
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/dist/0.js"]
+CMD ["web", "--host", "0.0.0.0", "--server-mode"]

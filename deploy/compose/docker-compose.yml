@@ -1,0 +1,89 @@
+# 0 web console on one server. EXPERIMENTAL, single node.
+#
+#   cp .env.example .env        # set ZERO_ACCESS_TOKEN (openssl rand -base64 32) and your host name
+#   docker compose up -d                       # console on http://127.0.0.1:48123 (this machine only)
+#   docker compose --profile proxy up -d       # + Caddy with automatic HTTPS on ports 80/443
+#
+# One replica, one volume: a single process owns the SQLite database in /data.
+# Never scale this service above 1 and never mount the volume into a second container.
+# There is no high availability. See docs/src/content/docs/docker.md.
+name: zero
+
+services:
+  zero:
+    image: ghcr.io/0sec-labs/0security:${ZERO_IMAGE_TAG:-latest}
+    # `web --host 0.0.0.0 --server-mode` is the image default; spelled out so the file is self-explanatory.
+    command: ["web", "--host", "0.0.0.0", "--server-mode"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Only these Host names are served (DNS rebinding protection). Set to your domain behind the proxy.
+      ZERO_ALLOWED_HOSTS: ${ZERO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # Trust X-Forwarded-* only from the proxy network below.
+      ZERO_TRUSTED_PROXY: ${ZERO_TRUSTED_PROXY:-172.30.0.0/24}
+      ZERO_PUBLIC_URL: ${ZERO_PUBLIC_URL:-}
+      # SSH_AUTH_SOCK: /ssh-agent
+    # Published on loopback only. The proxy profile is the supported way to expose it.
+    ports:
+      - "127.0.0.1:${ZERO_PORT:-48123}:48123"
+    volumes:
+      - zero-data:/data
+      # Remote computers over SSH (see the Docker page). Dedicated key owned by uid 1000, mode 600,
+      # and a known_hosts whose fingerprints you verified. Host key checking stays on.
+      # - ./secrets/zero_ed25519:/home/ubuntu/.ssh/id_ed25519:ro
+      # - ./secrets/known_hosts:/home/ubuntu/.ssh/known_hosts:ro
+      # Or forward an agent instead of a key file (Linux; the socket must be usable by uid 1000):
+      # - ${SSH_AUTH_SOCK}:/ssh-agent
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:48123/readyz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # Drain deadline (20 s by default) plus margin; docker's default of 10 s would cut it short.
+    stop_grace_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    # Example sizing, minimum 2 vCPU / 4 GB plus headroom per concurrent Thread. Uncomment and adjust.
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "4"
+    #       memory: 8g
+    #     reservations:
+    #       memory: 4g
+    networks:
+      zero-net:
+        ipv4_address: 172.30.0.10
+
+  # TLS termination with automatic HTTPS (Let's Encrypt). Needs DNS for ZERO_DOMAIN pointing here and ports 80/443 open.
+  proxy:
+    profiles: ["proxy"]
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      zero:
+        condition: service_healthy
+    environment:
+      ZERO_DOMAIN: ${ZERO_DOMAIN:?set ZERO_DOMAIN in .env to use the proxy profile}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      zero-net:
+        ipv4_address: 172.30.0.2
+
+volumes:
+  zero-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  zero-net:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

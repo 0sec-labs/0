@@ -1,0 +1,6 @@
+# Caddy terminates TLS and forwards to the console. It sets X-Forwarded-For/Proto/Host itself and
+# replaces any value a client sent, which is what --trusted-proxy relies on.
+{$ZERO_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy zero:48123
+}
