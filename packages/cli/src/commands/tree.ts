@@ -73,6 +73,8 @@ import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
 import { registerCampaignCommand } from "./campaign.js";
+import { registerSentinelsCommand } from "./sentinels.js";
+import { registerAutomationManageCommands } from "./automation-manage.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -113,6 +115,8 @@ export function registerCommandTree(program: Command): void {
   registerFindingsCommand(program);
   nest(program, "findings", [registerTriageCommand]);
   registerWorkflowCommand(program); // also registers `sessions` and `runs`
+  nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
+  registerSentinelsCommand(program);
   nest(program, "runs", [
     registerHistoryCommand, registerReplayCommand,
     (parent) => registerResumeCommand(parent, "relaunch"),

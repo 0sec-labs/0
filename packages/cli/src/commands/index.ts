@@ -59,6 +59,8 @@ export { registerTeamCommand } from "./team.js";
 export { registerApiCommand } from "./api.js";
 export { registerRoutingCommand } from "./routing.js";
 export { registerCampaignCommand } from "./campaign.js";
+export { registerSentinelsCommand } from "./sentinels.js";
+export { registerAutomationManageCommands } from "./automation-manage.js";
 
 export { registerReportsCommand } from "./reports.js";
 export { registerCommandTree } from "./tree.js";
