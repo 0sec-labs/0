@@ -144,7 +144,7 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Connections** | Provider keys and sign-ins. See [Models and keys](/models/). |
 | | **Models** | The default model and per-role models. |
 | Workspace | **Workspace** | The workspace folder, target and permissions. |
-| | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this engine opened. |
+| | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
 | | **Usage** | Estimated spend and tokens by model and by mission. |
 | | **Audit log** | Approvals, denials, settings, plugin and connection changes. Searchable, with JSON export. |
 | | **Diagnostics** | Checks that the engine, provider and tools work. |
@@ -182,7 +182,17 @@ Turn on **Notify me** to get browser notifications when a mission finishes, need
 
 ### Git and pull requests
 
-This page lists the repositories the signed-in `gh` account can reach and the sentinels that use them. It needs the GitHub CLI on the engine computer and is cached for five minutes. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
+The **GitHub** card shows who is connected (`Connected as <user> via GitHub CLI`), what is missing (`Needs permissions: repo`) or `Not connected`, and the computer it applies to. Everything runs on that computer through the GitHub CLI (`gh`). 0 never reads, stores or sends a token to the browser.
+
+Connect with one of these, in this order:
+
+1. **GitHub CLI login.** If `gh auth status` is already signed in on the computer, 0 uses it. A login without the `repo` scope shows `gh auth refresh -s repo` and an **Update permissions** button.
+2. **Sign in with GitHub.** Runs `gh auth login --web --scopes repo,read:org` on the computer, shows the one-time code and an **Open GitHub** button, and ends after five minutes or on **Cancel**. If `gh` is missing the card shows `brew install gh` and a link.
+3. **Fine-grained token.** **Create token on GitHub** opens a prefilled token page (contents and pull requests: write, metadata: read). Paste it; GitHub CLI checks it before it is saved, and the expiry is shown when GitHub reports one.
+
+**Disconnect** signs the GitHub CLI out on that computer. A login from `GH_TOKEN` or `GITHUB_TOKEN` is shown as `via token` and has to be unset in the environment.
+
+The page also lists the repositories the account can reach (cached for five minutes) and the sentinels that use them. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
 
 ## Run headless
 

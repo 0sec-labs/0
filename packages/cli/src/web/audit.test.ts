@@ -28,6 +28,10 @@ describe("console audit wiring", () => {
   it("skips no-op settings writes, names partial resets and records disconnects and check changes", () => {
     expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme", "density"] })).toMatchObject({ action: "settings.reset", subject: "2 settings", detail: { keys: ["theme", "density"] } });
     expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme"] })).toMatchObject({ subject: "theme" });
+    expect(describeConsoleAudit("github", "DELETE", undefined)).toEqual({ action: "github.disconnect", subject: "github" });
+    expect(describeConsoleAudit("github/device-auth", "POST", { mode: "refresh" })).toMatchObject({ action: "github.auth.start", detail: { mode: "refresh" } });
+    // A pasted token is never part of the audit entry.
+    expect(JSON.stringify(describeConsoleAudit("github/connect", "POST", { token: "ghp_secret" }))).not.toContain("ghp_secret");
     expect(describeConsoleAudit("workflow-definitions", "POST", { name: "Nightly" })).toMatchObject({ action: "automation.create", subject: "Nightly" });
     expect(describeConsoleAudit("workflow-definitions/w1", "DELETE", undefined)).toMatchObject({ action: "automation.delete", subject: "w1" });
     expect(describeConsoleAudit("workflow-definitions/w1", "PATCH", {})).toBeNull();

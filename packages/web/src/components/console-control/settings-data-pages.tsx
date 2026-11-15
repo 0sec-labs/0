@@ -10,7 +10,7 @@ import { CapyArrowUpRightIcon } from "@/ui/icons/capy";
 import type { DashboardResponse } from "@/types";
 import type { Workflow } from "./contracts";
 import { RepositoriesSettings } from "./repositories-control";
-import { GitHubPublicationControl, useGitHubPublicationAccount } from "./github-publication-control";
+import { GitHubPublicationControl } from "./github-publication-control";
 import { SettingsRow, SettingsSection, SettingsValueRow } from "./settings-section";
 import { pullRequestRows, safePullRequestUrl } from "./settings-data-model";
 
@@ -42,16 +42,10 @@ function useRecentFixes(dashboard: DashboardResponse | undefined) {
 
 /** GitHub connection, the repositories it can reach, and the pull requests this computer has opened. */
 export function GitSettings() {
-  const github = useGitHubPublicationAccount();
   const dashboard = useDashboard();
   const { fixes, loading } = useRecentFixes(dashboard.data);
   const prs = pullRequestRows(fixes);
   return <div className="flex flex-col gap-10">
-    {github.data?.connected && <SettingsSection id="settings-git-connection" title="Connected account" description="A published fix goes to a new branch and opens a pull request against the repository's current branch.">
-      <SettingsValueRow id="setting-git-status" label="Connection" value="Connected" />
-      {github.data.account && <SettingsValueRow id="setting-git-account" label="Account" value={github.data.account} />}
-      {github.data.scopes.length > 0 && <SettingsValueRow id="setting-git-scopes" label="Permissions" value={github.data.scopes.join(", ")} />}
-    </SettingsSection>}
     <GitHubPublicationControl secondary />
     <RepositoriesSettings embedded />
     <SettingsSection id="setting-git-prs" title="Pull requests opened by 0" description="Opened from fixes since this computer started. Whether they are merged is not tracked here.">

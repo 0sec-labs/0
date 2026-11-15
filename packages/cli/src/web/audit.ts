@@ -74,7 +74,8 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   }
   if (path.startsWith("instructions/")) return { action: "instructions.edit", subject: decodeURIComponent(path.slice("instructions/".length)), detail: { key: decodeURIComponent(path.slice("instructions/".length)) } };
   if (path === "github/connect") return { action: "github.connect", subject: "github" };
-  if (path === "github/device-auth") return { action: method === "DELETE" ? "github.auth.cancel" : "github.auth.start", subject: "github" };
+  if (path === "github" && method === "DELETE") return { action: "github.disconnect", subject: "github" };
+  if (path === "github/device-auth") return { action: method === "DELETE" ? "github.auth.cancel" : "github.auth.start", subject: "github", ...(method === "POST" && b.mode === "refresh" ? { detail: { mode: "refresh" } } : {}) };
   if ((m = /^self-edit\/(start|stop|gates|apply)$/.exec(path))) return { action: `self-edit.${m[1] === "gates" ? "gate" : m[1]}`, subject: "self-edit preview", detail: { count: b.discard === true ? 1 : undefined } };
   if (path === "workflow-definitions" && method === "POST") return { action: "automation.create", subject: String(b.name ?? "automation") };
   if ((m = /^workflow-definitions\/([^/]+)(?:\/(run|rollback))?$/.exec(path))) {

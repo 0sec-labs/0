@@ -31,9 +31,10 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "PUT", path: "connections/openai%3Adefault/models", engine: false, owner: true, why: "model gating" },
   { method: "POST", path: "providers/openai/device-auth", engine: false, owner: true, why: "starts credential flow" },
   { method: "DELETE", path: "providers/openai/device-auth", engine: false, owner: true, why: "cancels credential flow" },
-  { method: "POST", path: "github/connect", engine: false, why: "GitHub credential" },
-  { method: "POST", path: "github/device-auth", engine: false, why: "GitHub credential flow" },
-  { method: "DELETE", path: "github/device-auth", engine: false, why: "GitHub credential flow" },
+  { method: "POST", path: "github/connect", engine: false, owner: true, why: "GitHub credential" },
+  { method: "POST", path: "github/device-auth", engine: false, owner: true, why: "GitHub credential flow" },
+  { method: "DELETE", path: "github/device-auth", engine: false, owner: true, why: "GitHub credential flow" },
+  { method: "DELETE", path: "github", engine: false, owner: true, why: "signs the GitHub CLI out on this computer" },
   { method: "POST", path: "service-plugins/slack/connect", engine: false, owner: true, why: "stores service credentials" },
   { method: "PATCH", path: "service-plugins/slack", engine: false, owner: true, why: "enables service plugin" },
   { method: "DELETE", path: "service-plugins/slack", engine: false, owner: true, why: "forgets credentials" },
@@ -203,5 +204,19 @@ describe("engine bearer on routes outside /api/console", () => {
     // Every classified mutating family has at least one row in the table (or is read-only).
     const READ_ONLY = new Set(["dashboard", "events", "v1", "work", "backend", "console"]);
     for (const name of classified) if (!READ_ONLY.has(name)) expect(API_TABLE.some(row => row.path.startsWith(`/api/${name}`)) || READS.some(path => path.startsWith(`/api/${name}`)), name).toBe(true);
+  });
+});
+
+describe("GitHub connection routes", () => {
+  const engine = { engineRequest: true, teamEnabled: false };
+  const member = { engineRequest: false, teamEnabled: true, role: "member" };
+  it("keeps every GitHub mutation browser-only and owner-only in team mode, and the read open", () => {
+    for (const [method, path] of [["POST", "github/connect"], ["POST", "github/device-auth"], ["DELETE", "github/device-auth"], ["DELETE", "github"]] as const) {
+      expect(privilegedRouteDenial(`/api/console/${path}`, method, engine), `${method} ${path}`).toMatchObject({ status: 403, data: { code: "browser_only" } });
+      expect(privilegedRouteDenial(`/api/console/${path}`, method, member), `${method} ${path}`).toMatchObject({ status: 403, data: { code: "owner_required" } });
+      expect(privilegedRouteDenial(`/api/console/${path}`, method, { engineRequest: false, teamEnabled: true, role: "owner" })).toBeNull();
+    }
+    expect(privilegedRouteDenial("/api/console/github", "GET", engine)).toBeNull();
+    expect(privilegedRouteDenial("/api/console/github", "GET", member)).toBeNull();
   });
 });
