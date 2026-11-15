@@ -44,7 +44,9 @@ import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
 import { frameProtectionHeaders } from "../web/self-edit-preview.js";
 import { isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
-import { auditDenial, configureAudit } from "../web/audit.js";
+import { audit, auditDenial, configureAudit } from "../web/audit.js";
+import { ServerModeGuard, handleHealth, isHealthRequest, isWildcardHost, resolveAccessSecret, splitList, validateAccessToken, type ServerPhase, type ServerRequestContext } from "../web/server-mode.js";
+import { listAudit } from "@0/engine/storage";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -62,6 +64,12 @@ type DashboardOptions = {
   engineAllowApply?: boolean;
   engineTimeCap?: string;
   engineCostCap?: string;
+  serverMode?: boolean;
+  allowedHost?: string[];
+  trustedProxy?: string[];
+  publicUrl?: string;
+  accessTokenEnv?: string;
+  shutdownTimeout?: string;
   // Commander 12 maps `--no-open` to `opts.open = false` (not `opts.noOpen = true`).
   // See: https://github.com/tj/commander.js/blob/master/Readme.md#other-option-types-negatable-boolean-and-booleanvalue
   open?: boolean;
@@ -92,20 +100,36 @@ export function registerDashboardCommand(program: Command): void {
     .option("--engine-allow-apply", "Admit explicitly approved patch application in persistent workflow calls")
     .option("--engine-time-cap <ms>", "Server workflow deadline ceiling (default 600000 ms)")
     .option("--engine-cost-cap <usd>", "Server workflow estimated cost ceiling (default $5)")
+    .option("--server-mode", "Serve the console to a network behind a TLS proxy: requires sign-in, an allowed-host list and a single node (off by default)")
+    .option("--allowed-host <host...>", "Server mode: accepted Host header names (default: only the bind host); also ZERO_ALLOWED_HOSTS")
+    .option("--trusted-proxy <cidr...>", "Server mode: proxy addresses or CIDRs whose X-Forwarded-* headers are trusted; also ZERO_TRUSTED_PROXY")
+    .option("--public-url <url>", "Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL")
+    .option("--access-token-env <name>", "Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated")
+    .option("--shutdown-timeout <seconds>", "Server mode: seconds to finish in-flight requests on SIGTERM (default 20)")
     .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
     .action(async (opts: DashboardOptions) => {
+      const serverMode = opts.serverMode === true || process.env.ZERO_SERVER_MODE === "1";
       const host = opts.host?.trim() || "127.0.0.1";
       const port = parseInt(opts.port ?? "48123", 10);
       if (!Number.isInteger(port) || port < 0 || port > 65535) {
         throw new Error(`Invalid port: ${opts.port ?? "48123"}`);
       }
-      if (!isLoopbackDashboardHost(host)) {
+      if (!serverMode && !isLoopbackDashboardHost(host)) {
         throw new Error(
-          "Dashboard only binds loopback addresses (127.0.0.0/8 or ::1). Use an SSH tunnel or an authenticated reverse proxy bound to local loopback for remote access.",
+          "Dashboard only binds loopback addresses (127.0.0.0/8 or ::1). Use an SSH tunnel or an authenticated reverse proxy bound to local loopback for remote access, or run a single-node server with --server-mode (see the Docker page).",
         );
       }
-      let origin = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
+      if (serverMode && opts.devUrl) throw new Error("--server-mode cannot be combined with --dev-url.");
+      const shutdownSeconds = opts.shutdownTimeout === undefined ? 20 : Number(opts.shutdownTimeout);
+      if (!Number.isFinite(shutdownSeconds) || shutdownSeconds < 1 || shutdownSeconds > 600) throw new Error("--shutdown-timeout must be between 1 and 600 seconds.");
+      const allowedHosts = splitList(opts.allowedHost, process.env.ZERO_ALLOWED_HOSTS);
+      if (serverMode && allowedHosts.length === 0 && !isWildcardHost(host)) allowedHosts.push(host.replace(/^\[|\]$/g, "").toLowerCase());
+      const trustedProxies = splitList(opts.trustedProxy, process.env.ZERO_TRUSTED_PROXY);
+      const publicUrl = opts.publicUrl ?? process.env.ZERO_PUBLIC_URL;
+      // A server-mode wildcard bind is reached locally (engine discovery, URL base) through loopback.
+      const originHost = serverMode && !isLoopbackDashboardHost(host) ? "127.0.0.1" : host;
+      let origin = `http://${originHost.includes(":") ? `[${originHost}]` : originHost}:${port}`;
       let devUrl: URL | undefined;
       if (opts.devUrl) {
         devUrl = new URL(opts.devUrl);
@@ -116,7 +140,7 @@ export function registerDashboardCommand(program: Command): void {
       }
 
 
-      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
+      if (!serverMode && port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
         console.log(chalk.gray(`  0 web is already running: ${origin}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
         if (opts.open !== false) openBrowser(`${origin}/chats`);
@@ -131,7 +155,29 @@ export function registerDashboardCommand(program: Command): void {
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
-      let teamAuth = new TeamAuth({ configPath: teamConfigPath, origin });
+      const publicOrigin = serverMode && publicUrl ? new URL(publicUrl).origin : origin;
+      let teamAuth = new TeamAuth({ configPath: teamConfigPath, origin: publicOrigin });
+      let serverGuard: ServerModeGuard | undefined;
+      let generatedAccess: { path?: string; token: string } | undefined;
+      if (serverMode) {
+        const configured = validateAccessToken(process.env[opts.accessTokenEnv ?? "ZERO_ACCESS_TOKEN"], opts.accessTokenEnv ?? "ZERO_ACCESS_TOKEN");
+        if (opts.accessTokenEnv && !process.env[opts.accessTokenEnv]) throw new Error(`--access-token-env ${opts.accessTokenEnv} is not set.`);
+        // Team accounts (or an external identity provider) are the credential when configured; otherwise a strong shared access token.
+        let accessToken: string | undefined;
+        if (!teamAuth.enabled) {
+          const secret = resolveAccessSecret({ configured, stateDir: homeStateDir() });
+          accessToken = secret.token;
+          if (secret.generated) generatedAccess = secret;
+        } else if (configured) console.error(chalk.yellow("  Team sign-in is configured, so the access token is ignored."));
+        serverGuard = new ServerModeGuard({ allowedHosts, trustedProxies, publicUrl, accessToken });
+      }
+      let phase: ServerPhase = "starting";
+      let dbProbe = { at: 0, ok: false };
+      const dbOk = () => {
+        if (Date.now() - dbProbe.at < 5_000) return dbProbe.ok;
+        let ok = true; try { listAudit({ limit: 1 }, { dbPath: opts.dbPath ?? undefined }); } catch { ok = false; }
+        dbProbe = { at: Date.now(), ok }; return ok;
+      };
       let teamDirectory = teamAuth.enabled ? join(homeStateDir(), "teams", createHash("sha256").update(teamAuth.workspaceId!).digest("hex")) : undefined;
       if (teamDirectory) { mkdirSync(teamDirectory, { recursive: true, mode: 0o700 }); if (!explicitTeamConfig) opts.dbPath = join(teamDirectory, "data.db"); else opts.dbPath ??= join(teamDirectory, "data.db"); }
       let collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
@@ -219,16 +265,38 @@ export function registerDashboardCommand(program: Command): void {
 
         const server = createServer(async (req, res) => {
           activeResponses.add(res); const releaseResponse = () => activeResponses.delete(res); res.once("close", releaseResponse); res.once("finish", releaseResponse);
-          try { authorizeWebRequest(req, origin); }
+          // Orchestrator probes carry arbitrary Host values and read nothing but a status word.
+          if (serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk }); return; }
+          let serverContext: ServerRequestContext | undefined;
+          try { if (serverGuard) serverContext = serverGuard.authorize(req); else authorizeWebRequest(req, origin); }
           catch (error) {
+            if (serverGuard) audit({ actor: "anonymous", action: "access.host_denied", subject: (req.url ?? "/").split("?")[0] ?? "/", outcome: "denied", detail: { reason: "host_or_origin", status: error instanceof WebRequestError ? error.statusCode : 403, method: req.method ?? "GET", client: req.socket.remoteAddress } });
             json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
             return;
           }
+          if (!serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk }); return; }
           let requestUrl = new URL(req.url ?? "/", origin);
           const requestId = BackendRequestIdSchema.safeParse(req.headers["x-0-request-id"]);
           res.setHeader("X-0-Request-ID", requestId.success ? requestId.data : randomUUID());
 
           try {
+            if (serverGuard && serverContext) {
+              if (await serverGuard.handleAccessRoute(req, res, requestUrl.pathname, serverContext, teamAuth, () => readJson(req, 16_384))) return;
+              const hasBearer = typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ");
+              if (!serverGuard.isAuthenticated(req, teamAuth)) {
+                const api = requestUrl.pathname.startsWith("/api/");
+                const sso = req.method === "GET" && (requestUrl.pathname === "/api/team/auth/sso" || requestUrl.pathname === "/api/team/auth/callback");
+                if (api && !sso && !hasBearer) { serverGuard.denyAnonymous(req, res, serverContext); return; }
+                if (!api) {
+                  if (req.method !== "GET" && req.method !== "HEAD") { serverGuard.denyAnonymous(req, res, serverContext); return; }
+                  if (STATIC_ASSET_EXTENSION.test(extname(requestUrl.pathname)) || requestUrl.pathname.startsWith("/assets/")) { json(res, 401, { code: "access_required", error: "Sign in to use this console." }); return; }
+                  serverGuard.sendLoginPage(req, res, serverContext, teamAuth); return;
+                }
+              } else if (requestUrl.pathname.startsWith("/api/") && !hasBearer) {
+                const refusal = serverGuard.csrfDenial(req, serverContext);
+                if (refusal) { json(res, 403, { code: "csrf", error: refusal }); return; }
+              }
+            }
             if (requestUrl.pathname.startsWith("/api/")) {
               const findingsCredential = findingsAccess.authenticate(req, requestUrl);
               if (requestUrl.pathname === "/api/v1/findings" || requestUrl.pathname.startsWith("/api/v1/findings/")) {
@@ -534,7 +602,7 @@ export function registerDashboardCommand(program: Command): void {
         const onListening = () => {
           const address = server.address();
           if (address && typeof address !== "string") {
-            origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
+            origin = `http://${originHost.includes(":") ? `[${originHost}]` : originHost}:${address.port}`;
           }
           const url = origin;
           try {
@@ -545,10 +613,21 @@ export function registerDashboardCommand(program: Command): void {
             return;
           }
           console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
-          console.log(chalk.gray(`  ${url}`));
-          if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
+          console.log(chalk.gray(`  ${serverMode ? publicUrl || `http://${host.includes(":") ? `[${host}]` : host}:${address && typeof address !== "string" ? address.port : port}` : url}`));
+          if (serverGuard) {
+            console.log(chalk.gray(`  Server mode: single node, one process owns the database. Allowed hosts: ${allowedHosts.join(", ") || publicUrl}`));
+            if (generatedAccess) {
+              console.log(chalk.yellow.bold("  Access token (shown once; stored 0600 at " + (generatedAccess.path ?? "the state directory") + "):"));
+              console.log(`  ${generatedAccess.token}`);
+            }
+            if (!serverGuard.trustsProxy && !isLoopbackDashboardHost(host)) {
+              console.error(chalk.red.bold("  WARNING: listening on a network address without a trusted TLS proxy. Plain HTTP exposes the access token and the session cookie. Put a TLS-terminating proxy in front and pass --trusted-proxy and --public-url, or keep this port private."));
+            }
+          }
+          phase = "ready";
+          if (opts.readyJson || serverMode) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: serverMode && publicUrl ? publicUrl : url, ...(serverMode ? { mode: "server" } : {}) })}`);
           console.log(chalk.gray("  Ctrl+C to stop"));
-          if (opts.open !== false) openBrowser(`${url}/chats`);
+          if (opts.open !== false && !serverMode) openBrowser(`${url}/chats`);
         };
         server.listen(port, host, onListening);
 
@@ -556,6 +635,19 @@ export function registerDashboardCommand(program: Command): void {
         const shutdown = () => {
           if (shuttingDown) return;
           shuttingDown = true;
+          phase = "draining";
+          // Stop accepting, end long-lived streams, let ordinary requests finish within the deadline, then dispose and exit 0.
+          const drainMs = shutdownSeconds * 1000;
+          const failsafe = setTimeout(() => { console.error("0 web: shutdown deadline exceeded; exiting."); process.exit(1); }, drainMs + 10_000); failsafe.unref();
+          const closed = new Promise<void>(resolveClosed => server.close(() => resolveClosed()));
+          server.closeIdleConnections();
+          for (const response of activeResponses) if (String(response.getHeader("content-type") ?? "").includes("text/event-stream")) response.end();
+          const drained = new Promise<void>(resolveDrain => {
+            const deadline = Date.now() + drainMs;
+            const poll = setInterval(() => { server.closeIdleConnections(); if (activeResponses.size === 0 || Date.now() >= deadline) { clearInterval(poll); resolveDrain(); } }, 100);
+            poll.unref?.();
+          });
+          void drained.then(() => {
           stopHostReconnect?.(); hostRepairAbort.abort();
           services.remoteProviderRelays.dispose();
           void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => triggers.dispose()).then(() => sentinels.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
@@ -563,11 +655,12 @@ export function registerDashboardCommand(program: Command): void {
             closeSharedDbs();
             github.dispose();
             for (const response of activeResponses) response.end();
-            server.close(() => {
+            void closed.then(() => {
               cleanupDashboardAssets();
               process.exit(0);
             });
             server.closeAllConnections();
+          });
           });
         };
         process.once("SIGINT", shutdown);

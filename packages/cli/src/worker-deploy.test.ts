@@ -102,3 +102,11 @@ describe("worker deployment assets", () => {
     for (const enginePort of [0, 65536, 1.5]) expect(() => validateWorkerOptions({ ssh: "worker", enginePort })).toThrow("enginePort");
   });
 });
+
+describe("assertSshClient", () => {
+  it("explains how to get ssh when it is missing", async () => {
+    const { assertSshClient } = await import("./worker-deploy.js");
+    expect(() => assertSshClient(command => (command === "ssh" ? { error: Object.assign(new Error("spawn ssh ENOENT"), { code: "ENOENT" }) } : {}))).toThrow(/OpenSSH client.*Docker image/s);
+    expect(() => assertSshClient(() => ({}))).not.toThrow();
+  });
+});

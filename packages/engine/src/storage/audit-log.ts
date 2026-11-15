@@ -16,7 +16,7 @@ export interface AuditTarget { dbPath?: string; /** Row cap override (tests). */
 export const AUDIT_DETAIL_KEYS: ReadonlySet<string> = new Set([
   "key", "keys", "old", "new", "scope", "enabled", "approved", "decision", "fingerprint", "name", "transport", "envKeys", "headerKeys",
   "callerKind", "route", "method", "status", "code", "kind", "id", "sentinelId", "triggerId", "trigger", "reason", "role", "autonomy",
-  "seed", "preset", "count", "source", "repo", "sessionId", "decisionId", "path", "version",
+  "seed", "preset", "count", "source", "repo", "sessionId", "decisionId", "path", "version", "client",
 ]);
 const SECRET_KEY = /secret|token|passw|api[-_]?key|authorization|credential|private[-_]?key|cookie|bearer|session[-_]?key/i;
 const SECRET_VALUE: readonly RegExp[] = [

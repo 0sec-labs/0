@@ -82,8 +82,18 @@ export function validateWorkerOptions(options: WorkerDeployOptions): void {
   if (options.targetGit && !TARGET_GIT_PATTERN.test(options.targetGit)) throw new Error("--target-git must be a URL without whitespace or quotes");
 }
 
+/** `ssh` and `scp` must be on PATH; the container image ships them, a minimal host may not. */
+export function assertSshClient(probe: (command: string) => { error?: Error & { code?: string } } = command => spawnSync(command, ["-V"], { stdio: "ignore" })): void {
+  for (const command of ["ssh", "scp"]) {
+    if (probe(command).error?.code === "ENOENT") {
+      throw new Error(`\`${command}\` was not found on this computer. Install the OpenSSH client (Debian/Ubuntu: apt-get install openssh-client; macOS and Windows 10+ include it), or use the 0security Docker image, which includes it.`);
+    }
+  }
+}
+
 function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig">): WorkerRunner {
   if (options.ssh) {
+    assertSshClient();
     const host = options.ssh;
     const configArgs = options.sshConfig ? ["-F", options.sshConfig] : [];
     return {
