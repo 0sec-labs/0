@@ -23,6 +23,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- The CLI now has 14 top-level commands (`web`, `scan`, `findings`, `threads`, `agents`, `automation`, `models`, `computers`, `skills`, `plugin`, `memory`, `config`, `doctor`, `api`); the old names keep working as hidden aliases with identical behaviour. `fix`, `verify`, `deps`, `eval`, `agent-assure` and `disclose` moved under `scan`, `reports` under `findings`, `connections` and `usage` under `models`, `audit-log`, `team`, `db` and `github` under `config`, `upgrade`, `workbench` and `checks` under `doctor`, and the developer commands `research`, `improve`, `console`, `mcp-server` and `runs` under a hidden `lab` group.
 - Missions are now Threads and Sentinels are now Agents; `0 missions` and `0 sentinels` keep working as aliases. The Settings page that was called Agents (helper limits and where tools run) is now Helpers, and "this machine" now says "this computer".
 - Choosing Desktop, Documents, Downloads, iCloud or an external drive now waits for the macOS permission prompt instead of accepting the folder after three seconds. The picker shows checking, waiting for macOS, blocked and retry states, the folder chip changes only once access is granted, and a blocked working folder is reported before the first message instead of as an error mid-turn.
 - Automation templates no longer mention projects; automations run in the current folder.

@@ -1,4 +1,4 @@
-// `0 usage` — spend and tokens of the open missions, as on the web Settings > Usage page.
+// `0 models usage` — spend and tokens of the open missions, as on the web Settings > Usage page.
 // Only a running engine tracks open missions; without one the report is empty.
 import type { Command } from "commander";
 import { exitWhenDone, UsageError, expectOk, printJson, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";

@@ -321,11 +321,11 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 The same actions as **Settings → Connections** and **Models** are available as commands. Keys come from an environment variable or stdin, never from an argument.
 
 ```bash
-0 connections add openai --key-env MY_OPENAI_KEY
-0 connections test openai
+0 models connections add openai --key-env MY_OPENAI_KEY
+0 models connections test openai
 0 models list --provider openai
 0 models default --provider openai gpt-5.4-mini
-0 connections remove openai --yes
+0 models connections remove openai --yes
 ```
 
 <span id="console-credential-store"></span>

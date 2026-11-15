@@ -1,5 +1,5 @@
 /**
- * `0 research protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
+ * `0 lab research protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
  * differential (issue #972).
  *
  * Reads an authoritative spec excerpt + an implementation source excerpt, asks
@@ -7,14 +7,14 @@
  * the spec, then SENDS each exercise at a real target and lets a deterministic
  * oracle confirm/refute the divergence. Only MUST-level violations backed by a
  * concrete observation are reported as `confirmed` — the conservative FP
- * discipline that mirrors `0 verify`'s promotion contract.
+ * discipline that mirrors `0 scan verify`'s promotion contract.
  *
  * This command is GLUE: it builds the unified `NativeRuntime` (via the same
  * codex-login / API path the rest of the CLI uses — NO raw vendor keys) and the
  * live `fetch`-based HTTP sender, then calls `@0/engine`
  * `runHttpConformanceCheck`. All the analysis lives in the engine.
  *
- * Exit codes (mirroring `0 verify` so a dispatcher can branch on the code):
+ * Exit codes (mirroring `0 scan verify` so a dispatcher can branch on the code):
  *   0 → ran; at least one CONFIRMED divergence
  *   1 → ran; no confirmed divergence
  *   2 → conformance-gen produced no validated model (nothing exercised)

@@ -3,16 +3,16 @@ title: Verification result schema
 description: The JSON that deterministic replay verifiers emit.
 ---
 
-`0 verify` replay paths write a `VerificationResult`, defined in `packages/engine/src/shared/verification.ts`. It records what the selected runner observed. It does not mean every finding in a scan was replayed, and it is separate from triage state and kernel-finding verification.
+`0 scan verify` replay paths write a `VerificationResult`, defined in `packages/engine/src/shared/verification.ts`. It records what the selected runner observed. It does not mean every finding in a scan was replayed, and it is separate from triage state and kernel-finding verification.
 
 ## Run a replay
 
 ```bash
 # Run a reviewed finding's PoC on the host and keep the replay directory
-0 verify ./finding.json --runner local --out ./replay --output ./verification.json
+0 scan verify ./finding.json --runner local --out ./replay --output ./verification.json
 
 # Isolated container replay; provision the images first
-0 verify ./finding.json --runner docker --out ./replay-docker
+0 scan verify ./finding.json --runner docker --out ./replay-docker
 ```
 
 `--out` is the replay directory. `--output` is the result JSON.
@@ -114,7 +114,7 @@ Assertions are machine-checkable observations, not model confidence. The runner 
 The `cli-path-traversal` fixture starts a malicious local API, creates a sandboxed export directory and runs the argv you pass in `--fixture-command`.
 
 ```bash
-0 verify --fixture cli-path-traversal \
+0 scan verify --fixture cli-path-traversal \
   --fixture-command '["paperclip","company","export","--api","{{apiUrl}}","--output","{{exportDir}}"]' \
   --retain-artifacts
 ```

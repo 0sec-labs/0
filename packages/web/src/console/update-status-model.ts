@@ -15,4 +15,4 @@ export function showUpdateCard(status: UpdateStatus | null, dismissedVersion: st
   return status !== null && status.latest !== dismissedVersion;
 }
 
-export const UPDATE_COMMAND = "0 upgrade";
+export const UPDATE_COMMAND = "0 doctor upgrade";

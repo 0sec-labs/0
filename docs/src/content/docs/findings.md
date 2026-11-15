@@ -64,7 +64,7 @@ Formats are `json` (default), `md`, `sarif`, `html` and `pdf`. Without `-o` the 
 - **Status** is what the automation established: `discovered` is a candidate; `verified` and `confirmed` passed a verification step; `false-positive` was rejected.
 - **Triage** is your decision: `new`, `accepted` or `suppressed` (shown as **Dismissed** in the app).
 
-Accepting a finding does not verify it, and suppressing it does not prove it false. To get executable proof, use [`0 verify`](/verify-and-fix/).
+Accepting a finding does not verify it, and suppressing it does not prove it false. To get executable proof, use [`0 scan verify`](/verify-and-fix/).
 
 ## Teach 0 your false positives
 

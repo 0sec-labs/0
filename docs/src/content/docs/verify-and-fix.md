@@ -8,8 +8,8 @@ A finding is a claim. Verification runs it. A fix is accepted only when the patc
 | You have | Run |
 |---|---|
 | A repository and its test command | `0 scan repair ./my-app --test-command "npm test"` |
-| One finding with executable PoC steps | `0 verify finding.json --runner docker` |
-| One reproduced source finding | `0 fix ./my-app --finding finding.json --test-command "npm test"` |
+| One finding with executable PoC steps | `0 scan verify finding.json --runner docker` |
+| One reproduced source finding | `0 scan fix ./my-app --finding finding.json --test-command "npm test"` |
 
 In the browser app, open a finding under **Findings**. The detail panel offers **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on its state, plus the equivalent terminal command under **Terminal command**.
 
@@ -86,7 +86,7 @@ The state directory keeps each finding's probe, baseline and verification result
 ## Verify one finding
 
 ```bash
-0 verify finding.json --runner docker --output verification-result.json
+0 scan verify finding.json --runner docker --output verification-result.json
 ```
 
 `finding.json` is a single finding with `pocSteps`, for example one entry from a run's `report.json`:
@@ -106,7 +106,7 @@ HTTP replay needs `--scope`. For Docker, a bridge or custom network needs `--doc
 
 ### Output
 
-`0 verify` prints a `VerificationResult` JSON to stdout, or to `--output`:
+`0 scan verify` prints a `VerificationResult` JSON to stdout, or to `--output`:
 
 ```json
 {
@@ -133,14 +133,14 @@ See [Verification result schema](/verification-result/) for every field.
 
 ```bash
 # Replay the vulnerable and patched snapshots in a reproduction bundle.
-0 verify --bundle ./bundle-dir --runner docker
+0 scan verify --bundle ./bundle-dir --runner docker
 
 # Built-in fixture: run your CLI against a malicious local API.
-0 verify --fixture cli-path-traversal \
+0 scan verify --fixture cli-path-traversal \
   --fixture-command '["your-cli","export","--api","{{apiUrl}}","--output","{{exportDir}}"]'
 
 # Kernel finding: generate a reproducer and confirm it in a KASAN VM.
-env ZERO_KERNEL_VERIFY=1 0 verify --kernel-finding finding.json --kernel-tree ./linux
+env ZERO_KERNEL_VERIFY=1 0 scan verify --kernel-finding finding.json --kernel-tree ./linux
 ```
 
 Bundle, fixture and kernel modes each have their own result shape and exit codes. Kernel mode needs the VM setup in [Kernel VM verification](/kernel-vm/).
@@ -148,7 +148,7 @@ Bundle, fixture and kernel modes each have their own result shape and exit codes
 ## Fix one finding
 
 ```bash
-0 fix ./my-app --finding finding.json \
+0 scan fix ./my-app --finding finding.json \
   --verification-result verification-result.json \
   --test-command "npm test" --output fix.apply-patch
 ```

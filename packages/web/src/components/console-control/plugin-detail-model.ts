@@ -83,7 +83,7 @@ export function buildPluginView(source: PluginSource, opts: { toolNames?: readon
     const verified = item.signature === "verified";
     const rail: RailEntry[] = [];
     if (github && item.repo) rail.push({ label: "Repository", value: item.sha ? `${item.repo} @ ${item.sha.slice(0, 12)}` : item.repo, mono: true, ...(GITHUB_REPO.test(item.repo) ? { href: `https://github.com/${item.repo}` } : {}) });
-    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "The 0 team" });
+    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "The 0 config team" });
     if (verified) rail.push({ label: "Verified by", value: "Registry signature" });
     if (item.version) rail.push({ label: "Version", value: github && item.sha ? `${item.version} (pinned, never updates by itself)` : item.version });
     const tools = (item.tools ?? []).map(tool => ({ name: tool.name, description: tool.description }));

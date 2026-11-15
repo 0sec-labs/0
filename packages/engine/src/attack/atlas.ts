@@ -310,7 +310,7 @@ const TOOL_MAP: Record<string, AtlasTechnique[]> = {
 // An ATLAS tag asserts that the action targeted an AI system. No pipeline
 // event carries that fact on its own: `scan_start`, `stage_start` and
 // `oracle_result` fire identically against a kernel target and an LLM
-// endpoint. Tagging them would put AML ids on every engagement 0 runs.
+// endpoint. Tagging them would put AML ids on every engagement 0 lab runs.
 //
 // So ATLAS event tags come from one place only: a tool-bearing event whose
 // tool is in TOOL_MAP above. That is the only point where the engine knows an

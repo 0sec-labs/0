@@ -1,6 +1,6 @@
 ---
 title: Costs and budgets
-description: Cost ceilings, turn limits and price estimates for 0 runs.
+description: Cost ceilings, turn limits and price estimates for 0 lab runs.
 ---
 
 0 has three separate limits: estimated model cost, agent turns and request timeouts. Provider and infrastructure costs are yours.
@@ -34,7 +34,7 @@ A turn is one model round trip. It can hold several tool calls.
 | --- | --- |
 | Web and deep scan attack stage | 20 (`quick`), 40 (`default`), 100 (`deep`) |
 | Source and package research and verification | No limit. The agent stops when the work is done. |
-| Browser app threads | No limit per message. `0 console --max-tool-calls <n>` sets one. |
+| Browser app threads | No limit per message. `0 lab console --max-tool-calls <n>` sets one. |
 
 A larger limit raises the ceiling on work, not the floor. A run that finishes early does not use the rest.
 

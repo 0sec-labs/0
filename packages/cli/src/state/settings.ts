@@ -378,7 +378,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "executionProfile",
     label: "Execution profile",
-    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 workbench setup. Applies to this computer on next launch; failures never fall back to running on your computer.",
+    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 doctor workbench setup. Applies to this computer on next launch; failures never fall back to running on your computer.",
     kind: "enum",
     default: "local",
     choices: ["local", "smolvm"],
@@ -764,7 +764,7 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
 export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   const raw = readRawSettingsFile(settingsFilePath(homeDir));
   if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
-    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; direct fallback is refused.");
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 doctor workbench setup or 0 doctor workbench disable to make an explicit operator choice; direct fallback is refused.");
   }
   return normalizeSettings(raw);
 }

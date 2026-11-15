@@ -1,9 +1,9 @@
 ---
 title: Kernel VM verification
-description: Build and configure the QEMU guest used by 0 research ingest --verify.
+description: Build and configure the QEMU guest used by 0 lab research ingest --verify.
 ---
 
-`0 research ingest --verify` runs C reproducers in a local QEMU guest and compares the guest `dmesg` with the imported kernel crash report. Without the VM, kernel verification is static only.
+`0 lab research ingest --verify` runs C reproducers in a local QEMU guest and compares the guest `dmesg` with the imported kernel crash report. Without the VM, kernel verification is static only.
 
 To choose between `ingest --verify`, `research linux`, `research linux-matrix`, dynamic-witness hunting and weaponization, see [Specialist research](/research-workflows/). Importing an external boot matrix does not run the boots, and a source checkout does not provision the guest.
 
@@ -62,7 +62,7 @@ env \
   ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
   ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
   ZERO_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0/kernel-vm/runs" \
-  0 research ingest --verify ./crashes
+  0 lab research ingest --verify ./crashes
 ```
 
 The settings apply to that one command only. Memory, CPU count and timeouts have defaults, listed under [Environment variables](#environment-variables).
@@ -90,7 +90,7 @@ crashes/
 ```
 
 ```bash
-0 research ingest ./crashes --verify --output json
+0 lab research ingest ./crashes --verify --output json
 ```
 
 Run it with the same `env` settings as above.
@@ -98,7 +98,7 @@ Run it with the same `env` settings as above.
 For one reproducer and a source tree:
 
 ```bash
-0 research ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
+0 lab research ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
   --kernel-config kasan --output json
 ```
 

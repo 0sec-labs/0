@@ -115,7 +115,7 @@ Saved state is not ongoing authorization. Before you resume a run, confirm the t
 
 ## Diagnose a scope refusal
 
-1. Check that `--scope` points to the right file where 0 runs. A host path is not inside a container unless you mount it.
+1. Check that `--scope` points to the right file where 0 lab runs. A host path is not inside a container unless you mount it.
 2. Check the JSON is valid and `in_scope` and `out_of_scope` are string arrays.
 3. Compare the target hostname with each rule, including apex versus wildcard and exclusions.
 4. Check whether a redirect, API call or tool argument goes to another host.
@@ -171,12 +171,12 @@ When a profile is active, the report carries an `engagementPosture` record with 
 
 ## Forensic timeline
 
-`0 runs timeline` builds a chronological record from a run's event log:
+`0 lab runs timeline` builds a chronological record from a run's event log:
 
 ```bash
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only \
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only \
   --since 2026-09-01T09:00:00Z --until 2026-09-01T17:00:00Z
 ```
 

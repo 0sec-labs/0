@@ -72,7 +72,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 ## What can you do with 0?
 
 - **Find vulnerabilities** in source code, web apps and APIs, MCP endpoints and packages
-- **Check dependencies** with `0 deps scan` and `0 deps fix` for npm, pnpm, Cargo and PyPI
+- **Check dependencies** with `0 scan deps scan` and `0 scan deps fix` for npm, pnpm, Cargo and PyPI
 - **Hunt variants** of a known fix across a codebase
 - **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
 - **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
@@ -105,7 +105,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 ```bash
 0 automation run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
-0 mcp-server --automations --workspace /absolute/path/to/repo
+0 lab mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
 See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and MCP](https://docs.0.security/plugins/) and the [command reference](https://docs.0.security/commands/).

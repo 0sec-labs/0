@@ -1,5 +1,5 @@
 /**
- * 0#194 — `0 verify` command.
+ * 0#194 — `0 scan verify` command.
  *
  * Wraps `executePocSteps` (the deterministic-replay runtime introduced in
  * 0#171, see `packages/engine/src/disclose/poc-runtime.ts`) behind a
@@ -1077,7 +1077,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     const findingPath = positionalFinding ?? opts.finding;
     if (!findingPath) {
       throw new Error(
-        "missing finding path. Usage: 0 verify <finding.json> [--runner local|smolvm|docker|qemu]",
+        "missing finding path. Usage: 0 scan verify <finding.json> [--runner local|smolvm|docker|qemu]",
       );
     }
     const runner = parseRunnerKind(opts.runner);

@@ -67,7 +67,7 @@ Run `0 scan source --help` for the full list.
 0 scan source ./my-app --fix-commit 1a2b3c4
 ```
 
-`--fix-commit` needs a local Git repository. For a fix diff against a large tree such as the Linux kernel, use [`0 research hunt`](/research-workflows/#variant-hunting).
+`--fix-commit` needs a local Git repository. For a fix diff against a large tree such as the Linux kernel, use [`0 lab research hunt`](/research-workflows/#variant-hunting).
 
 ### C and C++ libraries
 
@@ -82,10 +82,10 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 Add your own review criteria per folder. They stay on your computer under `~/.0/review-checks`.
 
 ```bash
-0 checks propose --project ./my-app --name "Tenant boundary" \
+0 doctor checks propose --project ./my-app --name "Tenant boundary" \
   --prompt "Tenant-owned queries must use the authenticated organization."
-0 checks list --project ./my-app
-0 checks enable <check-id> --project ./my-app --yes
+0 doctor checks list --project ./my-app
+0 doctor checks enable <check-id> --project ./my-app --yes
 0 scan source ./my-app
 ```
 
@@ -104,7 +104,7 @@ A project can enable up to 8 checks, each up to 2,000 characters. Prompts are us
 
 To review a package's source with the full source-review options, use `0 scan source <name> --ecosystem npm`.
 
-For the dependencies of your own project, use [`0 deps scan`](/dependencies/).
+For the dependencies of your own project, use [`0 scan deps scan`](/dependencies/).
 
 ## Deep sweep
 

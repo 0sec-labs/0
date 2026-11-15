@@ -44,7 +44,7 @@ export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] 
  * findings-access keys, backend registry, control daemon/reset/prune, ...) is browser-only.
  * Remote clients only reach routes the backend transport admits (backendCapabilitiesForApiPath).
  *
- * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 mcp-server` workflow
+ * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 lab mcp-server` workflow
  * tool set (MCP_WORKFLOW_TOOL_NAMES) and the remote-workflow-runtime expose it so an MCP client can
  * author workflows on an attached engine. It is validated and revision-guarded server-side, unlike
  * the browser-only POST /api/console/workflow-definitions, which stays default-deny for the bearer.

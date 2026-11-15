@@ -130,11 +130,11 @@ Exit codes: `0` completed with no high or critical findings, `1` at least one hi
 
 ```bash
 0 scan web --target https://staging.example.com --scope ./scope.json --resume SCAN_ID
-0 runs relaunch SCAN_ID
-0 runs replay --scan SCAN_ID
+0 lab runs relaunch SCAN_ID
+0 lab runs replay --scan SCAN_ID
 ```
 
-`--resume` continues a run from its on-disk journal and lets you supply scope and credentials again. `0 runs relaunch` resumes from persisted state without them. `0 runs replay` prints the stored attack chain; it sends no traffic and does not re-verify anything.
+`--resume` continues a run from its on-disk journal and lets you supply scope and credentials again. `0 lab runs relaunch` resumes from persisted state without them. `0 lab runs replay` prints the stored attack chain; it sends no traffic and does not re-verify anything.
 
 ## Run in a container
 
@@ -153,7 +153,7 @@ The image runs as user `ubuntu` (UID 1000) in `/work`. `ZERO_RUN_DIR` puts `stat
 ## Limits
 
 - A clean run does not prove the target is secure. Depth, budget, model, auth and the paths the agents reached all bound coverage.
-- Verification is a fresh agent pass per finding. Read the evidence; a `confirmed` label is not a deterministic replay. For that, use [`0 verify`](/verify-and-fix/).
+- Verification is a fresh agent pass per finding. Read the evidence; a `confirmed` label is not a deterministic replay. For that, use [`0 scan verify`](/verify-and-fix/).
 - `--dry-run` on `--emit pr` only stops PR creation. The scan still runs and spends.
 - Scans send live traffic. A deadline requests cancellation; in-flight work can run past it.
 

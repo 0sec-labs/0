@@ -12,7 +12,7 @@ description: What is open source in 0, what you can run on your own, what leaves
 | Scans of source, web targets and packages, with verification and fixes | Yes, with your own model keys |
 | Browser app, automations, agents and skills | Yes |
 | Findings and reports (JSON, SARIF, Markdown, HTML, PDF) | Yes |
-| GitHub Action and CI reports, `0 reports import` | Yes, see [CI/CD](/ci/github-action/) |
+| GitHub Action and CI reports, `0 findings reports import` | Yes, see [CI/CD](/ci/github-action/) |
 | Findings API for your own tools | Yes, read-only, see [Findings API](/findings-api/) |
 | Team workspace with owner, editor and viewer roles and OIDC sign-in | Yes, see [Computers and teams](/engines/) |
 | Remote computers on your own servers | Yes, with limits listed on that page |

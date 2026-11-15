@@ -150,19 +150,20 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return undefined;
   // The host management surface is deliberately available even after a failed VM launch.
   if (["api", "workbench", "config", "reports", "web", "console", "team", "doctor", "help", "--help", "-h", "--version", "-v"].includes(args[0] ?? "") || args.length === 0) return undefined;
+  if ((args[0] === "findings" && args[1] === "reports") || (args[0] === "doctor" && args[1] === "workbench")) return undefined;
   if (remoteBackendClientId(args)) return undefined;
   const hostSettings = loadGlobalSettings(home, { requireExecutionProfile: existsSync(workbenchConfigPath(home)) });
   if (hostSettings.executionProfile !== "smolvm") return undefined;
-  if (args[0] === "mcp-server") {
-    throw new Error("MCP requires bidirectional stdio, which the SmolVM CLI bridge does not support. The selected SmolVM profile is unchanged; host fallback is refused. Use `0 automation` commands in SmolVM. MCP currently requires explicitly selected host-local execution; only the operator should choose `0 workbench disable` if host execution is intended.");
+  if (args[0] === "mcp-server" || (args[0] === "lab" && args[1] === "mcp-server")) {
+    throw new Error("MCP requires bidirectional stdio, which the SmolVM CLI bridge does not support. The selected SmolVM profile is unchanged; host fallback is refused. Use `0 automation` commands in SmolVM. MCP currently requires explicitly selected host-local execution; only the operator should choose `0 doctor workbench disable` if host execution is intended.");
   }
   const config = loadWorkbenchConfig(home);
-  if (!config) throw new Error("SmolVM profile is selected but no workbench is configured. Run 0 workbench setup --image <approved-archive>.");
+  if (!config) throw new Error("SmolVM profile is selected but no workbench is configured. Run 0 doctor workbench setup --image <approved-archive>.");
   const workspaceRoot = realpathSync(config.workspaceRoot ?? process.cwd());
   if (!lstatSync(workspaceRoot).isDirectory()) throw new Error("The configured workbench workspace is not a directory.");
   const status = await getSmolvmWorkbenchStatus({ stateRoot: config.stateRoot, image: config.image });
   if (!status.platformSupported || !status.runtimeReady || !status.imageApproved) {
-    throw new Error(status.error ?? "SmolVM runtime or approved image is unavailable. Run 0 workbench setup; host fallback is refused.");
+    throw new Error(status.error ?? "SmolVM runtime or approved image is unavailable. Run 0 doctor workbench setup; host fallback is refused.");
   }
   const modelIndex = args.findIndex(argument => argument === "--model" || argument === "-m");
   const modelArgument = modelIndex >= 0 ? args[modelIndex + 1] : args.find(argument => argument.startsWith("--model="))?.slice("--model=".length);

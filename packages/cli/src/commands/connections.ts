@@ -1,4 +1,4 @@
-// `0 connections` — model provider credentials, the same actions as the web Connections page.
+// `0 models connections` — model provider credentials, the same actions as the web Connections page.
 // Keys are never accepted as an argument: use --key-env <VAR> or --stdin.
 import type { Command } from "commander";
 import { exitWhenDone, UsageError, expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";

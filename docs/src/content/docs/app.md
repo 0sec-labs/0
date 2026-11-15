@@ -33,7 +33,7 @@ The sidebar holds:
 Two cards can appear above the account row, for local users and team owners:
 
 - **Finish setting up** has two steps: connect a model provider and start your first thread. It hides once both are done, and you can dismiss it.
-- **Update available** shows the latest and current versions. **Copy update command** copies `0 upgrade`. Dismissing it hides that version only.
+- **Update available** shows the latest and current versions. **Copy update command** copies `0 doctor upgrade`. Dismissing it hides that version only.
 
 ### Keyboard shortcuts
 
@@ -198,15 +198,15 @@ The page also lists the repositories the account can reach (cached for five minu
 
 ## Run headless
 
-`0 console --print` runs one prompt through the same app process and exits. There is no interactive terminal UI; `0 console` without a prompt prints a pointer to the browser app.
+`0 lab console --print` runs one prompt through the same app process and exits. There is no interactive terminal UI; `0 lab console` without a prompt prints a pointer to the browser app.
 
 ```bash
 0 -p "Review the selected repository" --mode standard
-0 console --print "Summarize the open findings" --format json
-printf '%s' 'Summarize the selected findings' | 0 console --print
+0 lab console --print "Summarize the open findings" --format json
+printf '%s' 'Summarize the selected findings' | 0 lab console --print
 ```
 
-`0 -p` is short for `0 console --print`. Useful options:
+`0 -p` is short for `0 lab console --print`. Useful options:
 
 | Option | Effect |
 | --- | --- |
@@ -225,9 +225,9 @@ Headless runs have no approval dialog. A task that needs a human decision cannot
 Send a prompt to a thread that is open in a running app:
 
 ```bash
-0 console --chat <id> --format json \
+0 lab console --chat <id> --format json \
   --print "Summarize the retained findings"
-0 console --chat <id> --engine staging --format ndjson \
+0 lab console --chat <id> --engine staging --format ndjson \
   --print "Continue the investigation"
 ```
 

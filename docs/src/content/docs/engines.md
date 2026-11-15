@@ -110,8 +110,8 @@ The CLI and the MCP adapter select the same registered computer. They never use 
 0 automation list --templates --engine staging --engines-config /abs/engines.json --format json
 0 automation run --template repository-review --target /srv/repos/app \
   --engine staging --engines-config /abs/engines.json --format json
-0 runs list --engine staging --engines-config /abs/engines.json --format json
-0 mcp-server --automations --engine staging --engines-config /abs/engines.json
+0 lab runs list --engine staging --engines-config /abs/engines.json --format json
+0 lab mcp-server --automations --engine staging --engines-config /abs/engines.json
 ```
 
 Remote automation rejects client-side `--workspace`, `--scope`, `--db-path` and `--model`. A remote MCP adapter exposes automation tools only, not atomic live-target tools.
@@ -130,10 +130,10 @@ For a direct call to a computer API, use `0 api`:
 
 ```bash
 0 threads list --engine staging --format json
-0 console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
-0 runs list --all --engine staging --format json
-0 runs show workflow:<execution-id> --engine staging --format json
-0 runs cancel workflow:<execution-id> --engine staging
+0 lab console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
+0 lab runs list --all --engine staging --format json
+0 lab runs show workflow:<execution-id> --engine staging --format json
+0 lab runs cancel workflow:<execution-id> --engine staging
 ```
 
 `--chat` attaches to a live thread. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
@@ -157,9 +157,9 @@ In the browser app, choose **Team**, enter a workspace name, your display name, 
 From a terminal:
 
 ```bash
-0 team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
-0 team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
-0 team list --config ./team.json
+0 config team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
+0 config team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
+0 config team list --config ./team.json
 0 web --team-config ./team.json
 ```
 

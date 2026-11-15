@@ -10,7 +10,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Thread** | A conversation with the agent. You describe a job; the agent plans it, runs tools and records findings. Threads can be saved, resumed and archived. The CLI manages them with `0 threads` (the old command names still work); URLs and the API say chats and sessions (`/chats/<id>`, `--chat`). See [Browser app](/app/). |
 | **Scan** | One assessment of one target. Modules: `web`, `source`, `package`, `deep`, `repair` and `campaign`. See [Scan code](/scan-code/) and [Scan web and APIs](/scan-web/). |
 | **Finding** | A security issue with evidence. An unconfirmed finding is a **lead**. See [Findings](/findings/). |
-| **Report** | The result of one run of a scan or an automation: status, evidence and linked findings. It opens at `/runs/<id>`; the CLI calls it a run (`0 runs`). |
+| **Report** | The result of one run of a scan or an automation: status, evidence and linked findings. It opens at `/runs/<id>`; the CLI calls it a run (`0 lab runs`). |
 | **Automation** | A saved list of steps that runs by hand, on a trigger or on a schedule. Starter automations are templates. See [Automations](/automations/). |
 | **Agent** | A persistent agent with a name, a standing job, a scope, files, a schedule, an autonomy level and a daily budget. It runs threads on a schedule, on a pull request or by hand. See [Agents](/agents/). |
 | **Helper** | A helper agent a thread starts for a part of its work (a subagent). Limits live under Settings, Helpers. |
@@ -37,10 +37,10 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | --- | --- | --- |
 | Source repository | `0 scan source ./repo` | [Scan code](/scan-code/) |
 | npm, PyPI, Cargo package or OCI image | `0 scan package <name> --ecosystem <eco>` | [Scan code](/scan-code/) |
-| Project dependencies | `0 deps scan` | [Dependencies](/dependencies/) |
+| Project dependencies | `0 scan deps scan` | [Dependencies](/dependencies/) |
 | Web app, REST API or MCP endpoint | `0 scan web --target <url> --scope ./scope.json` | [Scan web and APIs](/scan-web/) |
-| A finding you want reproduced or patched | `0 verify`, `0 fix`, `0 scan repair` | [Verify and fix](/verify-and-fix/) |
-| Binaries, kernels, identity, AI agents | `0 research ...`, `0 eval`, `0 agent-assure` | [Specialist research](/research-workflows/) |
+| A finding you want reproduced or patched | `0 scan verify`, `0 scan fix`, `0 scan repair` | [Verify and fix](/verify-and-fix/) |
+| Binaries, kernels, identity, AI agents | `0 lab research ...`, `0 scan eval`, `0 scan agent-assure` | [Specialist research](/research-workflows/) |
 
 `0 <target>` with no command picks a module for you: a URL becomes `scan web`, a local path becomes `scan source`, and a package name becomes `scan package`.
 

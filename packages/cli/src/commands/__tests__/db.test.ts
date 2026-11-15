@@ -1,7 +1,7 @@
 /**
  * Coverage seed for `@0/cli`'s `db` command. This is the local SQLite
- * management surface — `0 db reset` (destructive: deletes the local
- * DB + reseeds the verification workbench) and `0 db repair` (backs
+ * management surface — `0 config db reset` (destructive: deletes the local
+ * DB + reseeds the verification workbench) and `0 config db repair` (backs
  * up a malformed file and recreates a clean one). Both call into
  * `@0/engine/storage` (WASM SQLite per memory `project_db_wasm` — we never want
  * to touch a real DB from a unit test).
