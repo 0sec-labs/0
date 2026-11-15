@@ -11,7 +11,7 @@ import { FixControl } from "@/components/console-control/workflow-control";
 export type WebConsoleControlMode = "connections" | "models" | "settings" | "plugins" | "doctor" | "tools" | "project" | "fix";
 
 const pages = [
-  { mode: "connections", path: "/connections", label: "Connections", icon: CapyApiKeyIcon, description: "Subscriptions and API keys that power your models" },
+  { mode: "connections", path: "/connections", label: "Providers", icon: CapyApiKeyIcon, description: "Subscriptions and API keys that power your models" },
   { mode: "models", path: "/models", label: "Models", icon: CapyChipIcon, description: "" },
   { mode: "project", path: "/project", label: "Project", icon: CapyInboxIcon, description: "" },
   { mode: "settings", path: "/settings", label: "Settings", icon: CapySettingsIcon, description: "" },

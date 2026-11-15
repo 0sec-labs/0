@@ -16,11 +16,11 @@ test("home suggestions describe only the selected workspace's observed context",
     const observed=homeSuggestions(snapshot,{requestedPath:"/selected/project",project});
     assert.deepEqual(observed.map(item=>item.label),["Whitebox pentest","Review uncommitted changes","Plan a focused review"]);
     assert.match(observed[0].hint,/project · main/);
-    assert.match(observed[0].prompt,/selected workspace "\/selected\/project"/);
+    assert.match(observed[0].prompt,/selected project "\/selected\/project"/);
     assert.match(observed[1].prompt,/preserve the working tree/);
     assert.doesNotMatch(JSON.stringify(observed),/wrong-global-cwd/);
     const wrong=homeSuggestions(snapshot,{requestedPath:"/another/project",project});
-    assert.equal(wrong[0].label,"Explore this workspace","another folder's Git metadata cannot be reused");
+    assert.equal(wrong[0].label,"Explore this project","another folder's Git metadata cannot be reused");
     const child={...snapshot,workspacePath:"/selected/project/subdirectory"};
     const nested=homeSuggestions(child,{requestedPath:child.workspacePath,project:{...project,path:child.workspacePath}});
     assert.equal(nested[0].label,"Whitebox pentest");

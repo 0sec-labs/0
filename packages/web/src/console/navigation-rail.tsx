@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
+import { useBackendSelection } from "@/backend-context";
 import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
@@ -103,17 +104,16 @@ export function ConsoleNavigationRail({
     refetchOnWindowFocus: true,
   });
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
-  // Short primary list like Capy; Plugins, Memory and Hosts stay reachable under More. A "run" is just a chat, so there is no Runs destination.
+  // Short primary list like Capy: Skills and Plugins live inside Explore, Computers in Settings. A "run" is just a mission, so there is no Runs destination.
+  const selection = useBackendSelection();
+  const hasRemoteComputer = (selection?.backends ?? []).some((backend) => backend.id !== "local");
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
-  const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
-  const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/computers"]);
-  // Skill pages (installed or from the directory) light up Skills; Explore and plugin pages light up More.
-  const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
-  // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.
-  const ownRow = (path: string) =>
-    destinations.some(({ to }) => active(to) && (to === path || to.startsWith(`${path}/`)));
-  const moreActive = moreDestinations.some(({ to }) => active(to) && !ownRow(to));
+  const destinations = pick(["/findings", "/automations", "/plugins/explore"]);
+  const moreDestinations = pick(hasRemoteComputer ? ["/learning", "/computers"] : ["/learning"]);
+  const active = (to: string) =>
+    to === "/plugins/explore" ? currentPath.startsWith("/plugins") : currentPath === to || currentPath.startsWith(`${to}/`);
+  const moreActive = moreDestinations.some(({ to }) => active(to));
 
   return (
     <nav aria-label="Command Center navigation" className="flex h-full min-h-0 w-full flex-col pt-2">
@@ -167,7 +167,7 @@ export function ConsoleNavigationRail({
           <SidebarKbd aria-hidden="true">⇧⌘O</SidebarKbd>
         </a>
         {destinations.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === "/plugins/skills"} data-active={active(to) || undefined} className={sidebarItemClasses}>
+          <NavLink key={to} to={to} data-active={active(to) || undefined} className={sidebarItemClasses}>
             <Icon aria-hidden="true" />
             <SidebarLabel>{label}</SidebarLabel>
             {label === "Findings" && findingCount > 0 && (

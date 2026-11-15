@@ -30,7 +30,7 @@ describe("resolveCrumbs", () => {
     ["/plugins/cloudflare", "", "Cloudflare", [{ label: "Explore", to: "/plugins/explore" }, { label: "Plugins", to: "/plugins/explore" }, { label: "Cloudflare" }]],
     ["/plugins/skills", "", undefined, [{ label: "Skills" }]],
     ["/computers", "", undefined, [{ label: "Computers" }]],
-    ["/learning", "", undefined, [{ label: "Memory" }]],
+    ["/learning", "", undefined, [{ label: "Lessons" }]],
     ["/scope", "", undefined, [{ label: "Reports" }]],
     ["/runs/r1", "", undefined, [{ label: "Findings", to: "/findings" }, { label: "Report" }]],
     ["/runs/r1", "", "example.com", [{ label: "Findings", to: "/findings" }, { label: "example.com" }]],

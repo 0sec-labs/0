@@ -6,7 +6,7 @@ import { settingsPageId, settingsPages } from "@/components/console-control/sett
 export type Crumb = { label: string; to?: string };
 
 const SETTINGS_LEAVES: Record<string, string> = {
-  connections: "Connections", models: "Models", tools: "Tools", project: "Project", doctor: "Diagnostics", fix: "Fix",
+  connections: "Providers", models: "Models", tools: "Tools", project: "Project", doctor: "Diagnostics", fix: "Fix",
 };
 const SETTINGS_PREFIXES = new Set(["settings", ...Object.keys(SETTINGS_LEAVES)]);
 
@@ -45,7 +45,7 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
       }
       return [{ label: "Explore", to: "/plugins/explore" }, ...(second ? [{ label: "Plugins", to: "/plugins/explore" }, { label: label ?? "Plugin" }] : [{ label: "Plugins" }])];
     case "computers": case "engines": return list("Computers", "/computers");
-    case "learning": return list("Memory", "/learning");
+    case "learning": return list("Lessons", "/learning");
     case "scope": return list("Reports", "/scope");
     case "runs": return [{ label: "Findings", to: "/findings" }, { label: label ?? "Report" }];
     case "api-access": return [{ label: "Findings", to: "/findings" }, { label: "API access" }];

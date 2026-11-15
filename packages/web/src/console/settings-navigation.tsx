@@ -9,6 +9,7 @@ import {
   CapyArrowLeftIcon as ArrowLeft,
   CapyChatBubbleIcon,
   CapyChipIcon,
+  CapyDevicesIcon,
   CapyDocumentIcon,
   CapyGaugeIcon,
   CapyInboxIcon,
@@ -61,8 +62,9 @@ const groups: { label: string; items: Item[] }[] = [
     items: [
       pageItem("instructions"),
       pageItem("agents"),
-      { key: "connections", label: "Connections", icon: CapyApiKeyIcon, path: "/connections" },
+      { key: "connections", label: "Providers", icon: CapyApiKeyIcon, path: "/connections" },
       { key: "models", label: "Models", icon: CapyChipIcon, path: "/models" },
+      { key: "computers", label: "Computers", icon: CapyDevicesIcon, path: "/computers" },
     ],
   },
   {

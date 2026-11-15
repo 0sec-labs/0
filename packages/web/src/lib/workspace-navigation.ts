@@ -10,7 +10,7 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
   { to: "/plugins/explore", label: "Explore", icon: CapyGlobeIcon },
   { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
-  { to: "/learning", label: "Memory", icon: CapyDatabaseIcon },
+  { to: "/learning", label: "Lessons", icon: CapyDatabaseIcon },
   { to: "/settings", label: "Settings", icon: CapySettingsIcon },
 ] as const;
 
