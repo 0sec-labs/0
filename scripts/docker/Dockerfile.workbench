@@ -108,6 +108,9 @@ RUN --mount=type=cache,id=0-workbench-agent-clis,target=/root/.npm \
     npm ci --omit=dev --no-audit --no-fund
 
 FROM workbench-base AS workbench
+# A pre-provisioned Kali base can include an older engine and provider payload.
+# Replace these image-owned directories rather than merging two releases.
+RUN rm -rf /opt/0 /opt/0-agent-clis
 COPY --from=builder /app/dist /opt/0
 COPY --from=agent-clis /opt/0-agent-clis /opt/0-agent-clis
 ARG TOOLBOX_PROFILE=core-web
@@ -127,14 +130,16 @@ RUN HOME=/root npx --no-install playwright install chromium \
     && chmod -R a+rX /opt/playwright \
     && printf '#!/bin/sh\nexec /usr/local/bin/bun /opt/0/0.js "$@"\n' > /usr/local/bin/0 \
     && chmod 0755 /usr/local/bin/0 \
-    && ln -s /opt/0-agent-clis/node_modules/.bin/claude /usr/local/bin/claude \
-    && ln -s /opt/0-agent-clis/node_modules/.bin/codex /usr/local/bin/codex \
-    && ln -s /opt/0-agent-clis/node_modules/.bin/gemini /usr/local/bin/gemini \
+    && ln -sf /opt/0-agent-clis/node_modules/.bin/claude /usr/local/bin/claude \
+    && ln -sf /opt/0-agent-clis/node_modules/.bin/codex /usr/local/bin/codex \
+    && ln -sf /opt/0-agent-clis/node_modules/.bin/gemini /usr/local/bin/gemini \
     && old_user="$(getent passwd 1000 | cut -d: -f1)" \
     && old_group="$(getent group 1000 | cut -d: -f1)" \
+    && old_home="$(getent passwd 1000 | cut -d: -f6)" \
     && test -n "$old_user" && test -n "$old_group" \
-    && usermod -l zero -d /home/zero -m "$old_user" \
-    && groupmod -n zero "$old_group" \
+    && if test "$old_user" != zero; then usermod -l zero "$old_user"; fi \
+    && if test "$old_home" != /home/zero; then usermod -d /home/zero -m zero; fi \
+    && if test "$old_group" != zero; then groupmod -n zero "$old_group"; fi \
     && install -d -o zero -g zero /workspace /work /home/zero/.0 \
     && install -d -m 0755 /run/0-workbench \
     && runuser -u zero -- node /usr/local/share/0/workbench-inventory.mjs /tmp/workbench-tool-inventory.json \
