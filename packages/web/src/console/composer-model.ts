@@ -137,7 +137,7 @@ export function modelButtonLabel(
   hasModels = false,
 ): { text: string; known: boolean } {
   const model = runtime?.model || remembered?.model;
-  // The caller passes the recommended model when nothing is remembered, so the button names a real model.
-  void hasModels;
-  return model ? { text: model, known: true } : { text: "Choose model", known: false };
+  if (model) return { text: model, known: true };
+  // Models are listed but none is picked: the mission runs on the host's own default, and the button says so.
+  return hasModels ? { text: "Default model", known: false } : { text: "Choose model", known: false };
 }

@@ -125,6 +125,13 @@ describe("live runtime reconfiguration", () => {
     expect(after.reasoningEffort).toBeUndefined();
   });
 
+  it("drops role pins that name the previous provider's models on a provider switch", () => {
+    const env = { ...environment(), OPENAI_API_KEY: "openai-key", DEEPSEEK_API_KEY: "deepseek-key" };
+    const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "primary", timeout: 1000, agentModels: { audit: "old-audit" }, env });
+    runtime.reconfigure({ provider: "deepseek", model: "deepseek-v4-flash", env });
+    expect(runtime.modelSelection().agentModels).toEqual({});
+  });
+
   it("re-detects the provider account and endpoint after a live switch", () => {
     const runtime = new LlmApiRuntime({
       type: "api", provider: "openai", model: "primary", timeout: 1000,

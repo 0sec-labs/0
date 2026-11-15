@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, setRecommendedDefault, setSavedPreference, startingModelChoice, usableModelChoice, withRememberedModel } from "./last-model-choice";
+import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, setRecommendedDefault, resolveStartModel, setResolvedStartModel, setSavedPreference, startingModelChoice, usableModelChoice, withRememberedModel } from "./last-model-choice";
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -71,5 +71,34 @@ describe("startingModelChoice", () => {
     expect(startingModelChoice("start-test")).toEqual({ providerId: "openai", model: "rec" });
     rememberModelChoice("start-test", { providerId: "openrouter", model: "mine" });
     expect(startingModelChoice("start-test")).toEqual({ providerId: "openrouter", model: "mine" });
+  });
+});
+
+describe("start model resolution", () => {
+  const xai = { providerId: "xai", model: "gpt-xai-pro" };
+  const openai = { providerId: "openai", model: "gpt-4.1" };
+  const listed = [{ id: "gpt-4.1", provider: "openai" }, { id: "deepseek-flash", provider: "deepseek" }];
+  it("drops a remembered pick the catalog no longer lists and falls through", () => {
+    expect(resolveStartModel({ remembered: xai, configured: openai, models: listed })).toEqual(openai);
+    expect(resolveStartModel({ remembered: xai, models: listed })).toBeUndefined();
+    expect(resolveStartModel({ remembered: xai, models: [{ id: "gpt-xai-pro", provider: "xai", enabled: false }, ...listed] })).toBeUndefined();
+  });
+  it("uses the provider-configured model last, so the label and the mission agree", () => {
+    expect(resolveStartModel({ configured: openai, models: listed })).toEqual(openai);
+    expect(resolveStartModel({ recommended: { providerId: "deepseek", model: "deepseek-flash" }, configured: openai, models: listed })).toEqual({ providerId: "deepseek", model: "deepseek-flash" });
+    setResolvedStartModel("home", { choice: openai });
+    expect(startingModelChoice("home")).toEqual(openai);
+    expect(withRememberedModel("home", {})).toEqual({ runtime: openai });
+  });
+  it("starts on exactly what Home resolved, never the stale stored pick", () => {
+    rememberModelChoice("stale", xai);
+    expect(startingModelChoice("stale")).toEqual(xai); // catalog not loaded yet: trusted
+    setResolvedStartModel("stale", { choice: undefined });
+    expect(startingModelChoice("stale")).toBeUndefined();
+    expect(withRememberedModel("stale", { title: "x" })).toEqual({ title: "x" });
+    setResolvedStartModel("stale", undefined);
+  });
+  it("trusts every candidate until a catalog has loaded", () => {
+    expect(resolveStartModel({ remembered: xai })).toEqual(xai);
   });
 });

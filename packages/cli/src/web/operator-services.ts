@@ -15,7 +15,7 @@ import {
 } from "../state/credential-store.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { PROVIDERS, isRemovedProviderId, providerStates } from "../state/provider-status.js";
-import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../state/model-preference.js";
+import { createPreferredConsoleRuntime, saveAppliedAccessProgram, saveAppliedModelPreference } from "../state/model-preference.js";
 import { buildFullModelCatalog } from "../state/model-catalog.js";
 import { discoverConnectionModels } from "../state/available-models.js";
 
@@ -333,7 +333,8 @@ export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, s
     if (targetProvider === "chatgpt-plan") planConnection = getSiwcConnection(env.HOME);
     const created = await createPreferredConsoleRuntime({
       provider: targetProvider as RuntimeConfig["provider"], model: selection.model, env,
-      ...runtime.modelSelection(), ...runtimeSelection,
+      // Role pins name models of the previous connection: a new provider starts with none unless the caller sets them.
+      ...runtime.modelSelection(), agentModels: {}, ...runtimeSelection,
       ...(planConnection ? { siwcConnection: planConnection } : {}),
     }, policy);
     candidate = created.runtime;
@@ -362,7 +363,9 @@ export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, s
   const contextTokens = runtimeContextLimits.get(candidate);
   if (contextTokens) runtimeContextLimits.set(runtime, contextTokens);
   else runtimeContextLimits.delete(runtime);
-  if (selection.model !== undefined || selection.cyberAccessProgram !== undefined) saveAppliedModelPreference(runtime);
+  // A switch inside a live mission changes that mission only; the global default moves through the Home pick or Settings.
+  // The cyber access program is part of that record, so it alone is carried over to an existing default.
+  if (selection.cyberAccessProgram !== undefined) saveAppliedAccessProgram(runtime);
   return describeWebConsoleRuntime(runtime);
 }
 
@@ -598,23 +601,20 @@ export class WebOperatorServices {
     // Azure has no model list endpoint (deployments need Azure CLI), so its configured
     // deployment is the inventory. Fall back to the configured/default model for those only;
     // a genuine failure (rejected key, unreachable endpoint) keeps its diagnostic and stays hidden.
-    const fallbackIds = new Set(discovered.diagnostics
-      .filter(item => item.message === MODEL_PENDING_MESSAGE || item.providerId === "azure")
-      .map(item => item.providerId));
+    // Pending is reported by the top-level flag and the pendingProviders list, never as a failure that hides the provider.
+    const pendingProviders = [...new Set(discovered.diagnostics.filter(item => item.message === MODEL_PENDING_MESSAGE).map(item => item.providerId))];
     const diagnostics = discovered.diagnostics.filter(item => {
-      // Pending is reported by the top-level flag, never as a failure that hides the provider.
-      if (item.message === MODEL_PENDING_MESSAGE && !fallbackIds.has(item.providerId)) return false;
-      if (!fallbackIds.has(item.providerId)) return true;
+      const pendingItem = item.message === MODEL_PENDING_MESSAGE;
+      if (!pendingItem && item.providerId !== "azure") return true;
       const fallback = item.providerId === "azure" ? env.AZURE_OPENAI_MODEL : item.providerId === "deepseek" ? "deepseek-flash" : undefined;
-      if (!fallback || rows.some(row => row.provider === item.providerId)) return !fallback;
-      rows.push({ id: fallback, provider: item.providerId, enabled: !isModelDisabled(disabledModelsFor(item.providerId, accountStore), fallback),
+      if (fallback && !rows.some(row => row.provider === item.providerId)) rows.push({ id: fallback, provider: item.providerId, enabled: !isModelDisabled(disabledModelsFor(item.providerId, accountStore), fallback),
         price: metadata.get(`${item.providerId}/${fallback}`)?.price ?? "Unknown rate",
         contextWindowTokens: resolveContextLimit({ modelId: fallback, providerId: item.providerId })?.tokens ?? null, source: "account" });
-      return false;
+      return !pendingItem && !fallback ? true : false;
     });
     return { models: rows, providerId: providerId ?? null,
       diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES, recommended: recommendModels(rows),
-      ...(discovered.pending ? { pending: true } : {}) };
+      ...(discovered.pending ? { pending: true, pendingProviders } : {}) };
   }
 
   /** One cheap authenticated model-list call with the key about to be saved; only a clear rejection or an unreachable endpoint blocks it. */

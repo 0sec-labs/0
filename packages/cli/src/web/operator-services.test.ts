@@ -106,7 +106,7 @@ describe("web model connection inspection", () => {
     await Promise.resolve(); expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     const result = await pending;
-    expect(result?.data).toMatchObject({ pending: true, models: [{ id: "verified-account-model", provider: "openai", source: "account" }, { id: "deepseek-flash", provider: "deepseek" }], diagnostics: [] });
+    expect(result?.data).toMatchObject({ pending: true, models: [{ id: "verified-account-model", provider: "openai", source: "account" }, { id: "deepseek-flash", provider: "deepseek" }], diagnostics: [], pendingProviders: ["deepseek"] });
     expect((result?.data as { models: unknown[] }).models).toHaveLength(2);
 
     const fresh = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("fresh=1"));
@@ -115,6 +115,18 @@ describe("web model connection inspection", () => {
     await Promise.resolve(); expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect((await fresh)?.data).toMatchObject({ models: [{ id: "verified-account-model" }], diagnostics: [{ providerId: "deepseek", message: "Model discovery timed out. Retry this connection." }] });
+  });
+  it("reports a slow provider without a fallback as pending, not as a failure that hides it", async () => {
+    vi.useFakeTimers();
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockImplementation(async function(this: LlmApiRuntime) {
+      if (this.resolvedProvider() === "openai") return new Promise(() => {});
+      return [{ id: "provider-only-model" }];
+    });
+    const pending = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams());
+    await vi.advanceTimersByTimeAsync(2_500);
+    const data = (await pending)?.data as { pending?: boolean; pendingProviders?: string[]; diagnostics: unknown[]; models: { provider: string }[] };
+    expect(data).toMatchObject({ pending: true, pendingProviders: ["openai"], diagnostics: [] });
+    expect(data.models.every(model => model.provider !== "openai")).toBe(true);
   });
   it("serves discovery from a stale-while-revalidate cache with coalesced background refreshes", async () => {
     vi.useFakeTimers();
@@ -297,6 +309,20 @@ describe("web model connection inspection", () => {
   });
 });
 
+
+describe("provider switch inside a mission", () => {
+  it("clears role pins that name the previous provider's models", async () => {
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 300_000, provider: "deepseek", model: "deepseek-chat", agentModels: { audit: "deepseek-chat" } });
+    expect(runtime.modelSelection().agentModels).toEqual({ audit: "deepseek-chat" });
+    await applyWebConsoleRuntimeSelection(runtime, { providerId: "openai", model: "gpt-6.1-sol" });
+    expect(runtime.modelSelection().agentModels).toEqual({});
+  });
+  it("keeps role pins when the caller sets them with the switch", async () => {
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 300_000, provider: "deepseek", model: "deepseek-chat", agentModels: { audit: "deepseek-chat" } });
+    await applyWebConsoleRuntimeSelection(runtime, { providerId: "openai", model: "gpt-6.1-sol", agentModels: { audit: "gpt-6.1-sol" } });
+    expect(runtime.modelSelection().agentModels).toEqual({ audit: "gpt-6.1-sol" });
+  });
+});
 
 describe("web isolated plugin boundaries", () => {
   it("rejects host plugin runs before reading installed plugin bytes while VM execution is selected", async () => {

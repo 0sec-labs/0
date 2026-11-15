@@ -29,6 +29,8 @@ export interface ModelsResponse {
   providerId: string | null; diagnostics: { providerId: string; message: string }[]; roles: string[];
   /** Per-role picks reachable on the connected providers, from the engine recommendation catalog. */
   recommended?: { role: string; label: string; why?: string; providerId: string; model: string }[];
+  /** Discovery is still running for some providers: they are connected, just not listed yet. */
+  pending?: boolean; pendingProviders?: string[];
 }
 export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum" | "number" | "text"; default: unknown; choices?: string[]; min?: number; max?: number; step?: number; maxLength?: number; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }

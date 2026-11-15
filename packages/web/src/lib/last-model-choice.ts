@@ -74,8 +74,31 @@ export function setSavedPreference(backendId: string, choice: ModelChoice | unde
   if (choice) savedPreferences.set(backendId, choice); else savedPreferences.delete(backendId);
 }
 
-/** The model a plain mission starts on when none is bound yet: remembered pick, else the host default, else recommended. */
+/**
+ * The one model a new mission runs on, and the one Home shows: remembered pick, else the host's explicit default, else the
+ * recommendation, else the provider-configured model. Once a catalog has loaded (`models` defined) every candidate must be
+ * a listed, enabled row, so a stale pick can neither be shown nor started.
+ */
+export function resolveStartModel(input: {
+  remembered?: ModelChoice; explicit?: ModelChoice; recommended?: ModelChoice; configured?: ModelChoice; models?: readonly ChoiceCandidate[];
+}): ModelChoice | undefined {
+  for (const candidate of [input.remembered, input.explicit, input.recommended, input.configured]) {
+    const usable = usableModelChoice(candidate, input.models);
+    if (usable) return usable;
+  }
+  return undefined;
+}
+
+/** What Home resolved for each backend. `undefined` choice with a loaded catalog means nothing usable: the engine default applies. */
+const resolvedStarts = new Map<string, { choice: ModelChoice | undefined }>();
+export function setResolvedStartModel(backendId: string, resolved: { choice: ModelChoice | undefined } | undefined): void {
+  if (resolved) resolvedStarts.set(backendId, resolved); else resolvedStarts.delete(backendId);
+}
+
+/** The model a plain mission starts on when none is bound yet: exactly what Home resolved, else (catalog not loaded) the unchecked chain. */
 export function startingModelChoice(backendId: string): ModelChoice | undefined {
+  const resolved = resolvedStarts.get(backendId);
+  if (resolved) return resolved.choice;
   return readLastModelChoice(backendId) ?? savedPreferences.get(backendId) ?? recommendedDefaults.get(backendId);
 }
 

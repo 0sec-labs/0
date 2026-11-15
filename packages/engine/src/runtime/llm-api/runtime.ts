@@ -561,7 +561,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
     if (providerChanged) {
       // Full re-detection against the (optionally new) account, reusing the
-      // exact constructor path. Preserve the role-selection knobs, but never
+      // exact constructor path. Preserve singleModel/autoRoute, but never
       // carry the previous provider's model or explicit apiKey to a new connection.
       // Credentials come from the (possibly refreshed) environment.
       const merged: RuntimeConfig = {
@@ -570,7 +570,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         siwcConnection: sel.provider === "chatgpt-plan" ? sel.siwcConnection : undefined,
         provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
         model: sel.model,
-        ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
+        // Role pins name models of the previous provider; a new connection never inherits them.
+        agentModels: sel.agentModels ?? {},
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
         ...(sel.autoRoute !== undefined ? { autoRoute: sel.autoRoute } : {}),
         ...(sel.env !== undefined ? { env: sel.env as Record<string, string> } : {}),

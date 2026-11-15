@@ -6,7 +6,7 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, setSavedPreference, usableModelChoice } from "@/lib/last-model-choice";
+import { readLastModelChoice, rememberModelChoice, resolveStartModel, setRecommendedDefault, setResolvedStartModel, setSavedPreference, usableModelChoice } from "@/lib/last-model-choice";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -698,19 +698,6 @@ export function Composer({
   useEffect(() => {
     setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
   }, [client.backendId, recommendedDefault, localRelay]);
-  // The host's saved default is what a new mission starts on when nothing is remembered or recommended, so the button names it too.
-  const savedPreference = useMemo(() => {
-    const pref = providerList.data?.preference;
-    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
-    const saved =
-      pref?.providerId && pref.model
-        ? { providerId: pref.providerId, model: pref.model }
-        : providerDefault?.configuration?.model
-          ? { providerId: providerDefault.id, model: providerDefault.configuration.model }
-          : undefined;
-    return usableModelChoice(saved, modelCatalog.data ? catalogModels : undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
-  }, [providerList.data, modelCatalog.data, localRelay]);
   // The host's explicit default (not the provider-configured fallback above) outranks the recommendation.
   const explicitPreference = useMemo(() => {
     const pref = providerList.data?.preference;
@@ -720,7 +707,21 @@ export function Composer({
   useEffect(() => {
     setSavedPreference(client.backendId, localRelay ? undefined : explicitPreference);
   }, [client.backendId, explicitPreference, localRelay]);
-  const startModel = effectiveModelChoice(rememberedModel, explicitPreference ?? recommendedDefault ?? savedPreference);
+  // Label and mission start share one resolution, so the button always names the model that will run.
+  const configuredModel = useMemo(() => {
+    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
+    return providerDefault?.configuration?.model ? { providerId: providerDefault.id, model: providerDefault.configuration.model } : undefined;
+  }, [providerList.data]);
+  const startModel = useMemo(
+    () => resolveStartModel({ remembered: rememberedModel, explicit: explicitPreference, recommended: recommendedDefault, configured: configuredModel, models: modelCatalog.data ? catalogModels : undefined }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+    [rememberedModel, explicitPreference, recommendedDefault, configuredModel, modelCatalog.data, localRelay],
+  );
+  useEffect(() => {
+    // Wait for both the catalog and the host's providers: until then the unchecked chain is the best available answer.
+    const ready = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
+    setResolvedStartModel(client.backendId, ready ? { choice: startModel } : undefined);
+  }, [client.backendId, startModel, modelCatalog.data, providerList.data, localRelay, localModels]);
   // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
   const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
   const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
@@ -1287,19 +1288,14 @@ export function Composer({
                         recommended={recommendedModels}
                         backendId={chatApi.client.backendId}
                         onSelect={(model) => {
-                          rememberModelChoice(chatApi.client.backendId, {
-                            providerId: model.provider,
-                            model: model.id,
-                          });
+                          // Only a pick on Home (no runtime yet) moves the default for new missions; a switch inside a mission changes that mission.
+                          const savesDefault = !snapshot.runtime && !localModels;
+                          if (!snapshot.runtime)
+                            rememberModelChoice(chatApi.client.backendId, {
+                              providerId: model.provider,
+                              model: model.id,
+                            });
                           setChoiceVersion((value) => value + 1);
-                          // Home has no bound runtime yet: save the pick host-side so it survives a reload and seeds new missions.
-                          if (!snapshot.runtime && !localModels)
-                            void webFetchJson("/api/console/models/preference", {
-                              method: "PATCH",
-                              body: JSON.stringify({ providerId: model.provider, model: model.id }),
-                            })
-                              .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }))
-                              .catch(() => undefined);
                           const sessionId = snapshot.session.id;
                           setPicked({ sessionId, providerId: model.provider, model: model.id });
                           void workspace
@@ -1311,8 +1307,20 @@ export function Composer({
                                 snapshot.runtime,
                               ),
                             )
-                            .then((result) => {
+                            .then(async (result) => {
                               if (!result) setPicked(null);
+                              // Save the pick host-side so it survives a reload and seeds new missions; say so when that fails.
+                              if (result && savesDefault)
+                                await workspace
+                                  .perform(
+                                    () =>
+                                      webFetchJson("/api/console/models/preference", {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ providerId: model.provider, model: model.id }),
+                                      }).then(() => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() })),
+                                    sessionId,
+                                    "Couldn't save this as your default model. Other browsers will keep the previous one.",
+                                  );
                               // The trigger is disabled while the change applies, so the menu cannot hand focus back; do it once it is usable.
                               setTimeout(() => {
                                 if (!document.activeElement || document.activeElement === document.body)
@@ -1327,6 +1335,7 @@ export function Composer({
                             : undefined
                         }
                         diagnostics={modelDiagnostics}
+                        pendingProviders={modelCatalog.data?.pendingProviders}
                         connections={
                           localRelay
                             ? undefined
