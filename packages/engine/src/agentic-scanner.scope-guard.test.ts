@@ -17,7 +17,7 @@ import type { AddressInfo } from "node:net";
 import { agenticScan } from "./agentic-scanner.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ScanConfig } from "./shared/index.js";
-import type { ScanEvent } from "./scanner.js";
+import type { ScanEvent } from "./events/scan-event.js";
 import { ScopePolicy } from "./scope/scope.js";
 
 function tmpDbPath(): string {

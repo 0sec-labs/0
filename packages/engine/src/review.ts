@@ -14,7 +14,7 @@ import type {
   ReviewAnchor,
 } from "./shared/index.js";
 import type { osecDB } from "./storage/index.js";
-import type { ScanEvent, ScanListener } from "./scanner.js";
+import type { ScanEvent, ScanListener } from "./events/scan-event.js";
 import { reviewAgentPrompt } from "./analysis-prompts.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { features } from "./agent/features.js";

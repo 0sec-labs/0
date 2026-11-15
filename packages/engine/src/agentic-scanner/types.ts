@@ -1,5 +1,5 @@
 import type { ScanConfig } from "../shared/index.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import type { NativeRuntime, RuntimeConfig } from "../runtime/types.js";
 import { ScopePolicy } from "../scope/scope.js";
 import { runMemSafetyScan } from "../stages/memsafety-scan.js";

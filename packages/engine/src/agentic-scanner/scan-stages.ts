@@ -1,6 +1,6 @@
 import type { ScanConfig, ScanReport } from "../shared/index.js";
 import type { RuntimeMode } from "../shared/index.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import { runMemSafetyScan } from "../stages/memsafety-scan.js";
 import type { MemSafetyScanOptions } from "../stages/memsafety-scan.js";
 import type { MemSafetyTarget } from "../triage/memsafety-types.js";

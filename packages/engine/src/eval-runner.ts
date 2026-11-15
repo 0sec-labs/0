@@ -12,7 +12,7 @@ import type { Finding, TargetInfo, AuthConfig, AttackCategory, Severity } from "
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import type { NativeAgentState } from "./agent/native-loop.js";
 import { getToolsForRole } from "./agent/tools.js";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import {
   collectTranscriptText,
   detectInsecureOutputHandling,

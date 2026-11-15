@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 
 export interface HistoricalPackageRestoreResult {
   name: string;

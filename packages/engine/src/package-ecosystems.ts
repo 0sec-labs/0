@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { NpmAuditFinding, Severity } from "./shared/index.js";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import { restoreHistoricalPackageFixture, shouldUseHistoricalPackageFallback } from "./historical-package-fallback.js";
 import { bufferToString } from "./shared-analysis.js";
 import type { RegistryProbeResult, TransitivePackage } from "./malicious-detector.js";

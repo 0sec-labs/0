@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { Finding, RuntimeMode } from "../shared/index.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import { runAnalysisAgent, type AnalysisAgentResult } from "../agent-runner.js";
 import { runSelectedStaticScan } from "../shared-analysis.js";
 import { kernelReviewAgentPrompt } from "../review/linux-kernel-profile.js";

@@ -1,6 +1,6 @@
 import type { Finding, ScanCostLedgerLike, ScanPlan } from "./shared/index.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import { createRuntime, createNativeApiRuntime } from "./runtime/index.js";
 import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
 import type { RuntimeType } from "./runtime/index.js";

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SemgrepFinding } from "./shared/index.js";
 import type { RuntimeType } from "./runtime/index.js";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import { scanExecutionTimeout } from "./scan-plan.js";
 
 /**

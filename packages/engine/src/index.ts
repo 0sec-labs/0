@@ -52,9 +52,7 @@ export type {
 } from "./scope/engagement-profile.js";
 
 export { scan } from "./scanner.js";
-export type {
-  ScanEvent,
-} from "./scanner.js";
+export type { ScanEvent } from "./events/scan-event.js";
 export { agenticScan } from "./agentic-scanner.js";
 export {
   finalize,

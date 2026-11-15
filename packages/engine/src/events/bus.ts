@@ -30,7 +30,7 @@
  *
  * e.g. `ZERO_EVENT_STEP_STARTED {"step":"recon","n":1}`.
  */
-import type { ScanEvent, ScanListener } from "../scanner.js";
+import type { ScanEvent, ScanListener } from "./scan-event.js";
 import type { ToolCall, ToolResult } from "../agent/types.js";
 import {
   createPresentationEvent,

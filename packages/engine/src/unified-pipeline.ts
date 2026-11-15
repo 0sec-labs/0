@@ -8,7 +8,7 @@ import { mapWithConcurrency } from "./concurrency.js";
 import { PROJECT_OBSERVATION_PROMPT } from "./secure/project-context.js";
 import type { Finding, NpmAuditFinding, SemgrepFinding, ScanConfig, ReviewCheckResult } from "./shared/index.js";
 import type { osecDB } from "./storage/index.js";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";

@@ -64,7 +64,7 @@ import { scoreGeometry } from "../kernel/geometry-score.js";
 import { osecDB } from "../storage/index.js";
 import { type AnalysisAgentResult, runAnalysisAgent } from "../agent-runner.js";
 import { reviewAgentPrompt } from "../analysis-prompts.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import type { NativeRuntime } from "../runtime/types.js";
 
 // Per-scan throwaway SQLite DB. The finders/skeptics run concurrently and the

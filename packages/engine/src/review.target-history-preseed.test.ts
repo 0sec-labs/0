@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ScanEvent } from "./scanner.js";
+import type { ScanEvent } from "./events/scan-event.js";
 import { buildTargetHistoryPreseedBlock } from "./review.js";
 import type { IntelTargetHistory } from "./intel/index.js";
 

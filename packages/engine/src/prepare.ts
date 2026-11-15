@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import type { ScanListener } from "./scanner.js";
+import type { ScanListener } from "./events/scan-event.js";
 import { installPackageForEcosystem } from "./package-ecosystems.js";
 import {
   isExistingLocalTargetPath,

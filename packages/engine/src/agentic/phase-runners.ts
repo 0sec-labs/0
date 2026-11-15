@@ -18,7 +18,7 @@ import {
 import { createScanMemoryStore } from "../triage/memories.js";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import type { NativeRuntime, NativeMessage } from "../runtime/types.js";
 import type { ToolCall } from "../agent/types.js";
 import { z } from "zod";

@@ -11,6 +11,8 @@ import { runAttacks } from "./stages/attack.js";
 import { runVerification } from "./stages/blind-reexploit.js";
 import { generateReport } from "./stages/report.js";
 import { eventBus } from "./events/bus.js";
+import type { ScanEvent, ScanListener } from "./events/scan-event.js";
+
 
 function isRepairableDbError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -57,29 +59,6 @@ async function openRunDatabase(dbPath?: string): Promise<LocalRunDatabase> {
     return { db: null, runId: "no-db", writeReport: () => {} };
   }
 }
-
-export type ScanEventType =
-  | "stage:start"
-  | "stage:end"
-  | "attack:start"
-  | "attack:end"
-  | "finding"
-  | "verify:result"
-  | "thinking"
-  | "usage"
-  | "error"
-  | "user:injected";
-
-export interface ScanEvent {
-  type: ScanEventType;
-  stage?: string;
-  message: string;
-  data?: unknown;
-  /** Bounded-plan attempt ownership, including concurrent progress. */
-  runIndex?: number;
-}
-
-export type ScanListener = (event: ScanEvent) => void;
 
 export async function scan(
   config: ScanConfig,

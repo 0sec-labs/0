@@ -11,7 +11,7 @@ import type {
   Severity,
 } from "./shared/index.js";
 import type { osecDB } from "./storage/index.js";
-import type { ScanEvent, ScanListener } from "./scanner.js";
+import type { ScanEvent, ScanListener } from "./events/scan-event.js";
 import { auditAgentPrompt } from "./analysis-prompts.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { runSelectedStaticScan, selectedStaticScanner } from "./shared-analysis.js";

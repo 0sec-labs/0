@@ -1,5 +1,5 @@
 import type { ScanConfig, ScanReport, Finding } from "../../shared/index.js";
-import type { ScanListener } from "../../scanner.js";
+import type { ScanListener } from "../../events/scan-event.js";
 import type { AgentOutput } from "../../agentic-scanner.js";
 import { features } from "../../agent/features.js";
 import { appendRoutingTraceRecord, type RoutingDecision } from "../../triage/index.js";

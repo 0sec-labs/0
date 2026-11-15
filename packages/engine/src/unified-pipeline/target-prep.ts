@@ -5,7 +5,7 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { SeedFinding, SemgrepFinding } from "../shared/index.js";
-import type { ScanListener } from "../scanner.js";
+import type { ScanListener } from "../events/scan-event.js";
 import { cloneGitRepo } from "../repo-clone.js";
 import { installPackageForEcosystem } from "../package-ecosystems.js";
 import { isExistingLocalTargetPath, isExplicitLocalTargetPath, resolveLocalTargetPath } from "../path-resolution.js";
