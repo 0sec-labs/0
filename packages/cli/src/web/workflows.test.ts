@@ -16,7 +16,7 @@ const directories: string[] = [];
 let count = 0;
 const context: WebWorkflowExecutionContext = {
   runtime: {} as NativeRuntime, model: "synthetic-model", providerId: "synthetic", target: "https://example.test",
-  status: "ready", autonomyMode: "standard", scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: "/fixture", message: "Fixture" },
+  status: "ready", autonomyMode: "changes", scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: "/fixture", message: "Fixture" },
 };
 function service(path = ":memory:", overrides: Partial<WebWorkflowExecutionContext> = {}) {
   const authorize = vi.fn(async () => ({ ...context, ...overrides }));
@@ -312,11 +312,11 @@ describe("manual security workflow execution", () => {
     expect((await instance.handle(`/api/console/workflow-definitions/${workflow.id}/executions`, "GET", undefined, new URLSearchParams()))?.data).toEqual({ executions: [] });
   });
 
-  it("rejects stale reviewed revisions and recon mode before dispatch", async () => {
+  it("rejects stale reviewed revisions and read-only threads before dispatch", async () => {
     const { instance } = service();
     const workflow = await save(instance);
     expect((await run(instance, { ...workflow, revision: 2 }))?.status).toBe(409);
-    const readonlyService = service(":memory:", { autonomyMode: "recon" }).instance;
+    const readonlyService = service(":memory:", { autonomyMode: "read-only" }).instance;
     expect((await run(readonlyService, await save(readonlyService)))?.status).toBe(403);
     expect(runner).not.toHaveBeenCalled();
   });

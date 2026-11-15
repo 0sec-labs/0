@@ -186,14 +186,11 @@ describe("guardNetworkRequiresScope (RETIRED — pure-behaviour pin only)", () =
       guardNetworkRequiresScope(ctx({ autonomyMode: "yolo", networkCapable: false, hasScope: false })),
     ).toBeNull();
   });
-  it("abstains in standard/copilot (those modes are NOT hard-deny — no contradiction)", () => {
-    // The real gate only hard-denies in yolo; standard/copilot run scope-on-demand
+  it("abstains when Ask before running commands is on (those modes are NOT hard-deny — no contradiction)", () => {
+    // The real gate only hard-denies in yolo; ask-first runs scope-on-demand
     // or same-origin fallback. Denying here would contradict turn-engine.
     expect(
       guardNetworkRequiresScope(ctx({ autonomyMode: "standard", networkCapable: true, hasScope: false })),
-    ).toBeNull();
-    expect(
-      guardNetworkRequiresScope(ctx({ autonomyMode: "copilot", networkCapable: true, hasScope: false })),
     ).toBeNull();
   });
   it("fails closed on missing flags in yolo", () => {

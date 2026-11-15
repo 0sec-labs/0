@@ -8,6 +8,31 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.33.0",
+    date: "2026-11-15",
+    title: "Two kinds of access",
+    summary: "Threads, Agents, automations and scans are now Read-only or Can make changes, and asking first is one global setting.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ShieldCheck", title: "Two kinds of access: Read-only or Can make changes", text: "Agents and threads that asked first now follow one setting, Ask before running commands, which is off by default. Turn it on in Settings to keep confirmations." },
+      { icon: "Wrench", title: "The same choice in the CLI", text: "Use --access read-only or --access changes on 0 agents create, 0 threads start and 0 lab console. The old flags still work." },
+      { icon: "ListChecks", title: "Nothing is lost on upgrade", text: "Saved Threads, Agents and automations still load, and the first start shows one note in Settings > Helpers that you can dismiss." },
+    ],
+  },
+  {
+    version: "0.32.0",
+    date: "2026-11-15",
+    title: "Simpler approvals, calmer Threads",
+    summary: "Threads run commands without asking by default, slash commands match the CLI, and the sidebar has seven items.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ShieldCheck", title: "Simpler approvals", text: "Threads and Agents run commands automatically. One setting, Ask before running commands, turns the questions back on. Agents are Read-only, Can run commands or Can open pull requests." },
+      { icon: "Wrench", title: "Slash commands match the CLI", text: "/threads list, /findings list and /config get work like their 0 commands, and the old names still work." },
+      { icon: "ListChecks", title: "A calmer Thread", text: "One shimmer for the live work, one row per call, clear messages when a send fails or a reply comes back empty." },
+      { icon: "Palette", title: "Seven sidebar items", text: "Skills has its own page with Installed and Browse, real brand logos appear on Explore, and the Findings board drops cards where you let go." },
+    ],
+  },
+  {
     version: "0.31.0",
     date: "2026-11-14",
     title: "Threads, Agents and a leaner CLI",

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createSentinelClient } from "../src/sentinels/api";
 import {
-  SentinelApiError, accessFields, accessLevelOf, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
+  SentinelApiError, ACCESS_OPTIONS, accessFields, accessLevelOf, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
   type Sentinel, type SentinelPreset,
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
@@ -99,20 +99,23 @@ describe("client", () => {
   });
 });
 
-describe("Agent access levels", () => {
-  test("maps stored autonomy to the level users see", () => {
+describe("Agent access: Read-only or Can make changes", () => {
+  test("maps stored autonomy to the two choices users see", () => {
     expect(accessLevelOf("observe")).toBe("read-only");
-    expect(accessLevelOf("propose")).toBe("commands");
-    expect(accessLevelOf("run")).toBe("commands");
-    expect(accessLevelOf("act")).toBe("pull-requests");
+    for (const stored of ["propose", "run", "act"] as const) expect(accessLevelOf(stored)).toBe("changes");
+    expect(ACCESS_OPTIONS.map(option => option.label)).toEqual(["Read-only", "Can make changes"]);
   });
-  test("keeps stored values when the level is unchanged, so editing never alters behaviour", () => {
-    expect(accessFields("commands", { autonomy: "propose", toolAccess: "read-only" })).toEqual({ autonomy: "propose", toolAccess: "read-only" });
+  test("keeps web access when the level is unchanged, so editing never alters it", () => {
+    expect(accessFields("changes", { autonomy: "propose", toolAccess: "read-only" })).toEqual({ autonomy: "propose", toolAccess: "read-only" });
     expect(accessFields("read-only", { autonomy: "observe", toolAccess: "read-web" })).toEqual({ autonomy: "observe", toolAccess: "read-web" });
   });
-  test("uses canonical values only when the user picks another level", () => {
-    expect(accessFields("pull-requests", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "act", toolAccess: "exec" });
-    expect(accessFields("commands", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "run", toolAccess: "exec" });
+  test("new choices store only observe or act", () => {
+    expect(accessFields("changes", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "act", toolAccess: "exec" });
     expect(accessFields("read-only", { autonomy: "act", toolAccess: "exec" })).toEqual({ autonomy: "observe", toolAccess: "read-only" });
+  });
+  test("saving an older propose or run Agent stores act, with its web access unchanged", () => {
+    const form = { ...formFromSentinel(base as never), autonomy: "propose" as const };
+    expect(fieldsFromForm(form)).toMatchObject({ ok: true, fields: { autonomy: "act" } });
+    expect(fieldsFromForm({ ...form, autonomy: "run" })).toMatchObject({ ok: true, fields: { autonomy: "act" } });
   });
 });

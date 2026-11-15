@@ -32,7 +32,7 @@ async function continuityHost() {
   const gateway = new ConsoleGateway({ projectPath: workspace, dbPath, homeDir: root });
   const context = {
     runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
-    model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "standard", role: "audit",
+    model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "changes", role: "audit",
     scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: workspace, message: "Fixture" },
   } as ConsoleExecutionContext;
   vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context);

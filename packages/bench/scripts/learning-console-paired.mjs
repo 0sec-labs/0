@@ -120,7 +120,7 @@ export async function runConsolePaired({ live = false, model = 'gpt-5.6-sol', pr
     const session = createConsoleSession({ runtime, workspaceRoot: root, db: null,
       systemPrompt: 'You are reviewing an authorized local fixture repository. Inspect only the files named by the operator. Use read_file for source inspection. Do not run commands, access networks, delegate, or invent runtime proof. Follow the requested output format.',
       tools: development ? [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.remember_codebase] : [TOOL_DEFINITIONS.read_file], codebaseLearning: true, huntMemoryStore: memory, learningStore: learning,
-      autonomyMode: 'yolo', allowSelfExtension: false, maxToolIterations: 6, maxTurnTokens: 16000 });
+      autonomyMode: 'changes', allowSelfExtension: false, maxToolIterations: 6, maxTurnTokens: 16000 });
     try {
       await session.ready; session.configureWorkspace(root);
       const outcome = await session.send(prompt, undefined, { signal: AbortSignal.timeout(90000) });

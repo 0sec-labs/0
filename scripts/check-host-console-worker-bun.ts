@@ -38,7 +38,7 @@ try {
   } });
   const create = (scanId: string) => {
     const session = createHostConsoleSession({
-      config: { runtime: selected, scanId, workspaceRoot: root, codebaseLearning: false, refineObjective: false, autonomyMode: "yolo" }, dbPath: join(root, "selected.db"),
+      config: { runtime: selected, scanId, workspaceRoot: root, codebaseLearning: false, refineObjective: false, autonomyMode: "changes" }, dbPath: join(root, "selected.db"),
       executionEnvironment: { ZERO_0VERSE_MCP: "0", ZERO_DISABLE_HUNT_MEMORY: "1", ZERO_NO_TELEMETRY: "1" },
       launch: { command: binary, args: ["--host-console-worker"], cwd: root, env: { PATH: process.env.PATH, HOME: root }, graceMs: 100 },
     }); sessions.push(session); return session;

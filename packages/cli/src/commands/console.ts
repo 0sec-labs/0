@@ -22,7 +22,7 @@ import type {
   ToolCall,
   ToolResult,
 } from "@0/engine";
-import { DEFAULT_AUTONOMY_MODE, approvalsFromMode, modeFromApprovals, parseApprovals } from "@0/engine/shared";
+import { DEFAULT_AUTONOMY_MODE, normalizeAccess, parseApprovals, type ApprovalsChoice } from "@0/engine/shared";
 import {
   processPresentationOutput,
   type ProcessPresentationOutput,
@@ -49,6 +49,7 @@ interface ConsoleOptions {
   model?: string;
   role?: string;
   mode?: string;
+  access?: string;
   yolo?: boolean;
   approvals?: string;
   maxToolCalls?: string;
@@ -69,22 +70,20 @@ async function readStdinPrompt(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-/** Launch autonomy modes accepted by `--mode`. */
-export const CONSOLE_AUTONOMY_MODES = ["standard", "recon", "copilot", "yolo"] as const;
-
-function isConsoleAutonomyMode(value: string): value is ConsoleAutonomyMode {
-  return (CONSOLE_AUTONOMY_MODES as readonly string[]).includes(value);
-}
+/** Values accepted by the hidden `--mode` alias: the two access states and the older stored values. */
+export const CONSOLE_AUTONOMY_MODES = ["read-only", "changes", "standard", "recon", "copilot", "yolo"] as const;
 
 type ConsoleAutonomyResolution =
-  | { ok: true; mode: ConsoleAutonomyMode }
+  | { ok: true; mode: ConsoleAutonomyMode; approvals: ApprovalsChoice }
   | { ok: false; error: string };
 
 /**
- * Resolve the console's launch approvals from the surfaces that set it,
- * without changing what any engine mode permits:
+ * Resolve the console's launch access and approvals from the surfaces that set them.
+ * Access is Read-only or Can make changes; asking first is only the "Ask before running
+ * commands" setting, so a launch is always `changes` unless `--mode read-only` says otherwise:
  *   --approvals ask|auto   the documented option (auto is the default)
- *   --mode <mode>          hidden alias, accepts the stored engine values
+ *   --mode <value>         hidden alias: read-only | changes, or an older stored value
+ *                          (recon is read-only; standard means changes with ask; yolo and copilot mean changes with auto)
  *   --yolo                 hidden alias for --approvals auto
  *
  * Precedence: --mode > --yolo > --approvals > the `approvals` setting > auto.
@@ -106,22 +105,21 @@ export function resolveConsoleAutonomyMode(opts: {
   const conflict = { ok: false as const, error: "Conflicting approval options. Use --approvals ask or --approvals auto on its own." };
 
   if (opts.mode !== undefined) {
-    if (!isConsoleAutonomyMode(opts.mode)) {
+    if (!(CONSOLE_AUTONOMY_MODES as readonly string[]).includes(opts.mode)) {
       return { ok: false, error: `Invalid --mode '${opts.mode}': use --approvals ask or --approvals auto.` };
     }
-    if (opts.yolo && opts.mode !== "yolo") return conflict;
-    if (approvals && approvalsFromMode(opts.mode) !== approvals) return conflict;
-    return { ok: true, mode: opts.mode };
+    const access = normalizeAccess(opts.mode);
+    const implied: ApprovalsChoice | undefined = opts.mode === "standard" ? "ask" : opts.mode === "yolo" || opts.mode === "copilot" ? "auto" : undefined;
+    if (opts.yolo && implied === "ask") return conflict;
+    if (approvals && implied && implied !== approvals) return conflict;
+    return { ok: true, mode: access, approvals: implied ?? approvals ?? (opts.yolo ? "auto" : parseApprovals(opts.settingApprovals) ?? "auto") };
   }
 
   if (opts.yolo) {
     if (approvals === "ask") return conflict;
-    return { ok: true, mode: "yolo" };
+    return { ok: true, mode: DEFAULT_AUTONOMY_MODE, approvals: "auto" };
   }
-  if (approvals) return { ok: true, mode: modeFromApprovals(approvals) };
-
-  const saved = parseApprovals(opts.settingApprovals);
-  return { ok: true, mode: saved ? modeFromApprovals(saved) : DEFAULT_AUTONOMY_MODE };
+  return { ok: true, mode: DEFAULT_AUTONOMY_MODE, approvals: approvals ?? parseApprovals(opts.settingApprovals) ?? "auto" };
 }
 
 /**
@@ -150,8 +148,9 @@ export function registerConsoleCommand(program: Command): void {
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
+    .option("--access <level>", "Access: read-only | changes (default changes)")
     .option("--approvals <ask|auto>", "Ask before running commands, or run them automatically (default auto). Credential, private-network and sandbox protections apply either way.")
-    .addOption(new Option("--mode <mode>", "Alias for --approvals using stored engine values").hideHelp())
+    .addOption(new Option("--mode <mode>", "Alias: read-only | changes, or an older stored value").hideHelp())
     .addOption(new Option("--yolo", "Alias for --approvals auto").hideHelp())
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
@@ -201,7 +200,7 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       const autonomyResolution = resolveConsoleAutonomyMode({
-        mode: opts.mode,
+        mode: opts.access ?? opts.mode,
         yolo: opts.yolo,
         approvals: opts.approvals,
         settingApprovals: getSettings().approvals,
@@ -212,6 +211,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       const autonomyMode: ConsoleAutonomyMode = autonomyResolution.mode;
+      const approvals: ApprovalsChoice = autonomyResolution.approvals;
       const scopeEnforcement = getScopeEnforcementState();
       console.error(chalk.dim(scopeEnforcement.message));
 
@@ -226,8 +226,8 @@ export function registerConsoleCommand(program: Command): void {
         }
       }
 
-      if (scopeEnforcement.enabled && autonomyMode === "yolo" && !hasConfiguredScope(scope)) {
-        console.error(chalk.red("Auto approvals require --scope <file> with at least one in_scope entry."));
+      if (scopeEnforcement.enabled && autonomyMode === "changes" && approvals === "auto" && !hasConfiguredScope(scope)) {
+        console.error(chalk.red("Running without asking requires --scope <file> with at least one in_scope entry."));
         process.exitCode = 2;
         return;
       }
@@ -321,10 +321,11 @@ export function registerConsoleCommand(program: Command): void {
             allowScanners: opts.allowScanners,
             scope,
             autonomyMode,
+            approvals,
             ...(resumeMessages ? { initialMessages: resumeMessages as NativeMessage[] } : {}),
-            // Headless: no operator to approve a scope extension or a copilot gate.
+            // Headless: no operator to approve a scope extension or an ask-first prompt.
             requestScope: async () => null,
-            approveTool: autonomyMode === "copilot" ? async () => false : undefined,
+            approveTool: approvals === "ask" ? async () => false : undefined,
           }, opts.dbPath);
         } catch (err) {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));
@@ -447,7 +448,7 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
   if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires --engine.");
   if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
   if (options.engine && options.engineUrl) throw new Error("Select either --engine or --engine-url.");
-  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.approvals || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
+  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.access || options.yolo || options.approvals || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
     throw new Error("Attached console uses the chat's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
   }
   const runtime = await deps.runtime(options);

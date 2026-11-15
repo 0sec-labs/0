@@ -9,7 +9,7 @@ import { findingFromRow } from "./state/findings-data.js";
 import { normalizeSettings } from "./state/settings.js";
 import { installWorkbenchPlugins } from "./workbench-plugins.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./state/session-plugin-host.js";
-import { VERSION } from "@0/engine/shared";
+import { VERSION, parseAccess, parseApprovals } from "@0/engine/shared";
 import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
@@ -82,7 +82,7 @@ async function runGuest(cli: boolean): Promise<number> {
     let checkpoint;
     try { checkpoint = session.exportCheckpoint(); } catch { /* Active workers prevent safe handoff. */ }
     const snapshot = { scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools, messages: session.messages,
-      autonomyMode: session.autonomyMode, webSearchEnabled: session.webSearchEnabled, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
+      autonomyMode: session.autonomyMode, approvals: session.approvals, webSearchEnabled: session.webSearchEnabled, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
     await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
     // Memory provenance is live UI state, never part of persisted session artifacts.
@@ -210,8 +210,9 @@ async function runGuest(cli: boolean): Promise<number> {
             const result = withScopeEnforcement(policy, () => session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"] })); await state(); value = await result; turn = undefined; break;
           }
           case "autonomy": {
-            if (typeof frame.value !== "string" || !["standard", "recon", "copilot", "yolo"].includes(frame.value)) throw new Error("Invalid autonomy mode");
-            await session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
+            const access = parseAccess(frame.value);
+            if (!access) throw new Error("Invalid access");
+            await session.setAutonomyMode(access, parseApprovals(frame.approvals)); break;
           }
           case "webSearch": { if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting"); await session.setWebSearchEnabled!(frame.value); break; }
           case "configure": { const value = frame.value as { target?: string; scope?: ConstructorParameters<typeof ScopePolicy>[0] | null }; session.configureEngagement({ target: value.target, ...(value.scope === undefined ? {} : { scope: value.scope ? new ScopePolicy(value.scope) : null }) }); break; }

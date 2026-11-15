@@ -34,7 +34,7 @@ async function engine(paths: ReturnType<typeof location>, assess: (options: RunO
   const createHost = () => {
     const gateway = new ConsoleGateway({ projectPath: paths.workspace, dbPath: paths.dbPath, homeDir: paths.workspace });
     const context = { runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
-      model: "fixture", providerId: "fixture", target: paths.workspace, status: "ready", autonomyMode: "standard", role: "audit",
+      model: "fixture", providerId: "fixture", target: paths.workspace, status: "ready", autonomyMode: "changes", role: "audit",
       scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: paths.workspace, message: "Fixture" } } as ConsoleExecutionContext;
     vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context);
     vi.spyOn(gateway, "authorizeWorkflowTarget").mockResolvedValue(context);

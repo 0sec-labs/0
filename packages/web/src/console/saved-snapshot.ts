@@ -19,7 +19,7 @@ export function savedTranscriptSnapshot(savedId: string, page: ConsoleMessagesPa
     savedId,
     target: meta.target ?? "",
     role: "discovery",
-    autonomyMode: "standard",
+    autonomyMode: "changes",
     scopeConfigured: false,
     localScopeConfigured: false,
     status: "ready",

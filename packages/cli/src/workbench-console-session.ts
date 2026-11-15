@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { DEFAULT_MAX_TOOL_ITERATIONS, getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/engine";
 import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/engine";
-import { findingSchema, type Finding } from "@0/engine/shared";
+import { findingSchema, normalizeAccess, legacyAskedFirst, type ApprovalsChoice, type Finding } from "@0/engine/shared";
 import type { TuiSettings } from "./state/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugins.js";
@@ -212,7 +212,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
   // Guest state never creates authority. Only the host's initial grant and approval callback do.
   // Initial host workspace authorization is independent of later mode RPCs.
-  const explicitAutoSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
+  const explicitAutoSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode !== undefined && normalizeAccess(config.autonomyMode, "changes") === "changes" && config.approvals !== "ask" && !legacyAskedFirst(config.autonomyMode);
   let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitAutoSourceGrant ? workspace : undefined);
   const authorizedSourceRoot = (guestPath: unknown): string | undefined => {
     if (!sourceScopePath || typeof guestPath !== "string") return undefined;
@@ -230,7 +230,8 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   const flushSourceContext = async () => { try { await sourcePersistence; } catch { throw new Error("Workbench source context persistence failed"); } };
   let webSearchEnabled = config.webSearchEnabled ?? config.initialCheckpoint?.webSearchEnabled;
   let autonomyRevision = 0;
-  let autonomyMode = config.initialCheckpoint?.autonomyMode ?? config.autonomyMode ?? "standard";
+  let autonomyMode = normalizeAccess(config.initialCheckpoint?.autonomyMode ?? config.autonomyMode, "changes");
+  let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) ? "ask" : "auto");
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
   let sourceContext: ConsoleSession["sourceContext"];
   let render: ConsoleRenderCallbacks | undefined; let active = false; let findings: Finding[] = []; let engineWorkStarted = false; let lastOutcome: ConsoleTurnOutcome | undefined; let cleanupPromise: Promise<void> | undefined;
@@ -318,7 +319,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       target = mapWorkbenchTarget(String(state.target ?? ""), workspace, true);
       scope = state.scope ? new ScopePolicy(state.scope as ConstructorParameters<typeof ScopePolicy>[0]) : undefined;
       localScopePath = state.localScopePath ? hostWorkspacePath(String(state.localScopePath), workspace) : undefined;
-      if (autonomyRevision === 0) autonomyMode = state.autonomyMode as typeof autonomyMode;
+      if (autonomyRevision === 0) { autonomyMode = normalizeAccess(state.autonomyMode, "changes"); if (state.approvals === "ask" || state.approvals === "auto") approvals = state.approvals; }
       if (typeof state.webSearchEnabled === "boolean") webSearchEnabled = state.webSearchEnabled;
       checkpoint = state.checkpoint ? mapWorkbenchCheckpoint(state.checkpoint as ConsoleSessionCheckpoint, workspace, true) : undefined;
     } else if (frame.type === "event") {
@@ -331,26 +332,28 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   };
   return {
     scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; }, get sourceContext() { return sourceContext ? structuredClone(sourceContext) : undefined; },
-    get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, scopeEnforcement,
-    setAutonomyMode(mode) {
+    get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, get approvals() { return approvals; }, scopeEnforcement,
+    setAutonomyMode(input, approvalsArg) {
+      const mode = normalizeAccess(input, "changes");
+      const nextApprovals: ApprovalsChoice = approvalsArg ?? (legacyAskedFirst(input) ? "ask" : input === "yolo" || input === "copilot" ? "auto" : approvals);
       const revision = ++autonomyRevision;
       const applied = () => {
         if (revision !== autonomyRevision) return;
-        autonomyMode = mode;
+        autonomyMode = mode; approvals = nextApprovals;
       };
       if (!controller.done) {
         applied();
         // The guest restores checkpoint mode ahead of pre-start config mode.
         if (serial.initialCheckpoint) {
-          serial.initialCheckpoint = { ...serial.initialCheckpoint as ConsoleSessionCheckpoint, autonomyMode: mode };
+          serial.initialCheckpoint = { ...serial.initialCheckpoint as ConsoleSessionCheckpoint, autonomyMode: mode }; serial.approvals = nextApprovals;
           if (checkpoint) checkpoint = { ...checkpoint, autonomyMode: mode };
         }
-        queue("autonomy", mode);
+        queue("autonomy", mode); serial.approvals = nextApprovals;
         return;
       }
       // Autonomy requests are bidirectional during an active decision callback.
       // Publish the new policy only after the guest confirms applying it.
-      const acknowledged = controller.request("autonomy", { value: mode }).then(applied);
+      const acknowledged = controller.request("autonomy", { value: mode, approvals: nextApprovals }).then(applied);
       deferred.push(acknowledged);
       void acknowledged.catch(() => {});
       return acknowledged;

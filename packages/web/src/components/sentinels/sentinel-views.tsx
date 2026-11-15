@@ -152,7 +152,7 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
     <Dialog open={reviewing !== null} onOpenChange={next => { if (!next) { setReviewing(null); setError(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
-        <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own, within its scope and autonomy. Runs count against its cap of {dailyCaps(sentinel.budget)}.</p>
+        <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own, within its scope and access. Runs count against its cap of {dailyCaps(sentinel.budget)}.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="secondary" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>

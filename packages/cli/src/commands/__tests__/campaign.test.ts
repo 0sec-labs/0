@@ -360,7 +360,7 @@ describe("runCampaign loop", () => {
     expect(engine.createSession).toHaveBeenCalledTimes(2);
     expect(engine.createSession.mock.calls[0]![0]).toMatchObject({
       target: "https://target.example",
-      autonomyMode: "yolo",
+      autonomyMode: "changes",
       scope: { in_scope: ["127.0.0.1"] },
     });
     expect(engine.createSession.mock.calls[0]![0].title).toMatch(/^Campaign iter 1: /);
@@ -413,7 +413,7 @@ describe("runCampaign loop", () => {
     expect(io.stderr.join("")).toContain("falling back to headless");
     expect(spawnChild).toHaveBeenCalledTimes(1);
     const argv = spawnChild.mock.calls[0]![0] as string[];
-    expect(argv.slice(1)).toEqual(expect.arrayContaining(["chat", "--mode", "yolo", "--scope", scopePath, "--print"]));
+    expect(argv.slice(1)).toEqual(expect.arrayContaining(["chat", "--approvals", "auto", "--scope", scopePath, "--print"]));
     expect(argv.some(argument => argument.includes(credential))).toBe(false);
     expect(argv).not.toContain("--api-key");
     expect([...io.stdout, ...io.stderr].join("")).not.toContain(credential);

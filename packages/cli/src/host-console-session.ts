@@ -1,5 +1,6 @@
 import { ScopePolicy, getScopeEnforcementState, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
   type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/engine";
+import { normalizeAccess, legacyAskedFirst, type ApprovalsChoice } from "@0/engine/shared";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
 import { HOST_CONSOLE_CALLBACKS, encodeHostConsoleFrame, type HostConsoleBootstrap, type HostConsoleFrame, type HostConsoleStopResult } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, applyWebConsoleRuntimeBootstrap, type WebConsoleRuntimeBootstrap } from "./web/operator-services.js";
@@ -7,7 +8,7 @@ import { captureWebConsoleRuntimeBootstrap, applyWebConsoleRuntimeBootstrap, typ
 type Config = Omit<ConsoleSessionConfig, "db">;
 interface Mirror {
   scanId: string; systemPrompt: string; tools: ConsoleSession["tools"]; messages: NativeMessage[];
-  autonomyMode: ConsoleSession["autonomyMode"]; webSearchEnabled?: boolean; target: string;
+  autonomyMode: ConsoleSession["autonomyMode"]; approvals: ApprovalsChoice; webSearchEnabled?: boolean; target: string;
   localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
 const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "sourceLessonHints"] as const;
@@ -96,7 +97,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   let mirror: Mirror = {
     scanId: config.scanId, systemPrompt: config.systemPrompt ?? "", tools: config.tools ?? [],
     messages: structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []),
-    autonomyMode: config.initialCheckpoint?.autonomyMode ?? config.autonomyMode ?? "standard", target,
+    autonomyMode: normalizeAccess(config.initialCheckpoint?.autonomyMode ?? config.autonomyMode, "changes"), approvals: config.approvals ?? (legacyAskedFirst(config.autonomyMode) ? "ask" : "auto"), target,
     webSearchEnabled: config.webSearchEnabled, checkpoint: config.initialCheckpoint,
   };
   let render: ConsoleRenderCallbacks | undefined;
@@ -161,7 +162,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       if (fenced || !value || typeof value !== "object") return;
       const next = value as Mirror;
       if (next.scanId !== config.scanId || !Array.isArray(next.messages) || !Array.isArray(next.tools)) throw new Error("Invalid host session mirror");
-      mirror = structuredClone({ ...next, autonomyMode: autonomyControlled ? mirror.autonomyMode : next.autonomyMode }); options.onSnapshot?.(value);
+      mirror = structuredClone({ ...next, autonomyMode: autonomyControlled ? mirror.autonomyMode : next.autonomyMode, approvals: autonomyControlled ? mirror.approvals : next.approvals ?? mirror.approvals }); options.onSnapshot?.(value);
     },
     onCallback: async (name, args) => {
       if (fenced || !callbacks[name] || !HOST_CONSOLE_CALLBACKS.includes(name as typeof HOST_CONSOLE_CALLBACKS[number])) throw new Error("Host callback is not granted");
@@ -187,9 +188,9 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   const ready = controller.start(bootstrap);
   void ready.catch(() => {});
   const ensure = () => { if (fenced || handoff) throw new Error("Host session execution is fenced"); if (mutationError) throw mutationError; };
-  const queue = (op: string, value: unknown) => {
+  const queue = (op: string, value: unknown, extra?: Record<string, unknown>) => {
     ensure();
-    mutations = mutations.then(async () => { await ready; ensure(); await controller.request(op, { value }); }).catch(error => { mutationError = error; });
+    mutations = mutations.then(async () => { await ready; ensure(); await controller.request(op, { value, ...extra }); }).catch(error => { mutationError = error; });
   };
   const forceStop = () => {
     fenced = true;
@@ -222,14 +223,16 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     get executionProcess() { return controller; },
     get scanId() { return mirror.scanId; }, ready,
     get systemPrompt() { return mirror.systemPrompt; }, get tools() { return mirror.tools; }, get messages() { return mirror.messages; },
-    get autonomyMode() { return mirror.autonomyMode; }, get target() { return target; }, get scope() { return scope; },
+    get autonomyMode() { return mirror.autonomyMode; }, get approvals() { return mirror.approvals; }, get target() { return target; }, get scope() { return scope; },
     get scopeEnforcement() { return policy; }, get localScopePath() { return localScopePath ?? undefined; },
     get sourceContext() { return mirror.sourceContext; }, get webSearchEnabled() { return mirror.webSearchEnabled; },
     get harness() { return harnessSnapshot ? harnessProxy : undefined; },
-    setAutonomyMode(value) {
-      queue("autonomy", value);
+    setAutonomyMode(input, approvalsArg) {
+      const value = normalizeAccess(input, "changes");
+      const approvals = approvalsArg ?? (legacyAskedFirst(input) ? "ask" : input === "yolo" || input === "copilot" ? "auto" : mirror.approvals);
+      queue("autonomy", value, { approvals });
       autonomyControlled = true;
-      const acknowledged = mutations.then(() => { ensure(); mirror.autonomyMode = value; });
+      const acknowledged = mutations.then(() => { ensure(); mirror.autonomyMode = value; mirror.approvals = approvals; });
       void acknowledged.catch(() => {}); // Legacy callers may still ignore the acknowledgement.
       return acknowledged;
     },

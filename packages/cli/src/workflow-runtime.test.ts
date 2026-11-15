@@ -28,7 +28,7 @@ async function fixture(runAssessment?: (options: RunOptions) => Promise<void>, o
   const gateway = new ConsoleGateway({ projectPath: workspace, dbPath: join(root, "history.db"), homeDir: root, ...(createSession ? { createSession } : {}) });
   const context = {
     runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
-    model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "standard", role: "audit",
+    model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "changes", role: "audit",
     scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: workspace, message: "Fixture" },
   } as ConsoleExecutionContext;
   vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context);

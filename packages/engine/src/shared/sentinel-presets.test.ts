@@ -16,7 +16,7 @@ describe("sentinel presets", () => {
       expect(parsed.role).toBe(preset.id);
       expect(parsed.status).toBe("paused");
       expect(parsed.scope.production).toBe(false);
-      expect(parsed.autonomy).not.toBe("act");
+      expect(["observe", "act"]).toContain(parsed.autonomy);
       expect(parsed.toolAccess).not.toBe("exec");
     }
   });
@@ -39,8 +39,8 @@ describe("sentinel presets", () => {
       expect(parseSentinelCreate(preset.sentinel).avatar.icon).toBe(preset.avatar.icon);
     }
   });
-  it("keeps read-only tools and propose or observe autonomy unless justified", () => {
-    for (const preset of SENTINEL_PRESETS) expect(["propose", "observe"]).toContain(preset.autonomy);
+  it("stores only observe or act, with read-only tools unless justified", () => {
+    for (const preset of SENTINEL_PRESETS) expect(["act", "observe"]).toContain(preset.autonomy);
     expect(SENTINEL_PRESETS.filter(preset => preset.sentinel.toolAccess !== "read-only").map(preset => preset.id).sort()).toEqual(["attack-surface-monitor", "pen-tester", "regression-tester"]);
   });
 });

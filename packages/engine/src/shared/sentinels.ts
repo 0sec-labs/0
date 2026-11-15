@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Sentinels: named, always-on security agents that sit alongside Automations (workflows).
- * Records are default-inert: created paused, read-only, propose-only, production off, with
+ * Records are default-inert: created paused, production off, with
  * a finite daily budget. Instructions and memory live in virtual files (AGENTS.md, NOTES.md, ...).
  * Triggers belong to Automations (`ownerSentinelId` / `runIn` on the workflow), not here.
  */
@@ -14,35 +14,56 @@ export const SENTINEL_STATUSES = ["active", "paused", "archived"] as const;
 export type SentinelStatus = (typeof SENTINEL_STATUSES)[number];
 export const SENTINEL_AUTONOMY = ["observe", "propose", "act", "run"] as const;
 /**
- * Stored values, kept for compatibility. observe = read-only drafts; propose = every effectful action waits for
- * approval (the default of older Agents); act = may publish without per-item approval; run = runs commands but
- * does not publish. Users see these as an access level (see {@link sentinelAccessLevel}).
+ * Stored values, kept for compatibility. New Agents store only observe (Read-only) or act (Can make changes).
+ * propose (every effectful action waits for approval) and run (runs commands, blocks mutating web requests) are
+ * only read, for Agents saved before. Users see two choices (see {@link sentinelAccessLevel}).
  */
 export type SentinelAutonomy = (typeof SENTINEL_AUTONOMY)[number];
 
-/** What an Agent can do, in the words users see. Derived from the stored autonomy; nothing else is stored. */
-export const SENTINEL_ACCESS_LEVELS = ["read-only", "commands", "pull-requests"] as const;
+/** What an Agent can do, in the words users see: two choices. Derived from the stored autonomy; nothing else is stored. */
+export const SENTINEL_ACCESS_LEVELS = ["read-only", "changes"] as const;
 export type SentinelAccessLevel = (typeof SENTINEL_ACCESS_LEVELS)[number];
-/** observe -> read-only; propose and run -> commands (propose keeps asking before each action); act -> pull-requests. */
+/** Older spellings of "changes", accepted as input only. */
+const ACCESS_LEVEL_ALIASES: Record<string, SentinelAccessLevel> = { commands: "changes", "pull-requests": "changes" };
+/** Accepts a current or older access value and returns the current one, or undefined. */
+export function normalizeSentinelAccessLevel(value: unknown): SentinelAccessLevel | undefined {
+  return (SENTINEL_ACCESS_LEVELS as readonly unknown[]).includes(value) ? (value as SentinelAccessLevel) : typeof value === "string" ? ACCESS_LEVEL_ALIASES[value] : undefined;
+}
+/** observe -> read-only; every other stored value (propose, run, act) -> changes. */
 export function sentinelAccessLevel(autonomy: SentinelAutonomy): SentinelAccessLevel {
-  return autonomy === "observe" ? "read-only" : autonomy === "act" ? "pull-requests" : "commands";
+  return autonomy === "observe" ? "read-only" : "changes";
+}
+type AccessFieldsCurrent = { autonomy: SentinelAutonomy; toolAccess: (typeof SENTINEL_TOOL_ACCESS)[number] };
+/**
+ * The stored fields for an access level. New writes store only observe or act; whether an Agent asks first is the
+ * global "Ask before running commands" setting, not stored here. An Agent already saved as propose or run is read as
+ * Can make changes and becomes act when it is saved, with its web access (toolAccess) unchanged.
+ */
+export function sentinelAccessFields(level: SentinelAccessLevel, current?: AccessFieldsCurrent): AccessFieldsCurrent {
+  if (level === "read-only") return current?.autonomy === "observe" ? current : { autonomy: "observe", toolAccess: "read-only" };
+  return { autonomy: "act", toolAccess: current && current.autonomy !== "observe" ? current.toolAccess : "exec" };
+}
+/** The value written for a stored autonomy: new writes only ever store observe or act. Older propose and run are read, never written. */
+export function sentinelWrittenAutonomy(autonomy: SentinelAutonomy): "observe" | "act" {
+  return autonomy === "observe" ? "observe" : "act";
 }
 /**
- * The stored fields for an access level. A level the Agent already has keeps its stored autonomy and web access, so
- * editing never changes behaviour by accident; moving to another level never widens beyond that level.
+ * `access` (canonical) and `accessLevel` (older name) are input aliases for autonomy and toolAccess; an explicit
+ * autonomy wins. Any save that names access, autonomy or toolAccess is normalised so only observe or act is written.
  */
-export function sentinelAccessFields(level: SentinelAccessLevel, current?: { autonomy: SentinelAutonomy; toolAccess: (typeof SENTINEL_TOOL_ACCESS)[number] }): { autonomy: SentinelAutonomy; toolAccess: (typeof SENTINEL_TOOL_ACCESS)[number] } {
-  if (current && sentinelAccessLevel(current.autonomy) === level) return { autonomy: current.autonomy, toolAccess: current.toolAccess };
-  return level === "read-only" ? { autonomy: "observe", toolAccess: "read-only" } : level === "commands" ? { autonomy: "run", toolAccess: "exec" } : { autonomy: "act", toolAccess: "exec" };
-}
-const isAccessLevel = (value: unknown): value is SentinelAccessLevel => (SENTINEL_ACCESS_LEVELS as readonly unknown[]).includes(value);
-/** `accessLevel` is an input alias for autonomy and toolAccess; an explicit autonomy wins. */
-function resolveAccessAlias<T extends Record<string, unknown>>(value: T, current?: { autonomy: SentinelAutonomy; toolAccess: (typeof SENTINEL_TOOL_ACCESS)[number] }): Omit<T, "accessLevel"> {
-  if (!("accessLevel" in value)) return value;
-  const { accessLevel, ...rest } = value;
-  if (!isAccessLevel(accessLevel)) throw new Error("accessLevel must be read-only, commands or pull-requests.");
-  const fields = sentinelAccessFields(accessLevel, current);
-  return { ...fields, ...rest } as Omit<T, "accessLevel">;
+function resolveAccessAlias<T extends Record<string, unknown>>(value: T, current?: AccessFieldsCurrent): Omit<T, "accessLevel" | "access"> {
+  const hasAlias = "accessLevel" in value || "access" in value;
+  if (!hasAlias && !("autonomy" in value)) return value as Omit<T, "accessLevel" | "access">;
+  const { accessLevel, access, ...rest } = value as Record<string, unknown>;
+  let fields: Partial<AccessFieldsCurrent> = {};
+  if (hasAlias) {
+    const level = normalizeSentinelAccessLevel(access ?? accessLevel);
+    if (!level) throw new Error("access must be read-only or changes.");
+    fields = sentinelAccessFields(level, current);
+  }
+  const merged = { ...fields, ...rest } as Record<string, unknown>;
+  if (typeof merged["autonomy"] === "string" && (SENTINEL_AUTONOMY as readonly string[]).includes(merged["autonomy"])) merged["autonomy"] = sentinelWrittenAutonomy(merged["autonomy"] as SentinelAutonomy);
+  return merged as Omit<T, "accessLevel" | "access">;
 }
 
 export const SENTINEL_TOOL_ACCESS = ["read-only", "read-web", "exec"] as const;
@@ -119,7 +140,7 @@ const base = {
   role: identifier.default(SENTINEL_CUSTOM_ROLE),
   skills: z.array(skillId).max(64).refine(values => new Set(values).size === values.length, "Skills must be unique.").default([]),
   scope: scopeSchema.prefault({}),
-  autonomy: z.enum(SENTINEL_AUTONOMY).default("propose"),
+  autonomy: z.enum(SENTINEL_AUTONOMY).default("observe"),
   toolAccess: z.enum(SENTINEL_TOOL_ACCESS).default("read-only"),
   hostId: z.string().trim().min(1).max(256).nullable().default(null),
   model: modelSchema.nullable().default(null),
@@ -140,7 +161,7 @@ export const SentinelCreateSchema = z.strictObject({ ...base, instructions: z.st
  * defaulted field would silently reset it to the default).
  */
 export const SentinelPatchSchema = z.object({ version: z.number().int().positive() }).catchall(z.unknown()).superRefine((patch, context) => {
-  for (const key of Object.keys(patch)) if (key !== "version" && key !== "accessLevel" && !(key in base)) context.addIssue({ code: "custom", message: `Unknown field "${key}".`, path: [key] });
+  for (const key of Object.keys(patch)) if (key !== "version" && key !== "accessLevel" && key !== "access" && !(key in base)) context.addIssue({ code: "custom", message: `Unknown field "${key}".`, path: [key] });
 });
 
 export type SentinelInput = z.output<typeof SentinelInputSchema>;

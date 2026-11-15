@@ -97,6 +97,8 @@ With the plugin on, generic scanner wrappers (sqlmap, nikto and similar) are hid
 
 If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
 
+Access is separate from scope. A thread or Agent is **Read-only** or **Can make changes**; Read-only refuses every command and edit, whatever the scope says. Asking before each command is the global **Ask before running commands** setting (see [Configuration](/configuration/)).
+
 ## Local workflows and strict scope mode
 
 Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.

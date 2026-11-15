@@ -134,7 +134,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
     </ControlCard>
     <ControlCard title="All tools">
       <QueryState pending={tools.isPending} error={tools.error} retry={tools.refetch} />
-      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value === "copilot" || value === "yolo" ? "Auto" : value === "recon" ? "Read-only" : "Ask first" })).filter((option, index, all) => all.findIndex(other => other.label === option.label) === index) ?? [])]} /></Field></div>
+      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value })) ?? [])]} /></Field></div>
       {tools.data && rows.length === 0 && <Empty>No tools match these filters.</Empty>}
       <ul className="divide-y divide-border-1">{rows.map(tool => <li key={tool.name} className="space-y-1 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul>
     </ControlCard>

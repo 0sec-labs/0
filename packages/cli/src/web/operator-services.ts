@@ -31,6 +31,7 @@ const MODEL_COLD_WAIT_MS = 2_500;
 import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import { resolveContextLimit } from "../state/context-window.js";
 import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../state/device-auth.js";
+import { accessUpgradeNotice as readAccessUpgradeNotice, dismissAccessUpgrade } from "../state/access-upgrade.js";
 import { getSettings, getSettingSources, updateSetting, resetSettings, defaultWriteLayer } from "../state/settings-store.js";
 import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, type TuiSettings } from "../state/settings.js";
 import { createPluginService, type PluginRunResult } from "../state/plugin-service.js";
@@ -396,7 +397,9 @@ function provider(input: unknown) {
   return result;
 }
 function settingsView() {
+  const accessUpgradeNotice = readAccessUpgradeNotice();
   return {
+    ...(accessUpgradeNotice ? { accessUpgradeNotice } : {}),
     settings: getSettings(), sources: getSettingSources(), defaultWriteLayer: defaultWriteLayer(),
     definitions: SETTING_DEFS.map((def) => ({ ...def, operatorOnly: isOperatorSetting(def.key as keyof TuiSettings) })),
   };
@@ -954,6 +957,7 @@ export class WebOperatorServices {
         const state = this.#providers().find((entry) => entry.id === info.id)!;
         data = { provider: state, status: state.auth };
       } else if (path === "settings" && method === "GET") data = settingsView();
+      else if (path === "settings" && method === "PATCH" && object(input).key === "accessUpgradeNoticeDismissed") { dismissAccessUpgrade(); data = settingsView(); }
       else if (path === "settings" && method === "PATCH") {
         const body = object(input);
         const key = text(body.key, "setting", 128);

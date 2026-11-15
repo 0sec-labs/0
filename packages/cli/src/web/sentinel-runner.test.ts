@@ -389,9 +389,8 @@ describe("GitHub pull request polling", () => {
     expect(runs.map(activation => activation.status)).toEqual(expect.arrayContaining(["running", "running"]));
     expect(runs).toHaveLength(2);
     const fork = runs.find(activation => activation.trigger.event.pr === 2)!;
-    const forkCreate = f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer") && input.autonomyMode === "recon");
-    expect(forkCreate).toMatchObject({ autonomyMode: "recon", workerPolicy: { allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] } });
-    expect(f.missions.create.mock.calls.filter(call => call[0].autonomyMode === "recon")).toHaveLength(1);
+    const forkCreate = f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer") && input.autonomyMode === "read-only");
+    expect(forkCreate).toMatchObject({ autonomyMode: "read-only", workerPolicy: { allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] } });
     const seed = f.missions.send.mock.calls.map(call => call[1]).find(text => text.includes("UNTRUSTED FORK PULL REQUEST"));
     expect(seed).toContain("<pull-request-diff>");
     expect(fork.trigger.event).toMatchObject({ fork: "yes" });

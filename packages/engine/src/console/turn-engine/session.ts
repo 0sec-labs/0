@@ -42,7 +42,7 @@ import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleU
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
 import { RECON_PASSIVE_NETWORK_TOOLS, canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
-import { executionPolicy } from "../../shared/approvals.js";
+import { executionPolicy, normalizeAccess, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
 
 /**
  * Create an interactive console session over the real tool registry + runtime.
@@ -74,7 +74,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
   let workerPolicy = intersectWorkerPolicies(cp?.workerPolicy, config.workerPolicy);
   let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
-  let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
+  let autonomyMode: ConsoleAutonomyMode = normalizeAccess(cp?.autonomyMode ?? config.autonomyMode, DEFAULT_AUTONOMY_MODE);
+  // Ask-first is the global setting, not a mode. An older "standard" value passed here still asks.
+  let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(cp?.autonomyMode) ? "ask" : "auto");
   let sessionScopeEnforcement = getScopeEnforcementState();
 
   // In-memory mutable scope state — updated by requestScope, NEVER written
@@ -188,7 +190,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     target: sessionTarget, scopePath: sessionScopePath ?? null, policy: sessionScope?.raw ?? null,
     configuredPolicy: configuredScope?.raw ?? null, deniedHosts: [...deniedHosts],
     deniedLocalPaths: [...deniedLocalPaths], deniedShellPayloads: [...deniedShellPayloads],
-    autonomyMode, allowScanners: config.allowScanners ?? false,
+    autonomyMode, approvals, allowScanners: config.allowScanners ?? false,
   });
 
   const toolContext: ToolContext = {
@@ -213,7 +215,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // lifts ONLY the scoped-source-audit allow-list — the network, local
     // filesystem and co-pilot gates in this file still run first.
     autonomyMode,
-    publicNetwork: executionPolicy(autonomyMode).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
+    approvals,
+    publicNetwork: executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
     escalateScopedAudit: config.escalateScopedAudit,
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
@@ -494,7 +497,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
   const operatorInstructionsBlock = buildOperatorInstructionsBlock(config.operatorInstructions);
-  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -559,10 +562,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     toolContext.scope = scope;
     if (configured) {
       configuredScope = scope;
-      if (executionPolicy(autonomyMode).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
+      if (executionPolicy(autonomyMode, approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
     }
   }
 
@@ -573,7 +576,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       sessionTarget = target;
       toolContext.target = target;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
       }
       notify?.(`Target set to ${target}; scope plugin is disabled, authorization is not enforced.`);
       return;
@@ -671,7 +674,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     sessionScope = expanded;
     toolContext.scope = expanded;
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
     }
     notify?.(
       `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
@@ -785,33 +788,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     );
 
 
-    // ── copilot: full autonomy WITHIN the engagement ──
-    // When the WHOLE call stays in-engagement, expand scope automatically with
-    // no prompt. Anything foreign or unreadable is an engagement-boundary
-    // decision, so it falls through to the operator prompt below (or a hard
-    // refusal when no prompt channel exists) — copilot never silently authorizes
-    // a target outside the established engagement.
-    if (autonomyMode === "copilot" && foreign.length === 0 && unresolved.length === 0) {
-      return autoExpandScope(uncoveredUrls, notify, "Co-pilot");
-    }
-
-    // Ask for uncovered standard targets and foreign co-pilot targets.
+    // Ask for uncovered targets.
     const requestScope = config.requestScope;
     if (!requestScope) {
-      if (executionPolicy(autonomyMode).scopeExpansion === "target-related") {
+      if (executionPolicy(autonomyMode, approvals).scopeExpansion === "target-related") {
         return { success: false, output: null,
-          error: `Auto mode: approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
+          error: `Approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
       }
-      if (autonomyMode === "copilot") {
-        // Copilot must not fall open on a foreign/unreadable target with no
-        // operator channel — refuse rather than defer to same-origin luck.
-        return {
-          success: false,
-          output: null,
-          error: `Co-pilot mode: tool "${call.name}" targets ${foreign.join(", ") || "an unresolved destination"} outside the current scope and no scope-approval channel is available; refused.`,
-        };
-      }
-      // standard, no callback → the executor's own validateTargetUrl governs
+      // no callback → the executor's own validateTargetUrl governs
       // (no scope → same-origin only). Unchanged from the legacy console.
       return "approved";
     }
@@ -967,17 +951,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
 
     // ── yolo: auto-grant the path's subtree, no prompt (floors above still ran) ──
-    if (executionPolicy(autonomyMode).autoGrantsLocalPaths) {
+    if (executionPolicy(autonomyMode, approvals).autoGrantsLocalPaths) {
       return autoGrantLocalScope(call, requestedPath);
     }
 
-    // ── copilot: auto-grant when the path belongs to the engagement ──
-    // (adjacent to an established local scope); otherwise defer to the operator.
-    if (autonomyMode === "copilot" && pathBelongsToEngagement(requestedPath, sessionScopePath)) {
-      return autoGrantLocalScope(call, requestedPath);
-    }
-
-    // ── standard (and copilot's out-of-engagement remainder): ask the operator ──
+    // ── Ask before running commands: ask the operator ──
     // No callback wired (legacy readline console / tests): behave exactly as
     // today — fall through so the executor returns its own scope error.
     const requestLocalScope = config.requestLocalScope;
@@ -1081,7 +1059,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
    *     danger-by-omission class), always correct regardless of autonomy mode.
    *   - `guardApprovalUnavailable` (standard-mode): standard is now the mode
    *     that requires per-action approval, so this guard closes that gate's
-   *     fail-OPEN corner — in standard mode a non-read-only tool with no
+   *     fail-OPEN corner: with Ask before running commands on, a non-read-only tool with no
    *     approval mechanism is denied rather than run unapproved. It is inert in
    *     copilot/yolo (prompt-free by design) and in recon (whose capability gate
    *     refuses effectful tools before this floor is ever reached).
@@ -1121,6 +1099,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       localScope: localScopeTools[call.name] === true,
       readOnly: readOnlyTools[call.name] === true,
       autonomyMode,
+      askFirst: approvals === "ask",
       hasScope: sessionScope !== undefined,
       approvalAvailable: config.approveTool !== undefined,
       // `capabilitiesResolved` is true only for a tool this session actually
@@ -1153,7 +1132,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // engine cannot invent an operator to ask, and this mirrors every other gate's
   // "no callback → defer to the layers beneath" contract.
   async function maybeApproveTool(call: ToolCall): Promise<"approved" | ToolResult> {
-    if (autonomyMode !== "standard") return "approved";
+    if (autonomyMode !== "changes" || approvals !== "ask") return "approved";
     const approveTool = config.approveTool;
     if (!approveTool) return "approved";
     if (readOnlyTools[call.name]) return "approved";
@@ -1167,7 +1146,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       return {
         success: false,
         output: null,
-        error: `Tool "${call.name}" was not approved by the operator in standard mode.`,
+        error: `Tool "${call.name}" was not approved by the operator.`,
       };
     }
     return "approved";
@@ -1186,14 +1165,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // executor's SSRF rail and target/scope boundary run underneath. In every
   // other mode this gate is a no-op.
   function maybeAllowReconCapability(call: ToolCall): "approved" | ToolResult {
-    if (autonomyMode !== "recon") return "approved";
+    if (autonomyMode !== "read-only") return "approved";
     if (readOnlyTools[call.name] || RECON_PASSIVE_NETWORK_TOOLS[call.name]) {
       return "approved";
     }
     return {
       success: false,
       output: null,
-      error: `Recon mode: tool "${call.name}" is not permitted — recon allows only passive, read-only reconnaissance (read-only tools and passive network recon), never effectful, mutating, or exploitation tools. Switch to a mode that can run commands (ask first or auto) to run it.`,
+      error: `Read-only: tool "${call.name}" is not permitted. Read-only allows only passive reconnaissance (read-only tools and passive network recon), never effectful, mutating, or exploitation tools. Switch access to Can make changes to run it.`,
     };
   }
 
@@ -1228,7 +1207,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     if (config.workflowLifecycle && WORKFLOW_LIFECYCLE_NAMES.has(call.name)) {
       try {
         if (!call.arguments || typeof call.arguments !== "object" || Array.isArray(call.arguments)) throw new Error("Workflow tool arguments must be an object.");
-        if (["start_run", "create_schedule", "update_schedule", "delete_schedule"].includes(call.name) && autonomyMode === "recon") throw new Error("Recon mode cannot start assessment workflows.");
+        if (["start_run", "create_schedule", "update_schedule", "delete_schedule"].includes(call.name) && autonomyMode === "read-only") throw new Error("Read-only: cannot start assessment workflows.");
         return { success: true, output: await config.workflowLifecycle.invoke(call.name, call.arguments) };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow lifecycle operation failed." }; }
     }
@@ -1293,7 +1272,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
     if (customSystemPrompt === undefined && !turnInProgress) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
     }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
@@ -2032,7 +2011,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // reproduction. Build the receipt from the host's finding ledger, not
         // the model's submitted evidence prose. All subsequent verification
         // still passes through dispatchAuthorized and its independent gates.
-        if (executionPolicy(autonomyMode).verificationReceipts && call.name === "save_finding" && toolResult.success &&
+        if (executionPolicy(autonomyMode, approvals).verificationReceipts && call.name === "save_finding" && toolResult.success &&
           toolResult.output && typeof toolResult.output === "object" && "findingId" in toolResult.output) {
           const findingId = toolResult.output.findingId;
           const finding = toolContext.findings.find((item) => item.id === findingId);
@@ -2251,14 +2230,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     get scope(): ScopePolicy | undefined { return toolContext.publicNetwork ? configuredScope : sessionScope; },
     get scopeEnforcement(): ScopeEnforcementState { return sessionScopeEnforcement; },
     get localScopePath(): string | undefined { return sessionScopePath; },
-    setAutonomyMode: (mode) => {
-      autonomyMode = mode;
+    get approvals(): ApprovalsChoice { return approvals; },
+    setAutonomyMode: (mode, approvalsArg) => {
+      // An explicit setting wins; an older value implies one; otherwise the current setting is kept.
+      approvals = approvalsArg ?? (legacyAskedFirst(mode) ? "ask" : mode === "yolo" || mode === "copilot" ? "auto" : approvals);
+      autonomyMode = normalizeAccess(mode, DEFAULT_AUTONOMY_MODE);
+      toolContext.approvals = approvals;
       // The executor shares this mutable context object, so updating it here
       // is what makes an approvals change take effect without a restart.
-      toolContext.autonomyMode = mode;
-      toolContext.publicNetwork = executionPolicy(mode).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
+      toolContext.autonomyMode = autonomyMode;
+      toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
       }
     },
     configureWorkspace: (path) => {
@@ -2285,10 +2268,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         sessionScope = undefined;
         configuredScope = undefined;
         toolContext.scope = undefined;
-        toolContext.publicNetwork = executionPolicy(autonomyMode).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
+        toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
       }
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
       }
     },
     reconfigureRuntime: (sel) => {

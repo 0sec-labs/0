@@ -23,7 +23,7 @@ import {
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
-  DEFAULT_AUTONOMY_MODE, effectiveEngineMode, executionPolicy, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
+  DEFAULT_AUTONOMY_MODE, parseAccess, executionPolicy, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleWorkerPolicy, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
@@ -52,7 +52,6 @@ const MAX_TARGET_LENGTH = 4_096;
 const MAX_OPERATOR_TEXT_LENGTH = 8_000;
 const MAX_QUEUED_MESSAGES = 20;
 const ROLES: Record<string, true> = { discovery: true, attack: true, verify: true, report: true, audit: true, review: true };
-const MODES: Record<string, true> = { standard: true, recon: true, copilot: true, yolo: true };
 const ACTIVE_WORKERS: Record<string, true> = { queued: true, running: true, parked: true };
 
 /** Events that represent real conversation activity; passive restore/notice/session events do not count. */
@@ -170,9 +169,11 @@ function text(value: unknown, label: string, max: number, empty = false): string
   if ((!empty && !result) || result.length > max || result.includes("\u0000")) throw new ConsoleGatewayError(`${label} ${!result ? "cannot be empty" : `must be at most ${max} characters and contain no NUL`}.`, 400);
   return result;
 }
+/** Read-only or Can make changes; an older stored value is accepted and read as one of the two. */
 function mode(value: unknown): DesktopConsoleAutonomyMode {
-  if (typeof value !== "string" || !Object.hasOwn(MODES, value)) throw new ConsoleGatewayError("Unsupported autonomy mode.", 400);
-  return value as DesktopConsoleAutonomyMode;
+  const access = parseAccess(value);
+  if (!access) throw new ConsoleGatewayError("Access must be read-only or changes.", 400);
+  return access;
 }
 function role(value: unknown): DesktopConsoleRole {
   if (typeof value !== "string" || !Object.hasOwn(ROLES, value)) throw new ConsoleGatewayError("Unsupported console role.", 400);
@@ -800,6 +801,8 @@ export class ConsoleGateway {
       managed.selection = { ...managed.selection, ...input.runtime };
     }
     const autonomyRevision = input.autonomyMode === undefined ? undefined : (managed.autonomyRevision = (managed.autonomyRevision ?? 0) + 1);
+    // The global Ask before running commands setting as it stands when the change is requested.
+    const approvalsAtRequest = getSettings().approvals;
     if (input.title !== undefined) { managed.title = input.title; managed.titleSource = inferTitleSource(input.title); }
     const execution = { ...input }; delete execution.title;
     // Mode-only changes are acknowledged during a turn in either transport.
@@ -808,7 +811,7 @@ export class ConsoleGateway {
     const stagedRestrictions = managed.pendingConfiguration && Object.keys(managed.pendingConfiguration).some(key => key !== "autonomyMode");
     if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
       const session = managed.session;
-      await session?.setAutonomyMode(input.autonomyMode);
+      await session?.setAutonomyMode(input.autonomyMode, approvalsAtRequest);
       if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The thread changed while applying its mode.", 409);
       if (managed.autonomyRevision === autonomyRevision) {
         managed.autonomyMode = input.autonomyMode;
@@ -968,7 +971,7 @@ export class ConsoleGateway {
     const overrides = raw.runtime === undefined ? {} : runtimeSelection(raw.runtime);
     const restoredRuntime = { ...savedRuntime, ...overrides };
     const defaults = {
-      autonomyMode: "standard",
+      autonomyMode: "changes",
       target: configuration?.target ?? stored.target ?? "",
       ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
@@ -1109,7 +1112,7 @@ export class ConsoleGateway {
     if (!context.scopeEnforcement.enabled) return { ...context, target };
     const call: ToolCall = { name: "launch_run", arguments: { target, kind } };
     const remoteGit = /^git@([^:]+):(.+)$/.exec(target);
-    if ((context.role === "audit" || context.role === "review") && context.localScopePath && context.autonomyMode !== "yolo" && (kind !== "source" || remoteGit || /^[a-z][a-z0-9+.-]*:\/\//i.test(target))) {
+    if ((context.role === "audit" || context.role === "review") && context.localScopePath && !(context.autonomyMode === "changes" && getSettings().approvals !== "ask") && (kind !== "source" || remoteGit || /^[a-z][a-z0-9+.-]*:\/\//i.test(target))) {
       if (context.authorization.scopedAuditDenials.includes("launch_run")) throw new ConsoleGatewayError("This automation action was previously declined by the source-audit gate.", 403);
       if (!context.authorization.scopedAuditGrants.includes("launch_run")) {
         if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
@@ -1241,12 +1244,12 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -1260,7 +1263,7 @@ export class ConsoleGateway {
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: effectiveEngineMode(managed.autonomyMode, settings.approvals), webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
@@ -1395,7 +1398,7 @@ export class ConsoleGateway {
       },
       requestLocalScope: async (request) => {
         // Auto means "don't ask": allow the directory, except the filesystem/home root.
-        if (executionPolicy(managed.session?.autonomyMode ?? effectiveEngineMode(managed.autonomyMode, getSettings().approvals)).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
+        if (executionPolicy(managed.session?.autonomyMode ?? managed.autonomyMode, managed.session?.approvals ?? getSettings().approvals).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this thread only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
@@ -1425,10 +1428,10 @@ export class ConsoleGateway {
     }
     if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410);
-    // "Ask before running commands": the setting tightens a thread that stores an auto mode, and is lifted again when switched off.
+    // "Ask before running commands" is the one global setting; it applies to every thread that can make changes and is lifted again when switched off.
     {
-      const wanted = effectiveEngineMode(managed.autonomyMode, getSettings().approvals);
-      if (session.autonomyMode !== wanted) await session.setAutonomyMode(wanted);
+      const approvals = getSettings().approvals;
+      if (session.autonomyMode !== managed.autonomyMode || session.approvals !== approvals) await session.setAutonomyMode(managed.autonomyMode, approvals);
     }
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
@@ -1580,7 +1583,7 @@ export class ConsoleGateway {
       if (SCHEDULE_TOOL_NAMES.has(name)) {
         const schedules=this.#scheduleLifecycle;
         if (!schedules) throw new ConsoleGatewayError("Scheduling is unavailable on this engine.",409);
-        if (name !== "list_schedules" && managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot edit schedules.",403);
+        if (name !== "list_schedules" && managed.autonomyMode === "read-only") throw new ConsoleGatewayError("Read-only threads cannot edit schedules.",403);
         const context={workflowId:managed.workflowId};
         let approved=false;
         let request={...args};
@@ -1610,7 +1613,7 @@ export class ConsoleGateway {
         const epoch = managed.executionEpoch;
         const turnOwner = managed.turnOwner ?? undefined;
         const turnSignal = managed.abort?.signal;
-        if (managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot start automations.", 403);
+        if (managed.autonomyMode === "read-only") throw new ConsoleGatewayError("Read-only threads cannot start automations.", 403);
         const request = workflowLaunchSchema.parse(args);
         if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new ConsoleGatewayError("Select exactly one template or saved automation.", 400);
         if (request.workflowId && !request.revision) throw new ConsoleGatewayError("Saved automation runs require a pinned revision.", 400);
@@ -1844,7 +1847,7 @@ export class ConsoleGateway {
         await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
         managed.webSearchEnabled = input.webSearchEnabled;
       }
-      if (input.autonomyMode) { await managed.session?.setAutonomyMode(input.autonomyMode); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
+      if (input.autonomyMode) { await managed.session?.setAutonomyMode(input.autonomyMode, getSettings().approvals); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
       if (managed.pendingConfiguration === input) managed.pendingConfiguration = undefined;
       if (managed.status !== "closed" && !managed.turn) managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -1864,7 +1867,7 @@ export class ConsoleGateway {
     return deferred.promise;
   }
   #canApproveModeDecision(managed: ManagedSession, ownerId: string | undefined, signal?: AbortSignal): boolean {
-    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.autonomyMode === "yolo" && managed.session?.autonomyMode === "yolo" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
+    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.autonomyMode === "changes" && managed.session?.autonomyMode === "changes" && managed.session?.approvals !== "ask" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
   }
   #approveModeDecisions(managed: ManagedSession): void {
     for (const [id, pending] of managed.pending) {

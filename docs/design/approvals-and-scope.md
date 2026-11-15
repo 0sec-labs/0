@@ -322,13 +322,12 @@ recommendations above where they differ.
    running commands and the composer has no approvals control (the tune button
    held only the mode menu and was removed). The one safety valve is a single
    setting, **Ask before running commands** (Settings, Helpers; key `approvals`,
-   `ask|auto`, default `auto`, operator-only). It reuses the engine modes: when
-   on, a thread whose stored mode is `yolo` or `copilot` runs as `standard`;
-   recon is unchanged; it is re-evaluated at every turn and lifts when switched
-   off. CLI: `--approvals ask|auto` on `0 lab console` and `0 threads start|set`.
-2. **No "YOLO" in user-visible text.** `--yolo` and `--mode` remain hidden
-   aliases. Stored values are read, never migrated (`yolo` and `copilot` read as
-   Auto, `standard` as Ask first, `recon` as Read-only). Internal enum names stay.
+   `ask|auto`, default `auto`, operator-only). It applies on top of Can make
+   changes and is re-evaluated at every turn. CLI: `--approvals ask|auto` on
+   `0 lab console`; threads and Agents have no per-item choice.
+2. **No "YOLO" (or Observe, Propose, Run, Act, Recon, Copilot, Standard) in
+   user-visible text.** `--yolo` and `--mode` remain hidden aliases; stored
+   values are read, never migrated eagerly (see decision 6).
 3. **Third-party target authorization stays optional** (the scope plugin is off by
    default; the always-on Targets flow was not built). Scope means one thing in
    the UI: what a scan or Agent may target. The thread Permissions card became
@@ -336,17 +335,44 @@ recommendations above where they differ.
    gone, the scan detail card is "Run details", and the local folder is always
    allowed with no prompt (auto local grants are silent; the two network-scope
    notices remain).
-4. **Agents are access-first**: Read-only, Can run commands, Can open pull
-   requests. Mapping from stored autonomy: `observe` to Read-only; `propose` and
-   the new `run` to Can run commands; `act` to Can open pull requests. Existing
-   Agents keep their stored values, so behavior is identical (`propose` keeps
-   asking before every action). `run` is the only new stored value: it runs
-   commands in auto (ask-first when the setting is on), blocks mutating web
-   requests and instructs the Agent not to publish. The API keeps `autonomy` and
-   `toolAccess` and adds a derived `accessLevel` (also accepted as an input alias).
-5. **Prerequisite done first**: capability flags were extracted from `yolo` into
-   `ExecutionPolicy` (`shared/approvals.ts`) with a golden table test; the
-   existing engine suites pass unchanged against it.
+4. **Access is two states everywhere: Read-only | Can make changes**
+   (`read-only | changes`). This replaces the earlier three-level Agent access
+   and the four engine modes (`standard`, `recon`, `copilot`, `yolo`) and Agent
+   autonomy values (`observe`, `propose`, `run`, `act`). It applies to threads,
+   Agents, automations, presets, the turn engine and session checkpoints, the
+   gateway, the CLI (`--access read-only|changes`; `--mode`, `--yolo`,
+   `--autonomy`, `--tool-access`, `accessLevel` with `commands` and
+   `pull-requests` stay as hidden aliases), slash commands and the API (`access`
+   canonical; `autonomy` and `toolAccess` kept and echoed for compatibility).
+5. **Asking first is not a state.** It is only the global operator setting
+   **Ask before running commands** (default off), applied on top of Can make
+   changes at every turn. `standard` and `copilot` disappear as modes; their
+   behavior is reachable only through that setting.
+6. **Legacy values stay readable forever**, normalised on write, never rewritten
+   eagerly. Migration table:
+
+   | Stored value | Read as | Written on next save |
+   | --- | --- | --- |
+   | `observe`, `recon` | Read-only | `observe` (Agents), `read-only` (threads) |
+   | `act`, `run`, `propose`, `yolo`, `copilot`, `standard` | Can make changes | `act` (Agents), `changes` (threads) |
+
+   Agents saved as `propose` and threads saved as `standard` or `copilot` used to
+   ask before every action. They now follow the global setting. This is an
+   intentional decision with no special "Asks first" state. The upgrade is made
+   visible instead: the first start records one audit entry and shows one
+   dismissible note next to the setting (Settings, Helpers), and the changelog
+   and Agents docs carry an upgrade note. `propose` and `run` Agents also keep
+   blocking mutating web requests until saved.
+7. **The execution policy is re-baselined deliberately** (`shared/approvals.ts`,
+   golden table in `approvals.test.ts`): Read-only has the former recon
+   capability set (effectful tools refused outright); Can make changes has the
+   former yolo set. The ask-first setting gates every effectful tool call
+   through approvals and keeps the narrower former standard capability set
+   (no public-network shortcut, tokenised commands, grants behind a prompt); it
+   never grants anything and does nothing to Read-only.
+8. **Prerequisite done first**: capability flags were extracted from `yolo` into
+   `ExecutionPolicy` (`shared/approvals.ts`) with a golden table test.
+
 
 **Security note.** With Auto by default, commands run as the user on a local
 computer with no confirmation. The workbench sandbox isolates them when used.

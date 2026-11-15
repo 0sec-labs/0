@@ -96,6 +96,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   const resetTriggerRef = useRef<HTMLElement | null>(null);
   const openReset = (scope: "all") => { reset.reset(); resetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setResetScope(scope); };
   const [message, setMessage] = useState<string | null>(null);
+  const dismissNotice = useMutation({ scope: { id: "console-settings" }, mutationFn: () => webFetchJson<SettingsResponse>("/api/console/settings", { method: "PATCH", body: JSON.stringify({ key: "accessUpgradeNoticeDismissed", value: true }) }), onSuccess: data => { queryClient.setQueryData(settings.queryKey, data); } });
   const save = useMutation({ scope: { id: "console-settings" }, mutationFn: async (input: { key: string; value: unknown; scope: "global" | "project" }) => {
     if (!visibleWebSetting(input)) throw new Error("This preference is not managed by the web app.");
     const data = await webFetchJson<SettingsResponse>("/api/console/settings", { method: "PATCH", body: JSON.stringify(input) });
@@ -147,6 +148,10 @@ export function SettingsControl({ presentationOnly = false, category = "general"
         {section.id === "appearance" && <>
           <AppearanceRows />
         </>}
+        {!presentationOnly && section.id === "agents" && settings.data?.accessUpgradeNotice && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+          <p className="min-w-0 text-muted-foreground-2">Agents and threads that used to confirm every action now follow Ask before running commands. Turn it on to keep confirmations.</p>
+          <Button type="button" variant="ghost" size="sm" disabled={dismissNotice.isPending} onClick={() => dismissNotice.mutate()}>Dismiss</Button>
+        </div>}
         {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={reset.isPending} isolatedReady={isolatedReady} group={{ keys: settingGroup(def.key).filter(key => settings.data!.definitions.some(item => item.key === key)), values: settings.data!.settings }} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}
       </SettingsSection>;

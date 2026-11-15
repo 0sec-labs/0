@@ -13,6 +13,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Report** | The result of one run of a scan or an automation: status, evidence and linked findings. It opens at `/runs/<id>`; the CLI calls it a run (`0 lab runs`). |
 | **Automation** | A saved list of steps that runs by hand, on a trigger or on a schedule. Starter automations are templates. See [Automations](/automations/). |
 | **Agent** | A persistent agent with a name, a standing job, a scope, files, a schedule, an access level and a daily budget. It runs threads on a schedule, on a pull request or by hand. See [Agents](/agents/). |
+| **Access** | What a thread or Agent may do, with two choices everywhere: **Read-only** (reads and reports) or **Can make changes** (runs commands and opens pull requests). Whether it asks first is not a third choice: it is the one global setting **Ask before running commands**, off by default. Older stored values are still read. |
 | **Helper** | A helper agent a thread starts for a part of its work (a subagent). Limits live under Settings, Helpers. |
 | **Scope** | What a scan or Agent may target: the target list or URL on an automation or Agent, with its exclusions. It is optional and enforced by the scope plugin. Your chosen folder is always allowed. See [Scope and authorization](/scope/). |
 | **Plugin** | Installable code that extends 0: a tool plugin or an MCP server plugin. A plugin can bundle skills. See [Plugins](/plugins/). |

@@ -39,12 +39,12 @@ test('thread settings show one Scope card: no autonomy select, no confirmation c
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    assert.equal(await page.evaluate(() => window.defaultMode), 'yolo', 'the stored default stays internal; it is shown as Auto');
+    assert.equal(await page.evaluate(() => window.defaultMode), 'changes', 'new threads are Can make changes');
     await page.evaluate(() => window.openSettings('legacy'));
     await page.getByText('Scope', { exact: true }).first().waitFor();
     await page.getByRole('button', { name: 'Save settings', exact: true }).waitFor();
     const text = await page.locator('body').innerText();
-    assert.doesNotMatch(text, /yolo|act without asking|ask before acting|autonomy|permissions|limited to|folder and scope reviewed|confirm actions run/i);
+    assert.doesNotMatch(text, /yolo|recon|observe|propose|asks first|act without asking|ask before acting|autonomy|permissions|limited to|folder and scope reviewed|confirm actions run/i);
     assert.equal(await page.getByRole('combobox', { name: 'Autonomy' }).count(), 0);
     assert.equal(await page.getByRole('checkbox', { name: /reviewed|confirm/i }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Save settings', exact: true }).isDisabled(), false);

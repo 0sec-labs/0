@@ -111,6 +111,7 @@ Guide: [Read the workflow](/app/).
 | `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
 | `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
+| `--access <level>` | — | Access: read-only \| changes (default changes) |
 | `--approvals <ask\|auto>` | — | ask puts each command or change to you first (headless runs cannot answer, so effectful tools are refused). auto, the default, runs commands without asking. Credential, private-network and sandbox protections apply either way. Overrides the approvals setting. |
 | `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
@@ -127,7 +128,7 @@ See [Browser app](/app/#approvals) for Ask and Auto behavior. Approvals never gr
 
 #### Approval prompts
 
-Tool, network-scope, and directory approvals are distinct gates. Standard's per-action prompts require a wired approval callback; Co-pilot skips that gate, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/app/) before relying on an approval boundary.
+Tool, network-scope, and directory approvals are distinct gates. Per-action prompts (the Ask before running commands setting) require a wired approval callback, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/app/) before relying on an approval boundary.
 
 #### Session persistence
 
@@ -4918,7 +4919,8 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | --- | --- | --- |
 | `--model <model>` | — | Model for this thread |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--approvals <ask\|auto>` | — | Ask before running commands, or run them automatically (default auto) |
+| `--access <level>` | — | Access: read-only \| changes (default changes) |
+| `--approvals <ask\|auto>` | — | Moved to the global setting |
 | `--folder <path>` | — | Folder the thread works in |
 | `--target <target>` | — | Authorized target |
 | `--scope <path>` | — | Scope policy JSON file |
@@ -5009,7 +5011,8 @@ Change a thread's model, reasoning effort, mode or folder. A computer is chosen 
 | --- | --- | --- |
 | `--model <model>` | — | Model |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--approvals <ask\|auto>` | — | Ask before running commands, or run them automatically (default auto) |
+| `--access <level>` | — | Access: read-only \| changes (default changes) |
+| `--approvals <ask\|auto>` | — | Moved to the global setting |
 | `--folder <path>` | — | Folder the thread works in |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
@@ -5257,7 +5260,7 @@ Create a Agent from a preset or a JSON definition.
 | --- | --- | --- |
 | `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
 | `--name <name>` | — | Name |
-| `--access <level>` | — | Access level: read-only \| commands \| pull-requests |
+| `--access <level>` | — | Access: read-only \| changes |
 | `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
@@ -5278,7 +5281,7 @@ Change a Agent's settings.
 | --- | --- | --- |
 | `--name <name>` | — | Name |
 | `--mission <text>` | — | One-line mission |
-| `--access <level>` | — | Access level: read-only \| commands \| pull-requests |
+| `--access <level>` | — | Access: read-only \| changes |
 | `--daily-usd <usd>` | — | Daily budget in USD |
 | `--max-runs <n>` | — | Maximum runs per day |
 | `--file <path>` | — | Patch JSON object |
