@@ -174,6 +174,7 @@ export interface CorePluginApi {
     opts: { fetchImpl: typeof fetch; verifier: unknown },
   ): Promise<{ ok: true; result: MarketRegistryView } | { ok: false; error: string }>;
   unconfiguredVerifier: unknown;
+  configuredRegistryVerifier?: () => unknown;
   // ids + paths + install
   isSafePluginId(value: unknown): boolean;
   pluginsRootDir(homeDir?: string): string;
@@ -348,7 +349,7 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
       const c = await core();
       const fetched = await c.fetchRegistryIndex(registryUrl, {
         fetchImpl,
-        verifier: c.unconfiguredVerifier,
+        verifier: c.configuredRegistryVerifier?.() ?? c.unconfiguredVerifier,
       });
       if (!fetched.ok) return { ok: false, error: fetched.error };
       return { ok: true, result: fetched.result };

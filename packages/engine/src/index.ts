@@ -898,6 +898,8 @@ export {
 export {
   DEFAULT_REGISTRY_URL,
   unconfiguredVerifier,
+  createEd25519SignatureVerifier,
+  configuredRegistryVerifier,
   fetchRegistryIndex,
   searchInstallable,
   findInstallable,

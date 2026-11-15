@@ -18,7 +18,7 @@ A plugin is code you add to the agent: a tool plugin (tools it can call) or an M
 
 In the browser app, open **Plugins**. **Explore the marketplace** lists the registry, and **Add** offers **From marketplace**, **From GitHub repository** and **MCP server**. See [MCP](/mcp/) for MCP servers and service connections.
 
-The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community-curated index. `0 plugin browse`, `search` and `install` read its [`index.json`](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json) over HTTPS. Set `ZERO_REGISTRY_URL` or pass `--registry URL` to use another index. An explicitly empty value disables fetching. Entries are marked `unverified`, because no signature verifier is configured. A listing or a review is not a signature.
+The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community-curated index. `0 plugin browse`, `search` and `install` read its [`index.json`](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json) over HTTPS. Set `ZERO_REGISTRY_URL` or pass `--registry URL` to use another index. An explicitly empty value disables fetching. Entries are marked `unverified` unless you configure a verification key. Set `ZERO_REGISTRY_PUBLIC_KEY_FILE` to a PEM file with one or more Ed25519 public keys (SPKI) and the registry refuses unsigned entries and entries whose signature (base64 Ed25519 over the canonical entry) does not verify. A set but unreadable or empty key file refuses everything. A listing or a review is not a signature.
 
 | Command | What it does |
 | --- | --- |

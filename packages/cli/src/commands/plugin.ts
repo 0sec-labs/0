@@ -179,6 +179,8 @@ export interface CorePort {
   searchInstallable(entries: readonly InstallableEntryView[], query: string): InstallableEntryView[];
   findInstallable(entries: readonly InstallableEntryView[], id: string): InstallableEntryView | undefined;
   unconfiguredVerifier: SignatureVerifierView;
+  /** The operator-configured verifier (ZERO_REGISTRY_PUBLIC_KEY_FILE); absent in older engines and test fakes. */
+  configuredRegistryVerifier?: () => SignatureVerifierView;
   readonly DEFAULT_REGISTRY_URL: string;
   // loader.ts (discovery helpers only — this command never spawns)
   pluginsRootDir(homeDir?: string): string;
@@ -257,7 +259,7 @@ function resolve(deps: PluginCommandDeps): ResolvedDeps {
   return {
     core: deps.core,
     fetchImpl: deps.fetchImpl ?? fetch,
-    verifier: deps.verifier ?? deps.core.unconfiguredVerifier,
+    verifier: deps.verifier ?? deps.core.configuredRegistryVerifier?.() ?? deps.core.unconfiguredVerifier,
     homeDir: deps.homeDir,
     projectPath: deps.projectPath ?? process.cwd(),
     registryUrl: (deps.registryUrl ?? process.env["ZERO_REGISTRY_URL"] ?? deps.core.DEFAULT_REGISTRY_URL).trim(),
