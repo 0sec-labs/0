@@ -136,6 +136,7 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
               const isChanged = review.toolChanges?.changed.includes(tool.name);
               const isAdded = review.toolChanges?.added.includes(tool.name);
               const isRemoved = review.toolChanges?.removed.includes(tool.name);
+
               return (
                 <div key={tool.name} className="p-4">
                   <div className="flex items-center gap-2">
