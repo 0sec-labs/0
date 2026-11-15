@@ -20,6 +20,7 @@ CLI="${INPUT_CLI_PATH:-0}"
 DIFF_BASE="${INPUT_DIFF_BASE:-}"
 CHANGED_ONLY="${INPUT_CHANGED_ONLY:-}"
 STATIC_ONLY="${INPUT_STATIC_ONLY:-false}"
+SHARE_REPORT="${INPUT_SHARE_REPORT:-true}"
 ACTION_ROOT="${ZERO_ACTION_ROOT:-${GITHUB_ACTION_PATH:-}}"
 [[ -n "$ACTION_ROOT" && -n "${GITHUB_OUTPUT:-}" ]] || fail 'Action root and GITHUB_OUTPUT are required.'
 case "$MODE" in review|audit|scan) ;; *) fail 'Invalid mode.' ;; esac
@@ -43,6 +44,7 @@ case "$CHANGED_ONLY" in
 esac
 [[ "$CHANGED_ONLY" == false || -n "$DIFF_BASE" ]] || fail 'changed-only requires diff-base.'
 case "$STATIC_ONLY" in true|false) ;; *) fail 'Invalid static-only; use true or false.' ;; esac
+case "$SHARE_REPORT" in true|false) ;; *) fail 'Invalid share-report; use true or false.' ;; esac
 [[ "$STATIC_ONLY" == false || "$MODE" != scan ]] || fail 'static-only is only supported by review and audit.'
 [[ "$REPORT_DIR" != -* ]] || fail 'Report directory must not start with a dash.'
 # Positional target values cannot be interpreted as CLI switches.
@@ -53,7 +55,7 @@ JSON_REPORT="$REPORT_DIR/report.json"
 SARIF_REPORT="$REPORT_DIR/report.sarif"
 STDERR_LOG="$REPORT_DIR/0.stderr.log"
 # Do not retain a previous invocation's SARIF after an unsuccessful invocation.
-rm -f -- "$SARIF_REPORT"
+rm -f -- "$SARIF_REPORT" "$REPORT_DIR/report.share.json"
 # Use the compatibility spellings accepted by published releases and the new command tree.
 # The action can update before npm latest ships the consolidated scan modules.
 COMMON_ARGS=(--depth "$DEPTH" --format json --runtime "$RUNTIME" --timeout "$TIMEOUT" --cost-ceiling "$COST_CEILING")
@@ -119,6 +121,16 @@ if [[ ! -s "$JSON_REPORT" ]]; then
   echo "::error::0 did not produce a JSON report. Inspect the retained stderr artifact privately."
   if [[ "$CLI_EXIT" -ne 0 ]]; then exit "$CLI_EXIT"; fi
   exit 1
+fi
+# Share-safe copy, on by default. Never affects the gate: an older CLI without
+# `reports export` or any export failure only emits a notice.
+if [[ "$SHARE_REPORT" == true ]]; then
+  if "$CLI" reports export "$JSON_REPORT" --output "$REPORT_DIR/report.share.json" >/dev/null 2>>"$STDERR_LOG"; then
+    echo "share-report-file=$REPORT_DIR/report.share.json" >> "$GITHUB_OUTPUT"
+  else
+    rm -f -- "$REPORT_DIR/report.share.json"
+    echo "::notice::report.share.json was not written: this 0 CLI could not run 'reports export' (it needs a newer release). Set share-report: false to silence this."
+  fi
 fi
 set +e
 ZERO_ACTION_CLI_EXIT="$CLI_EXIT" ZERO_ACTION_ENFORCE_GATE=1 node "${ACTION_ROOT}/scripts/render-github-action-output.mjs" \

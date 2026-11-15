@@ -55,6 +55,9 @@ inputs:
   static-only:
     description: 'Skip AI analysis on purpose (review and audit only); without it, a run that cannot reach a model fails with CLI exit 3'
     default: 'false'
+  share-report:
+    description: 'true (default) writes report.share.json, an allowlist-based copy without evidence, PoC or local paths; false skips it. Needs a CLI with reports export; older CLIs are skipped quietly'
+    default: 'true'
   cli-path:
     description: 'Existing executable path; empty installs a checksum-verified release'
     default: ''
@@ -71,6 +74,9 @@ outputs:
   sarif-report-file:
     description: 'SARIF report path'
     value: ${{ steps.review.outputs.sarif-report-file }}
+  share-report-file:
+    description: 'Share-safe report path when share-report is true and the export succeeded'
+    value: ${{ steps.review.outputs.share-report-file }}
   total-findings:
     description: 'Total findings'
     value: ${{ steps.review.outputs.total-findings }}
@@ -136,6 +142,7 @@ runs:
         INPUT_DIFF_BASE: ${{ inputs.diff-base }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_STATIC_ONLY: ${{ inputs.static-only }}
+        INPUT_SHARE_REPORT: ${{ inputs.share-report }}
         INPUT_CLI_PATH: ${{ inputs.cli-path }}
       run: |
         [[ "${RUNNER_OS}" == Linux ]] || { echo '::error::This action supports Linux runners.'; exit 1; }
