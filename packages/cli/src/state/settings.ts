@@ -586,11 +586,6 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
     : undefined;
 }
 
-/** The valid value `key` would take from `value`, or undefined when it is not valid for the key. */
-export function validSettingValue<K extends keyof TuiSettings>(key: K, value: unknown): TuiSettings[K] | undefined {
-  return strictValueAt({ [key]: value }, key);
-}
-
 /** Round and clamp a finite number into the def's range; anything else is "absent". */
 function clampInteger(value: unknown, def: NumberSettingDef): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;

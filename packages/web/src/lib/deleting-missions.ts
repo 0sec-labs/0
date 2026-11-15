@@ -17,7 +17,3 @@ export function isMissionDeleting(...ids: Array<string | undefined>): boolean {
     return true;
   });
 }
-
-export function clearMissionsDeleting(...ids: Array<string | undefined>): void {
-  for (const id of ids) if (id) deleting.delete(id);
-}

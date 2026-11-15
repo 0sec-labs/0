@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
@@ -138,9 +138,4 @@ export function SkillMarkdown({ text }: { text: string }) {
     {frontmatter && <pre aria-label="SKILL.md metadata" className="overflow-x-auto rounded-md bg-secondary p-3 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground-1">{frontmatter}</pre>}
     <Markdown text={body} />
   </div>;
-}
-
-/** Small chip used wherever an installed skill came from the directory. */
-export function AddedFromGithubChip({ children = "Added from GitHub" }: { children?: ReactNode }) {
-  return <span className="inline-flex items-center gap-1 rounded-full bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground-2"><Check aria-hidden="true" className="size-3" />{children}</span>;
 }

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { DEFAULT_COLOR_THEME, getColorTheme, isColorThemeId, parseColorTheme, type ThemePalette } from "./color-themes";
+import { DEFAULT_COLOR_THEME, isColorThemeId, parseColorTheme } from "./color-themes";
 import { STORAGE_KEYS, storage } from "./storage";
 
 /**
@@ -31,7 +31,6 @@ export function initializeColorTheme() {
   window.addEventListener("storage", event => { if (event.key === COLOR_THEME_STORAGE_KEY || event.key === null) publish(stored()); });
 }
 export function getColorThemeId(): string { initializeColorTheme(); return current; }
-export const getActiveColorTheme = (): ThemePalette => getColorTheme(getColorThemeId());
 export function setColorTheme(next: string) {
   if (!isColorThemeId(next)) return;
   initializeColorTheme();

@@ -115,33 +115,6 @@ export function getCandidateEvidenceRequest(
 export const getFindingCandidateEvidenceRequest = getCandidateEvidenceRequest;
 
 /**
- * Evaluate whether an existing finding matches an incoming finding under the
- * similarity-key invariant: (category, normalizedTitle, evidenceRequestPrefix).
- *
- * Rules:
- * - Category must match strictly.
- * - Evidence prefixes must match strictly.
- * - If normalized titles are identical, findings merge.
- * - Fuzzy title matching (Levenshtein <= FUZZY_TITLE_DISTANCE_THRESHOLD) is
- *   permitted ONLY when both findings have matching non-empty evidence prefixes.
- */
-export function isFindingDuplicate(
-  existing: FindingSimilarityCandidate,
-  incoming: FindingSimilarityCandidate,
-): boolean {
-  if (!existing.category || !incoming.category || existing.category !== incoming.category) return false;
-  const existingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(existing));
-  const incomingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(incoming));
-  if (existingPrefix !== incomingPrefix) return false;
-  const existingNormTitle = normalizeFindingTitle(existing.title ?? "");
-  const incomingNormTitle = normalizeFindingTitle(incoming.title ?? "");
-  if (!existingNormTitle || !incomingNormTitle) return false;
-  if (existingNormTitle === incomingNormTitle) return true;
-  if (!existingPrefix) return false;
-  return levenshtein(existingNormTitle, incomingNormTitle) <= FUZZY_TITLE_DISTANCE_THRESHOLD;
-}
-
-/**
  * Find the first matching finding in a list of candidates that satisfies the
  * deduplication similarity invariant with the incoming finding.
  */

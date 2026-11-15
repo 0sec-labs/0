@@ -60,10 +60,6 @@ const recommendedDefaults = new Map<string, ModelChoice>();
 export function setRecommendedDefault(backendId: string, choice: ModelChoice | undefined): void {
   if (choice) recommendedDefaults.set(backendId, choice); else recommendedDefaults.delete(backendId);
 }
-/** The pick to show and start with: the operator's usable remembered choice, else the recommended default. */
-export function effectiveModelChoice(remembered: ModelChoice | undefined, recommended: ModelChoice | undefined): ModelChoice | undefined {
-  return remembered ?? recommended;
-}
 
 /**
  * The host's saved global default (PATCH /api/console/models/preference), published by the composer once the providers
