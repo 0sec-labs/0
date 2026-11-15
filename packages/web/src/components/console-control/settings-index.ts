@@ -51,7 +51,7 @@ const categoryKeywords: Record<SettingsPageId, string> = {
   agents: "agents where agents run computer sandbox subagents plugins",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
   instructions: "instructions agents.md global project guidance rules markdown",
-  git: "git github pull requests prs branch publish fixes connection token repository repositories repos commit visibility default branch sentinels",
+  git: "git github pull requests prs branch publish fixes connection sign in device code gh cli permissions token repository repositories repos commit visibility default branch sentinels",
   "audit-log": "audit log security history approvals denials settings changes mcp plugins connections sentinels export json actor action subject",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
 };
