@@ -27,7 +27,8 @@ Save `scope.json` with your authorized hosts:
 Pass it to the scan:
 
 ```bash
-0 scan web --target https://app.example.com --scope ./scope.json --depth quick --cost-ceiling 2
+0 scan web --target https://app.example.com --scope ./scope.json \
+  --depth quick --cost-ceiling 2
 ```
 
 With the plugin on, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
@@ -125,7 +126,7 @@ Saved state is not ongoing authorization. Before you resume a run, confirm the t
 
 Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
 
-The browser app's **Scope** page (`/scope`) groups scans and findings into a report, with its objective, scope and handoff notes.
+To collect an engagement's scans and findings in one place, use the **Reports** page in the browser app.
 
 <span id="engagement-posture-profile"></span>
 ## Posture profile
@@ -184,20 +185,6 @@ Rows carry UTC timestamps, stage, event type, an action summary and technique ma
 
 Findings and actions map to MITRE ATT&CK (Enterprise) and MITRE ATLAS (AI systems). A row can carry either, both or neither. 0 uses current ATT&CK names, for example TA0005 "Stealth" (formerly "Defense Evasion").
 
-## Data residency
-
-To keep model traffic inside a boundary, pin the provider and endpoint, and check every role model. For example, with Azure:
-
-```bash
-export AZURE_OPENAI_API_KEY=...
-export AZURE_OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1
-env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL=<deployment-name> 0 scan source ./repo --runtime api
-```
-
-- Setting Azure variables alone does not prove all traffic uses Azure. Provider priority and role models can pick other routes. See [Models and keys](/models/#how-0-picks-a-provider).
-- Other lookups still leave: GitHub API, OSV, package registries, Microsoft Graph and out-of-band testing services.
-- The `claude`, `codex` and `gemini` runtimes call third-party CLIs whose network traffic 0 does not control. Use `--runtime api`.
-
 <span id="what-0-does-not-do"></span>
 ## What scope does not cover
 
@@ -206,3 +193,4 @@ env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL=<deployment-name> 0 scan source ./re
 - A quiet posture is not stealth.
 - A hostname in scope does not authorize persistence, implants, C2, pivoting or destructive impact.
 - A saved lead or a model's confirmation is not always a proven vulnerability. Check the verifier result before disclosure. See [Verify and fix](/verify-and-fix/).
+- Scope does not limit where model traffic goes. See [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).

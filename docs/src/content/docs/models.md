@@ -294,6 +294,15 @@ env OPENAI_WIRE_API=responses \
 
 The flag requests access; it does not grant it. Reports keep the requested program separate from what the provider confirmed. Program-bound calls never fall back to another provider. Do not pass `--api-key` with ChatGPT sign-in.
 
+<span id="data-residency"></span>
+## Keep model traffic in one region
+
+Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`, as in the [Azure OpenAI](#azure-openai) example, and leave `ZERO_LLM_FALLBACK` unset.
+
+- Setting a provider's variables alone does not prove all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
+- Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
+- The `claude`, `codex` and `gemini` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
+
 <span id="console-credential-store"></span>
 ## Where credentials live
 

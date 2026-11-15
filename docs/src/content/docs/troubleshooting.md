@@ -42,7 +42,8 @@ The installer also fetches the FoxGuard static analyzer into the same folder. If
 To skip FoxGuard on purpose:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | INSTALL_FOXGUARD=0 sh
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh \
+  | INSTALL_FOXGUARD=0 bash
 ```
 
 Without FoxGuard, source reviews lose its static coverage.
@@ -83,7 +84,7 @@ nvm install 24
 
 ### API provider missing
 
-```
+```text
 API provider  missing  not configured
 ```
 
@@ -98,7 +99,7 @@ See [Models and keys](/models/). `configured` means a credential was found, not 
 
 ### API provider bad
 
-```
+```text
 API provider  bad  Azure OpenAI
 ```
 
@@ -143,7 +144,7 @@ For a priced model, 0 needs token usage in every response. If a proxy drops or c
 
 ### Agent loop error
 
-`Agent loop error: ...` usually means one of:
+`Agent loop error on turn <n>: ...` on stderr usually means one of:
 
 - **Model unavailable**: rate limit, quota or an unknown model ID. Check `--model` or `ZERO_MODEL`.
 - **Network error**: the provider is unreachable. Check connectivity and proxies.
@@ -167,7 +168,7 @@ The configuration is invalid, for example an unknown `--engagement-profile`, a b
 
 ### Target is out of scope
 
-```
+```text
 --target https://example.com is out of scope per ./scope.json: ...
 ```
 
@@ -216,7 +217,8 @@ The container runs as `ubuntu` (UID 1000). Give that user read access to the sou
 impacket, certipy and bloodhound-ce live in a Python venv at `/opt/ad-tools`, with their commands linked into `/usr/local/bin`:
 
 ```bash
-docker run --rm --entrypoint bash ghcr.io/0sec-labs/0:latest -c 'which secretsdump.py'
+docker run --rm --entrypoint bash ghcr.io/0sec-labs/0:latest \
+  -c 'which secretsdump.py'
 ```
 
 ## State and database

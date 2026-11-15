@@ -31,7 +31,7 @@ head:
               "name": "Can I run it on my own infrastructure?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes. 0 runs on your machine, in your CI runner or in a container, with your own model key. Only the context you send to the model you choose leaves your environment."
+                "text": "Yes. 0 runs on your machine, in your CI runner or in a container, with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search."
               }
             },
             {
@@ -55,7 +55,7 @@ head:
               "name": "How does it prove and fix a vulnerability?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "A finding is a claim, and verification runs it by reproducing the issue. A fix is accepted only when the patched code no longer reproduces the finding and your tests still pass."
+                "text": "A finding is a claim until verification reproduces it. A fix is accepted only when the patched code no longer reproduces the finding and your tests still pass."
               }
             },
             {
@@ -94,8 +94,6 @@ head:
         }
 ---
 
-Short answers, with links to the pages that cover each topic.
-
 ## What is 0security?
 
 0security is a framework for building security agents. They find vulnerabilities across your code, dependencies, infrastructure and AI agents, prove them, fix them, verify the fix and keep watching. Start with the [Quickstart](/) and the [concepts](/concepts/).
@@ -106,7 +104,7 @@ Yes. The code is licensed under MIT or Apache-2.0, at your option, and is develo
 
 ## Can I run it on my own infrastructure?
 
-Yes. 0 runs on your machine, in your CI runner or in a [container](/docker/), with your own model key. Only the context you send to the model you choose leaves your environment; see [Models and keys](/models/).
+Yes. 0 runs on your machine, in your CI runner or in a [container](/docker/), with your own model key. Code and context go to the model provider you choose. Some workflows also call outside services, such as OSV, package registries and web search; see [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
 
 ## Which models does it support?
 
@@ -118,7 +116,7 @@ Source repositories and pull request diffs ([Scan code](/scan-code/)), live web 
 
 ## How does it prove and fix a vulnerability?
 
-A finding is a claim, and verification runs it by reproducing the issue. A fix is accepted only when the patched code no longer reproduces the finding and your tests still pass. See [Verify and fix](/verify-and-fix/).
+A finding is a claim until verification reproduces it. A fix is accepted only when the patched code no longer reproduces the finding and your tests still pass. See [Verify and fix](/verify-and-fix/).
 
 ## What are persistent security agents (Sentinels)?
 

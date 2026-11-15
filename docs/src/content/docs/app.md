@@ -3,8 +3,6 @@ title: Browser app
 description: Run missions, review findings, change settings and themes in the local browser app, or run the same engine headless.
 ---
 
-The browser app is where you talk to the agent, watch it work and review what it found.
-
 ```bash
 0
 ```
@@ -28,15 +26,13 @@ The sidebar holds:
 - **New mission**, search and your mission history.
 - **Findings**, with a count of open findings.
 - **Automations** and **Skills**.
-- **More…**: **Explore** (the catalog of plugins, skills and themes), **Plugins**, **Memory** and **Engines**.
+- **More…**: **Explore** (the catalog of plugins, skills and themes), **Plugins**, **Memory** and **Computers**.
 - Your **Sentinels**, when the engine supports them.
 
 Two cards can appear above the account row, for local users and team owners:
 
 - **Finish setting up** has two steps: connect a model provider and start your first mission. It hides once both are done, and you can dismiss it. There is no separate onboarding page.
 - **Update available** shows the latest and current versions. **Copy update command** copies `0 upgrade`. Dismissing it hides that version only.
-
-Pages other than a mission show breadcrumbs at the top, for example **Plugins > Cloudflare** or **Settings > Notifications**. Notices appear as toasts at the bottom right. Status toasts close after 5 seconds, errors after 8.
 
 ### Keyboard shortcuts
 
@@ -67,17 +63,17 @@ The composer also has:
 
 - **Add to message**: attach images or text files, or reference a file path.
 - **Thinking effort**, for models that support it.
-- **Mode** (see below).
+- **Mode**: whether the agent asks before it acts. See below.
 - Slash commands. Type `/` to list them. For example `/model`, `/connect`, `/findings`, `/skills`, `/doctor` and `/explain`.
 
 ### Modes
 
-| Mode | Behavior |
-| --- | --- |
-| **YOLO** | Acts without per-action prompts. The default for new missions. |
-| **Standard** | Asks before each action. |
+| Mode | CLI name | Behavior |
+| --- | --- | --- |
+| **Act without asking** | `yolo` | Runs tools without per-action prompts. The default for new missions. |
+| **Ask before acting** | `standard` | Asks you to approve each action. |
 
-Switching to YOLO also resumes actions waiting for approval. Scope grants, folder grants and questions the agent asks you stay separate decisions. Existing missions keep their mode until you change it. Credential, private-network and sandbox protections apply in both modes.
+Switching to **Act without asking** also resumes actions waiting for approval. Scope grants, folder grants and questions the agent asks you stay separate decisions. Existing missions keep their mode until you change it. Credential, private-network and sandbox protections apply in both modes.
 
 ### Sending while the agent works
 
@@ -95,7 +91,7 @@ Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to turn search off by default. Thi
 
 ### Public source
 
-In YOLO, the agent can clone a public HTTPS repository to review it. Cloning does not add the hosting service to your scope. Scope exclusions and private-network restrictions still apply. See [Scope and authorization](/scope/#local-workflows-and-strict-scope-mode).
+With **Act without asking**, the agent can clone a public HTTPS repository to review it. Cloning does not add the hosting service to your scope. Scope exclusions and private-network restrictions still apply. See [Scope and authorization](/scope/#local-workflows-and-strict-scope-mode).
 
 ### Access programs
 
@@ -122,29 +118,9 @@ The agent can put a visual in a mission with its `visualize` tool: an attack pat
 | `table` | Columns and rows. |
 | `mermaid` | Sequence or flow diagrams. |
 
-Every visual has a title and a summary. The summary is the alt text and states the conclusion.
+Every visual has a title and a summary. The summary is the alt text and states the conclusion. A mission holds up to 200 visuals. A visual that is too large fails validation and the model retries with less data; nothing is truncated silently.
 
-Oversized visuals fail validation and the model retries. Nothing is truncated silently.
-
-| Limit | Value |
-| --- | --- |
-| Spec size | 64 KB |
-| Graph | 200 nodes, 400 edges, 30 groups |
-| Chart | 12 series, 500 points per series, 2,000 total |
-| Timeline | 200 events |
-| Table | 20 columns, 500 rows |
-| Mermaid source | 10,000 bytes |
-| Per mission | 200 visuals |
-
-Titles are at most 120 characters, summaries 600, captions 300 and labels 80.
-
-Visuals are plain data, never HTML:
-
-- Markup, URLs, `javascript:` and `data:` schemes, control characters and bidi overrides are rejected.
-- A node can point to a finding, a file or an agent by id. It is never a link.
-- The app renders visuals with its own components and sanitizes Mermaid (no click handlers, no script labels).
-
-Target content is attacker-controlled, so the agent is told to shorten labels and not copy target text verbatim.
+Visuals are plain data, never HTML. Markup, URLs and control characters are rejected. A node can reference a finding, a file or an agent, never a URL. The app sanitizes Mermaid. Target content is attacker-controlled, so the agent is told to shorten labels and not copy target text.
 
 ## Saved missions
 
@@ -172,8 +148,6 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Usage** | Estimated spend and tokens by model and by mission. |
 | | **Audit log** | Approvals, denials, settings, plugin and connection changes. Searchable, with JSON export. |
 | | **Diagnostics** | Checks that the engine, provider and tools work. |
-
-Old `/settings?section=` links for removed pages redirect to the closest page.
 
 ### Themes
 
@@ -239,8 +213,10 @@ Headless runs have no approval dialog. A task that needs a human decision cannot
 Send a prompt to a mission that is open on a running engine:
 
 ```bash
-0 console --chat <id> --print "Summarize the retained findings" --format json
-0 console --chat <id> --engine staging --print "Continue the investigation" --format ndjson
+0 console --chat <id> --format json \
+  --print "Summarize the retained findings"
+0 console --chat <id> --engine staging --format ndjson \
+  --print "Continue the investigation"
 ```
 
 The mission keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints engine events, then the result.
@@ -253,10 +229,11 @@ Manage live missions with `0 chats list`, `show`, `create`, `send`, `continue`, 
 
 ```bash
 export ZERO_AGENT_TOKEN="$(openssl rand -hex 32)"
-0 web --no-open --port 48123 --engine-token-env ZERO_AGENT_TOKEN --ready-json
+0 web --no-open --engine-token-env ZERO_AGENT_TOKEN --ready-json
 
 # From another shell with the same token variable:
-0 api /api/console/sessions --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
+0 api /api/console/sessions \
+  --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
 ```
 
 The default method is `GET`. Use `--method` and `--data <json-or-@file>` (at most 1 MB) for writes. Responses look like `{ "ok": true, "status": 200, "data": ... }`. Exit code 0 means the request succeeded, not that a queued operation finished; poll the resource to check.
@@ -266,3 +243,9 @@ The default method is `GET`. Use `--method` and `--data <json-or-@file>` (at mos
 - **Local** means tools run on the engine host. Your model endpoint can still be remote. Where tools run and which model you use are separate choices.
 - A provider connection does not authorize a target. Scope and tool isolation are separate.
 - A source build serves the app from built assets. Rebuild after changing source.
+
+## Next
+
+- [Models and keys](/models/): connect a provider and pick models per role.
+- [Findings](/findings/): triage what a mission found.
+- [Remote engines and teams](/engines/): run the engine on another machine.
