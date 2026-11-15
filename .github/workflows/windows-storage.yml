@@ -1,10 +1,24 @@
 name: "0: Windows storage"
+# Windows runners bill at 2x, so this runs only when the code it exercises can
+# have changed: the private-storage module and its tests, the Bun smoke script,
+# the lockfile/engine manifest and this file. A weekly run catches drift in the
+# windows-latest image, Bun and Node.
 on:
   push:
-    branches: ["**"]
+    paths:
+      - "packages/engine/src/improvement/**"
+      - "packages/engine/package.json"
+      - "pnpm-lock.yaml"
+      - "scripts/check-windows-storage-bun.ts"
+      - ".github/workflows/windows-storage.yml"
+  schedule:
+    - cron: "29 5 * * 1"
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: windows-storage-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows-storage:
     runs-on: windows-latest
