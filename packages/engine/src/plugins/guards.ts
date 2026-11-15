@@ -47,6 +47,8 @@
  * them defensively (undefined is treated as the unsafe answer) so a loosely
  * typed JS caller can never widen access by omission.
  */
+import { executionPolicy } from "../shared/approvals.js";
+
 export interface GuardContext {
   /** The tool being authorized. Used only for human-readable denial reasons. */
   readonly toolName: string;
@@ -249,7 +251,7 @@ export function composeGuards(...groups: readonly (readonly ToolGuard[])[]): Too
  * RETIRED — kept exported for backward compatibility, but wired NOWHERE.
  *
  * ORIGINAL INTENT: deny a network-capable tool when no scope is configured, in
- * YOLO mode, mirroring an old `maybeResolveScope` hard-deny ("YOLO mode: no
+ * Auto mode, mirroring an old `maybeResolveScope` hard-deny ("Auto mode: no
  * scope configured — tool ... cannot run").
  *
  * WHY IT WAS RETIRED: the "network requires a PRECONFIGURED scope" invariant no
@@ -277,8 +279,8 @@ export function guardNetworkRequiresScope(ctx: GuardContext): string | null | un
   // non-explicit-true hasScope as unscoped.
   const networkCapable = ctx.networkCapable !== false;
   const unscoped = ctx.hasScope !== true;
-  if (ctx.autonomyMode === "yolo" && networkCapable && unscoped) {
-    return `YOLO mode: tool "${ctx.toolName}" is network-capable but no scope is configured`;
+  if (executionPolicy(ctx.autonomyMode).publicNetwork && networkCapable && unscoped) {
+    return `Auto mode: tool "${ctx.toolName}" is network-capable but no scope is configured`;
   }
   return null;
 }

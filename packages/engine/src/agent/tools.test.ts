@@ -2639,10 +2639,10 @@ describe("containsUnquotedShellChars", () => {
   });
 });
 
-// ── run_command: YOLO lifts the scoped-audit command policy ─────────
+// ── run_command: Auto lifts the scoped-audit command policy ─────────
 //
 // The tokenized pipeline syntax (no unquoted shell operators, scoped paths) is
-// for the read-only SOURCE-AUDIT modes. In YOLO the operator has opted into
+// for the read-only SOURCE-AUDIT modes. In Auto the operator has opted into
 // full autonomy on their own machine, so run_command runs full shell via the
 // same path as the `bash` tool. These pin that the syntax gate is lifted ONLY
 // under yolo and stays enforced otherwise.
@@ -3078,7 +3078,7 @@ describe("ToolExecutor — scope enforcement (0#215)", () => {
 // authority: scope, when present and covering the host, satisfies the
 // cross-origin check. With no scope, the same-origin rail is unchanged.
 describe("ToolExecutor — explicit console public-network authority", () => {
-  it("refuses a different repository identity even with console YOLO public-network authority", async () => {
+  it("refuses a different repository identity even with console Auto public-network authority", async () => {
     const acquisition = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition")
       .mockResolvedValue({ success: true, output: "checkout completed" });
     const executor = new ToolExecutor({

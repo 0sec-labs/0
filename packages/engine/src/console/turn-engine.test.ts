@@ -101,7 +101,7 @@ describe("Console bookkeeping progress", () => {
   });
 });
 
-describe("YOLO finding verification workflow", () => {
+describe("Auto finding verification workflow", () => {
   it.each([false, true])("continues from a saved source lead without approval (missing runtime: %s)", async (missingRuntime) => {
     const root = mkdtempSync(join(tmpdir(), "0-yolo-verification-"));
     const source = join(root, "parser.cjs");
@@ -147,8 +147,8 @@ describe("YOLO finding verification workflow", () => {
           : "Runtime-reproduced: malformed integer accepted. Local parser PoC executed; caller impact still requires investigation.");
       },
     };
-    const approveTool = vi.fn(async () => { throw new Error("Routine YOLO verification must not request approval"); });
-    const askOperator = vi.fn(async () => { throw new Error("Routine YOLO verification must not ask whether to test"); });
+    const approveTool = vi.fn(async () => { throw new Error("Routine Auto verification must not request approval"); });
+    const askOperator = vi.fn(async () => { throw new Error("Routine Auto verification must not ask whether to test"); });
     const session = createConsoleSession({ runtime, autonomyMode: "yolo", approveTool, askOperator,
       allowModelSelfExtension: false, refineObjective: false });
     try {
@@ -166,7 +166,7 @@ describe("YOLO finding verification workflow", () => {
   });
 
   it.each(["recon", "standard", "copilot"] as const)("does not prescribe automatic PoCs in %s mode", (autonomyMode) => {
-    expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("YOLO verification workflow");
+    expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("Auto verification workflow");
   });
 });
 
@@ -1101,7 +1101,7 @@ describe("Console autonomy — denied-host memory", () => {
     expect(prompts).toBe(2);
   });
 
-  it("remembers a Standard refusal after switching to YOLO without prompting again", async () => {
+  it("remembers a Standard refusal after switching to Auto without prompting again", async () => {
     const runtime = new ScriptedRuntime([
       httpTurn("c1", "https://offscope.test/a"),
       endTurn("Yolo denial 1."),
@@ -1152,7 +1152,7 @@ describe("Console autonomy — yolo still enforces scope", () => {
         expect(fetch).not.toHaveBeenCalled();
         return { target: "https://doruk.ch/", scope: ScopePolicy.fromJson({ in_scope: ["doruk.ch", "excluded.test"] }) };
       },
-      approveTool: async () => { throw new Error("YOLO must not add a second per-action approval"); },
+      approveTool: async () => { throw new Error("Auto must not add a second per-action approval"); },
     });
     try {
       await session.send("hello");
@@ -1203,7 +1203,7 @@ describe("Console autonomy — yolo still enforces scope", () => {
     expect(outcome.toolCalls[0].result.success).toBe(true);
   });
 
-  it("enforces an explicit empty scope without prompting in YOLO", async () => {
+  it("enforces an explicit empty scope without prompting in Auto", async () => {
     const runtime = new ScriptedRuntime([
       {
         content: [
@@ -1212,7 +1212,7 @@ describe("Console autonomy — yolo still enforces scope", () => {
         stopReason: "tool_use",
         durationMs: 1,
       },
-      endTurn("YOLO denials hold without requestScope."),
+      endTurn("Auto denials hold without requestScope."),
     ]);
 
     const session = createConsoleSession({
@@ -1297,7 +1297,7 @@ describe("Console autonomy — approval integrity", () => {
     // ── Switch to yolo: tool auto-executes without approval or scope ──
     session.setAutonomyMode("yolo");
     expect(session.autonomyMode).toBe("yolo");
-    expect(session.systemPrompt).toContain("YOLO mode");
+    expect(session.systemPrompt).toContain("Auto mode");
 
     outcome = await session.send("yolo turn");
     expect(approvals).toBe(1); // approveTool still not called
@@ -2297,7 +2297,7 @@ describe("Console scope gate — schemeless hosts against a real scope", () => {
     expect(outcome.toolCalls[0].result.success).toBe(false);
   });
 
-  it("refuses an out-of-scope schemeless host in YOLO without prompting", async () => {
+  it("refuses an out-of-scope schemeless host in Auto without prompting", async () => {
     const runtime = new ScriptedRuntime([bashTurn("c1", "curl elsewhere.test/x"), endTurn("done")]);
     let prompts = 0;
     const session = createConsoleSession({
@@ -2383,7 +2383,7 @@ describe("Console scope gate — unresolvable shell destinations", () => {
 
   it("RUNS an unreadable local command in yolo without prompting (operator opted into full autonomy)", async () => {
     // `base64 --decode` is flagged unresolvable by the shell scanner (it hides
-    // its payload), but it is a LOCAL command with no network reach. YOLO is the
+    // its payload), but it is a LOCAL command with no network reach. Auto is the
     // operator's explicit full-autonomy opt-in, so the scope gate no longer
     // refuses an unreadable command — it runs (the executor's SSRF rail still
     // applies to supported network tools). Named foreign hosts need approval.
@@ -2406,7 +2406,7 @@ describe("Console scope gate — unresolvable shell destinations", () => {
       expect(prompts).toBe(0);
       expect(outcome.toolCalls[0].result.success).toBe(true);
       expect(outcome.toolCalls[0].result.error ?? "").not.toContain("cannot resolve");
-      expect(outcome.toolCalls[0].result.error ?? "").not.toContain("YOLO mode");
+      expect(outcome.toolCalls[0].result.error ?? "").not.toContain("Auto mode");
     } finally {
       if (prevRequireScope !== undefined) process.env["ZERO_REQUIRE_SCOPE"] = prevRequireScope;
     }
@@ -2760,7 +2760,7 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
     expect(session.scope).toBeUndefined();
   });
 
-  it("honors configured scope without asking to expand it in YOLO", async () => {
+  it("honors configured scope without asking to expand it in Auto", async () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "https://unrelated.test/x" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("done"),
@@ -2984,7 +2984,7 @@ describe("Console source acquisition is not target authorization", () => {
     expect(outcome.toolCalls[0].result.success).toBe(false);
   });
 
-  it("preserves a declined source host after switching to YOLO", async () => {
+  it("preserves a declined source host after switching to Auto", async () => {
     let prompts = 0;
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([

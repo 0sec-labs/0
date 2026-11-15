@@ -64,7 +64,7 @@ describe("scoped source-audit escalation gate", () => {
   });
 
 
-  it("YOLO + configured scope → a previously-blocked tool dispatches", async () => {
+  it("Auto + configured scope → a previously-blocked tool dispatches", async () => {
     const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const exec = new ToolExecutor(
@@ -81,9 +81,9 @@ describe("scoped source-audit escalation gate", () => {
     }
   });
 
-  it("YOLO + NO scope → still blocked (no scope means no execution rights)", async () => {
+  it("Auto + NO scope → still blocked (no scope means no execution rights)", async () => {
     // No scopePath: the allow-list gate does not even engage, and the handler's
-    // own scope guard blocks the call. YOLO grants nothing without a scope.
+    // own scope guard blocks the call. Auto grants nothing without a scope.
     const exec = new ToolExecutor(
       baseCtx({ autonomyMode: "yolo" /* no scopePath */ }),
       null,
@@ -208,7 +208,7 @@ describe("scoped source-audit escalation gate", () => {
       expect(blocked.success).toBe(false);
       expect(blocked.error).toMatch(BLOCK_MSG);
 
-      // Flip the same context object to YOLO — no new executor.
+      // Flip the same context object to Auto — no new executor.
       ctx.autonomyMode = "yolo";
       const opened = await exec.execute(patchCall);
       expect(opened.error).not.toMatch(BLOCK_MSG);

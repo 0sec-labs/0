@@ -11,6 +11,7 @@ export * from "./operator-instructions.js";
 export * from "./agent-assurance.js";
 export * from "./presentation.js";
 export * from "./desktop-console.js";
+export * from "./approvals.js";
 export * from "./live-harness.js";
 export * from "./slash-commands.js";
 export * from "./security-workflows.js";

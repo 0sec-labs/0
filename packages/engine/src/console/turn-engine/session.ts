@@ -42,6 +42,7 @@ import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleU
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
 import { RECON_PASSIVE_NETWORK_TOOLS, canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
+import { executionPolicy } from "../../shared/approvals.js";
 
 /**
  * Create an interactive console session over the real tool registry + runtime.
@@ -212,7 +213,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // lifts ONLY the scoped-source-audit allow-list — the network, local
     // filesystem and co-pilot gates in this file still run first.
     autonomyMode,
-    publicNetwork: autonomyMode === "yolo" ? { scope: configuredScope, deniedHosts } : undefined,
+    publicNetwork: executionPolicy(autonomyMode).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
     escalateScopedAudit: config.escalateScopedAudit,
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
@@ -558,7 +559,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     toolContext.scope = scope;
     if (configured) {
       configuredScope = scope;
-      if (autonomyMode === "yolo") toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
+      if (executionPolicy(autonomyMode).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
     if (customSystemPrompt === undefined) {
       systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
@@ -797,9 +798,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Ask for uncovered standard targets and foreign co-pilot targets.
     const requestScope = config.requestScope;
     if (!requestScope) {
-      if (autonomyMode === "yolo") {
+      if (executionPolicy(autonomyMode).scopeExpansion === "target-related") {
         return { success: false, output: null,
-          error: `YOLO mode: approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
+          error: `Auto mode: approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
       }
       if (autonomyMode === "copilot") {
         // Copilot must not fall open on a foreign/unreadable target with no
@@ -966,7 +967,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
 
     // ── yolo: auto-grant the path's subtree, no prompt (floors above still ran) ──
-    if (autonomyMode === "yolo") {
+    if (executionPolicy(autonomyMode).autoGrantsLocalPaths) {
       return autoGrantLocalScope(call, requestedPath);
     }
 
@@ -1088,7 +1089,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
    * and adding guards can only narrow access.
    *
    * The THIRD built-in, `guardNetworkRequiresScope`, is DELIBERATELY NOT wired:
-   * it is retired. Console YOLO now explicitly opts into public-network access;
+   * it is retired. Console Auto now explicitly opts into public-network access;
    * optional operator restrictions, denied decisions and private-network
    * boundaries remain enforced by the console, executor and pinned transport.
    * Existing non-console callers retain their target/same-origin policy.
@@ -1192,7 +1193,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     return {
       success: false,
       output: null,
-      error: `Recon mode: tool "${call.name}" is not permitted — recon allows only passive, read-only reconnaissance (read-only tools and passive network recon), never effectful, mutating, or exploitation tools. Switch to standard, copilot, or yolo to run it.`,
+      error: `Recon mode: tool "${call.name}" is not permitted — recon allows only passive, read-only reconnaissance (read-only tools and passive network recon), never effectful, mutating, or exploitation tools. Switch to a mode that can run commands (ask first or auto) to run it.`,
     };
   }
 
@@ -2031,7 +2032,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // reproduction. Build the receipt from the host's finding ledger, not
         // the model's submitted evidence prose. All subsequent verification
         // still passes through dispatchAuthorized and its independent gates.
-        if (autonomyMode === "yolo" && call.name === "save_finding" && toolResult.success &&
+        if (executionPolicy(autonomyMode).verificationReceipts && call.name === "save_finding" && toolResult.success &&
           toolResult.output && typeof toolResult.output === "object" && "findingId" in toolResult.output) {
           const findingId = toolResult.output.findingId;
           const finding = toolContext.findings.find((item) => item.id === findingId);
@@ -2253,9 +2254,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     setAutonomyMode: (mode) => {
       autonomyMode = mode;
       // The executor shares this mutable context object, so updating it here
-      // is what makes `/mode yolo` take effect without a restart.
+      // is what makes an approvals change take effect without a restart.
       toolContext.autonomyMode = mode;
-      toolContext.publicNetwork = mode === "yolo" ? { scope: configuredScope, deniedHosts } : undefined;
+      toolContext.publicNetwork = executionPolicy(mode).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
         systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
       }
@@ -2284,7 +2285,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         sessionScope = undefined;
         configuredScope = undefined;
         toolContext.scope = undefined;
-        toolContext.publicNetwork = autonomyMode === "yolo" ? { scope: undefined, deniedHosts } : undefined;
+        toolContext.publicNetwork = executionPolicy(autonomyMode).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
       }
       if (customSystemPrompt === undefined) {
         systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });

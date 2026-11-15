@@ -575,7 +575,7 @@ export interface ToolContext {
    */
   autonomyMode?: ToolAutonomyMode;
   /**
-   * Explicit console YOLO authority, never inferred from a tool argument or
+   * Explicit console Auto authority, never inferred from a tool argument or
    * target. Scope contains operator restrictions, not derived target grants.
    * Absent for existing scan/native callers, whose URL policy is unchanged.
    */

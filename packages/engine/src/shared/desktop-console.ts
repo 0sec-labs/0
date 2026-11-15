@@ -11,7 +11,7 @@ export const DESKTOP_CONSOLE_SCHEMA_VERSION = 1 as const;
 
 export type DesktopConsoleAutonomyMode = "standard" | "recon" | "copilot" | "yolo";
 
-/** Product default autonomy mode: YOLO. Explicit flags/settings win. */
+/** Product default autonomy mode (stored as `yolo`, shown as Auto approvals). Explicit flags/settings win. */
 export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "yolo";
 
 /** Product default for allowModelSelfExtension in non-verify sessions. */

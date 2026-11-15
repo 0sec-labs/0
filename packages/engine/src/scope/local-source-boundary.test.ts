@@ -37,7 +37,7 @@ it("confines canonical paths even while the optional engagement plugin is disabl
   });
 });
 
-it("retains a tool executor's folder boundary after async context exit and blocks YOLO widening", async () => {
+it("retains a tool executor's folder boundary after async context exit and blocks Auto widening", async () => {
   const f = fixture();
   const executor = withLocalSourceBoundary(f.folder, () => new ToolExecutor(f.ctx, null));
   await withScopeEnforcement(f.disabled, async () => {

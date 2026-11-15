@@ -11,8 +11,8 @@ an explicitly selected or persisted `false` takes precedence. The desktop
 checkbox initializes from that shared default. Existing disabled sessions stay
 disabled and are not reconstructed.
 
-Autonomy is separate: desktop authorization remains unscoped-standard/scoped-YOLO,
-not globally YOLO. Workspace-trusted ESM requires its own explicit workspace
+Autonomy is separate: desktop authorization remains unscoped-standard/scoped-auto,
+not globally auto. Workspace-trusted ESM requires its own explicit workspace
 grant; neither self-extension nor autonomy grants that trust.
 
 `ExecutablePluginManager` in `executable.ts` supplies runnable model-authored
