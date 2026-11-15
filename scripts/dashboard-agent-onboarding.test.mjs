@@ -12,7 +12,7 @@ test("external-agent setup discovers the CLI before optional MCP and preserves a
     const output = resolve(directory, "fixture.mjs");
     await build({ entryPoints: [resolve(dashboard, "src/console/agent-onboarding.tsx")], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", alias: { "@": resolve(dashboard, "src") }, loader: { ".svg": "dataurl" }, logLevel: "silent" });
     const { setupPrompt } = await import(pathToFileURL(output).href);
-    assert.match(setupPrompt, /^Help me use 0\.security for my task/);
+    assert.match(setupPrompt, /^Help me use 0security for my task/);
     const cli = setupPrompt.indexOf("0 --help");
     const mcp = setupPrompt.indexOf("0 mcp-server --help");
     assert.ok(cli >= 0 && mcp > cli, "CLI discovery precedes any MCP configuration");
