@@ -202,7 +202,7 @@ The image runs `0 --help` by default. It does not mount your folder or read your
 
 ```bash
 docker run --rm -e ANTHROPIC_API_KEY \
-  -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0:latest \
+  -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest \
   scan source /work/source --runtime api --depth quick
 ```
 
@@ -217,7 +217,7 @@ The container runs as `ubuntu` (UID 1000). Give that user read access to the sou
 impacket, certipy and bloodhound-ce live in a Python venv at `/opt/ad-tools`, with their commands linked into `/usr/local/bin`:
 
 ```bash
-docker run --rm --entrypoint bash ghcr.io/0sec-labs/0:latest \
+docker run --rm --entrypoint bash ghcr.io/0sec-labs/0security:latest \
   -c 'which secretsdump.py'
 ```
 
