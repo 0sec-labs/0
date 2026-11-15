@@ -92,7 +92,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     await page.getByRole('button', { name: 'Reset form', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[aria-label="Autonomy"]')?.textContent?.includes('Ask before acting'));
     assert.deepEqual(await page.evaluate(() => window.saves), [], 'resetting a legacy draft never applies it');
-    await page.getByRole('checkbox', { name: 'Target and scope reviewed', exact: true }).check();
+    await page.getByRole('checkbox', { name: 'Project and scope reviewed', exact: true }).check();
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await page.waitForFunction(() => window.saves.length === 1);
     assert.equal((await page.evaluate(() => window.saves))[0].autonomyMode, 'standard');
