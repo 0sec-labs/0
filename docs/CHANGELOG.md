@@ -24,6 +24,16 @@ on the GitHub Release tag.
 - A page left open while the console restarts no longer reloads into the browser's error page.
 - Copies older than this release cannot be updated remotely. Run `0 doctor upgrade`, or the install one-liner, once.
 
+### Added
+
+- Server mode accepts GitHub webhooks as an accelerator for pull request Agents: `POST /api/webhooks/github` verifies an HMAC-SHA256 signature of the raw body, caps the body at 1 MB, accepts only `pull_request` (opened, reopened, synchronize, ready for review) and `ping`, drops replayed deliveries and rate limits per source. A delivery only asks the poller to check the matching trigger now, so the draft, fork, comment and one-review-per-head-SHA rules are unchanged. Polling stays the default and the fallback, and the route does not exist outside `--server-mode`.
+- The per-instance webhook secret is generated on first use, stored with mode 0600, shown once, and can be rotated; the old secret keeps working for 5 minutes. Set it up from the **GitHub webhook** card on Agents and in Settings > Git (server mode only), or with the hidden `0 agents webhook status` and `0 agents webhook secret rotate --yes`.
+- `pnpm test:webhook-e2e` runs a signed delivery, a replay, a bad signature and an oversize body against a throwaway server-mode console.
+
+### Security
+
+- `/api/webhooks/github` is the only anonymous `/api` route in server mode. It is exempt from sign-in and the control token, authenticated by the signature, and refused for the engine bearer. Audit events `webhook.received`, `webhook.ignored` and `webhook.rejected` record a reason and never the payload, secret or signature.
+
 ## [0.33.0] - 2026-11-15
 
 This release makes access the same two choices everywhere: Read-only or Can make changes. Asking before each command is only the global setting.

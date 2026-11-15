@@ -46,10 +46,11 @@ import { resolveDashboardAssetDir, resolveAssetPath } from "../web/dashboard-ass
 import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
 import { frameProtectionHeaders } from "../web/self-edit-preview.js";
-import { isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
+import { isAnonymousApiExemption, isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
 import { audit, auditDenial, configureAudit } from "../web/audit.js";
 import { ServerModeGuard, handleHealth, isHealthRequest, isWildcardHost, resolveAccessSecret, splitList, validateAccessToken, type ServerPhase, type ServerRequestContext } from "../web/server-mode.js";
 import { listAudit } from "@0/engine/storage";
+import { GITHUB_WEBHOOK_PATH, GitHubWebhookReceiver, WebhookSecretStore } from "../web/github-webhook.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -174,6 +175,13 @@ export function registerDashboardCommand(program: Command): void {
         } else if (configured) console.error(chalk.yellow("  Team sign-in is configured, so the access token is ignored."));
         serverGuard = new ServerModeGuard({ allowedHosts, trustedProxies, publicUrl, accessToken });
       }
+      // The GitHub webhook receiver exists only in server mode; without it the route is not mounted at all.
+      let webhookSentinels: () => WebSentinelService | undefined = () => undefined;
+      const webhook = serverMode ? new GitHubWebhookReceiver({
+        secrets: new WebhookSecretStore(homeStateDir()),
+        dispatcher: () => { const service = webhookSentinels(); return service ? { targets: (repo, base) => service.webhookTargets(repo, base), check: id => service.checkTrigger(id) } : undefined; },
+      }) : undefined;
+      const webhookConsole = webhook ? { receiver: webhook, ...(publicUrl ? { payloadUrl: new URL(GITHUB_WEBHOOK_PATH, publicUrl).toString() } : {}) } : undefined;
       let phase: ServerPhase = "starting";
       let dbProbe = { at: 0, ok: false };
       const dbOk = () => {
@@ -238,6 +246,7 @@ export function registerDashboardCommand(program: Command): void {
         stopHostReconnect = watchManagedHosts();
         let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = services;
         engine = services.engine;
+        webhookSentinels = () => sentinels;
         // Opt-in: close resumed-but-never-used chats after this many idle ms (>= 1000).
         const reapIdleMs = Number(process.env["ZERO_REAP_IDLE_RESUMED_MS"]);
         if (Number.isFinite(reapIdleMs) && reapIdleMs >= 1_000) {
@@ -293,6 +302,9 @@ export function registerDashboardCommand(program: Command): void {
           res.setHeader("X-0-Request-ID", requestId.success ? requestId.data : randomUUID());
 
           try {
+            // The one anonymous API path in server mode: GitHub cannot sign in, so it is authenticated by an HMAC of the raw
+            // body inside the handler instead. It sits before the session gate and the control-token check and nothing else does.
+            if (webhook && serverContext && isAnonymousApiExemption(requestUrl.pathname)) { await webhook.handle(req, res, serverContext.clientIp); return; }
             if (serverGuard && serverContext) {
               if (await serverGuard.handleAccessRoute(req, res, requestUrl.pathname, serverContext, teamAuth, () => readJson(req, 16_384))) return;
               const hasBearer = typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ");
@@ -550,7 +562,7 @@ export function registerDashboardCommand(program: Command): void {
                 res.end(artifact.body);
                 return;
               }
-              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills);
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills, webhookConsole);
               if (consoleHandled) return;
               const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
               if (!handled) json(res, 404, { error: "Not found" });

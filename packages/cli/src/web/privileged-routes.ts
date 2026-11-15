@@ -11,6 +11,8 @@
  * 2. Team mode owner gate (isPrivilegedOperatorRoute): routes that act on the operator's machine,
  *    credentials or global preferences need the workspace owner.
  */
+import { GITHUB_WEBHOOK_PATH } from "./github-webhook.js";
+
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export interface EngineAllowedMutation { pattern: RegExp; methods: readonly string[]; why: string }
@@ -56,6 +58,18 @@ export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
   { pattern: /^\/api\/finding-family\/[^/]+\/(?:triage|workflow)$/, methods: ["POST"], why: "Finding triage/assignment on a remote engine (artifacts capability); data-only." },
   { pattern: /^\/api\/findings\/[^/]+\/impact-assessment$/, methods: ["POST", "DELETE"], why: "Business impact notes on a remote engine (artifacts capability); data-only." },
 ];
+
+/**
+ * The ONLY /api routes that skip the server-mode session gate and the control-token requirement, by exact path. Each
+ * authenticates the caller itself inside its handler. Everything else under /api is default-deny for anonymous callers.
+ * The engine bearer grants nothing here: it is ignored by these handlers and these paths stay browser-only in
+ * isBrowserOnlyRoute (see privileged-routes.test.ts).
+ */
+export const ANONYMOUS_API_EXEMPTIONS: readonly { path: string; methods: readonly string[]; why: string }[] = [
+  { path: GITHUB_WEBHOOK_PATH, methods: ["POST"], why: "GitHub cannot sign in. The handler requires an X-Hub-Signature-256 HMAC-SHA256 of the raw body under the per-instance secret, a 1 MB cap, an event allow-list, delivery-id replay protection and rate limits, and it only asks the poller's own routine to check configured triggers. Mounted in server mode only." },
+];
+/** True for the exact paths in ANONYMOUS_API_EXEMPTIONS (any method: the handler answers 405 for the rest). */
+export function isAnonymousApiExemption(pathname: string): boolean { return ANONYMOUS_API_EXEMPTIONS.some(entry => entry.path === pathname); }
 
 /** The engine bearer must never ride the registry proxy: it would borrow other backends' credentials or re-enter local routes after the gate. */
 const ENGINE_DENIED_ANY_METHOD = /^\/api\/backends\/[^/]+\/proxy(?:\/|$)/;

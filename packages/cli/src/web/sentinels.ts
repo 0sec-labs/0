@@ -49,6 +49,10 @@ export class WebSentinelService {
       if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.ask-first", subject: "access", outcome: "ok", detail: { agents, threads, note: "Agents and threads that used Ask first now follow the global Ask before running commands setting." } });
     } catch { /* Advisory only. */ }
   }
+  /** Webhook acceleration: the triggers a delivery for this repository and base branch may check. */
+  webhookTargets(repo: string, baseBranch: string): Array<{ id: string }> { return this.#runner.pullRequestTriggers(repo, baseBranch).map(trigger => ({ id: trigger.id })); }
+  /** Webhook acceleration: runs the poller's own check for one trigger now (same draft, fork, comment and head-SHA rules). */
+  checkTrigger(triggerId: string): Promise<boolean> { return this.#runner.checkNow(triggerId); }
   /** Drives one scheduler pass; the background timer calls this. Exposed for tests and for an explicit "check now". */
   tick(nowMs?: number): Promise<void> { return this.#runner.tick(nowMs); }
   async dispose(): Promise<void> { await this.#runner.dispose(); this.#store.close(); this.#workflows.close(); }

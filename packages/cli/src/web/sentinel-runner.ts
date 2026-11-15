@@ -129,6 +129,12 @@ export class SentinelRunner {
     return true;
   }
 
+  /** Enabled pull request triggers that watch this repository (case-insensitive) and base branch. Used only to locate triggers for a webhook delivery. */
+  pullRequestTriggers(repo: string, baseBranch: string): SentinelTrigger[] {
+    return this.#store.listTriggers().filter(trigger => trigger.kind === "github-pr" && trigger.enabled && trigger.github
+      && trigger.github.repo.toLowerCase() === repo.toLowerCase() && (!trigger.github.baseBranch || trigger.github.baseBranch === baseBranch));
+  }
+
   /** Runs left "running" by a stopped engine can never finish; close them out so budgets and attention stay truthful. */
   #reconcile(nowMs: number): void {
     for (const activation of this.#store.listRunningActivations()) {

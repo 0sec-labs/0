@@ -5202,7 +5202,7 @@ Create, inspect and control Agents.
 0 agents
 ```
 
-Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers).
+Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
 
 #### agents list
 
@@ -5638,6 +5638,53 @@ Delete a trigger.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents webhook
+
+GitHub webhook for pull request Agents (server mode). Hidden: most installs poll. See [Agents](/agents/#faster-with-a-github-webhook-server-mode).
+
+```text
+0 agents webhook
+```
+
+Subcommands: [status](#agents-webhook-status) · [secret](#agents-webhook-secret).
+
+#### agents webhook status
+
+Show whether the webhook is set up and the last deliveries.
+
+```text
+0 agents webhook status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents webhook secret
+
+Manage the webhook secret.
+
+```text
+0 agents webhook secret
+```
+
+Subcommands: [rotate](#agents-webhook-secret-rotate).
+
+#### agents webhook secret rotate
+
+Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
+
+```text
+0 agents webhook secret rotate [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm; update the secret on GitHub afterwards |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
