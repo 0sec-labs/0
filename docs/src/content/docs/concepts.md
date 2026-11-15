@@ -18,7 +18,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Skill** | A folder of instructions the agent loads when a task needs it. A skill is not code. See [Skills](/skills/). |
 | **Theme** | A light and dark color palette for the browser app. Themes live in the browser only. See [Browser app](/app/#themes). |
 | **Memory** | Source-backed notes the agent saved and can recall. See [Browser app](/app/#memory). |
-| **Engine** | The process that does the work, on this computer or a remote server. See [Remote engines and teams](/engines/). |
+| **Computer** | The machine where missions run and tools execute: this one, a VM or a remote server. See [Computers and teams](/engines/). |
 
 ## How they fit together
 
@@ -28,7 +28,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 - Scope decides which targets may be tested live.
 - You verify a finding, then fix it.
 - Plugins add tools and MCP servers, skills add instructions, themes change only how the app looks.
-- An engine executes all of it. The browser app, the CLI, CI and MCP are different ways to drive the same engine.
+- A computer runs all of it. The browser app, the CLI, CI and MCP are different ways to drive the same computer.
 
 ## Pick an entry point by target
 

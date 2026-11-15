@@ -200,7 +200,7 @@ export default defineConfig({
             { label: "CLI reference", slug: "commands" },
             { label: "Configuration", slug: "configuration" },
             { label: "Costs and budgets", slug: "budgets" },
-            { label: "Remote engines and teams", slug: "engines" },
+            { label: "Computers and teams", slug: "engines" },
             { label: "Findings API", slug: "findings-api" },
             { label: "Verification result schema", slug: "verification-result" },
             { label: "Docker", slug: "docker" },

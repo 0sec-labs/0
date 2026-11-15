@@ -53,7 +53,7 @@ Trace input through the application and verify each finding against its caller.
 
 ## Where skills come from
 
-0 discovers `.agents/skills` folders in the project and in your home directory, and `.claude/skills` for compatibility. **Mount folder** adds another folder on the engine computer without copying it. Changes to the original files show up automatically.
+0 discovers `.agents/skills` folders in the project and in your home directory, and `.claude/skills` for compatibility. **Mount folder** adds another folder on the computer without copying it. Changes to the original files show up automatically.
 
 Local users and team owners can edit mounted, personal and project skills in place. Team editors customize a workspace copy instead.
 

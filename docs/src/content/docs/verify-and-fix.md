@@ -44,7 +44,7 @@ Commit first. 0 clones the committed revision, so uncommitted edits are not part
 | `--timeout <ms>` | `3600000` (1 hour) for the whole run |
 | `--max-findings <n>` | 10 |
 | `--rules <text>` | None. Plain-English repair standards, for example "minimal diffs, no new dependencies". |
-| `--state-dir <path>` | `~/.0/secure/<repo-hash>`, so learnings carry across runs |
+| `--state-dir <path>` | `~/.0/secure/<repo-hash>`, so memory carries across runs |
 | `--resume` | Continue a compatible interrupted, blocked or failed run |
 | `--publish` | Push verified repairs as GitHub pull requests. Needs authenticated `gh`. Never merges or deploys. |
 

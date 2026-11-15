@@ -21,7 +21,7 @@ Internal contracts (artifact schemas, registry events, worker protocol) live in 
 
 Model credentials pay for proposal generation. Guest images pay for execution. Neither replaces the other.
 
-## Learning
+## Memory
 
 Open **Memory** in the browser app (`/memory`).
 
@@ -57,7 +57,7 @@ The app has no screen for reviewing automation changes proposed from run history
 
 Workbench VM missions can save bounded, source-linked memory on the host before teardown. A fresh VM requests current memory for its approved directory before model calls. Both sides check file hashes. Memory stays out of saved mission history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
 
-The control database, queue and knowledge stay on the selected engine. Nothing is exported automatically.
+The control database, queue and knowledge stay on the selected computer. Nothing is exported automatically.
 
 ## Benchmark variants
 
@@ -180,10 +180,10 @@ Other options: `--registry <path>`, `--max-register <n>`, `-m <model>`, `--watch
 | Evolved finder | `scan deep --evolution-config` picks the active snapshot for each new review. | Verification and host policy. |
 | Skills and router | Training installs exact authorized artifact bytes. | A model already loaded in another process. |
 | Executable plugin | An enabled agent submits or evolves code. Later calls use the active retained version. | An invocation pins its version and declared capabilities. Admission is not measured improvement. |
-| Development engine | A development console with `allowDevSourceUpdates` loads changed engine source between turns. | The UI shell, injected clients and shared dependencies. A failed build or checkpoint keeps the current engine. |
+| Development source | A development console with `allowDevSourceUpdates` loads changed source between turns. | The UI shell, injected clients and shared dependencies. A failed build or checkpoint keeps the current computer. |
 | Live harness generation | A session replaces its `agent.driver` and `ui.view` at a checkpoint. | History and accounting survive. This is not durable campaign recovery. |
 
-Two of these run host code. The development engine path needs a console started with `ZERO_DEV_SOURCE_ROOT` and the global `allowDevSourceUpdates` setting. It defaults off and a project cannot grant it. Workspace-trusted ESM for self-extension is a separate acknowledged grant. Neither grant gives sandboxed model-written code host access, and `allowModelSelfExtension` does not enable either one. See [Configuration](/configuration/#development-engine-updates).
+Two of these run host code. The development source path needs a console started with `ZERO_DEV_SOURCE_ROOT` and the global `allowDevSourceUpdates` setting. It defaults off and a project cannot grant it. Workspace-trusted ESM for self-extension is a separate acknowledged grant. Neither grant gives sandboxed model-written code host access, and `allowModelSelfExtension` does not enable either one. See [Configuration](/configuration/#development-source-updates).
 
 Rules that hold on every path:
 
@@ -199,4 +199,4 @@ Lifecycle checks measure orchestration. Provider behavior, sandbox execution and
 - [Benchmarks](/benchmark/) for scores and method
 - [Architecture](/architecture/)
 - [Plugins](/plugins/) and [Plugin security](/plugin-trust/) for self-extension
-- [Configuration](/configuration/#development-engine-updates)
+- [Configuration](/configuration/#development-source-updates)
