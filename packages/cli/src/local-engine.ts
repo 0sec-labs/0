@@ -122,3 +122,14 @@ export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
     throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.", { cause: error });
   }
 }
+
+/** Live host for this database, or null (a dead host's stale descriptor is removed). Used by commands that talk to the console API directly. */
+export function findLiveLocalEngine(options: { dbPath?: string; homeDir?: string; workspace: string }): { url: string; token: string; engineId: string; serverInstanceId: string } | null {
+  if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
+  const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
+  const descriptor = readDescriptor(path);
+  if (!descriptor) return null;
+  if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
+  if (realpathSync(options.workspace) !== descriptor.workspace) throw new Error("The running local engine owns this database in another workspace. Select its workspace or a separate engine database.");
+  return { url: descriptor.url, token: descriptor.token, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId };
+}
