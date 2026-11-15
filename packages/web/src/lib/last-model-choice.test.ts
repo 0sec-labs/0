@@ -16,7 +16,7 @@ describe("last model choice", () => {
     store.set("0-last-model:bad", "{nope");
     expect(readLastModelChoice("bad")).toBeUndefined();
   });
-  it("applies only to plain missions without an explicit runtime", () => {
+  it("applies only to plain threads without an explicit runtime", () => {
     rememberModelChoice("local", { providerId: "openrouter", model: "m" });
     expect(withRememberedModel("local", { title: "x" })).toEqual({ title: "x", runtime: { providerId: "openrouter", model: "m" } });
     const own = { runtime: { model: "y" } };
@@ -27,7 +27,7 @@ describe("last model choice", () => {
 });
 
 describe("host default model", () => {
-  it("starts new missions when nothing is remembered, and loses to a remembered pick", () => {
+  it("starts new threads when nothing is remembered, and loses to a remembered pick", () => {
     setRecommendedDefault("local", { providerId: "openai", model: "recommended" });
     setSavedPreference("local", { providerId: "anthropic", model: "saved" });
     expect(startingModelChoice("local")).toEqual({ providerId: "anthropic", model: "saved" });

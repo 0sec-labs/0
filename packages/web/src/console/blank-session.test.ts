@@ -5,7 +5,7 @@ import { partitionVisualCalls } from "./visuals";
 import { mergeSessionAliases } from "./use-session-aliases";
 
 const session = (over: Partial<DesktopConsoleSession>) =>
-  ({ id: "a", title: "New mission", target: "", status: "ready", messageCount: 0, ...over }) as DesktopConsoleSession;
+  ({ id: "a", title: "New thread", target: "", status: "ready", messageCount: 0, ...over }) as DesktopConsoleSession;
 
 describe("blank sessions", () => {
   test("ready, empty, untitled sessions are blank", () => {

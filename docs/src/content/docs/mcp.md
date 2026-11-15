@@ -1,5 +1,5 @@
 ---
-title: Agents and MCP
+title: MCP servers
 description: Drive 0 from Claude Code, Codex or Cursor, and give 0 tools from other MCP servers.
 ---
 
@@ -238,7 +238,7 @@ A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the t
 
 ## Service connections
 
-In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new chats. Leaving a saved secret field blank keeps it.
+In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new threads. Leaving a saved secret field blank keeps it.
 
 | Service | Tools |
 | --- | --- |
@@ -256,10 +256,10 @@ Setup uses vendor API tokens. Jira Cloud also needs an account email and site UR
 
 Credentials are stored for the operator in `~/.0/service-plugins.json` (mode `0600`, directory `0700`) and are never part of portable automation JSON. The API returns only non-secret settings and tool metadata. Connecting a service does not widen the token's vendor permissions.
 
-Local chats connect enabled accounts directly. SmolVM chats get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing chats keep their original tools.
+Local threads connect enabled accounts directly. SmolVM threads get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing threads keep their original tools.
 
 ## Next steps
 
 - [Automations](/automations/): the runs these tools start.
-- [Plugin security](/plugin-trust/): what an MCP server can do on your machine.
+- [Plugin security](/plugin-trust/): what an MCP server can do on your computer.
 - [Scope](/scope/): authorize targets before a live run.

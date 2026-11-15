@@ -1,6 +1,6 @@
 ---
 title: Open source and Enterprise
-description: What is open source in 0, what you can run on your own, what leaves your machine, and what Enterprise adds.
+description: What is open source in 0, what you can run on your own, what leaves your computer, and what Enterprise adds.
 ---
 
 0 is open source under MIT OR Apache-2.0. The CLI, the engine, the browser app, the GitHub Action and the team workspace are all in the [`0sec-labs/0security`](https://github.com/0sec-labs/0security) repository. Nothing in them needs an account, a license key or a 0security-hosted service.
@@ -10,7 +10,7 @@ description: What is open source in 0, what you can run on your own, what leaves
 | | Included |
 |---|---|
 | Scans of source, web targets and packages, with verification and fixes | Yes, with your own model keys |
-| Browser app, automations, sentinels and skills | Yes |
+| Browser app, automations, agents and skills | Yes |
 | Findings and reports (JSON, SARIF, Markdown, HTML, PDF) | Yes |
 | GitHub Action and CI reports, `0 reports import` | Yes, see [CI/CD](/ci/github-action/) |
 | Findings API for your own tools | Yes, read-only, see [Findings API](/findings-api/) |
@@ -18,9 +18,9 @@ description: What is open source in 0, what you can run on your own, what leaves
 | Remote computers on your own servers | Yes, with limits listed on that page |
 | Docker image | Yes, see [Docker](/docker/) |
 
-Scans run on your machine, in your CI or on your servers. Model calls go to the provider you choose with your own key. 0security does not run scans or model calls for you.
+Scans run on your computer, in your CI or on your servers. Model calls go to the provider you choose with your own key. 0security does not run scans or model calls for you.
 
-## What leaves your machine
+## What leaves your computer
 
 By default, nothing is uploaded with your findings, source code or model keys.
 

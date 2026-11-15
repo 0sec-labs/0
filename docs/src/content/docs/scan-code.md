@@ -9,7 +9,7 @@ Point 0 at a repository or package. It runs a static pass, then model-driven rev
 0 scan source ./my-app
 ```
 
-You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable machine.
+You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable computer.
 
 ## Pick a command
 
@@ -79,7 +79,7 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 
 ### Private review checks
 
-Add your own review criteria per folder. They stay on your machine under `~/.0/review-checks`.
+Add your own review criteria per folder. They stay on your computer under `~/.0/review-checks`.
 
 ```bash
 0 checks propose --project ./my-app --name "Tenant boundary" \

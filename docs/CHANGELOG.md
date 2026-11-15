@@ -14,6 +14,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- Missions are now Threads and Sentinels are now Agents; `0 missions` and `0 sentinels` keep working as aliases. The Settings page that was called Agents (helper limits and where tools run) is now Helpers, and "this machine" now says "this computer".
 - Automation templates no longer mention projects; automations run in the current folder.
 - Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
 

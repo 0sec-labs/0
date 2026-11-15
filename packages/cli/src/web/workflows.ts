@@ -334,7 +334,7 @@ export class WebWorkflowService {
     }
     const request = parse(z.object({ runId: idSchema, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().positive().max(100).optional() }).strict(), args);
     const execution = this.getExecution(request.runId);
-    if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Automation run was not found for this mission.", 404);
+    if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Automation run was not found for this thread.", 404);
     if (name === "get_run") return { run: { ...execution, id: execution.id, ownerId: sessionId }, events: this.runEvents(execution.id, request.cursor ?? 0) };
     if (name === "get_run_results") {
       const persisted = this.#definitions.getExecutionResults(execution.id) as WorkflowRunResult | null;
@@ -475,7 +475,7 @@ export class WebWorkflowService {
       const id = parse(idSchema, decodeURIComponent(executionRoute[1]!));
       const sessionId = executionRoute[2] === "/cancel" ? parse(cancelSchema, input).sessionId : parse(idSchema, query.get("sessionId"));
       const execution = this.getExecution(id);
-      if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Automation execution was not found for this mission.", 404);
+      if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Automation execution was not found for this thread.", 404);
       if (executionRoute[2] === "/results" && method === "GET") return { status: 200, data: { results: this.#definitions.getExecutionResults(id) } };
       if (executionRoute[2] === "/cancel" && method === "POST") {
         const jobId = this.#graphJobs.get(id);
@@ -552,8 +552,8 @@ export class WebWorkflowService {
       if (target.plan.kind !== "source" || /^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) || target.plan.target.startsWith("git@")) throw new WorkflowError("Typed automation operations require an authorized local source workspace.", 400);
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, undefined, undefined, { interactive });
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize automation operations.", 403);
-      if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Mission model or routing changed while authorizing automation inputs.");
-      if (isApiRuntime(authorized.runtime) && isApiRuntime(context.runtime) && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Mission connection changed while authorizing automation inputs.");
+      if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Thread model or routing changed while authorizing automation inputs.");
+      if (isApiRuntime(authorized.runtime) && isApiRuntime(context.runtime) && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Thread connection changed while authorizing automation inputs.");
       canonicalTarget = await realpath(target.plan.target);
       if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonicalTarget))) throw new WorkflowError("Automation inputs are outside the approved local scope.", 403);
       const typedDefinition = { ...definition, target: canonicalTarget };
@@ -589,8 +589,8 @@ export class WebWorkflowService {
         executors: Object.fromEntries(Object.entries(registry).map(([operation, executor]) => [operation, async (step: WorkflowAssessmentContext) => {
           const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, step.signal, parent.view.id, { interactive });
           if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize automation operations.", 403);
-          if (identity(selection(authorized)) !== identity(parent.view.runtime)) throw new WorkflowError("Mission model or routing changed during automation authorization.");
-          if (isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Mission connection changed during automation authorization.");
+          if (identity(selection(authorized)) !== identity(parent.view.runtime)) throw new WorkflowError("Thread model or routing changed during automation authorization.");
+          if (isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Thread connection changed during automation authorization.");
           const canonical = await realpath(target.plan.target);
           if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonical))) throw new WorkflowError("Automation operation is outside the approved local scope.", 403);
           return withScopeEnforcement(authorized.scopeEnforcement, () => executor!(step));
@@ -696,12 +696,12 @@ export class WebWorkflowService {
     const resolution = resolveEngagement(request.target);
     if (!resolution.ok) throw new WorkflowError(resolution.message, 400);
     const context = await this.#gateway.getExecutionContext(request.sessionId);
-    if (resume && (context.dbPath ?? this.#dbPath) !== resume.dbPath) throw new WorkflowError("Mission storage changed during resume. Review the scan and launch again.");
+    if (resume && (context.dbPath ?? this.#dbPath) !== resume.dbPath) throw new WorkflowError("Thread storage changed during resume. Review the scan and launch again.");
     if (this.#disposing) throw new WorkflowError("Automation service is shutting down.", 503);
     graphSignal?.throwIfAborted();
     if (execution) withWorkflowAuditExecutionPolicy(execution, () => assertWorkflowNativeRuntime(context.runtime));
-    if (owningGraphId && identity(selection(context)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Mission model or routing changed during this automation. Review the selection and run it again.");
-    if (owningGraphId && isApiRuntime(context.runtime) && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Mission connection changed during this automation. Review it and run again.");
+    if (owningGraphId && identity(selection(context)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Thread model or routing changed during this automation. Review the selection and run it again.");
+    if (owningGraphId && isApiRuntime(context.runtime) && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Thread connection changed during this automation. Review it and run again.");
     if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving an effectful bounded scan.", 403);
     const resolved = snapshot(resolution.plan);
     const job = this.#createJob("run", request.sessionId, { ...request, resolved, ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry } : {}) }, context, owningGraphId);
@@ -711,9 +711,9 @@ export class WebWorkflowService {
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, {
         target: resolved.kind === "package" ? request.target : resolved.target, kind: resolved.kind,
       }, job.controller.signal, job.view.id, { interactive });
-      if (resume && (identity(selection(authorized)) !== identity(selection(context)) || (authorized.dbPath ?? this.#dbPath) !== resume.dbPath)) throw new WorkflowError("Mission runtime or storage changed during resume authorization. Review it and launch again.");
-      if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Mission model or routing changed during automation authorization. Review it and run again.");
-      if (owningGraphId && isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Mission connection changed during automation authorization. Review it and run again.");
+      if (resume && (identity(selection(authorized)) !== identity(selection(context)) || (authorized.dbPath ?? this.#dbPath) !== resume.dbPath)) throw new WorkflowError("Thread runtime or storage changed during resume authorization. Review it and launch again.");
+      if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Thread model or routing changed during automation authorization. Review it and run again.");
+      if (owningGraphId && isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Thread connection changed during automation authorization. Review it and run again.");
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize an effectful bounded scan.", 403);
       if (resolved.kind === "source" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resolved.target) && !resolved.target.startsWith("git@")) {
         const path = await realpath(resolved.target);
@@ -815,7 +815,7 @@ export class WebWorkflowService {
   async #fixAction(action: string, input: unknown): Promise<{ status: number; data: unknown }> {
     const request = parse(fixActionSchema, input);
     const fix = this.#fixes.get(request.fixId);
-    if (!fix || fix.view.sessionId !== request.sessionId) throw new WorkflowError("Source-fix review was not found for this mission.", 404);
+    if (!fix || fix.view.sessionId !== request.sessionId) throw new WorkflowError("Source-fix review was not found for this thread.", 404);
     if (fix.view.activeWorkflowId) throw new WorkflowError("This source-fix review already has an active operation.");
     if (fix.view.published) throw new WorkflowError("This source-fix candidate was already published.");
     const currentContext = await this.#gateway.getExecutionContext(request.sessionId);
@@ -909,7 +909,7 @@ export class WebWorkflowService {
   #createJob(kind: WebWorkflow["kind"], sessionId: string, request: unknown, context: WebWorkflowExecutionContext, owningGraphId?: string): ManagedJob {
     this.#prune();
     if ([...this.#jobs.values()].filter(active).length >= MAX_ACTIVE) throw new WorkflowError("Too many active browser automations; wait or cancel one.", 429);
-    if ([...this.#jobs.values()].some(job => active(job) && job.view.sessionId === sessionId && job.view.id !== owningGraphId)) throw new WorkflowError("This mission already owns an active automation; wait or cancel it.");
+    if ([...this.#jobs.values()].some(job => active(job) && job.view.sessionId === sessionId && job.view.id !== owningGraphId)) throw new WorkflowError("This thread already owns an active automation; wait or cancel it.");
     if (this.#jobs.size >= MAX_JOBS) {
       const oldest = [...this.#jobs.values()].find(job => !active(job));
       if (!oldest) throw new WorkflowError("Browser automation retention is full.", 429);
@@ -960,7 +960,7 @@ export class WebWorkflowService {
 
   #requireJob(id: string, sessionId: string): ManagedJob {
     const job = this.#jobs.get(id);
-    if (!job || job.view.sessionId !== sessionId) throw new WorkflowError("Automation was not found for this mission.", 404);
+    if (!job || job.view.sessionId !== sessionId) throw new WorkflowError("Automation was not found for this thread.", 404);
     return job;
   }
 

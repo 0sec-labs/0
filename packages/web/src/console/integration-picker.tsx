@@ -246,7 +246,7 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
       <div
         id={picker.id}
         role="listbox"
-        aria-label="Plugins, findings and missions"
+        aria-label="Plugins, findings and threads"
         className="max-h-[232px] overflow-y-auto overscroll-contain scroll-fade-y"
       >
         {picker.items.map((item, index) => {
@@ -296,7 +296,7 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
             ? "Loading…"
             : picker.error
               ? "Couldn't load plugins."
-              : "No matching plugins, findings or missions."}
+              : "No matching plugins, findings or threads."}
         </p>
       )}
       <Link

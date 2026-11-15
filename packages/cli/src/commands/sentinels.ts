@@ -31,11 +31,11 @@ const triggerTable = (rows: Trigger[]) => renderTable(rows, [
   { header: "ENABLED", value: t => (t.enabled ? "yes" : "no") }, { header: "WHEN", value: t => t.summary ?? t.nextFireAt ?? "-" },
 ]);
 
-/** `0 sentinels`: everything the Sentinels page does. Reads and edits work offline; runs need the engine. */
-export function registerSentinelsCommand(program: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
-  const group = program.command("sentinels").description("Create, inspect and control Sentinels");
+/** `0 agents`: everything the Agents page does. Reads and edits work offline; runs need the engine. */
+export function registerAgentsCommand(program: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
+  const group = program.command("agents").description("Create, inspect and control Agents");
 
-  consoleFlags(group.command("list").description("List Sentinels").option("--status <status>", `Only ${SENTINEL_STATUSES.join(", ")}`))
+  consoleFlags(group.command("list").description("List Agents").option("--status <status>", `Only ${SENTINEL_STATUSES.join(", ")}`))
     .action((options: ConsoleFlags & { status?: string }) => withConsole(options, deps, async client => {
       const status = oneOf("--status", SENTINEL_STATUSES, options.status);
       return ((await client.request("GET", `${ROOT}${status ? `?status=${status}` : ""}`)) as { sentinels: Sentinel[] }).sentinels;
@@ -49,7 +49,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       rows => renderTable(rows, [{ header: "ID", value: p => p.id }, { header: "NAME", value: p => p.name }, { header: "DESCRIPTION", value: p => p.description }])));
 
   consoleFlags(group.command("create").description("Create a Sentinel from a preset or a JSON definition")
-    .option("--preset <id>", "Start from a preset (see `0 sentinels presets`)").option("--name <name>", "Name").option("--file <path>", "Sentinel JSON object (overrides preset fields)"))
+    .option("--preset <id>", "Start from a preset (see `0 agents presets`)").option("--name <name>", "Name").option("--file <path>", "Sentinel JSON object (overrides preset fields)"))
     .action((options: ConsoleFlags & { preset?: string; name?: string; file?: string }) => withConsole(options, deps, async client => {
       if (!options.preset && !options.file) throw new UsageError("Provide --preset <id> or --file <path>.");
       const body = { ...(options.file ? await readJsonObject(options.file, "Sentinel definition") : {}), ...(options.preset ? { preset: options.preset } : {}), ...(options.name ? { name: options.name } : {}) };
@@ -101,10 +101,10 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       return { ...(await client.request("DELETE", `${ROOT}/${enc(current.id)}?version=${current.version}`) as object), id: current.id };
     }, result => `Deleted Sentinel ${result.id}`));
 
-  consoleFlags(group.command("run <id>").description("Run a Sentinel now; starts a mission (needs a running engine)")
+  consoleFlags(group.command("run <id>").description("Run a Sentinel now; starts a thread (needs a running engine)")
     .option("--task <text>", "Task for this run").option("--yes", "Confirm that this run is authorized"))
     .action((id: string, options: ConsoleFlags & { task?: string; yes?: boolean }) => withConsole(options, deps, async client => {
-      requireYes(options.yes, "Running a Sentinel starts an autonomous mission within its scope and budget.");
+      requireYes(options.yes, "Running a Sentinel starts an autonomous thread within its scope and budget.");
       const current = await sentinel(client, id);
       return await client.request("POST", `${ROOT}/${enc(current.id)}/run`, { approval: "launch-authorized-run", version: current.version, ...(options.task ? { task: options.task } : {}) }) as { activation: { id: string; status: string; missionId?: string } };
     }, ({ activation }) => renderFields({ activation: activation.id, status: activation.status, mission: activation.missionId }), { requireHost: "Running a Sentinel" }));

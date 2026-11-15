@@ -3,7 +3,7 @@ title: Skills
 description: Give the agent reusable instructions with standard skill folders.
 ---
 
-A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Plugins](/plugins/) add tools, and a plugin can bundle skills. [Automations](/automations/) define the steps of a task, and you can use a skill in a mission or alongside an automation.
+A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Plugins](/plugins/) add tools, and a plugin can bundle skills. [Automations](/automations/) define the steps of a task, and you can use a skill in a thread or alongside an automation.
 
 ## Add a skill
 
@@ -63,7 +63,7 @@ Local users and team owners can edit mounted, personal and project skills in pla
 - **Customize** makes an editable copy of a built-in guide, or of a folder you cannot write to, and keeps its supporting files.
 - **Import** takes a `SKILL.md` file, a skill folder (which keeps references, scripts and assets) or an exported skill.
 - **Export** downloads `SKILL.md`, or all files as a bundle that another 0 workspace can import. The bundle is a 0 transport format, not one other agents read directly.
-- The editor can open a mission about the skill. The agent reads the latest skill with `read_skill`, drafts with `create_skill`, and saves with `save_skill` or `copy_skill`. It uses the same permissions and revision checks as the editor.
+- The editor can open a thread about the skill. The agent reads the latest skill with `read_skill`, drafts with `create_skill`, and saves with `save_skill` or `copy_skill`. It uses the same permissions and revision checks as the editor.
 
 Saves check the revision. If someone changes a skill while you edit, your draft stays open and the stale save is rejected. **Reload latest** replaces the draft with the current version.
 
@@ -73,10 +73,10 @@ In a team workspace, created and imported skills are shared with the team. Edito
 
 ## Limits
 
-Folder mounting works with local mission execution. Mounted skills are not copied into SmolVM guests automatically.
+Folder mounting works with local thread execution. Mounted skills are not copied into SmolVM guests automatically.
 
 ## Next steps
 
 - [Plugin security](/plugin-trust/#adding-skills-from-github): what to check before adding a skill from GitHub.
-- [Sentinels](/sentinels/): give a standing agent the skills it should load.
+- [Agents](/agents/): give a standing agent the skills it should load.
 - [Plugins](/plugins/): add tools, not instructions.

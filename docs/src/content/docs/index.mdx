@@ -54,7 +54,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
 
 2. **Connect a model.** Open **Settings → Models** and add a provider key or sign in. See [Models and keys](/models/).
 
-3. **Start a mission.** Press **New mission** and describe the job, for example "Review ./my-app for injection bugs and verify what you find".
+3. **Start a thread.** Press **New thread** and describe the job, for example "Review ./my-app for injection bugs and verify what you find".
 
 4. **Review findings.** Open **Findings**. Each finding links to its evidence. Reproduce it and check a patch with [Verify and fix](/verify-and-fix/).
 
@@ -83,7 +83,7 @@ Only scan systems you own or are authorized to test. See [Scope and authorizatio
   <LinkCard title="Dependencies" description="Find and fix vulnerable packages." href="/dependencies/" />
   <LinkCard title="Verify and fix" description="Reproduce findings and check patches." href="/verify-and-fix/" />
   <LinkCard title="Automate in CI" description="Run 0 on every pull request." href="/ci/github-action/" />
-  <LinkCard title="Agents and MCP" description="Drive 0 from a coding agent." href="/mcp/" />
+  <LinkCard title="MCP servers" description="Drive 0 from a coding agent." href="/mcp/" />
 </CardGrid>
 
 ## More workflows
@@ -92,7 +92,7 @@ Only scan systems you own or are authorized to test. See [Scope and authorizatio
 - [Analyze binaries](/research-workflows/#binaries) with Ghidra, and fuzz [kernels](/research-workflows/#kernel) and [memory-unsafe code](/research-workflows/#memory-safety).
 - [Map attack surface](/research-workflows/#attack-surface) and review [Entra ID and Active Directory posture](/research-workflows/#identity).
 - [Test AI agents](/research-workflows/#ai-agents) for prompt injection.
-- [Run Sentinels](/sentinels/) that watch a scope on a schedule or on every pull request.
+- [Run Agents](/agents/) that watch a scope on a schedule or on every pull request.
 - [Draft advisories](/reports/#draft-advisories) from saved findings.
 - Extend 0 with [plugins](/plugins/) and [skills](/skills/).
 

@@ -2,7 +2,7 @@
  * The single registry of keyboard shortcuts. The global key handlers match events against it and the Shortcuts
  * settings page and dialog render from it, so the documentation cannot drift from what the app handles.
  */
-export type ShortcutGroup = "Navigation" | "Missions" | "Panel" | "Editor";
+export type ShortcutGroup = "Navigation" | "Threads" | "Panel" | "Editor";
 /** `global` bindings must be unique across every scope; the others only within their own scope. */
 export type ShortcutScope = "global" | "mission" | "composer";
 /** `mod` is Cmd on macOS and Ctrl elsewhere. Bindings without `mod` are plain keys. */
@@ -20,18 +20,18 @@ export type Shortcut = {
 };
 
 const mod = (key: string, shift = false, blockWhenTyping = false): Binding => ({ key, mod: true, shift, blockWhenTyping });
-const panelView = (id: string, action: string, key: string): Shortcut => ({ id: `panel.${id}`, action, group: "Panel", scope: "mission", when: "In a mission", bindings: [mod(key, true)], handler: "panel.open-view" });
+const panelView = (id: string, action: string, key: string): Shortcut => ({ id: `panel.${id}`, action, group: "Panel", scope: "mission", when: "In a thread", bindings: [mod(key, true)], handler: "panel.open-view" });
 
 export const SHORTCUTS: readonly Shortcut[] = [
   { id: "palette.open", action: "Search anything", group: "Navigation", scope: "global", when: "Always", bindings: [mod("k"), { key: "/" }], handler: "palette.toggle" },
   { id: "settings.open", action: "Open settings", group: "Navigation", scope: "global", when: "Always", bindings: [mod(",")], handler: "navigation.settings" },
   { id: "sidebar.toggle", action: "Toggle sidebar", group: "Navigation", scope: "global", when: "Not editing formatted text", bindings: [mod("b", false, true), mod("s", true)], handler: "sidebar.toggle" },
   { id: "shortcuts.open", action: "Keyboard shortcuts", group: "Navigation", scope: "global", when: "Not typing in a field", bindings: [{ key: "?" }], handler: "shortcuts.open" },
-  { id: "mission.new", action: "New mission", group: "Missions", scope: "global", when: "Always", bindings: [mod("o", true)], handler: "navigation.new-mission" },
+  { id: "mission.new", action: "New thread", group: "Threads", scope: "global", when: "Always", bindings: [mod("o", true)], handler: "navigation.new-mission" },
   { id: "composer.focus", action: "Focus composer", group: "Editor", scope: "global", when: "Always", bindings: [mod("i")], handler: "composer.focus" },
-  { id: "mission.stop", action: "Stop running mission", group: "Missions", scope: "global", when: "A mission is running", bindings: [mod(".")], handler: "mission.stop" },
+  { id: "mission.stop", action: "Stop running thread", group: "Threads", scope: "global", when: "A thread is running", bindings: [mod(".")], handler: "mission.stop" },
   { id: "composer.upload", action: "Attach files", group: "Editor", scope: "global", when: "Composer visible, not typing in another field", bindings: [mod("/")], handler: "composer.upload" },
-  { id: "panel.toggle", action: "Toggle right panel", group: "Panel", scope: "mission", when: "In a mission", bindings: [mod("b", true)], handler: "panel.toggle-panel" },
+  { id: "panel.toggle", action: "Toggle right panel", group: "Panel", scope: "mission", when: "In a thread", bindings: [mod("b", true)], handler: "panel.toggle-panel" },
   panelView("findings", "Open Findings", "f"),
   panelView("evidence", "Open Evidence", "e"),
   panelView("fixes", "Open Fixes", "g"),
@@ -44,7 +44,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "composer.dismiss", action: "Dismiss suggestions", group: "Editor", scope: "composer", when: "Suggestions open", bindings: [{ key: "Escape" }], handler: "composer.native" },
 ];
 
-export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Navigation", "Missions", "Panel", "Editor"];
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Navigation", "Threads", "Panel", "Editor"];
 
 export type KeyLike = { key: string; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 export type TargetLike = EventTarget | { tagName?: string; isContentEditable?: boolean; closest?(selector: string): unknown } | null | undefined;

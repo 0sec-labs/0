@@ -1,6 +1,6 @@
 ---
 title: Plugin security
-description: What runs on your machine when you add an MCP server or install a plugin, and what protects you.
+description: What runs on your computer when you add an MCP server or install a plugin, and what protects you.
 ---
 
 Adding a custom MCP server or a plugin from GitHub lets other people's code run
@@ -14,14 +14,14 @@ it. Setup is in [MCP](/mcp/) and [Plugins](/plugins/).
   user's permissions. The environment is scrubbed to safe defaults plus the
   variables you declared, and loader variables such as `LD_PRELOAD`,
   `DYLD_*` and `NODE_OPTIONS` are rejected. The working directory is a
-  relative path inside the mission workspace.
+  relative path inside the thread workspace.
 - **HTTP or SSE MCP server**: 0 connects to an `https` URL. Loopback, private
   and link-local hosts are refused unless allow-listed through
   `ZERO_ALLOWED_LOCAL_ORIGINS`, and DNS results are re-checked.
 - **GitHub plugin**: a repository with `plugin.json` and `plugin.js`. Its tools
   run as local child processes after you enable them.
 - MCP tools are treated like other network-capable tools and their output is
-  untrusted data. They are not offered inside SmolVM missions.
+  untrusted data. They are not offered inside SmolVM threads.
 
 ## Approvals and fingerprints
 
@@ -111,7 +111,7 @@ Model-authored plugins are the exception: they run in a disposable Docker or smo
 
 ## Next steps
 
-- [Agents and MCP](/mcp/): add an MCP server or service connection.
+- [MCP servers](/mcp/): add an MCP server or service connection.
 - [Plugins](/plugins/): install, build and submit plugins.
 - [Skills](/skills/): skill folders and where they come from.
 

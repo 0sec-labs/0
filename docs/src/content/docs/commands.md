@@ -35,7 +35,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
     <h3>Automate</h3>
     <p>Run saved automations, use 0 in CI, and connect coding agents.</p>
     <p><a href="#automation">automation</a> · <a href="#mcp-server">mcp-server</a> · <a href="#api">api</a></p>
-    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">Agents and MCP</a></p>
+    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">MCP servers</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Investigate further</h3>
@@ -47,7 +47,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
     <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Computers and teams</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
 
@@ -124,7 +124,7 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### web
 
-Open the local browser workspace for chats, scans and findings.
+Open the local browser workspace for threads, scans and findings.
 
 ```text
 0 web [options]
@@ -261,7 +261,7 @@ Guide: [Read the workflow](/troubleshooting/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--discard-reports` | — | Delete crash reports waiting for review on this machine |
+| `--discard-reports` | — | Delete crash reports waiting for review on this computer |
 
 ### config
 
@@ -273,19 +273,15 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
 
 #### config show
 
 Show each setting's effective value and source: default, global, or project.
 
 ```text
-0 config show [options]
+0 config show
 ```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print JSON |
 
 #### config list
 
@@ -591,19 +587,19 @@ List repositories the signed-in account can reach (cached for five minutes).
 
 ### usage
 
-Show spend and tokens of the open missions, by model or by mission. Open missions are only tracked by a running `0 web` engine; without one the report is empty.
+Show spend and tokens of the open threads, by model or by thread. Open threads are only tracked by a running `0 web` engine; without one the report is empty.
 
 ```text
 0 usage [options]
 ```
 
 ```bash
-0 usage --by mission --json
+0 usage --by thread --json
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--by <model\|mission>` | — | Group by model (default) or list each mission |
+| `--by <model\|thread>` | — | Group by model (default) or list each thread |
 | `--json` | — | Print JSON |
 
 ### audit-log
@@ -796,7 +792,7 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 
 ### scan campaign
 
-Run a sequence of objective-driven security-testing chats for an authorized target.
+Run a sequence of objective-driven security-testing threads for an authorized target.
 Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
 an attached local engine's console. If no engine is available on the selected
 database, the supervisor falls back to headless chat children.
@@ -810,7 +806,7 @@ iteration or wall-clock limits, or when the model declares coverage complete.
 `--max-tool-calls` applies to headless fallback children; `--cost-ceiling` applies
 to the optional `--with-scan` run, rather than the whole campaign's model usage.
 Objective generation and docs triage also use models. `--dry-run` prints the
-iteration plan without starting chats or scans. With `--docs-url`, published docs
+iteration plan without starting threads or scans. With `--docs-url`, published docs
 are fetched for model-assisted severity triage; use `--no-docs-triage` to disable it.
 
 | Option | Registered default | Description |
@@ -821,7 +817,7 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 | `--total-timeout-ms <ms>` | `14400000` | Hard cap for the whole campaign (default 14400000 = 4h) |
 | `--cost-ceiling <usd>` | `10` | Per-scan-run cost ceiling passed through with --with-scan (default 10) |
 | `--max-tool-calls <n>` | `150` | Tool-call cap for headless fallback chat children (default 150) |
-| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chats |
+| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and threads |
 | `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
@@ -1184,7 +1180,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/findings/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1710,7 +1706,7 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--all` | — | List unified work records with automation, scan and mission references |
+| `--all` | — | List unified work records with automation, scan and thread references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -1788,7 +1784,7 @@ Resume a persisted assessment scan in an existing engine session. The selected e
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` **required** | — | Existing engine mission |
+| `--chat <id>` **required** | — | Existing engine thread |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -1858,7 +1854,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2269,7 +2265,7 @@ Show retained observations and their approval/processing status
 0 improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
@@ -3005,7 +3001,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3022,7 +3018,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3039,7 +3035,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3283,7 +3279,7 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 ### computers
 
 Add and manage remote computers. A computer is a remote 0 engine that runs
-missions and automations on its host; select it in the browser's computer menu
+threads and automations on its host; select it in the browser's computer menu
 to work there. `worker` still works as an older name.
 
 ```text
@@ -3437,7 +3433,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/plugins/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
 
 #### plugin list
 
@@ -3491,11 +3487,6 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 | --- | --- | --- |
 | `--registry <url>` | — | plugin registry index URL (https) |
 | `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
-| `--ref <ref>` | — | Branch, tag or commit for github:owner/repo |
-| `--replace` | — | Replace an installed plugin when installing from GitHub |
-| `--yes` | — | Install the reviewed GitHub commit |
-| `--json` | — | Print machine-readable JSON for github:owner/repo |
-| `--db-path <path>` | — | Engine database for github:owner/repo |
 
 #### plugin enable
 
@@ -3659,7 +3650,7 @@ Forget a connector's credentials
 
 #### plugin mcp
 
-Manage custom MCP servers that missions can use
+Manage custom MCP servers that threads can use
 
 ```text
 0 plugin mcp
@@ -3709,7 +3700,7 @@ Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for 
 | `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
 | `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
 | `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
-| `--enable` | — | Enable it for missions once added |
+| `--enable` | — | Enable it for threads once added |
 | `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
 | `--yes` | — | Approve the reviewed command and settings |
 | `--json` | — | Print machine-readable JSON |
@@ -3833,6 +3824,12 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--out <path>` | — | Override the output path |
+
+## Private local review checks
+
+These commands store operator-approved criteria for a real local project root,
+not cloud enrollment or repository-controlled configuration. See the
+[review-check workflow](/scan-code/).
 
 ### skills
 
@@ -4077,13 +4074,13 @@ Remove a skill that was added from GitHub or the catalog
 
 ### memory
 
-List, disable, export and import what 0 remembers across missions
+List, disable, export and import what 0 remembers across threads
 
 ```text
 0 memory
 ```
 
-Memory is what 0 remembers across missions. False-positive and evaluation memories live under [findings triage memory](#findings-triage-memory).
+Memory is what 0 remembers across threads. False-positive and evaluation memories live under [findings triage memory](#findings-triage-memory).
 
 ```bash
 0 memory list
@@ -4112,7 +4109,7 @@ List memories
 
 #### memory disable
 
-Stop using a memory in future missions
+Stop using a memory in future threads
 
 ```text
 0 memory disable [options] <id>
@@ -4330,9 +4327,7 @@ Discover reusable definitions and execute them through the shared workflow runti
 0 automation
 ```
 
-Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete) · [triggers](#automation-triggers).
-
-Aliases: `automations`.
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
 
 #### automation list
 
@@ -4403,7 +4398,7 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
+| `--chat <id>` | — | Attach the run to an existing thread on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -4595,54 +4590,290 @@ Delete a schedule.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-### missions
+### threads
 
-Start, steer and manage missions on the running engine. These commands make the same console API calls as the browser, so authority and audit trail match. They attach to the local engine started by `0 web`, or to `--engine-url` or `--computer`. A remote engine token cannot reach routes the browser protects.
+Inspect and control the same live sessions used by the browser. Attach with --engine or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
 
 ```text
-0 missions
+0 threads
 ```
 
 ```bash
-0 missions start "Map the login flow" --folder ~/code/app --wait
+0 threads list --engine production
 ```
 
-Subcommands: [list](#missions-list) · [start](#missions-start) · [stop](#missions-stop) · [retry](#missions-retry) · [set](#missions-set) · [rename](#missions-rename) · [clear](#missions-clear) · [close](#missions-close) · [archive](#missions-archive) · [delete](#missions-delete) · [export](#missions-export).
+Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide).
 
-#### missions list
+#### threads list
 
-List live missions, or retained snapshots with `--saved`.
+List live sessions, or retained snapshots with --saved. Listing does not resume work.
 
 ```text
-0 missions list [options]
+0 threads list [options]
 ```
 
 ```bash
-0 missions list --saved
+0 threads list --saved --engine production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | List retained mission snapshots instead |
+| `--saved` | — | List retained thread snapshots |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--computer <id>` | — | Use a registered remote computer |
-| `--engine <id>` | — |  |
-| `--computers-config <path>` | — | Operator computer connection registry JSON file |
-| `--engines-config <path>` | — |  |
-| `--db-path <path>` | — | Control database of the local engine to attach to |
-| `--json` | — | Print the engine response as JSON |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
 
-#### missions start
+#### threads show
 
-Create a mission, send the first prompt and print its ID. With `--wait`, block until the turn ends and print the reply.
+Read an existing live session without recreating it or restoring approvals.
 
 ```text
-0 missions start [options] <prompt>
+0 threads show [options] <id>
 ```
 
 ```bash
-0 missions start "Triage the open findings" --model gpt-5 --effort high --mode recon --wait
+0 threads show SESSION_ID --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads create
+
+Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
+
+```text
+0 threads create [options]
+```
+
+```bash
+0 threads create --config session.json --engine production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` | — | Thread configuration JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads send
+
+Send text to a live engine session. The engine runs the turn using its configured provider and tools.
+
+```text
+0 threads send [options] <id> <text>
+```
+
+```bash
+0 threads send SESSION_ID "Review the current findings" --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads continue
+
+Continue the selected live session with optional text. This preserves the existing engine context.
+
+```text
+0 threads continue [options] <id> [text]
+```
+
+```bash
+0 threads continue SESSION_ID --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads cancel
+
+Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
+
+```text
+0 threads cancel [options] <id>
+```
+
+```bash
+0 threads cancel SESSION_ID --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads events
+
+Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
+
+```text
+0 threads events [options] <id>
+```
+
+```bash
+0 threads events SESSION_ID --after 0 --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--after <cursor>` | — | Nonnegative engine event cursor |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads force-stop
+
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 threads list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+
+```text
+0 threads force-stop [options] <id>
+```
+
+```bash
+0 threads force-stop LIVE_SESSION_ID --engine production
+0 threads force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+```
+
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 threads show` after an error before taking another action.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads resume
+
+Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
+
+```text
+0 threads resume [options] <saved-id>
+```
+
+```bash
+0 threads resume SAVED_ID --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `saved-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### threads decide
+
+Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
+
+```text
+0 threads decide [options] <id> <decision-id>
+```
+
+```bash
+0 threads decide SESSION_ID DECISION_ID --response response.json --engine production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `decision-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--response <path>` **required** | — | Decision response JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--engines-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+## Reference sources
+
+Registration entry point: `packages/cli/src/index.ts`. Command implementations
+are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
+handler behavior and prerequisites beyond the registered flags.
+
+## Team workspace setup
+
+#### threads start
+
+Create a thread, send the first prompt and print its ID. With `--wait`, block until the turn ends and print the reply.
+
+```text
+0 threads start [options] <prompt>
+```
+
+```bash
+0 threads start "Triage the open findings" --model gpt-5 --effort high --mode recon --wait
 ```
 
 | Argument | Required | Description |
@@ -4651,13 +4882,13 @@ Create a mission, send the first prompt and print its ID. With `--wait`, block u
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--model <model>` | — | Model for this mission |
+| `--model <model>` | — | Model for this thread |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
-| `--folder <path>` | — | Folder the mission works in |
+| `--folder <path>` | — | Folder the thread works in |
 | `--target <target>` | — | Authorized target |
 | `--scope <path>` | — | Scope policy JSON file |
-| `--title <title>` | — | Mission title |
+| `--title <title>` | — | Thread title |
 | `--wait` | — | Wait for the turn to finish and print the reply |
 | `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
@@ -4669,16 +4900,16 @@ Create a mission, send the first prompt and print its ID. With `--wait`, block u
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions stop
+#### threads stop
 
-Cancel a mission's active work. `--force` force stops owned execution that did not drain.
+Cancel a thread's active work. `--force` force stops owned execution that did not drain.
 
 ```text
-0 missions stop [options] <id>
+0 threads stop [options] <id>
 ```
 
 ```bash
-0 missions stop 3f2a --force
+0 threads stop 3f2a --force
 ```
 
 | Argument | Required | Description |
@@ -4697,16 +4928,16 @@ Cancel a mission's active work. `--force` force stops owned execution that did n
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions retry
+#### threads retry
 
-Re-run the last turn of a mission.
+Re-run the last turn of a thread.
 
 ```text
-0 missions retry [options] <id>
+0 threads retry [options] <id>
 ```
 
 ```bash
-0 missions retry 3f2a
+0 threads retry 3f2a
 ```
 
 | Argument | Required | Description |
@@ -4724,16 +4955,16 @@ Re-run the last turn of a mission.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions set
+#### threads set
 
-Change a mission's model, reasoning effort, mode or folder. A computer is chosen when the mission starts.
+Change a thread's model, reasoning effort, mode or folder. A computer is chosen when the thread starts.
 
 ```text
-0 missions set [options] <id>
+0 threads set [options] <id>
 ```
 
 ```bash
-0 missions set 3f2a --mode copilot --folder ~/code/app
+0 threads set 3f2a --mode copilot --folder ~/code/app
 ```
 
 | Argument | Required | Description |
@@ -4745,7 +4976,7 @@ Change a mission's model, reasoning effort, mode or folder. A computer is chosen
 | `--model <model>` | — | Model |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
-| `--folder <path>` | — | Folder the mission works in |
+| `--folder <path>` | — | Folder the thread works in |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--computer <id>` | — | Use a registered remote computer |
@@ -4755,16 +4986,16 @@ Change a mission's model, reasoning effort, mode or folder. A computer is chosen
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions rename
+#### threads rename
 
-Rename a mission, or generate a new title from its conversation.
+Rename a thread, or generate a new title from its conversation.
 
 ```text
-0 missions rename [options] <id> [title]
+0 threads rename [options] <id> [title]
 ```
 
 ```bash
-0 missions rename 3f2a --regenerate
+0 threads rename 3f2a --regenerate
 ```
 
 | Argument | Required | Description |
@@ -4784,16 +5015,16 @@ Rename a mission, or generate a new title from its conversation.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions clear
+#### threads clear
 
-Erase a mission's conversation but keep the mission. Requires `--yes`.
+Erase a thread's conversation but keep the thread. Requires `--yes`.
 
 ```text
-0 missions clear [options] <id>
+0 threads clear [options] <id>
 ```
 
 ```bash
-0 missions clear 3f2a --yes
+0 threads clear 3f2a --yes
 ```
 
 | Argument | Required | Description |
@@ -4812,16 +5043,16 @@ Erase a mission's conversation but keep the mission. Requires `--yes`.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions close
+#### threads close
 
-Stop and close a live mission. Its saved copy stays.
+Stop and close a live thread. Its saved copy stays.
 
 ```text
-0 missions close [options] <id>
+0 threads close [options] <id>
 ```
 
 ```bash
-0 missions close 3f2a
+0 threads close 3f2a
 ```
 
 | Argument | Required | Description |
@@ -4839,16 +5070,16 @@ Stop and close a live mission. Its saved copy stays.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions archive
+#### threads archive
 
-Archive a mission, or a retained snapshot with `--saved`.
+Archive a thread, or a retained snapshot with `--saved`.
 
 ```text
-0 missions archive [options] <id>
+0 threads archive [options] <id>
 ```
 
 ```bash
-0 missions archive 3f2a
+0 threads archive 3f2a
 ```
 
 | Argument | Required | Description |
@@ -4857,7 +5088,7 @@ Archive a mission, or a retained snapshot with `--saved`.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--computer <id>` | — | Use a registered remote computer |
@@ -4867,16 +5098,16 @@ Archive a mission, or a retained snapshot with `--saved`.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions delete
+#### threads delete
 
-Permanently delete a mission or, with `--saved`, a retained snapshot. Requires `--yes`.
+Permanently delete a thread or, with `--saved`, a retained snapshot. Requires `--yes`.
 
 ```text
-0 missions delete [options] <id>
+0 threads delete [options] <id>
 ```
 
 ```bash
-0 missions delete 3f2a --yes
+0 threads delete 3f2a --yes
 ```
 
 | Argument | Required | Description |
@@ -4885,7 +5116,7 @@ Permanently delete a mission or, with `--saved`, a retained snapshot. Requires `
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
 | `--yes` | — | Confirm the destructive action |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
@@ -4896,16 +5127,16 @@ Permanently delete a mission or, with `--saved`, a retained snapshot. Requires `
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-#### missions export
+#### threads export
 
-Export a mission transcript as JSON or Markdown.
+Export a thread transcript as JSON or Markdown.
 
 ```text
-0 missions export [options] <id>
+0 threads export [options] <id>
 ```
 
 ```bash
-0 missions export 3f2a --format md -o transcript.md
+0 threads export 3f2a --format md -o transcript.md
 ```
 
 | Argument | Required | Description |
@@ -4914,7 +5145,7 @@ Export a mission transcript as JSON or Markdown.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | The ID is a retained snapshot, not a live mission |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
 | `--format <format>` | `json` | json or md |
 | `-o, --output <file>` | — | Write to a file instead of stdout |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
@@ -4926,292 +5157,22 @@ Export a mission transcript as JSON or Markdown.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-### chats
+### agents
 
-Inspect and control the same live sessions used by the browser. Attach with --engine or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
-
-```text
-0 chats
-```
-
-```bash
-0 chats list --engine production
-```
-
-Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [force-stop](#chats-force-stop) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
-
-#### chats list
-
-List live sessions, or retained snapshots with --saved. Listing does not resume work.
+Create, inspect and control Agents.
 
 ```text
-0 chats list [options]
+0 agents
 ```
 
-```bash
-0 chats list --saved --engine production
-```
+Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers).
 
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--saved` | — | List retained mission snapshots |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+#### agents list
 
-#### chats show
-
-Read an existing live session without recreating it or restoring approvals.
+List Agents.
 
 ```text
-0 chats show [options] <id>
-```
-
-```bash
-0 chats show SESSION_ID --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats create
-
-Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
-
-```text
-0 chats create [options]
-```
-
-```bash
-0 chats create --config session.json --engine production
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--config <path>` | — | Mission configuration JSON object |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats send
-
-Send text to a live engine session. The engine runs the turn using its configured provider and tools.
-
-```text
-0 chats send [options] <id> <text>
-```
-
-```bash
-0 chats send SESSION_ID "Review the current findings" --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-| `text` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats continue
-
-Continue the selected live session with optional text. This preserves the existing engine context.
-
-```text
-0 chats continue [options] <id> [text]
-```
-
-```bash
-0 chats continue SESSION_ID --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-| `text` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats cancel
-
-Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
-
-```text
-0 chats cancel [options] <id>
-```
-
-```bash
-0 chats cancel SESSION_ID --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats events
-
-Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
-
-```text
-0 chats events [options] <id>
-```
-
-```bash
-0 chats events SESSION_ID --after 0 --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--after <cursor>` | — | Nonnegative engine event cursor |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats force-stop
-
-Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 chats list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
-
-```text
-0 chats force-stop [options] <id>
-```
-
-```bash
-0 chats force-stop LIVE_SESSION_ID --engine production
-0 chats force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
-```
-
-Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 chats show` after an error before taking another action.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats resume
-
-Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
-
-```text
-0 chats resume [options] <saved-id>
-```
-
-```bash
-0 chats resume SAVED_ID --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `saved-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### chats decide
-
-Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
-
-```text
-0 chats decide [options] <id> <decision-id>
-```
-
-```bash
-0 chats decide SESSION_ID DECISION_ID --response response.json --engine production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-| `decision-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--response <path>` **required** | — | Decision response JSON object |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-## Sentinels
-
-See [Sentinels](/sentinels/) for presets, the review gate and run history. Commands attach to a running engine, or edit the control database directly when none is running.
-
-### sentinels
-
-Create, inspect and control Sentinels.
-
-```text
-0 sentinels
-```
-
-Subcommands: [list](#sentinels-list) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [set](#sentinels-set) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [run](#sentinels-run) · [activations](#sentinels-activations) · [budget](#sentinels-budget) · [files](#sentinels-files) · [triggers](#sentinels-triggers).
-
-#### sentinels list
-
-List Sentinels.
-
-```text
-0 sentinels list [options]
+0 agents list [options]
 ```
 
 | Option | Registered default | Description |
@@ -5220,12 +5181,12 @@ List Sentinels.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels show
+#### agents show
 
-Show a Sentinel (full or prefix ID).
+Show a Agent (full or prefix ID).
 
 ```text
-0 sentinels show [options] <id>
+0 agents show [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5237,12 +5198,12 @@ Show a Sentinel (full or prefix ID).
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels presets
+#### agents presets
 
-List Sentinel presets.
+List Agent presets.
 
 ```text
-0 sentinels presets [options]
+0 agents presets [options]
 ```
 
 | Option | Registered default | Description |
@@ -5250,28 +5211,28 @@ List Sentinel presets.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels create
+#### agents create
 
-Create a Sentinel from a preset or a JSON definition.
+Create a Agent from a preset or a JSON definition.
 
 ```text
-0 sentinels create [options]
+0 agents create [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--preset <id>` | — | Start from a preset (see `0 sentinels presets`) |
+| `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
 | `--name <name>` | — | Name |
-| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
+| `--file <path>` | — | Agent JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels set
+#### agents set
 
-Change a Sentinel's settings.
+Change a Agent's settings.
 
 ```text
-0 sentinels set [options] <id>
+0 agents set [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5281,7 +5242,7 @@ Change a Sentinel's settings.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--name <name>` | — | Name |
-| `--mission <text>` | — | One-line mission |
+| `--thread <text>` | — | One-line thread |
 | `--autonomy <level>` | — | observe \| propose \| act |
 | `--tool-access <level>` | — | read-only \| read-web \| exec |
 | `--daily-usd <usd>` | — | Daily budget in USD |
@@ -5291,12 +5252,12 @@ Change a Sentinel's settings.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels pause
+#### agents pause
 
-Pause a Sentinel.
+Pause a Agent.
 
 ```text
-0 sentinels pause [options] <id>
+0 agents pause [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5308,12 +5269,12 @@ Pause a Sentinel.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels resume
+#### agents resume
 
-Resume a paused Sentinel.
+Resume a paused Agent.
 
 ```text
-0 sentinels resume [options] <id>
+0 agents resume [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5326,12 +5287,12 @@ Resume a paused Sentinel.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels acknowledge
+#### agents acknowledge
 
 Mark changed scope, model or tools as reviewed.
 
 ```text
-0 sentinels acknowledge [options] <id>
+0 agents acknowledge [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5343,12 +5304,12 @@ Mark changed scope, model or tools as reviewed.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels archive
+#### agents archive
 
-Archive a Sentinel; its history stays.
+Archive a Agent; its history stays.
 
 ```text
-0 sentinels archive [options] <id>
+0 agents archive [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5360,12 +5321,12 @@ Archive a Sentinel; its history stays.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels delete
+#### agents delete
 
-Delete a Sentinel; its automations are detached, not deleted.
+Delete a Agent; its automations are detached, not deleted.
 
 ```text
-0 sentinels delete [options] <id>
+0 agents delete [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5378,12 +5339,12 @@ Delete a Sentinel; its automations are detached, not deleted.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels run
+#### agents run
 
-Run a Sentinel now; starts a mission (needs a running engine).
+Run a Agent now; starts a thread (needs a running engine).
 
 ```text
-0 sentinels run [options] <id>
+0 agents run [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5397,12 +5358,12 @@ Run a Sentinel now; starts a mission (needs a running engine).
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels activations
+#### agents activations
 
-List a Sentinel's recent runs.
+List a Agent's recent runs.
 
 ```text
-0 sentinels activations [options] <id>
+0 agents activations [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5415,12 +5376,12 @@ List a Sentinel's recent runs.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels budget
+#### agents budget
 
-Show a Sentinel's budget and the last 24 hours of spend.
+Show a Agent's budget and the last 24 hours of spend.
 
 ```text
-0 sentinels budget [options] <id>
+0 agents budget [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5432,22 +5393,22 @@ Show a Sentinel's budget and the last 24 hours of spend.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels files
+#### agents files
 
-Read and edit a Sentinel's instructions and memory files.
+Read and edit a Agent's instructions and memory files.
 
 ```text
-0 sentinels files
+0 agents files
 ```
 
-Subcommands: [list](#sentinels-files-list) · [get](#sentinels-files-get) · [put](#sentinels-files-put) · [rm](#sentinels-files-rm).
+Subcommands: [list](#agents-files-list) · [get](#agents-files-get) · [put](#agents-files-put) · [rm](#agents-files-rm).
 
-#### sentinels files list
+#### agents files list
 
 List files.
 
 ```text
-0 sentinels files list [options] <id>
+0 agents files list [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5459,12 +5420,12 @@ List files.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels files get
+#### agents files get
 
 Print a file's content.
 
 ```text
-0 sentinels files get [options] <id> <path>
+0 agents files get [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -5477,12 +5438,12 @@ Print a file's content.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels files put
+#### agents files put
 
 Create or replace a file from --file or --content.
 
 ```text
-0 sentinels files put [options] <id> <path>
+0 agents files put [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -5497,12 +5458,12 @@ Create or replace a file from --file or --content.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels files rm
+#### agents files rm
 
 Delete a file.
 
 ```text
-0 sentinels files rm [options] <id> <path>
+0 agents files rm [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -5516,22 +5477,22 @@ Delete a file.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels triggers
+#### agents triggers
 
-Control what starts a Sentinel's automations.
+Control what starts a Agent's automations.
 
 ```text
-0 sentinels triggers
+0 agents triggers
 ```
 
-Subcommands: [list](#sentinels-triggers-list) · [add](#sentinels-triggers-add) · [enable](#sentinels-triggers-enable) · [disable](#sentinels-triggers-disable) · [rm](#sentinels-triggers-rm).
+Subcommands: [list](#agents-triggers-list) · [add](#agents-triggers-add) · [enable](#agents-triggers-enable) · [disable](#agents-triggers-disable) · [rm](#agents-triggers-rm).
 
-#### sentinels triggers list
+#### agents triggers list
 
 List triggers.
 
 ```text
-0 sentinels triggers list [options] <id>
+0 agents triggers list [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5543,12 +5504,12 @@ List triggers.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels triggers add
+#### agents triggers add
 
-Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes.
+Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
 
 ```text
-0 sentinels triggers add [options] <id>
+0 agents triggers add [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -5565,12 +5526,12 @@ Add a trigger for an automation the Sentinel owns; disabled unless --enable --ye
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels triggers enable
+#### agents triggers enable
 
 Enable a trigger after reviewing it.
 
 ```text
-0 sentinels triggers enable [options] <id> <trigger-id>
+0 agents triggers enable [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -5584,12 +5545,12 @@ Enable a trigger after reviewing it.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels triggers disable
+#### agents triggers disable
 
 Pause a trigger.
 
 ```text
-0 sentinels triggers disable [options] <id> <trigger-id>
+0 agents triggers disable [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -5602,12 +5563,12 @@ Pause a trigger.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### sentinels triggers rm
+#### agents triggers rm
 
 Delete a trigger.
 
 ```text
-0 sentinels triggers rm [options] <id> <trigger-id>
+0 agents triggers rm [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |

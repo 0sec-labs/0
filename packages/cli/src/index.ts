@@ -147,7 +147,7 @@ function exitWithCommandError(err: unknown): never {
 let userArgs = process.argv.slice(2);
 const moved = rewriteMovedCommand(userArgs);
 if (moved) {
-  if (shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
+  if (moved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
   userArgs = moved.args;
   process.argv = [process.argv[0], process.argv[1], ...userArgs];
 }

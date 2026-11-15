@@ -23,19 +23,19 @@ function harness(responses: Record<string, unknown> | ((call: Call) => unknown) 
     sleep: async () => {}, readFile: path => files.get(path) ?? "{}", writeFile: (path, text) => { files.set(path, text); },
   };
   const run = async (...argv: string[]) => {
-    const program = new Command().exitOverride(); registerMissionsCommand(program, deps);
-    await program.parseAsync(["node", "0", "missions", ...argv]);
+    const program = new Command().exitOverride(); program.command("threads"); registerMissionsCommand(program, deps);
+    await program.parseAsync(["node", "0", "threads", ...argv]);
   };
   return { calls, out, err, files, run, opened: () => opened, disposed: () => disposed };
 }
 beforeEach(() => { process.exitCode = 0; });
 afterEach(() => { process.exitCode = 0; });
 
-describe("0 missions", () => {
+describe("0 threads (console actions)", () => {
   it("is part of the real command tree with its subcommands", () => {
     const program = new Command(); registerCommandTree(program);
-    const group = program.commands.find(c => c.name() === "missions")!;
-    expect(group.commands.map(c => c.name()).sort()).toEqual(["archive", "clear", "close", "delete", "export", "list", "rename", "retry", "set", "start", "stop"]);
+    const group = program.commands.find(c => c.name() === "threads")!;
+    expect(group.commands.map(c => c.name())).toEqual(expect.arrayContaining(["archive", "clear", "close", "delete", "export", "rename", "retry", "set", "start", "stop", "list"]));
   });
 
   it("start creates, configures the folder, sends the prompt and prints the id", async () => {
@@ -129,11 +129,5 @@ describe("0 missions", () => {
   it("rejects path-like mission IDs", async () => {
     const h = harness();
     await h.run("stop", "../x"); expect(process.exitCode).toBe(2); expect(h.calls).toEqual([]);
-  });
-
-  it("list renders a table", async () => {
-    const h = harness({ "GET /api/console/sessions": { sessions: [{ id: "m1", status: "ready", title: "First" }] } });
-    await h.run("list");
-    expect(h.out[0]).toMatch(/ID\s+STATUS\s+TITLE\nm1\s+ready\s+First/);
   });
 });

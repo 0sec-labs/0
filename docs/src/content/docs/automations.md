@@ -10,7 +10,7 @@ An automation is a saved list of steps that runs against a target and keeps its 
 In the browser:
 
 1. Run `0` (or `0 web`) and open **Automations**.
-2. Pick a template, or describe a custom automation in a mission.
+2. Pick a template, or describe a custom automation in a thread.
 3. Set a target and press **Run**.
 
 From the CLI:
@@ -134,7 +134,7 @@ A CLI or MCP client that starts its own computer ends that computer when it exit
 
 ```bash
 # ENGINE_TOKEN holds the engine's bearer token.
-0 chats list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
+0 threads list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
 0 automation run --template repository-review --target /engine/repo \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
   --chat SESSION_ID
@@ -159,6 +159,6 @@ Open a finding and use **Edit business impact** to record affected customers, se
 
 ## Next steps
 
-- [Sentinels](/sentinels/): standing agents that run automations on triggers.
+- [Agents](/agents/): standing agents that run automations on triggers.
 - [CI](/ci/github-action/): run 0 in a pipeline.
 - [MCP](/mcp/): start the same runs from a coding agent.

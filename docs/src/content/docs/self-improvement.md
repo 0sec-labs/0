@@ -25,7 +25,7 @@ Model credentials pay for proposal generation. Guest images pay for execution. N
 
 Open **Memory** in the browser app (`/memory`).
 
-- Memory entries are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching entries have their cited file hashes rechecked. Changed files and disabled entries are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
+- Memory entries are source-linked notes saved with `remember_codebase` in authorized local CLI and app threads. Before each model request, matching entries have their cited file hashes rechecked. Changed files and disabled entries are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 
 ```bash
 0 memory list
@@ -55,7 +55,7 @@ The app has no screen for reviewing automation changes proposed from run history
 
 ### Isolated workspaces
 
-Workbench VM missions can save bounded, source-linked memory on the host before teardown. A fresh VM requests current memory for its approved directory before model calls. Both sides check file hashes. Memory stays out of saved mission history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
+Workbench VM threads can save bounded, source-linked memory on the host before teardown. A fresh VM requests current memory for its approved directory before model calls. Both sides check file hashes. Memory stays out of saved thread history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
 
 The control database, queue and knowledge stay on the selected computer. Nothing is exported automatically.
 

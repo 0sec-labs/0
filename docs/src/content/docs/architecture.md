@@ -9,7 +9,7 @@ One rule drives the design: reproduce before trusting. To run a scan instead, se
 
 | Component | Role |
 | --- | --- |
-| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and sentinels. |
+| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and agents. |
 | Engine (`packages/engine`) | Scan pipelines, agent loop, tools, verification, fixes, scope guard and storage. |
 | Browser app (`packages/web`) | The UI that `0` opens. Talks to the computer over a same-origin proxy. |
 | Bench (`packages/bench`) | Benchmark runners. See [Benchmarks](/benchmark/). |
@@ -153,7 +153,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 - Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
 - Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
-See [Agents and MCP](/mcp/).
+See [MCP servers](/mcp/).
 
 ## Storage
 

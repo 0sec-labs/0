@@ -40,11 +40,11 @@ type Item = { key: string; label: string; icon: IconComponent; path: string; sec
 const PREFERENCE_ICONS: Record<string, IconComponent> = {
   general: CapySettingsIcon,
   appearance: CapyAppearanceIcon,
-  missions: CapyChatBubbleIcon,
+  threads: CapyChatBubbleIcon,
   notifications: CapyBellIcon,
   shortcuts: CapyKeyboardIcon,
   instructions: CapyDocumentIcon,
-  agents: CapyShieldIcon,
+  helpers: CapyShieldIcon,
   git: CapyBranchIcon,
   usage: CapyUsageIcon,
   "audit-log": CapyThreadListIcon,
@@ -54,13 +54,13 @@ const pageItem = (id: string): Item => {
   return { key: `settings-${page.id}`, label: page.label, icon: PREFERENCE_ICONS[page.id] ?? CapySettingsIcon, path: "/settings", section: page.id };
 };
 const groups: { label: string; items: Item[] }[] = [
-  { label: "Preferences", items: ["general", "appearance", "missions", "notifications", "shortcuts"].map(pageItem) },
+  { label: "Preferences", items: ["general", "appearance", "threads", "notifications", "shortcuts"].map(pageItem) },
   {
-    label: "Agent",
+    label: "Setup",
     items: [
       pageItem("instructions"),
       { key: "models", label: "Models", icon: CapyChipIcon, path: "/models" },
-      pageItem("agents"),
+      pageItem("helpers"),
       { key: "computers", label: "Computers", icon: CapyDevicesIcon, path: "/computers" },
       pageItem("git"),
     ],

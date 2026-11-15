@@ -181,7 +181,7 @@ export function WorkersPage() {
               <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>SSH address (user@host or config alias)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>Target repository (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
-                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this machine's OpenAI key to the remote computer (user-owned hosts only)</span></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this computer's OpenAI key to the remote computer (user-owned hosts only)</span></label>
                 <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Deploying…" : "Deploy to computer"}</Button>
               </form>
             </Disclosure>

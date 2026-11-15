@@ -51,7 +51,7 @@ describe("shared room HTTP authorization", () => {
     expect(() => authorizeTeamApi(auth, request("POST", cookies.viewer), "/api/console/sessions")).toThrow("read-only");
     expect(() => assertTeamConsoleMutation(request("POST", cookies.viewer), "chat-a", auth, collaboration, gateway)).toThrow("viewers");
   });
-  it("keeps engine settings and machine bridge restricted to owners", () => {
+  it("keeps engine settings and computer bridge restricted to owners", () => {
     for (const path of ["/api/control/reset-database", "/api/workflow-engine/call", "/api/console/settings", "/api/console/connections", "/api/console/plugins/install", "/api/console/github/connect", "/api/console/checks"]) {
       expect(() => authorizeTeamApi(auth, request("POST", cookies.editor), path), path).toThrow();
       expect(authorizeTeamApi(auth, request("POST", cookies.owner), path)?.role).toBe("owner");

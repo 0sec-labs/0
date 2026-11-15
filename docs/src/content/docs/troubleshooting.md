@@ -239,7 +239,7 @@ Each new scan gets its own `~/.0/runs/<run-id>/state.db` unless you pass `--db-p
 0 runs relaunch <scan-id> --db-path ./scans/scan-001.db
 ```
 
-The scan ID prints when the scan starts. `0 console --resume` is different: it continues a saved mission, not a scan.
+The scan ID prints when the scan starts. `0 console --resume` is different: it continues a saved thread, not a scan.
 
 ## Browser app
 
@@ -262,7 +262,7 @@ Keys saved under **Providers** on the Models page live in `~/.0/credentials.json
 
 ### `--finding-intent` does nothing
 
-`--finding-intent` needs `--finding <id>`. Values: `investigate` (default), `verify`, `draft_fix` and `impact`. The finding must exist in the database chosen by `--db-path`. A scan ID or mission ID is not a finding ID.
+`--finding-intent` needs `--finding <id>`. Values: `investigate` (default), `verify`, `draft_fix` and `impact`. The finding must exist in the database chosen by `--db-path`. A scan ID or thread ID is not a finding ID.
 
 ## Known limits
 

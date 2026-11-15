@@ -49,7 +49,7 @@ export function registerWorkerCommand(program: Command): void {
     .option("--target-git <url>", "Repository the remote server clones into the engine workspace instead of the bundled demo target")
     .option("--ssh-config <path>", "OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config)")
     .option("--engine-port <port>", "Engine port on the remote server (default: stable port derived from host)")
-    .option("--forward-provider-key", "Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only)", false)
+    .option("--forward-provider-key", "Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only)", false)
     .action(async (opts: { ssh?: string; lima: string; targetGit?: string; enginePort?: string; forwardProviderKey: boolean; sshConfig?: string; enginesConfig?: string }) => {
       const port = opts.enginePort === undefined ? undefined : Number.parseInt(opts.enginePort, 10);
       if (port !== undefined && (!Number.isSafeInteger(port) || port < 1 || port > 65535)) throw new Error("--engine-port must be 1-65535");

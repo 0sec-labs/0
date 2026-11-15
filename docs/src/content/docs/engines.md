@@ -96,7 +96,7 @@ Start the browser app with the registry and pick the computer in the selector:
 
 Missions, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
 
-### Local Codex model for a remote mission
+### Local Codex model for a remote thread
 
 A browser mission can run its tools on a remote computer while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that mission. Provider tokens stay on your machine. Prompts, tool results and responses pass through a mission-scoped relay, and they can contain remote workspace data.
 
@@ -129,14 +129,14 @@ For a direct call to a computer API, use `0 api`:
 ### Continue the same work
 
 ```bash
-0 chats list --engine staging --format json
+0 threads list --engine staging --format json
 0 console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
 0 runs list --all --engine staging --format json
 0 runs show workflow:<execution-id> --engine staging --format json
 0 runs cancel workflow:<execution-id> --engine staging
 ```
 
-`--chat` attaches to a live mission. It does not restore an archived one. The mission keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
+`--chat` attaches to a live thread. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
 
 `runs list --all` and the **Runs** view share one read model over automations and standalone scans. References look like `workflow:<execution-id>` and `scan:<scan-id>`. The read-only API is `GET /api/work` and `GET /api/work/<reference>`.
 

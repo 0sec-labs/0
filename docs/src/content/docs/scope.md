@@ -101,7 +101,7 @@ If an engagement needs a hard boundary for all traffic, enforce it outside the p
 
 Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
 
-In YOLO missions, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
+In YOLO threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
 
 To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the plugin to be on; neither turns it on.
 

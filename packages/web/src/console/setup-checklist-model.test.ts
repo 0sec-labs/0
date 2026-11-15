@@ -26,7 +26,7 @@ describe("setup checklist", () => {
     expect(showSetupCard(deriveSetupProgress(none), true)).toBe(false);
     expect(showSetupCard(null, false)).toBe(false);
   });
-  it("sends the provider step to Connections and the mission step to a prefilled prompt", () => {
+  it("sends the provider step to Connections and the thread step to a prefilled prompt", () => {
     const steps = deriveSetupProgress(none)!.steps;
     expect(steps.map(step => Boolean(step.to) !== Boolean(step.prompt))).toEqual([true, true]);
   });

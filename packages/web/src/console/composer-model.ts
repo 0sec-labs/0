@@ -55,7 +55,7 @@ export interface MentionItem {
 export const MENTION_GROUP_LABELS: Record<MentionKind, string> = {
   plugin: "Plugins",
   finding: "Findings",
-  mission: "Missions",
+  mission: "Threads",
 };
 export const MENTION_GROUP_LIMIT = 5;
 

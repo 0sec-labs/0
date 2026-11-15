@@ -23,7 +23,7 @@ Run `0 web --help` for the full list.
 
 The sidebar holds:
 
-- **New mission**, search and your mission history.
+- **New thread**, search and your thread history.
 - **Findings**, with a count of open findings.
 - **Automations**.
 - **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
@@ -44,17 +44,17 @@ Press `?` outside a text field to see every shortcut, or open **Settings → Sho
 | ⌘K or `/` | Search anything |
 | ⌘, | Open Settings |
 | ⌘B or ⇧⌘S | Show or hide the sidebar (⌘B is bold while typing) |
-| ⇧⌘B | Show or hide the right panel in a mission |
-| ⇧⌘O | New mission |
-| ⌘. | Stop the running mission |
+| ⇧⌘B | Show or hide the right panel in a thread |
+| ⇧⌘O | New thread |
+| ⌘. | Stop the running thread |
 | ⌘I | Focus the composer |
 | ⌘/ | Attach files |
-| ⇧⌘F, ⇧⌘E, ⇧⌘G, ⇧⌘L, ⇧⌘V | Open Findings, Evidence, Fixes, Browser or Visuals in the mission panel |
+| ⇧⌘F, ⇧⌘E, ⇧⌘G, ⇧⌘L, ⇧⌘V | Open Findings, Evidence, Fixes, Browser or Visuals in the thread panel |
 | Enter, ⇧Enter | Send, or insert a new line |
 
-## Run a mission
+## Run a thread
 
-1. Press **New mission**.
+1. Press **New thread**.
 2. Pick a folder if the job involves code.
 3. Choose a model with the model picker under the composer. Connect a provider first if the list is empty; see [Models and keys](/models/).
 4. Describe the job in plain words, for example "Review this repo for auth bypasses and verify anything you find".
@@ -71,10 +71,10 @@ The composer also has:
 
 | Mode | CLI name | Behavior |
 | --- | --- | --- |
-| **Act without asking** | `yolo` | Runs tools without per-action prompts. The default for new missions. |
+| **Act without asking** | `yolo` | Runs tools without per-action prompts. The default for new threads. |
 | **Ask before acting** | `standard` | Asks you to approve each action. |
 
-Switching to **Act without asking** also resumes actions waiting for approval. Scope grants, folder grants and questions the agent asks you stay separate decisions. Existing missions keep their mode until you change it. Credential, private-network and sandbox protections apply in both modes.
+Switching to **Act without asking** also resumes actions waiting for approval. Scope grants, folder grants and questions the agent asks you stay separate decisions. Existing threads keep their mode until you change it. Credential, private-network and sandbox protections apply in both modes.
 
 ### Sending while the agent works
 
@@ -82,7 +82,7 @@ A message you send during a response is queued. It goes out when the current res
 
 Background agents that a mission starts keep running after its response ends. Stop them from the agents panel. They belong to the live mission and do not survive a computer restart.
 
-If a model connection drops, the mission reconnects and continues from its last completed tool result. Completed tool actions are not replayed.
+If a model connection drops, the thread reconnects and continues from its last completed tool result. Completed tool actions are not replayed.
 
 ### Web search
 
@@ -109,7 +109,7 @@ Memory entries are hints for the agent to check again, not verified findings. A 
 
 ## Visualizations
 
-The agent can put a visual in a mission with its `visualize` tool: an attack path, an incident timeline or a table of findings. Visuals are saved with the mission and replay when you reopen it.
+The agent can put a visual in a thread with its `visualize` tool: an attack path, an incident timeline or a table of findings. Visuals are saved with the thread and replay when you reopen it.
 
 | `kind` | Use for |
 | --- | --- |
@@ -119,15 +119,15 @@ The agent can put a visual in a mission with its `visualize` tool: an attack pat
 | `table` | Columns and rows. |
 | `mermaid` | Sequence or flow diagrams. |
 
-Every visual has a title and a summary. The summary is the alt text and states the conclusion. A mission holds up to 200 visuals. A visual that is too large fails validation and the model retries with less data; nothing is truncated silently.
+Every visual has a title and a summary. The summary is the alt text and states the conclusion. A thread holds up to 200 visuals. A visual that is too large fails validation and the model retries with less data; nothing is truncated silently.
 
 Visuals are plain data, never HTML. Markup, URLs and control characters are rejected. A node can reference a finding, a file or an agent, never a URL. The app sanitizes Mermaid. Target content is attacker-controlled, so the agent is told to shorten labels and not copy target text.
 
-## Saved missions
+## Saved threads
 
-A saved mission opens at `/chats/saved/<id>` in the same view as a live one, with its transcript, work log and panels. Opening it does not start any work. It stays read-only until you send a message, which resumes it. Rename, clear, close and model change wait until then.
+A saved thread opens at `/chats/saved/<id>` in the same view as a live one, with its transcript, work log and panels. Opening it does not start any work. It stays read-only until you send a message, which resumes it. Rename, clear, close and model change wait until then.
 
-Use mission history or ⌘K search to find older work. Search matches message text and metadata, ranks relevant matches first and skips tool payloads and private reasoning.
+Use thread history or ⌘K search to find older work. Search matches message text and metadata, ranks relevant matches first and skips tool payloads and private reasoning.
 
 ## Settings
 
@@ -137,7 +137,7 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | --- | --- | --- |
 | Preferences | **General** | Update policy, input behavior, privacy (usage metrics and problem reports), support, status and one reset for shared preferences. |
 | | **Appearance** | Theme, mode, accent color, font size and reduce motion. This browser only. |
-| | **Missions** | Summarizing long missions, title instructions, idle archiving, subagent limits, transcript options and one **Show cost and usage** switch. |
+| | **Threads** | Summarizing long threads, title instructions, idle archiving, subagent limits, transcript options and one **Show cost and usage** switch. |
 | | **Notifications** | Browser notifications. This browser only. |
 | | **Shortcuts** | The searchable shortcut list. |
 | Agent | **Instructions** | Your own `AGENTS.md` text for every mission, plus one file per folder. |
@@ -145,7 +145,7 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
 | | **Computers** | The machines missions run on. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
-| Activity | **Usage** | Estimated spend and tokens by model and by mission. |
+| Activity | **Usage** | Estimated spend and tokens by model and by thread. |
 | | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |
 | | **Members** | Team mode only. |
 
@@ -162,7 +162,7 @@ The folder and permissions page opens at `/project`. Checks that the computer, p
 
 Themes are stored in the browser. The computer and the CLI never see them.
 
-### Mission settings
+### Thread settings
 
 - **Messages while working**: queue your next message or interrupt the response.
 - **Mission title instructions**: guidance for automatic titles, such as a language or style, up to 500 characters. Credentials are still redacted.
@@ -173,14 +173,14 @@ Themes are stored in the browser. The computer and the CLI never see them.
 
 **Settings → Instructions** edits two Markdown files you own, each up to 32,000 characters:
 
-- **Global**: `~/.0/AGENTS.md`, for every mission.
+- **Global**: `~/.0/AGENTS.md`, for every thread.
 - **Folder**: one file per folder under `~/.0/workspaces/`.
 
-When a mission starts, both are added to its system prompt in a block marked as trusted operator instructions, global first. `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded. Whoever wrote the target controls that text.
+When a thread starts, both are added to its system prompt in a block marked as trusted operator instructions, global first. `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded. Whoever wrote the target controls that text.
 
 ### Notifications
 
-Turn on **Notify me** to get browser notifications when a mission finishes, needs your approval or asks a question, when a scan finishes, and when a fix is ready or a pull request opens. Notifications are off by default. By default they fire only while the tab is hidden and play a sound. Your browser must allow notifications. Nothing leaves the browser.
+Turn on **Notify me** to get browser notifications when a thread finishes, needs your approval or asks a question, when a scan finishes, and when a fix is ready or a pull request opens. Notifications are off by default. By default they fire only while the tab is hidden and play a sound. Your browser must allow notifications. Nothing leaves the browser.
 
 ### Git and pull requests
 
@@ -194,7 +194,7 @@ Connect with one of these, in this order:
 
 A login from `GH_TOKEN` or `GITHUB_TOKEN` is shown as `via token`.
 
-The page also lists the repositories the account can reach (cached for five minutes) and the sentinels that use them. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
+The page also lists the repositories the account can reach (cached for five minutes) and the agents that use them. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
 
 ## Run headless
 
@@ -216,11 +216,11 @@ printf '%s' 'Summarize the selected findings' | 0 console --print
 | `--target <url>`, `--scope <file>` | Target and scope policy for the run. |
 | `--finding <id>`, `--finding-intent <intent>` | Focus on one saved finding: `investigate`, `verify`, `draft_fix` or `impact`. |
 | `--max-tool-calls <n>` | Tool-call rounds per message. Unlimited by default. |
-| `--resume <id>`, `--continue` | Continue a saved mission by id or prefix, or the most recent one. `0 -r <id>` and `0 -c` are shortcuts. |
+| `--resume <id>`, `--continue` | Continue a saved thread by id or prefix, or the most recent one. `0 -r <id>` and `0 -c` are shortcuts. |
 
 Headless runs have no approval dialog. A task that needs a human decision cannot finish there; open it in the browser.
 
-### Continue a live mission from the terminal
+### Continue a live thread from the terminal
 
 Send a prompt to a mission that is open in a running app:
 

@@ -186,9 +186,9 @@ export default defineConfig({
           label: "Automate and extend",
           items: [
             { label: "Automations", slug: "automations" },
-            { label: "Sentinels", slug: "sentinels" },
+            { label: "Agents", slug: "agents" },
             { label: "CI/CD", slug: "ci/github-action" },
-            { label: "Agents and MCP", slug: "mcp" },
+            { label: "MCP servers", slug: "mcp" },
             { label: "Plugins", slug: "plugins" },
             { label: "Plugin security", slug: "plugin-trust" },
             { label: "Skills", slug: "skills" },

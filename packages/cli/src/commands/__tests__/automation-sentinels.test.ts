@@ -38,7 +38,7 @@ describe("command tree", () => {
     const program = new Command();
     registerCommandTree(program);
     const find = (...path: string[]) => path.reduce<Command | undefined>((parent, name) => parent?.commands.find(c => c.name() === name || c.aliases().includes(name)), program);
-    for (const path of [["automations", "create"], ["automation", "delete"], ["automation", "triggers", "enable"], ["sentinels", "run"], ["sentinels", "files", "put"], ["sentinels", "triggers", "add"], ["sentinels", "budget"]]) expect(find(...path), path.join(" ")).toBeDefined();
+    for (const path of [["automations", "create"], ["automation", "delete"], ["automation", "triggers", "enable"], ["agents", "run"], ["agents", "files", "put"], ["agents", "triggers", "add"], ["agents", "budget"]]) expect(find(...path), path.join(" ")).toBeDefined();
   });
 });
 
@@ -47,7 +47,7 @@ describe("destructive commands", () => {
     const calls: string[] = [];
     const client: ConsoleClient = { mode: "embedded", request: async (method, path) => { calls.push(`${method} ${path}`); return {}; }, dispose: async () => {} };
     const { run } = harness(async () => client);
-    for (const args of [["automation", "delete", "a"], ["sentinels", "delete", "s"], ["sentinels", "run", "s"], ["sentinels", "files", "rm", "s", "AGENTS.md"], ["sentinels", "triggers", "rm", "s", "t"], ["automation", "triggers", "remove", "t"]]) {
+    for (const args of [["automation", "delete", "a"], ["agents", "delete", "s"], ["agents", "run", "s"], ["agents", "files", "rm", "s", "AGENTS.md"], ["agents", "triggers", "rm", "s", "t"], ["automation", "triggers", "remove", "t"]]) {
       const result = await run(...args);
       expect(result.code, args.join(" ")).toBe(2);
       expect(result.err).toContain("--yes");
@@ -56,11 +56,11 @@ describe("destructive commands", () => {
   });
 
   it("prints JSON errors on stderr and exits 1 for server failures", async () => {
-    const client: ConsoleClient = { mode: "attached", request: async () => { throw new Error("Sentinel not found."); }, dispose: async () => {} };
+    const client: ConsoleClient = { mode: "attached", request: async () => { throw new Error("Agent not found."); }, dispose: async () => {} };
     const { run } = harness(async () => client);
-    const result = await run("sentinels", "show", "nope", "--json");
+    const result = await run("agents", "show", "nope", "--json");
     expect(result.code).toBe(1);
-    expect(JSON.parse(result.err)).toEqual({ error: "Sentinel not found." });
+    expect(JSON.parse(result.err)).toEqual({ error: "Agent not found." });
   });
 });
 
@@ -71,44 +71,44 @@ describe("embedded (no running engine)", () => {
     const { run } = harness(options => openConsoleClient(options), home);
     const db = ["--db-path", dbPath, "--json"];
 
-    const presets = JSON.parse((await run("sentinels", "presets", ...db)).out) as Array<{ id: string }>;
+    const presets = JSON.parse((await run("agents", "presets", ...db)).out) as Array<{ id: string }>;
     expect(presets.length).toBeGreaterThan(0);
-    const created = await run("sentinels", "create", "--preset", presets[0]!.id, "--name", "Nightly", ...db);
+    const created = await run("agents", "create", "--preset", presets[0]!.id, "--name", "Nightly", ...db);
     expect(created.code).toBe(0);
     const sentinel = JSON.parse(created.out) as { id: string; name: string; version: number };
     expect(sentinel.name).toBe("Nightly");
     const prefix = sentinel.id.slice(0, 8);
 
-    expect(JSON.parse((await run("sentinels", "list", ...db)).out)).toHaveLength(1);
-    expect((await run("sentinels", "show", prefix, "--db-path", dbPath)).out).toContain("Nightly");
+    expect(JSON.parse((await run("agents", "list", ...db)).out)).toHaveLength(1);
+    expect((await run("agents", "show", prefix, "--db-path", dbPath)).out).toContain("Nightly");
 
-    const set = await run("sentinels", "set", prefix, "--daily-usd", "3", "--autonomy", "observe", ...db);
+    const set = await run("agents", "set", prefix, "--daily-usd", "3", "--autonomy", "observe", ...db);
     expect(set.code).toBe(0);
     expect(JSON.parse(set.out).budget.dailyUsd).toBe(3);
-    expect((await run("sentinels", "set", prefix, "--autonomy", "bogus", ...db)).code).toBe(2);
-    expect((await run("sentinels", "set", prefix, ...db)).code).toBe(2);
+    expect((await run("agents", "set", prefix, "--autonomy", "bogus", ...db)).code).toBe(2);
+    expect((await run("agents", "set", prefix, ...db)).code).toBe(2);
 
-    expect((await run("sentinels", "pause", prefix, ...db)).code).toBe(0);
-    const budget = JSON.parse((await run("sentinels", "budget", prefix, ...db)).out);
+    expect((await run("agents", "pause", prefix, ...db)).code).toBe(0);
+    const budget = JSON.parse((await run("agents", "budget", prefix, ...db)).out);
     expect(budget.budget.dailyUsd).toBe(3);
-    expect(JSON.parse((await run("sentinels", "activations", prefix, ...db)).out)).toEqual([]);
+    expect(JSON.parse((await run("agents", "activations", prefix, ...db)).out)).toEqual([]);
 
-    const put = await run("sentinels", "files", "put", prefix, "reports/note.md", "--content", "hello", ...db);
+    const put = await run("agents", "files", "put", prefix, "reports/note.md", "--content", "hello", ...db);
     expect(put.code, put.err).toBe(0);
-    expect((await run("sentinels", "files", "put", prefix, "reports/note.md", "--content", "hello again", ...db)).code).toBe(0);
-    expect(JSON.parse((await run("sentinels", "files", "get", prefix, "reports/note.md", ...db)).out).content).toBe("hello again");
-    const removed = await run("sentinels", "files", "rm", prefix, "reports/note.md", "--yes", ...db);
+    expect((await run("agents", "files", "put", prefix, "reports/note.md", "--content", "hello again", ...db)).code).toBe(0);
+    expect(JSON.parse((await run("agents", "files", "get", prefix, "reports/note.md", ...db)).out).content).toBe("hello again");
+    const removed = await run("agents", "files", "rm", prefix, "reports/note.md", "--yes", ...db);
     expect(removed.err).toBe("");
     expect(removed.code).toBe(0);
 
-    const running = await run("sentinels", "run", prefix, "--yes", ...db);
+    const running = await run("agents", "run", prefix, "--yes", ...db);
     expect(running.code).toBe(1);
     expect(running.err).toContain("running engine");
 
-    expect((await run("sentinels", "archive", prefix, ...db)).code).toBe(0);
-    expect(JSON.parse((await run("sentinels", "list", "--status", "archived", ...db)).out)).toHaveLength(1);
-    expect((await run("sentinels", "delete", prefix, "--yes", ...db)).code).toBe(0);
-    expect(JSON.parse((await run("sentinels", "list", ...db)).out)).toEqual([]);
+    expect((await run("agents", "archive", prefix, ...db)).code).toBe(0);
+    expect(JSON.parse((await run("agents", "list", "--status", "archived", ...db)).out)).toHaveLength(1);
+    expect((await run("agents", "delete", prefix, "--yes", ...db)).code).toBe(0);
+    expect(JSON.parse((await run("agents", "list", ...db)).out)).toEqual([]);
   });
 
   it("manages automations end to end and keeps schedules host-only", async () => {
@@ -164,7 +164,7 @@ describe("attached to a running engine", () => {
         return new Response(JSON.stringify({ sentinels: [{ id: "sent-1", name: "Watcher", status: "active", autonomy: "propose", toolAccess: "read-only", version: 1 }] }), { status: 200, headers: { "content-type": "application/json", "x-0-engine-id": "engine-test" } });
       }) as unknown as typeof fetch;
       const { run } = harness(options => openConsoleClient(options, { fetch: fetchStub }), home);
-      const result = await run("sentinels", "list", "--db-path", dbPath);
+      const result = await run("agents", "list", "--db-path", dbPath);
       expect(result.code).toBe(0);
       expect(result.out).toContain("Watcher");
       expect(result.out + result.err).not.toContain(FAKE_TOKEN);
@@ -172,7 +172,7 @@ describe("attached to a running engine", () => {
 
       const mismatch = (async () => new Response("{}", { status: 200, headers: { "x-0-engine-id": "other" } })) as unknown as typeof fetch;
       const failing = harness(options => openConsoleClient(options, { fetch: mismatch }), home);
-      const bad = await failing.run("sentinels", "list", "--db-path", dbPath);
+      const bad = await failing.run("agents", "list", "--db-path", dbPath);
       expect(bad.code).toBe(1);
       expect(bad.err).toContain("identity");
     } finally { unregister(); }
