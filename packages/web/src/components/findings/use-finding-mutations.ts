@@ -55,6 +55,11 @@ export function useFindingMutations() {
 
   const triage = useMutation({
     mutationFn: ({ fingerprint, triageStatus, triageNote }: TriageInput) => updateFindingFamilyTriage(fingerprint, triageStatus, triageNote),
+    onSuccess: (_data, variables) => {
+      if (variables.triageStatus === "new") return;
+      const undo = () => triage.mutate({ ...variables, triageStatus: "new" });
+      toast({ id: "finding-triage", kind: "success", title: variables.triageStatus === "accepted" ? "Risk accepted" : "Finding dismissed", action: { label: "Undo", onClick: undo } });
+    },
     onError: error => toast({ id: "finding-triage-failed", kind: "error", title: "Review not saved", description: errorText(error, "Couldn't reach this computer. Try again when it is back.") }),
     onSettled: (_data, _error, variables) => {
       // Not awaited: refetches stall while offline and would keep the mutation (and its buttons) pending.

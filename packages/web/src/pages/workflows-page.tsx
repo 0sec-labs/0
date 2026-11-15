@@ -58,22 +58,30 @@ export function WorkflowsPage() {
   const selectedNode = selected?.nodes.find(node => node.id === nodeId);
   // A blank automation nobody touched is not worth keeping, however the person left it (Back, sidebar, reload).
   const swept = useRef(new Set<string>());
+  const [sweepTick, setSweepTick] = useState(0);
   useEffect(() => {
     if (selectedId || readOnly || !definitions.data) return;
+    let wait = Infinity;
     for (const item of definitions.data.definitions) {
-      const pristine = item.revision === 1 && item.name === "Untitled automation" && !item.target && !item.instructions && !item.ownerSentinelId && Date.now() - Date.parse(item.updatedAt) > 15_000;
+      const pristine = item.revision === 1 && item.name === "Untitled automation" && !item.target && !item.instructions && !item.ownerSentinelId;
       if (!pristine || swept.current.has(item.id) || readAutomationDraft(item.id)) continue;
+      const remaining = 3000 - (Date.now() - Date.parse(item.updatedAt));
+      if (remaining > 0) { wait = Math.min(wait, remaining); continue; }
       swept.current.add(item.id);
       void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(item.id)}?revision=${item.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {});
     }
-  }, [selectedId, readOnly, definitions.data]);
+    if (wait === Infinity) return;
+    const timer = window.setTimeout(() => setSweepTick(tick => tick + 1), wait + 50);
+    return () => window.clearTimeout(timer);
+  }, [selectedId, readOnly, definitions.data, sweepTick]);
   const selectStep = (id: string) => { setNodeId(id); };
   // Leaving a Sentinel "Set up" URL replaces it, so history never holds a link that would create the automation again.
   const select = (id: string | null) => { const setup = search.has("template") || search.has("owner"); setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); for (const key of ["template", "owner", "runIn"]) next.delete(key); return next; }, setup ? { replace: true } : undefined); setNodeId(null); setError(""); };
+  const performing = useRef(false);
   const perform = async (action: () => Promise<void>) => {
-    if (busy) throw new Error("Wait for the current update to finish.");
-    setBusy(true); setError("");
-    try { await action(); } catch (cause) { setError(errorText(cause, "Unable to update the workflow.")); throw cause; } finally { setBusy(false); }
+    if (busy || performing.current) throw new Error("Wait for the current update to finish.");
+    performing.current = true; setBusy(true); setError("");
+    try { await action(); } catch (cause) { setError(errorText(cause, "Unable to update the workflow.")); throw cause; } finally { performing.current = false; setBusy(false); }
   };
   const save = (input: SecurityWorkflowInput) => perform(async () => {
     const validated = parseSecurityWorkflowInput(input);
@@ -144,7 +152,7 @@ export function WorkflowsPage() {
       onCloseAutoFocus={event => { event.preventDefault(); runTrigger.current?.focus(); }}
       title={`Run ${runCandidate?.name}?`}
       confirmLabel={busy ? "Starting…" : "Run automation"} confirmDisabled={!reviewedAudits.length} onConfirm={run}>
-      <div className="space-y-4 text-sm"><p><span className="text-muted-foreground">Computer: </span>{computerName}</p><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p>{runCandidate?.model && <p><span className="text-muted-foreground">Model: </span>{runCandidate.model.model}{runCandidate.model.reasoning ? ` (${runCandidate.model.reasoning})` : ""}</p>}<p className="text-xs text-muted-foreground">Reviewed revision {runCandidate?.revision}</p>{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">{node.type === "audit" && <>{node.plan.goal.replaceAll("-", " ")} · {node.plan.runCount} {node.plan.runCount === 1 ? "attempt" : "attempts"}, {node.plan.executionMode} · {node.plan.depth === "default" ? "standard" : node.plan.depth} depth · </>} {Math.round(node.plan.timeCapMs / 60000)} minutes · ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div>
+      <div className="space-y-4 text-sm"><p><span className="text-muted-foreground">Computer: </span>{computerName}</p><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p>{runCandidate?.model && <p><span className="text-muted-foreground">Model: </span>{runCandidate.model.model}{runCandidate.model.reasoning ? ` (${runCandidate.model.reasoning})` : ""}</p>}{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">Up to {Math.round(node.plan.timeCapMs / 60000)} minutes and ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div>
     </ConfirmDialog>
     <ConfirmDialog open={deleteCandidate !== null} onOpenChange={open => { if (!open) setDeleteCandidate(null); }} pending={busy} destructive className="sm:max-w-sm"
       onCloseAutoFocus={event => { event.preventDefault(); if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus(); else page.current?.focus(); }}

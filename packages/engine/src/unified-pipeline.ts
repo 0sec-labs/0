@@ -666,7 +666,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
           `review cap — split the change or scope to a subsystem/path`
         : `review target too large: over ${cap} source files exceeds the ${cap} ` +
           `review cap — scope to a subsystem/path (e.g. a specific directory) or ` +
-          `use a smaller target (override with ZERO_REVIEW_MAX_FILES)`;
+          `use a smaller target`;
       logPipelineEvent("prepare", "stage_error", { error: msg, fileCount, cap });
       emit({ type: "error", stage: "prepare", message: msg });
       throw new Error(msg);

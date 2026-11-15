@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { v } from "@/lib/vocabulary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,15 +24,19 @@ export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: 
     setPresetId(id);
     if (!touched) setName(presets.data?.find(item => item.id === id)?.name ?? "");
   };
+  const inflight = useRef(false);
   const submit = async () => {
+    if (inflight.current) return;
     const trimmed = name.trim();
     if (!trimmed) { setError("Give it a name."); return; }
     setError("");
+    inflight.current = true;
     try {
       const result = await create.mutateAsync({ name: trimmed, ...(preset ? { preset: preset.id } : { avatar: BLANK_AVATAR }), status: "paused" });
       reset();
       onCreated(result.sentinel);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to create."); }
+    finally { inflight.current = false; }
   };
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) reset(); }}>
     <DialogContent className="sm:max-w-md">

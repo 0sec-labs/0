@@ -67,7 +67,7 @@ export function SentinelPage() {
         <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No mission yet."}</p>
       </div>
     </header>
-    <div className="no-scrollbar -mx-6 overflow-x-auto px-6"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
+    <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
       <TabsList variant="line" aria-label="Sentinel views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
     </Tabs></div>
     <div role="region" aria-label={VIEW_LABELS[view]}>

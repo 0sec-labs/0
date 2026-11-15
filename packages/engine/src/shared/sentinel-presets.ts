@@ -38,7 +38,7 @@ const make = (preset: Omit<SentinelPreset, "sentinel"> & { skills: string[]; too
 export const SENTINEL_PRESETS: readonly SentinelPreset[] = [
   make({
     id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Scheduled, scoped, non-destructive tests of web and API targets.",
-    job: "Run scheduled, scoped, non-destructive penetration tests of authorised web and API targets.",
+    job: "Run scheduled, scoped, non-destructive penetration tests of authorized web and API targets.",
     autonomy: "observe", toolAccess: "read-web", requiredInputs: ["target URLs", "scope and exclusions", "optional test credentials"],
     expectedOutputs: ["Findings with proof of concept", "Report", "Trend notes"],
     skills: ["poc-verification", "jwt-attacks", "graphql-introspection", "blind-exploitation", "ssrf-bypass", "sqli-advanced", "assumption-mining"],

@@ -26,6 +26,7 @@ import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
 import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
+import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
@@ -101,7 +102,7 @@ export function ConsoleNavigationRail({
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
-  const findingCount = dashboard.data?.groups.length ?? 0; // same total the Findings page shows (it lists suppressed groups too)
+  const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
   // Short primary list like Capy; Plugins, Memory and Hosts stay reachable under More. A "run" is just a chat, so there is no Runs destination.
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
@@ -171,7 +172,7 @@ export function ConsoleNavigationRail({
             <SidebarLabel>{label}</SidebarLabel>
             {label === "Findings" && findingCount > 0 && (
               <span
-                aria-label={`${findingCount} findings`}
+                aria-label={`${findingCount} to review`}
                 className="ml-auto inline-flex h-3.5 min-w-4.5 shrink-0 items-center justify-center translate-y-px rounded-full border-[0.5px] border-[color-mix(in_oklch,var(--primary)_80%,black)] bg-primary px-1 text-[11px] leading-none font-bold tabular-nums text-primary-foreground shadow-[inset_0_1px_oklch(1_0_0/.12),var(--sh-plate)]"
               >
                 {findingCount > 99 ? "99+" : findingCount}

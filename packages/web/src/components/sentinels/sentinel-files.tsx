@@ -62,7 +62,7 @@ function Editor({ sentinelId, initial, revisions, readOnly, savedInitially, onSa
         <Button type="button" size="sm" variant="ghost" onClick={() => setConflict(null)}>Keep editing</Button>
       </div>
     </div>}
-    <Textarea aria-label={`Edit ${base.path}`} value={text} readOnly={readOnly} spellCheck={false} rows={18} className="min-h-80 font-mono text-sm" onChange={event => edit(event.target.value)} />
+    <Textarea aria-label={`Edit ${base.path}`} value={text} readOnly={readOnly} spellCheck={false} rows={18} className="max-h-[32rem] min-h-80 overflow-y-auto font-mono text-sm" onChange={event => edit(event.target.value)} />
     <div className="flex items-center justify-between text-xs text-muted-foreground-1">
       <span className={cn(tooLarge && "text-destructive")}>{fileBytes(text).toLocaleString()} / {SENTINEL_LIMITS.fileBytes.toLocaleString()} bytes</span>
       <span role="status">{savedAt ? "Saved" : dirty ? "Unsaved changes" : ""}</span>

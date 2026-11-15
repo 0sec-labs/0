@@ -128,6 +128,6 @@ export function useSentinelMutations() {
     updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled: boolean }) => client.updateTrigger(input.id, input.triggerId, input.version, { enabled: input.enabled }), onSuccess: refresh }),
     removeTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string }) => client.removeTrigger(input.id, input.triggerId), onSuccess: refresh }),
     deleteFile: useMutation({ mutationFn: (input: { id: string; path: string; revision: number }) => client.deleteFile(input.id, input.path, input.revision), onSuccess: (_result, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),
-    saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),
+    saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); void cache.invalidateQueries({ queryKey: [...scope, "file", input.id, input.path] }); } }),
   };
 }

@@ -63,9 +63,6 @@ function Column({ column, ...props }: { column: BoardColumn } & FindingsBoardPro
         className={cn("no-scrollbar scroll-fade-y mt-1 flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-1 transition-colors duration-100 motion-reduce:transition-none", isOver && "bg-section")}
       >
         {column.items.map(group => <Card key={group.fingerprint} group={group} {...props} />)}
-        {column.items.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-muted-foreground-2">{column.droppable ? "Nothing here. Drag a finding in." : "Set by review, not by hand."}</p>
-        ) : null}
       </div>
     </section>
   );

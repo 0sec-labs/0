@@ -46,8 +46,10 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
     setError("");
     try { await acknowledge.mutateAsync({ id: sentinel.id, version: sentinel.version }); } catch (cause) { setError(errorText(cause, "Unable to acknowledge the review.")); }
   };
+  const noScope = sentinel.scope.repos.length + sentinel.scope.targets.length + sentinel.scope.domains.length === 0;
   const toggle = async () => {
     setError("");
+    if (paused && noScope) { setError("Add scope in Settings before turning it on."); return; }
     try { await setPaused.mutateAsync({ id: sentinel.id, paused: !paused, version: sentinel.version }); } catch (cause) { setError(errorText(cause, "Unable to change status.")); }
   };
   return <div className="space-y-8">
@@ -60,7 +62,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <span>{sentinel.name} is waiting on {sentinel.attention?.pendingDecisions ?? 1} decision{(sentinel.attention?.pendingDecisions ?? 1) === 1 ? "" : "s"} from you.</span>
       {home && <Button size="sm" variant="secondary" render={<Link to={home} />}>Open chat</Button>}
     </div>}
-    {!readOnly && !archived && paused && sentinel.scope.repos.length + sentinel.scope.targets.length + sentinel.scope.domains.length === 0
+    {!readOnly && !archived && paused && noScope
       && <Link to={sentinelHref(sentinel.id, "settings")} className="block rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm text-muted-foreground outline-none hover:bg-muted focus-visible:outline-ring-inset">Add scope to say what it covers, then turn it on.</Link>}
     <Section title="Status" action={<div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>

@@ -47,6 +47,8 @@ export const isClosedStatus = (status: FindingStatus) => status === "done" || st
 export function findingStatus(group: FindingGroup): FindingStatus {
   if (group.latest.triageStatus === "suppressed" || (group.latest.status as string) === "false-positive") return "cancelled";
   if (isFixedFinding(group)) return "done";
+  // An accepted risk has been reviewed: it leaves the review queue and reads as done.
+  if (group.latest.triageStatus === "accepted") return "done";
   return group.workflow?.status ?? "backlog";
 }
 
@@ -299,6 +301,7 @@ export type ActivityEvent = { id: string; at: number | null; kind: "detected" | 
  * Timeline from what the family endpoint returns: every recorded occurrence (oldest = first detection), the
  * agent work items (no timestamps, listed after) and the reviewer's note. Newest first.
  */
+const STEP_TITLES: Record<string, string> = { consensus: "Agreement check", "blind verify": "Independent check" };
 export function buildActivity(family: {
   rows: readonly { id: string; scanId: string; status: string; timestamp: number }[];
   workItems: readonly { id: string; title: string; status: string; owner: string | null; summary: string }[];
@@ -309,8 +312,9 @@ export function buildActivity(family: {
     id: `row:${row.id}`, at: row.timestamp, kind: "detected" as const,
     text: index === 0 ? "First detected" : "Detected again", detail: `Run ${row.scanId.slice(0, 8)} · recorded ${row.status.replaceAll("_", " ")}`,
   })).reverse();
+  const stepTitle = (title: string) => STEP_TITLES[title.trim().toLowerCase()] ?? title;
   const steps: ActivityEvent[] = family.workItems.map(item => ({
-    id: `step:${item.id}`, at: null, kind: "step", text: `${item.title} · ${item.status.replaceAll("_", " ")}`, detail: item.summary || undefined,
+    id: `step:${item.id}`, at: null, kind: "step", text: `${stepTitle(item.title)} · ${item.status.replaceAll("_", " ")}`, detail: item.summary || undefined,
   }));
   const note: ActivityEvent[] = family.latest.triageNote?.trim()
     ? [{ id: "note", at: null, kind: "note", text: `Review note (${family.latest.triageStatus})`, detail: family.latest.triageNote.trim() }]

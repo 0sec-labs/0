@@ -86,9 +86,10 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   if ((m = /^sentinels\/([^/]+)(?:\/(.*))?$/.exec(path))) {
     const id = decodeURIComponent(m[1]!); const rest = m[2];
     const detail = { sentinelId: id };
-    if (rest === undefined) return method === "DELETE" ? { action: "sentinel.delete", subject: id, detail } : method === "PATCH" ? { action: "sentinel.update", subject: id, detail } : null;
+    if (rest === undefined) return method === "DELETE" ? { action: "sentinel.delete", subject: id, detail } : method === "PATCH" ? { action: "sentinel.update", subject: id, detail: typeof b.status === "string" ? { ...detail, status: b.status } : detail } : null;
     if (rest === "pause" || rest === "resume") return { action: `sentinel.${rest}`, subject: id, detail: { ...detail, approved: rest === "resume" ? b.acknowledge === true : undefined } };
     if (rest === "run" || rest === "acknowledge") return { action: `sentinel.${rest}`, subject: id, detail };
+    if (rest.startsWith("files/") && (method === "PUT" || method === "DELETE")) return { action: method === "PUT" ? "sentinel.file.edit" : "sentinel.file.delete", subject: id, detail: { ...detail, path: decodeURIComponent(rest.slice("files/".length)) } };
     if (rest.startsWith("triggers")) return { action: method === "POST" ? "sentinel.trigger.create" : method === "DELETE" ? "sentinel.trigger.delete" : typeof b.enabled === "boolean" ? (b.enabled ? "sentinel.trigger.enable" : "sentinel.trigger.disable") : "sentinel.trigger.update", subject: id, detail: { ...detail, triggerId: rest.split("/")[1] } };
     return null;
   }

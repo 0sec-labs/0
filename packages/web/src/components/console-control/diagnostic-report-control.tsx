@@ -23,7 +23,7 @@ export function DiagnosticReportControl() {
   return <ControlCard title="Feedback">
     <form className="space-y-4" onSubmit={event => { event.preventDefault(); mutation.mutate("save"); }}>
       <Field label="What happened?" hint="Don't paste passwords or keys."><Textarea value={message} maxLength={16000} required rows={4} disabled={mutation.isPending} onChange={event => { setMessage(event.target.value); setStaged(null); setReviewed(false); mutation.reset(); }} /></Field>
-      <Check checked={requestPreview} onChange={value => { setRequestPreview(value); setStaged(null); setReviewed(false); }} disabled={mutation.isPending}>Also prepare a report to send (nothing is sent yet).</Check>
+      <Check checked={requestPreview} onChange={value => { setRequestPreview(value); setStaged(null); setReviewed(false); }} disabled={mutation.isPending}>Also prepare a report to review before sending.</Check>
       <SubmitButton type="submit" pending={mutation.isPending && mutation.variables === "save"} disabled={!message.trim() || mutation.isPending}>{requestPreview ? "Save & preview" : "Save"}</SubmitButton>
     </form>
     {staged?.preview && <section className="space-y-4 border-t border-border pt-4">

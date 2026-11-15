@@ -142,7 +142,7 @@ export function WorkersPage() {
             const remote = backend.id !== "local";
             return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote computer" : "This computer"} · {statusLabel(backend)}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? `Remote computer · ${statusLabel(backend)}` : statusLabel(backend)}</p></div>
               {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
               {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-ring-inset"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
