@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           cp deploy/compose/.env.example deploy/compose/.env
-          docker compose -f deploy/compose/docker-compose.yml config -q
+          ZERO_IMAGE_TAG=latest docker compose -f deploy/compose/docker-compose.yml config -q
           ZERO_DOMAIN=0.example.com docker compose -f deploy/compose/docker-compose.yml --profile proxy config -q
           rm deploy/compose/.env
       - uses: docker/setup-buildx-action@v4
