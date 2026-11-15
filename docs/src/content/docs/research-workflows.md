@@ -74,7 +74,7 @@ For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` 
 
 `research binary` hands off to 0verse, the Python binary engine in the repository. It needs a source checkout of 0 (the `0verse/` directory) and `uv` on your `PATH`; the installed binary alone cannot run it. Backends are `ghidra` (preferred), `rizin` and `angr`; each must be installed separately.
 
-`triage` identifies the file format, architecture and mitigations. It does not decompile or find bugs. `scan` decompiles, slices source-to-sink paths and applies bug-class lenses. Without `--llm`, 0verse uses a deterministic mock model, not real analysis. Static candidates stay leads until a replay confirms them. See the [0verse README](https://github.com/0sec-labs/0/blob/main/0verse/README.md) for setup.
+`triage` identifies the file format, architecture and mitigations. It does not decompile or find bugs. `scan` decompiles, slices source-to-sink paths and applies bug-class lenses. Without `--llm`, 0verse uses a deterministic mock model, not a review. Static candidates stay leads until a replay confirms them. See the [0verse README](https://github.com/0sec-labs/0/blob/main/0verse/README.md) for setup.
 
 ## Kernel
 
@@ -154,7 +154,7 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
   --environment staging --output ./evidence-bundle
 ```
 
-You provide three endpoints: an agent test adapter, the MCP server the agent uses, and an oracle that reports real state changes. The scenario names the injection vector, a benign task, the payload and the prohibited action. 0 runs the task, injects the payload and asks the oracle whether the prohibited action happened. The output directory (default `agent-assurance-<run-id>`) holds a manifest that binds target, policy, model and tool versions to hashed evidence.
+You provide three endpoints: an agent test adapter, the MCP server the agent uses, and an oracle that reports actual state changes. The scenario names the injection vector, a benign task, the payload and the prohibited action. 0 runs the task, injects the payload and asks the oracle whether the prohibited action happened. The output directory (default `agent-assurance-<run-id>`) holds a manifest that binds target, policy, model and tool versions to hashed evidence.
 
 | Exit | Outcome |
 |---|---|
@@ -164,7 +164,7 @@ You provide three endpoints: an agent test adapter, the MCP server the agent use
 
 `inconclusive` covers an oracle that did not finish, even if it reported a provisional observation. `not_observed` applies only to that scenario and observation window. With the scope plugin on, all three endpoints must be in `--scope`. `--baseline <manifest>` links a retest to an earlier run.
 
-The repository also has fixture runners for MCP tool misuse, indirect prompt injection and persistence: `pnpm --filter @0/bench adversarial-tool-misuse --json` (and `adversarial-indirect-prompt-injection`, `adversarial-persistence`). They run against local fixtures with no real model, and a pass means expected categories were detected.
+The repository also has fixture runners for MCP tool misuse, indirect prompt injection and persistence: `pnpm --filter @0/bench adversarial-tool-misuse --json` (and `adversarial-indirect-prompt-injection`, `adversarial-persistence`). They run against local fixtures with no model, and a pass means expected categories were detected.
 
 ## HackerOne
 
@@ -186,3 +186,8 @@ Exit codes: `0` success, `1` bad input, `2` auth failure, `3` rate limit or netw
 - Most of these commands emit leads. Only `memsafety`, `protocol-check` confirmations, kernel VM runs with a matching oracle and `agent-assure` `observed` outcomes rest on execution.
 - Model diversity flags (`--models`, `--attempts`) multiply cost. Set `--cost-ceiling` where a command offers it.
 - Output directories do not contain every write. Builds, caches and models can land elsewhere on the host.
+
+## Next
+
+- [Scan code](/scan-code/) and [Scan web and APIs](/scan-web/) for the main scan commands.
+- [CLI reference](/commands/#research) for every option.

@@ -59,7 +59,7 @@ Accepting a finding does not verify it, and suppressing it does not prove it fal
 
 ## Teach 0 your false positives
 
-Record why a finding is not a real issue. Later scans that read the same database recall the memory as context.
+Record why a finding is a false alarm. Later scans that read the same database recall the memory as context.
 
 ```bash
 0 findings triage mark-fp 3f2a --reason "Echo endpoint only exists in test fixtures" \
@@ -79,3 +79,8 @@ To reuse memories across runs, scan into the same database with `--db-path`. A n
 - A finding without reproduced evidence is a lead. Check its status and evidence before you report it.
 - Fingerprint grouping can merge or split issues imperfectly. Findings without a fingerprint stay separate.
 - For programmatic access from other tools, use the [Findings API](/findings-api/).
+
+## Next
+
+- [Verify and fix](/verify-and-fix/) to reproduce a finding and patch it.
+- [Reports and disclosure](/reports/) to export findings or draft an advisory.

@@ -155,4 +155,10 @@ The image runs as user `ubuntu` (UID 1000) in `/work`. `ZERO_RUN_DIR` puts `stat
 - A clean run does not prove the target is secure. Depth, budget, model, auth and the paths the agents reached all bound coverage.
 - Verification is a fresh agent pass per finding. Read the evidence; a `confirmed` label is not a deterministic replay. For that, use [`0 verify`](/verify-and-fix/).
 - `--dry-run` on `--emit pr` only stops PR creation. The scan still runs and spends.
-- Scans send real traffic. A deadline requests cancellation; in-flight work can run past it.
+- Scans send live traffic. A deadline requests cancellation; in-flight work can run past it.
+
+## Next
+
+- [Findings](/findings/) to triage the results.
+- [Verify and fix](/verify-and-fix/) to replay a finding with executable steps.
+- [GitHub Action](/ci/github-action/) to run scans in CI.

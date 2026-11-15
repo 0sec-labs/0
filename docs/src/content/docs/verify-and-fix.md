@@ -179,3 +179,8 @@ Specs with a `behavior` section need a running target and are rejected here. Use
 - Setup commands, test commands and generated probes run as you. Disposable checkouts and worktrees are not an OS sandbox. Use a disposable machine for untrusted code.
 - `costUsd` counts provider-reported usage. It can miss spend across phases or resumes. `--cost-ceiling` is checked between findings, not enforced by the provider.
 - Model-backed verification inside scans is a second opinion with evidence, not independent reproduction.
+
+## Next
+
+- [Findings](/findings/) to triage what the fix addressed.
+- [Reports and disclosure](/reports/) to export results.

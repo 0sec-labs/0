@@ -171,3 +171,9 @@ With no usable model, the scan still runs the static layer, exits `3` and record
 - A clean run does not prove the absence of vulnerabilities. Coverage depends on depth, budget, model and the tools that ran.
 - The static pass uses FoxGuard by default. Set `ZERO_STATIC=semgrep` to use Semgrep instead; it must be installed.
 - Binaries without source are covered in [Specialist research](/research-workflows/#binaries).
+
+## Next
+
+- [Scan web and APIs](/scan-web/) to attack a running target.
+- [Verify and fix](/verify-and-fix/) to prove a finding and patch it.
+- [Reports and disclosure](/reports/) to export results.

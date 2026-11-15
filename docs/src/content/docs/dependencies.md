@@ -10,7 +10,7 @@ cd my-app
 0 deps scan
 ```
 
-No model or API key is needed. Nothing is sent to a model.
+No model or API key is needed.
 
 ## Scan
 
@@ -49,12 +49,15 @@ npm: 2 vulnerable dependencies
 
 ## Fix
 
-Commit or stash your work first. `deps fix` changes your lockfile and manifests.
+Commit or stash your work first. With `--yes`, `deps fix` changes your lockfile and manifests.
 
 ```bash
 0 deps fix
-0 deps fix --cwd ./services/api
+0 deps fix --yes
+0 deps fix --yes --cwd ./services/api
 ```
+
+Without `--yes`, 0 prints the command it would run and changes nothing.
 
 | Ecosystem | Command 0 runs |
 |---|---|
@@ -63,11 +66,7 @@ Commit or stash your work first. `deps fix` changes your lockfile and manifests.
 | `cargo` | `cargo update` |
 | `pypi` | `pip-audit --fix` |
 
-0 prints the tool's output and exits with its exit code. Run `0 deps scan` again and your tests afterwards.
-
-:::caution
-The help text says `deps fix` only prints the command unless you pass `--yes`. The current code runs the fix command either way. Do not rely on `--yes` as a dry-run guard.
-:::
+With `--yes`, 0 prints the tool's output and exits with its exit code. Run `0 deps scan` again and your tests afterwards.
 
 ## Scan a package you depend on
 
@@ -79,10 +78,6 @@ The help text says `deps fix` only prints the command unless you pass `--yes`. T
 
 See [Scan code](/scan-code/#package-scan).
 
-## FoxGuard
-
-The installer also downloads FoxGuard, the static analyzer 0 uses in source and package scans, next to the `0` binary. Set `INSTALL_FOXGUARD=0` to skip it on hosts where you provision it yourself. `0 deps` does not use FoxGuard.
-
 ## Limits
 
 - Results are only as complete as the audit tool and its advisory database. A vulnerable version with no published advisory is not reported.
@@ -90,3 +85,8 @@ The installer also downloads FoxGuard, the static analyzer 0 uses in source and 
 - `cargo update` updates within your semver ranges; it can change more than the vulnerable crates and cannot fix an advisory that needs a major version bump.
 - For Python, 0 runs `pip-audit` with no arguments, which audits the active Python environment, not the lockfile. Activate the project's environment first. `pip-audit --fix` upgrades packages in that environment.
 - Only the four ecosystems above are supported. Other manifests fail with "No supported dependency manifest found".
+
+## Next
+
+- [Scan code](/scan-code/) to review the code itself.
+- [CLI reference](/commands/) for every command.

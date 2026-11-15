@@ -112,7 +112,7 @@ To check that findings still apply before you file:
 | `--drop-fixed` | Move fixed findings to `_dropped/` with a reason file |
 | `--reverify --target-url <url> --scope-allowlist <hosts>` | Re-run each finding's PoC steps against a live target. Out-of-scope steps fail closed. Default 2 requests per second per host. |
 
-`--reverify` sends real traffic. Use it only on a target you are authorized to test.
+`--reverify` sends live traffic. Use it only on a target you are authorized to test.
 
 ### Notification drafts, manifests and tracking
 
@@ -138,3 +138,8 @@ For HackerOne program scope, see [Specialist research](/research-workflows/#hack
 - A report shows the evidence the workflow collected. Source and package findings often have no HTTP request and response, and a formatted report does not add missing proof.
 - An empty report or a completed run does not prove full coverage.
 - GitHub export, PR emission and `--publish` on `scan repair` are external writes. Confirm you are allowed to disclose before you use them.
+
+## Next
+
+- [Findings](/findings/) to review and triage.
+- [Verify and fix](/verify-and-fix/) to prove a finding before you disclose it.
