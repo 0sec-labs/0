@@ -70,7 +70,7 @@ export async function openConsole(raw: ConsoleTransportOptions, deps: OpenConsol
     const { BackendConnectionRegistry } = await import("./web/backend-connections.js");
     registry = new BackendConnectionRegistry({ configPath: options.computersConfig });
   } else {
-    const connect = deps.connectLocal ?? (async (o: { dbPath?: string }) => (await import("./local-engine.js")).connectLocalConsole({ ...o, homeDir: deps.homeDir }));
+    const connect = deps.connectLocal ?? (async (o: { dbPath?: string }) => (await import("./local-engine.js")).connectLocalConsoleRegistry({ ...o, homeDir: deps.homeDir }));
     const local = await connect({ dbPath: options.dbPath });
     if (!local) throw new Error("No running engine found. Start one with `0 web`, or pass --engine-url or --computer.");
     ({ registry, backendId } = local);
