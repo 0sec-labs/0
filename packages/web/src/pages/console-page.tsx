@@ -237,7 +237,11 @@ function ConsolePageContent({
   useMissionStart(
     !embedded && Boolean(sessionId) && !workerId && Boolean(workspace.snapshot),
     () => Boolean(workspace.snapshot?.messages.length) || ["working", "waiting", "cancelling"].includes(workspace.snapshot?.session.status ?? ""),
-    (text) => workspace.send({ text, mode: "send" }),
+    (text) => {
+      // Same exit as a typed first message: leave the bare /chats landing for the mission before sending.
+      if (!routeSessionId && !savedMode && sessionId) navigate(`/chats/${sessionId}`, { replace: true });
+      return workspace.send({ text, mode: "send" });
+    },
     () => setNotice(v("0 couldn't start the {mission}. Your prompt is in the composer.")),
   );
   const recoveringSession = useStaleSessionRecovery({
@@ -779,6 +783,7 @@ function ConsolePageContent({
     }
   };
   useEffect(() => {
+    if (sessionId) openingInitialChat.current = false; // a later landing without an id (after a delete) opens a fresh mission again
     if (
       embedded ||
       sessionId ||
@@ -896,7 +901,7 @@ function ConsolePageContent({
         messageWorkspace.setDraft("");
         return;
       }
-      if (name === "new-chat") {
+      if (name === "new-mission") {
         void createSession();
         return;
       }
@@ -1108,10 +1113,11 @@ function ConsolePageContent({
               disabled={!canExport || workspace.busy}
               icon={<Sparkles className="size-4" />}
               onClick={() =>
-                void workspace.perform(
-                  () => controlConsoleSession(snapshot.session.id, "title/regenerate"),
-                  snapshot.session.id,
-                )
+                void workspace
+                  .perform(() => controlConsoleSession(snapshot.session.id, "title/regenerate"), snapshot.session.id)
+                  .then((result) => {
+                    if (result?.source === "fallback") setNotice("Couldn't generate a new title.");
+                  })
               }
             >
               Regenerate title
@@ -1533,7 +1539,7 @@ function ConsolePageContent({
                     if (action.kind === "delete") return deleteSavedConsoleSession(action.id);
                     if (action.kind === "close") return closeConsoleSession(action.id);
                     return controlConsoleSession(action.id, action.kind === "drain" ? "workers/stop" : "clear");
-                  }, action.id)
+                  }, action.id, undefined, action.kind === "delete" || action.kind === "delete-live")
                   .then((result) => {
                     if (!result) return;
                     setConfirm(null);
