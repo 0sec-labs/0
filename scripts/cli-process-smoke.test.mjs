@@ -62,13 +62,15 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   const { cli } = fixture(t);
   const help = cli(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  for (const command of ["web", "automation", "threads", "runs", "config"]) assert.ok(help.stdout.includes(command), `Missing ${command} in help`);
+  const visible = ["scan", "findings", "threads", "agents", "automation", "models", "computers", "skills", "plugin", "memory", "config", "web", "doctor", "api"];
+  for (const command of visible) assert.match(help.stdout, new RegExp(`^  ${command}\\b`, "m"), `Missing ${command} in help`);
+  assert.doesNotMatch(help.stdout, /^  lab\b/m, "developer commands stay under the hidden lab group");
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);
   const templates = jsonSuccess(cli(["automation", "list", "--templates", "--format", "json"]));
   assert.ok(templates.some(template => template.id === "repository-review"));
   assert.deepEqual(jsonSuccess(cli(["threads", "list", "--format", "json"])), []);
   assert.equal(jsonSuccess(cli(["config", "export"])).executionProfile, "local");
-  const history = cli(["runs", "history"]);
+  const history = cli(["lab", "runs", "history"]);
   assert.equal(history.status, 0, history.stderr);
   assert.match(history.stdout, /No scan history found/);
   const bad = cli(["automation", "show", "missing-workflow", "--format", "json"]);
