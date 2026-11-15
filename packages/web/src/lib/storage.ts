@@ -33,6 +33,10 @@ export const STORAGE_KEYS = {
   findingsView: "0:findings:view",
   setupCardDismissed: "0-setup-card-dismissed",
   updateCardDismissed: "0-update-card-dismissed",
+  /** Newest release the user opened or dismissed (`lib/whats-new.ts`). */
+  whatsNewSeen: "0-whats-new-seen",
+  /** Newest release whose modal already opened by itself, so it never auto-opens twice. */
+  whatsNewAutoOpened: "0-whats-new-auto-opened",
   paletteRecents: "0-palette-recents",
   notificationPrefs: "0-notification-prefs",
   /** sessionStorage: text queued for the composer (`lib/composer-prefill.ts`). */

@@ -1,3 +1,4 @@
+import { WhatsNewHost } from "@/components/whats-new-dialog";
 import { queryKeys } from "@/queries";
 import { pollInterval } from "@/lib/polling";
 import { v } from "@/lib/vocabulary";
@@ -82,6 +83,7 @@ export function OperationsApp() {
   return (
     <DashboardPanelProvider>
       <MissionNotifications />
+      <WhatsNewHost />
       <AppShell>
         {paletteMounted && <RouteErrorBoundary silent resetKey={String(paletteOpen)}><Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense></RouteErrorBoundary>}
         <RouteErrorBoundary resetKey={location.pathname}>
