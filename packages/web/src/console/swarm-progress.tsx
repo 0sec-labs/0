@@ -12,7 +12,7 @@ export function SwarmProgress({ workers, onSelect }: { workers: ConsoleWorker[];
   const failed = workers.filter((worker) => worker.status === "failed" && !isCancellation(worker.error)).length;
   const stopped = workers.length - completed - running - waiting - failed;
   return (
-    <div className="space-y-3 rounded-lg bg-secondary/50 p-3" aria-label="Swarm progress">
+    <div className="space-y-3 rounded-md bg-secondary/50 p-3" aria-label="Swarm progress">
       <div className="flex items-center gap-2 text-xs">
         <Network className="size-4 text-muted-foreground" />
         <span className="font-medium">{running || waiting ? "Swarm at work" : "Swarm finished"}</span>

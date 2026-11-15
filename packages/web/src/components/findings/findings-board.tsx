@@ -114,7 +114,7 @@ function Column({ column, draggedStatus, over, ...props }: { column: BoardColumn
   const refused = decision !== null && !decision.ok && decision.reason !== null;
   return (
     <section aria-label={`${column.label}, ${column.items.length} findings`} data-column={column.status} data-drop={over ? (refused ? "refused" : decision?.ok ? "accept" : "same") : undefined} className="flex w-72 shrink-0 flex-col">
-      <header className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-section px-2.5 text-[13px] font-medium">
+      <header className="flex h-9 shrink-0 items-center gap-2 rounded-md bg-section px-2.5 text-[13px] font-medium">
         <StatusIcon status={column.status} />
         <span className="min-w-0 truncate">{column.label}</span>
         <span className="font-normal tabular-nums text-muted-foreground-2">{column.items.length}</span>
@@ -122,7 +122,7 @@ function Column({ column, draggedStatus, over, ...props }: { column: BoardColumn
       <div
         ref={setNodeRef}
         className={cn(
-          "no-scrollbar scroll-fade-y mt-1 flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-1 transition-colors duration-100 motion-reduce:transition-none",
+          "no-scrollbar scroll-fade-y mt-1 flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-md p-1 transition-colors duration-100 motion-reduce:transition-none",
           over && decision?.ok && "bg-section outline outline-1 -outline-offset-1 outline-ring",
           over && refused && "cursor-not-allowed bg-destructive/5 outline outline-1 -outline-offset-1 outline-destructive",
           draggedStatus && refused && !over && "opacity-50",
@@ -154,7 +154,7 @@ function Card({ group, overlay = false, ...props }: { group: FindingGroup; overl
         if (!overlay) listeners?.onKeyDown?.(event);
       }}
       className={cn(
-        "flex cursor-pointer flex-col gap-1.5 rounded-lg border-[0.5px] border-border-2 bg-card p-2.5 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset motion-reduce:transition-none",
+        "flex cursor-pointer flex-col gap-1.5 rounded-md border-[0.5px] border-border-2 bg-card p-2.5 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset motion-reduce:transition-none",
         (props.activeFingerprint === fingerprint || selected) && "bg-section",
         props.cursorFingerprint === fingerprint && "outline-ring-inset",
         isDragging && !overlay && "opacity-30",

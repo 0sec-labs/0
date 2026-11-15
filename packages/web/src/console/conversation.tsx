@@ -447,7 +447,7 @@ export function Conversation({
                   ? `Scroll to latest, ${unseen} new ${unseen === 1 ? "message" : "messages"}`
                   : "Scroll to latest"
               }
-              className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-2 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-lg border-[0.5px] border-border-2 bg-card px-2.5 text-xs font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
+              className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-2 inline-flex h-7 -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-md border-[0.5px] border-border-2 bg-card px-2.5 text-xs font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
               onClick={() => {
                 const node = scroller.current;
                 if (node) node.scrollTop = node.scrollHeight;
@@ -1128,7 +1128,7 @@ export function Composer({
               )}
             </ComposerPickerSurface>
             {bindingStale && !rebindStale && snapshot.runtime && (
-              <div role="alert" data-testid="model-unavailable-notice" className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[13px] text-muted-foreground-1">
+              <div role="alert" data-testid="model-unavailable-notice" className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border bg-secondary/40 px-3 py-2 text-[13px] text-muted-foreground-1">
                 <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => setModelMenuOpen(true)}>
                   {snapshot.runtime.model} is no longer available. Pick another model
                 </button>

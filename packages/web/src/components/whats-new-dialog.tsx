@@ -45,7 +45,7 @@ export function WhatsNewDialog({ open, onOpenChange, version, onVersionChange }:
               const Icon = RELEASE_ICONS[item.icon] ?? Sparkles;
               return (
                 <li key={item.title} className="flex gap-3">
-                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground-1"><Icon strokeWidth={1.5} className="size-4" /></span>
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground-1"><Icon strokeWidth={1.5} className="size-4" /></span>
                   <div className="min-w-0 space-y-0.5"><p className="text-sm font-medium">{item.title}</p><p className="text-sm text-muted-foreground">{item.text}</p></div>
                 </li>
               );

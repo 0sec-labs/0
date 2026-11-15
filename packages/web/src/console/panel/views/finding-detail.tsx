@@ -40,7 +40,7 @@ export const FindingDetailView: PanelViewComponent = ({ viewId, snapshot, sessio
         {pr && <Button variant="ghost" size="sm" render={<a href={pr} target="_blank" rel="noreferrer" />}><GitPullRequest className="size-3.5" />{prLabel(pr)}</Button>}
       </div>
     </header>
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border-[0.5px] border-border-1 bg-card p-3 text-xs">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border-[0.5px] border-border-1 bg-card p-3 text-xs">
       {meta.map(([key, value]) => <div key={key} className="contents"><dt className="text-muted-foreground-2">{key}</dt><dd className="min-w-0 break-words">{value}</dd></div>)}
     </dl>
     {latest.description && <p className="whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{latest.description}</p>}

@@ -26,7 +26,7 @@ export function QueuedMessages({
         {snapshot.queuedMessages.map((message, index) => (
           <article
             key={message.id}
-            className="ml-auto max-w-[92%] space-y-2 rounded-lg bg-secondary/60 px-3 py-2 text-sm"
+            className="ml-auto max-w-[92%] space-y-2 rounded-md bg-secondary/60 px-3 py-2 text-sm"
           >
             {message.author && <p className="text-xs text-muted-foreground">{message.author.displayName}</p>}
             {message.text && <p className="whitespace-pre-wrap break-words">{message.text}</p>}
@@ -80,7 +80,7 @@ export function QueuedMessages({
         align="end"
         sideOffset={10}
         positionMethod="fixed"
-        className="flex w-80 max-w-[calc(100vw-24px)] flex-col rounded-lg border-[0.5px] border-[var(--card-hairline)] bg-popover p-3 text-popover-foreground shadow-lg"
+        className="flex w-80 max-w-[calc(100vw-24px)] flex-col rounded-md border-[0.5px] border-[var(--card-hairline)] bg-popover p-3 text-popover-foreground shadow-lg"
       >
         <div className="flex items-center justify-between gap-3">
           <Popover.Title className="text-sm font-medium">Queued messages · {count}</Popover.Title>

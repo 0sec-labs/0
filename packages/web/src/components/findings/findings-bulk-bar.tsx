@@ -19,7 +19,7 @@ export function FindingsBulkBar({ count, busy, exportPath, onStatus, onDismiss, 
   onClear: () => void;
 }) {
   return (
-    <div role="toolbar" aria-label="Bulk actions" className="pointer-events-auto absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-xl border-[0.5px] border-border-2 bg-popover p-1 pl-3 text-sm text-popover-foreground shadow-[var(--sh-overlay,0_6px_18px_rgb(0_0_0/.08))]">
+    <div role="toolbar" aria-label="Bulk actions" className="pointer-events-auto absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-md border-[0.5px] border-border-2 bg-popover p-1 pl-3 text-sm text-popover-foreground shadow-[var(--sh-overlay,0_6px_18px_rgb(0_0_0/.08))]">
       <span className="mr-1 text-xs font-medium tabular-nums whitespace-nowrap" aria-live="polite">{count} selected</span>
       <DropdownMenu>
         <DropdownMenu.Trigger render={<Button variant="ghost" size="sm" disabled={busy} />}>Status</DropdownMenu.Trigger>

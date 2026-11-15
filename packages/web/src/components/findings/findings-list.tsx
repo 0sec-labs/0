@@ -165,7 +165,7 @@ const SectionHeader = memo(function SectionHeader({ row, style, onToggle }: { ro
       aria-expanded={!collapsed}
       onClick={() => onToggle(section.key, !collapsed)}
       style={style}
-      className="absolute inset-x-0 flex items-center gap-2 rounded-lg bg-section px-2 text-left text-[13px] font-medium text-foreground outline-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset"
+      className="absolute inset-x-0 flex items-center gap-2 rounded-md bg-section px-2 text-left text-[13px] font-medium text-foreground outline-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset"
     >
       <ChevronRight aria-hidden="true" className={cn("size-3 shrink-0 text-muted-foreground-3 transition-transform duration-150 motion-reduce:transition-none", !collapsed && "rotate-90")} />
       {section.kind === "status" && section.status ? <StatusIcon status={section.status} /> : null}

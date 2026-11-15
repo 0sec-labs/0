@@ -59,7 +59,7 @@ function Group({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex h-7 w-full items-center gap-1.5 rounded-lg bg-card px-2 text-left text-xs font-medium ui-row-hover focus-visible:outline-ring-inset"
+        className="flex h-7 w-full items-center gap-1.5 rounded-md bg-card px-2 text-left text-xs font-medium ui-row-hover focus-visible:outline-ring-inset"
       >
         {open ? (
           <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground-2" />
@@ -138,7 +138,7 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
     ) : null;
   return (
     <div className="scroll-fade-y min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-2">
-      <div className="rounded-lg border-[0.5px] border-border-1 bg-card p-3" aria-label="Run status">
+      <div className="rounded-md border-[0.5px] border-border-1 bg-card p-3" aria-label="Run status">
         <div className="flex items-center gap-2 text-sm font-medium">
           <span aria-hidden="true" className={`size-2 rounded-full ${toneDot[status.tone]}`} />
           {status.label}

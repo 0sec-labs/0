@@ -27,7 +27,7 @@ export function ChatHistorySkeleton({ rows = 5 }: { rows?: number }) {
 }
 
 /** A user bubble stand-in: narrower than the column and right-aligned, like the real message. */
-const ThreadUser = ({ width }: { width: string }) => <Skeleton className="ml-auto h-9 max-w-[45%] rounded-xl bg-secondary/60" style={{ width }} />;
+const ThreadUser = ({ width }: { width: string }) => <Skeleton className="ml-auto h-9 max-w-[45%] rounded-md bg-secondary/60" style={{ width }} />;
 /** Assistant text stand-in: stacked h-3.5 strokes of natural uneven widths, the last one short. */
 const ThreadAnswer = ({ lines }: { lines: string[] }) => <div className="flex flex-col gap-2.5">{lines.map((width, index) => <Skeleton key={index} className="h-3.5 rounded-md bg-secondary/60" style={{ width }} />)}</div>;
 

@@ -95,7 +95,7 @@ const SIGNAL_LABEL = { weak: "Weak signal", medium: "Medium signal", strong: "St
 
 export function EvidenceCard({ item, onOpen }: { item: EvidenceItem; onOpen?: () => void }) {
   return (
-    <article aria-label={`Evidence for ${item.title}`} className="rounded-lg border-[0.5px] border-border-1 bg-card">
+    <article aria-label={`Evidence for ${item.title}`} className="rounded-md border-[0.5px] border-border-1 bg-card">
       <header className="flex h-8 items-center gap-2 px-2">
         <SeverityDot severity={item.severity} />
         {onOpen ? (

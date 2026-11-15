@@ -123,7 +123,7 @@ function blockedNotice(family: FindingFamilyResponse | null, phase: string) {
   const blocked = family?.workItems.find(item => item.status === "blocked");
   if (!blocked && phase !== "blocked") return null;
   return (
-    <div role="status" className="rounded-lg border-[0.5px] border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px]">
+    <div role="status" className="rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px]">
       <span className="font-medium text-foreground">Blocked: </span>
       <span className="text-muted-foreground-1">{blocked?.summary || family?.workflow.reviewReason || "Needs your input."}</span>
     </div>
@@ -260,7 +260,7 @@ function EvidenceSection({ group, latest, workflow, fingerprint }: { group: Find
   return (
     <section aria-label="Evidence" className="flex flex-col gap-2">
       <SectionLabel>Evidence</SectionLabel>
-      <div className="rounded-lg border-[0.5px] border-border-1 bg-card">
+      <div className="rounded-md border-[0.5px] border-border-1 bg-card">
         {artifacts.map(artifact => <EvidenceArtifactRow key={artifact.kind} artifact={artifact} defaultOpen={artifact.kind === "analysis"} />)}
       </div>
     </section>
@@ -292,7 +292,7 @@ function Handoff({ family }: { family: FindingFamilyResponse }) {
   return (
     <section aria-label="Hand off" className="flex flex-col gap-2">
       <Button variant="outline" className="w-full" render={<Link to={`/chats?finding=${encodeURIComponent(family.latest.id)}&intent=${intent}`} />}><MessageSquare className="size-4" />{title}</Button>
-      <Disclosure summary="Terminal command" className="rounded-lg border-[0.5px] border-border-1 px-3 py-2 text-sm" triggerClassName="cursor-pointer text-muted-foreground-1">
+      <Disclosure summary="Terminal command" className="rounded-md border-[0.5px] border-border-1 px-3 py-2 text-sm" triggerClassName="cursor-pointer text-muted-foreground-1">
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground-1">{title}</span>
@@ -357,7 +357,7 @@ function SupportingDetails({ family }: { family: FindingFamilyResponse }) {
   return (
     <div className="flex flex-col gap-2">
       {family.workItems.length ? (
-        <Disclosure summary={<>Steps ({family.workItems.length})</>} className="rounded-lg bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
+        <Disclosure summary={<>Steps ({family.workItems.length})</>} className="rounded-md bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
           <ul className="mt-2 flex flex-col gap-2">
             {family.workItems.map(item => (
               <li key={item.id} className="text-xs">
@@ -369,7 +369,7 @@ function SupportingDetails({ family }: { family: FindingFamilyResponse }) {
         </Disclosure>
       ) : null}
       {family.artifacts.length ? (
-        <Disclosure summary={<>Files ({family.artifacts.length})</>} className="rounded-lg bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
+        <Disclosure summary={<>Files ({family.artifacts.length})</>} className="rounded-md bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
           <ul className="mt-2 flex flex-col gap-2">
             {family.artifacts.map(artifact => (
               <li key={artifact.id} className="text-xs">
@@ -380,7 +380,7 @@ function SupportingDetails({ family }: { family: FindingFamilyResponse }) {
           </ul>
         </Disclosure>
       ) : null}
-      <Disclosure summary={<>Details</>} className="rounded-lg bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
+      <Disclosure summary={<>Details</>} className="rounded-md bg-section px-3 py-2 text-sm" triggerClassName="cursor-pointer font-medium text-foreground">
         <dl className="mt-2 grid gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
           {metrics.map(([label, value, mono]) => (
             <div key={label} className="min-w-0"><dt className="text-muted-foreground-2">{label}</dt><dd className={cn("truncate text-foreground", mono && "font-mono tabular-nums")} title={value}>{value}</dd></div>

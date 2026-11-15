@@ -36,7 +36,7 @@ export const VisualsView: PanelViewComponent = ({ snapshot }) => {
           <article
             key={visual.id}
             aria-label={visual.title}
-            className="rounded-lg border-[0.5px] border-border-1 bg-card"
+            className="rounded-md border-[0.5px] border-border-1 bg-card"
           >
             <header className="flex min-h-8 items-center gap-1 px-2">
               <button

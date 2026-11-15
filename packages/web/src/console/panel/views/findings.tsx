@@ -109,7 +109,7 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
         ) : (
           groups.map((group) => (
             <div key={group.severity} role="group" aria-label={`${group.label} findings`} className="mb-1">
-              <div className="flex h-7 items-center gap-2 rounded-lg bg-card px-2 text-xs font-medium">
+              <div className="flex h-7 items-center gap-2 rounded-md bg-card px-2 text-xs font-medium">
                 <SeverityDot severity={group.severity} />
                 {group.label}
                 <span className="tabular-nums text-muted-foreground-2">{group.findings.length}</span>

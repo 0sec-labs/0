@@ -73,7 +73,7 @@ function ToolDetail({ tool }: { tool: Tool }) {
     <Disclosure
       open={open}
       onOpenChange={setOpen}
-      className="rounded-lg bg-secondary/50 p-3 text-xs"
+      className="rounded-md bg-secondary/50 p-3 text-xs"
       summary={<span title={tool.name}>{displayToolName(tool.name.replace(/^mcp__zeroverse__/, ""))}</span>}
       triggerClassName="rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer font-medium"
     >

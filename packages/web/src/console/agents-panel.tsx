@@ -126,7 +126,7 @@ export function AgentsPanel({
               </p>
             )}
             {worker.operatorMessages?.map((message) => (
-              <div key={message.id} className="ml-6 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+              <div key={message.id} className="ml-6 rounded-md bg-muted/60 px-3 py-2 text-sm">
                 <span className="sr-only">Your message: </span>
                 <p className="whitespace-pre-wrap break-words">{message.text}</p>
               </div>
@@ -169,7 +169,7 @@ export function AgentsPanel({
               !isCancellation(worker.summary) &&
               worker.summary !== worker.transcript.at(-1)?.assistant && <Markdown text={worker.summary} />}
             {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && (
-              <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {worker.error}
               </p>
             )}

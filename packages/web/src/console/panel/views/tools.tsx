@@ -99,7 +99,7 @@ export const ToolsView: PanelViewComponent = ({ snapshot, busy }) => {
             </p>
           )}
           {harness.views.map(({ providerId, view }) => (
-            <div key={providerId} className="space-y-3 rounded-lg bg-secondary/50 p-3">
+            <div key={providerId} className="space-y-3 rounded-md bg-secondary/50 p-3">
               <div className="text-xs font-medium">{view.title}</div>
               {view.blocks.map((block, index) => (
                 <HarnessBlock key={index} block={block} stagePrompt={stagePrompt} />
@@ -123,7 +123,7 @@ export const ToolsView: PanelViewComponent = ({ snapshot, busy }) => {
           {harness.settings.map((setting) => (
             <label
               key={`${harness.generationId}:${setting.providerId}:${setting.id}`}
-              className="block space-y-2 rounded-lg bg-secondary/50 p-3 text-xs"
+              className="block space-y-2 rounded-md bg-secondary/50 p-3 text-xs"
             >
               <span className="font-medium">{setting.label}</span>
               {setting.description && <span className="block text-muted-foreground">{setting.description}</span>}

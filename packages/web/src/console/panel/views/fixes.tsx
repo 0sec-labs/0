@@ -60,7 +60,7 @@ export function DiffSummary({ diff, label }: { diff: string; label?: string }) {
   const parsed = useMemo(() => parseDiff(diff), [diff]);
   if (!parsed.lines.length) return <p className="text-xs text-muted-foreground">No diff.</p>;
   return (
-    <figure className="overflow-hidden rounded-lg border-[0.5px] border-[var(--card-hairline)] bg-card">
+    <figure className="overflow-hidden rounded-md border-[0.5px] border-[var(--card-hairline)] bg-card">
       <figcaption className="flex h-9 items-center gap-2 border-b-[0.5px] border-[var(--card-hairline)] px-3 text-xs">
         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground" title={parsed.files.join(", ")}>
           {label ??
@@ -105,7 +105,7 @@ function FixCard({ entry, backendId }: { entry: PanelFix; backendId: string }) {
     ? backendRouteHref(backendId, `/findings/${encodeURIComponent(fix.finding.fingerprint)}`)
     : undefined;
   return (
-    <li className="space-y-2 rounded-lg border-[0.5px] border-[var(--card-hairline)] bg-card p-3">
+    <li className="space-y-2 rounded-md border-[0.5px] border-[var(--card-hairline)] bg-card p-3">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium leading-5">

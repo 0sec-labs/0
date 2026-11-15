@@ -117,7 +117,7 @@ export const AgentDetailView: PanelViewComponent = ({ snapshot, viewId, closeVie
         <div className="space-y-4">
           {meta && <p className="text-2xs tabular-nums text-muted-foreground-2">{meta}</p>}
           {worker.operatorMessages?.map((message) => (
-            <div key={message.id} className="ml-6 rounded-lg bg-secondary px-3 py-2 text-sm">
+            <div key={message.id} className="ml-6 rounded-md bg-secondary px-3 py-2 text-sm">
               <span className="sr-only">Your message: </span>
               <p className="whitespace-pre-wrap break-words">{message.text}</p>
             </div>
@@ -143,7 +143,7 @@ export const AgentDetailView: PanelViewComponent = ({ snapshot, viewId, closeVie
             !isCancellation(worker.summary) &&
             worker.summary !== worker.transcript.at(-1)?.assistant && <Markdown text={worker.summary} />}
           {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && (
-            <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {worker.error}
             </p>
           )}
