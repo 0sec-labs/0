@@ -59,6 +59,17 @@ optional engine, live-provider, VM, or install E2E. The separate `test:*:e2e`
 scripts may need credentials, network access, or isolated execution; inspect
 their prerequisites before running them.
 
+### Fast checks
+
+`pnpm test:changed` runs only what your diff reaches: typecheck of touched
+packages and their dependants, `vitest related`, the `scripts/*.test.mjs` files
+whose static imports include a changed file, plus docs and release-notes checks
+when those paths changed. `--dry-run` prints the plan, `--base <ref>` overrides
+the merge base, `--all` runs everything. Root `package.json`, lockfile,
+`tsconfig*`, vitest/playwright configs and CI files always fall back to the full
+suite. It is not a gate: CI and `scripts/ci-local.sh` run everything on main.
+`pnpm hooks:install` (opt-in) adds a pre-push hook that runs it.
+
 For documentation changes, use `pnpm docs:check` and `pnpm build:docs`.
 If CLI declarations changed, regenerate the command reference with
 `pnpm docs:sync` and review the resulting diff.
