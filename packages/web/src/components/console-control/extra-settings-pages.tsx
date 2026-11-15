@@ -26,7 +26,8 @@ export function UsageSettings() {
     });
     return { rows, truncated: sessions.length === MAX_CHATS, failed: settled.filter(item => item.status === "rejected").length };
   } });
-  const rows = usage.data?.rows ?? [];
+  // A chat that has not used any tokens yet (an empty "New chat" opened by visiting /chats) is not usage.
+  const rows = (usage.data?.rows ?? []).filter(row => row.inputTokens + row.outputTokens > 0);
   const byModel = new Map<string, { model: string; chats: number; tokens: number; costUsd: number; priced: boolean }>();
   for (const row of rows) {
     const entry = byModel.get(row.model) ?? { model: row.model, chats: 0, tokens: 0, costUsd: 0, priced: false };

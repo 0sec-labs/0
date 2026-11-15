@@ -19,13 +19,13 @@ export interface RecommendedRoleSpec {
 
 export const RECOMMENDED_MODEL_ROLES: readonly RecommendedRoleSpec[] = [
   // Drives the whole mission: needs dependable tool calls at a low price. Matches DEFAULT_OPENAI_MODEL.
-  { role: "orchestrator", label: "Orchestrator", why: "Newest generation, reliable tool use, lowest cost for long agent loops",
+  { role: "orchestrator", label: "Main model", why: "Newest generation, reliable tool use, lowest cost for long agent loops",
     candidates: ["gpt-6-luna", "gpt-5.6-terra", "gpt-5.5", "claude-sonnet-5-5", "DeepSeek-V4-Pro", "deepseek-flash"] },
   // High volume triage: mid-tier price, 1M context for large codebases.
-  { role: "scanner", label: "Scanner and triage", why: "Strong code reading at mid-tier cost, large context for big repositories",
+  { role: "scanner", label: "Reading code", why: "Strong code reading at mid-tier cost, large context for big repositories",
     candidates: ["DeepSeek-V4-Pro", "deepseek-v4-pro", "gpt-5.6-terra", "gpt-5.4-mini", "gpt-6-luna"] },
   // Rare, high stakes: pay for the strongest reasoning.
-  { role: "exploit", label: "Exploit analysis", why: "Strongest reasoning for hard verification and exploit chains",
+  { role: "exploit", label: "Hard problems", why: "Strongest reasoning for hard verification and exploit chains",
     candidates: ["gpt-6-sol", "gpt-5.6-sol", "claude-sonnet-5-5", "DeepSeek-V4-Pro", "gpt-5.5"] },
   // Titles and summaries: speed and price over depth.
   { role: "summariser", label: "Titles and summaries", why: "Fast and cheap; depth is not needed for short text",

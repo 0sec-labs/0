@@ -29,10 +29,14 @@ const keyLinks: Record<string, { href: string; label: string }> = {
   together: { href: "https://api.together.ai/settings/api-keys", label: "Create or manage a Together AI API key" },
 };
 
+const OFFLINE_MESSAGE = "You're offline. Reconnect and try again.";
+
 export function providerTitle(provider: Pick<Provider, "id" | "label">): string {
   return provider.id === "chatgpt-codex" ? "Codex" : provider.id === "chatgpt-plan" ? "ChatGPT plan" : provider.label;
 }
 export function providerSubtitle(provider: Provider): string {
+  if (provider.id === "chatgpt-codex") return "Codex sign-in";
+  if (provider.id === "chatgpt-plan") return "ChatGPT plan allowance";
   const host = provider.configuration?.baseUrl ? safeHost(provider.configuration.baseUrl) : providerHost[provider.id];
   return host ?? (provider.methods.includes("oauth") ? "Subscription sign-in" : "API key");
 }
@@ -77,7 +81,13 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
   }, [open, picked, onConnected, onOpenChange]);
 
   const save = useMutation({
+    networkMode: "always",
     mutationFn: async (provider: Provider) => {
+      if (!navigator.onLine) throw new Error(OFFLINE_MESSAGE);
+      let onOffline = () => {};
+      const offline = new Promise<never>((_, reject) => { onOffline = () => reject(new Error(OFFLINE_MESSAGE)); window.addEventListener("offline", onOffline); });
+      try { return await Promise.race([connect(provider), offline]); } finally { window.removeEventListener("offline", onOffline); }
+      async function connect(provider: Provider) {
       const key = apiKey.trim();
       if (baseUrl.trim()) {
         const url = new URL(baseUrl.trim());
@@ -98,6 +108,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
       else if (provider.configured && Object.keys(config).length) data = await post({ action: "configure", ...config });
       if (!data) throw new Error("Enter an API key.");
       return data;
+      }
     },
     onSuccess: async (data, provider) => {
       queryClient.setQueryData(queryKeys.consoleProviders(), data);
@@ -139,7 +150,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
   const group = (title: string, items: Provider[]) => items.length > 0 && <section className="flex flex-col gap-3"><h3 className="text-sm font-medium text-foreground">{title}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map(tile)}</div></section>;
 
   return <Sheet open={open} onOpenChange={close}>
-    <SheetContent className="w-full data-[side=right]:sm:max-w-[640px]">
+    <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]">
       {!picked ? <>
         <SheetHeader><SheetTitle>Add a connection</SheetTitle><SheetDescription className="sr-only">Choose a subscription or API key provider to connect on {hostName}.</SheetDescription></SheetHeader>
         <div className="flex flex-col gap-6 px-6 pb-6">

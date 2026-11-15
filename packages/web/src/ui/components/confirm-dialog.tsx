@@ -43,7 +43,7 @@ type FormProps = DialogFrameProps & {
 
 function Frame({ open, onOpenChange, title, description, pending = false, className, onCloseAutoFocus, children }: Pick<DialogFrameProps, "open" | "onOpenChange" | "title" | "description" | "pending" | "className" | "onCloseAutoFocus"> & { children: React.ReactNode }) {
   return <Dialog open={open} onOpenChange={next => { if (!next && pending) return; onOpenChange(next); }}>
-    <DialogContent showCloseButton={!pending} className={className} onCloseAutoFocus={onCloseAutoFocus}>
+    <DialogContent showCloseButton={false} className={className} onCloseAutoFocus={onCloseAutoFocus}>
       <DialogHeader className="min-w-0"><DialogTitle className="min-w-0 break-words [overflow-wrap:anywhere]">{title}</DialogTitle>{description && <DialogDescription className="min-w-0 break-words [overflow-wrap:anywhere]">{description}</DialogDescription>}</DialogHeader>
       {children}
     </DialogContent>

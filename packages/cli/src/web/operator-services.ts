@@ -420,6 +420,8 @@ export function planSettingsReset(requested: readonly (keyof TuiSettings)[], exp
 function authProbeUrl(providerId: string, baseUrl: string | undefined): string | undefined {
   if (providerId === "openrouter") return `${baseUrl ?? "https://openrouter.ai/api/v1"}/key`;
   if (providerId === "z-ai" && (!baseUrl || new URL(baseUrl).hostname === "api.z.ai")) return "https://api.z.ai/api/paas/v4/models";
+  // Zen's model catalog falls back to a public snapshot, so discovery cannot prove the key.
+  if (providerId === "opencode") return `${baseUrl ?? "https://opencode.ai/zen/v1"}/models`;
   return undefined;
 }
 

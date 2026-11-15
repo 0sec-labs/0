@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
+import { ConsoleGatewayError } from "./console-gateway.js";
 
 const execute = promisify(execFile);
 type Phase = "idle" | "running" | "connected" | "failed" | "cancelled" | "unavailable";
@@ -36,15 +37,19 @@ export class GitHubPublicationAuth {
   }
 
   async connect(value: unknown): Promise<GithubAccount> {
-    if (this.#child) throw new Error("GitHub authentication is already running.");
-    if (!value || typeof value !== "object" || !("token" in value) || typeof value.token !== "string" || !value.token.trim() || value.token.length > 16_000) throw new Error("Enter a valid GitHub publication token.");
+    if (this.#child) throw new ConsoleGatewayError("GitHub sign-in is already in progress.", 409);
+    if (!value || typeof value !== "object" || !("token" in value) || typeof value.token !== "string" || !value.token.trim() || value.token.length > 16_000) throw new ConsoleGatewayError("Enter a GitHub token.", 400);
     const token = value.token.trim();
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     const child = spawn("gh", ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--with-token"], { stdio: ["pipe", "ignore", "pipe"] });
     this.#child = child;
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString("utf8")}`.slice(-4_000); });
     this.#state = { phase: "running", message: "Validating the publication account." };
-    child.once("error", () => { reject(new Error("GitHub authentication could not start.")); });
-    child.once("exit", code => { if (code === 0) resolve(); else reject(new Error("GitHub rejected the publication credential or could not save it privately.")); });
+    child.once("error", () => { reject(new ConsoleGatewayError("GitHub could not be started on this computer.", 500)); });
+    child.once("exit", code => { if (code === 0) resolve(); else reject(/401|bad credentials|invalid|authentication failed|not accept|scope|token/i.test(stderr) && !/keyring|keychain|write|permission denied/i.test(stderr)
+      ? new ConsoleGatewayError("GitHub did not accept this token.", 422)
+      : new ConsoleGatewayError("The token could not be saved on this computer.", 500)); });
     child.stdin?.end(`${token}\n`);
     try { await promise; this.#state = { phase: "connected", message: "GitHub publication account connected." }; }
     catch (error) { this.#state = { phase: "failed", message: error instanceof Error ? error.message : "GitHub authentication failed." }; throw error; }
