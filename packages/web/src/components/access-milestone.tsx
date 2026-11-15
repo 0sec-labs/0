@@ -1,9 +1,9 @@
 import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
-import { accessMilestoneFromArtifact, appendAccessMilestone, visibleAccessMilestones } from "@0/engine/shared";
+import { accessMilestoneFromArtifact, appendAccessMilestone, visibleAccessMilestones } from "@0/engine/dist/shared/access-milestone.js";
 import { Link } from "react-router-dom";
-import type { AccessMilestone } from "@0/engine/shared";
+import type { AccessMilestone } from "@0/engine/dist/shared/access-milestone.js";
 export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: AccessMilestone; scanId: string; at?: number }) {
   const verifiedAt = milestone.verifiedAt ?? at;
   const date = verifiedAt !== undefined && Number.isFinite(verifiedAt) && Math.abs(verifiedAt) <= 8_640_000_000_000_000 ? new Date(verifiedAt) : null;

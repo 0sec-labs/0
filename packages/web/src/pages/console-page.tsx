@@ -36,7 +36,7 @@ import {
   type To,
 } from "react-router-dom";
 import { useQuery, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { findCommand, getCommandByName, SLASH_COMMANDS } from "@0/engine/shared";
+import { findCommand, getCommandByName, SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
 import { startingModelChoice } from "@/lib/last-model-choice";
 import type {
   ConsoleSessionSnapshot,
@@ -45,7 +45,7 @@ import type {
   HarnessSnapshot,
   ConsoleCreateSessionInput,
 } from "@0/engine/shared";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared";
+import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
 import { Download, Menu, Trash2, Pencil, Eraser } from "lucide-react";
 import {
   CapyCopyIcon as Copy,

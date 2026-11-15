@@ -2,7 +2,7 @@ import { queryKeys } from "@/queries";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ImpactAssessmentSchema, getFindingPriority } from "@0/engine/shared";
+import { ImpactAssessmentSchema, getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
 import type { ImpactAssessment } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import type { FindingRecord } from "@/types";

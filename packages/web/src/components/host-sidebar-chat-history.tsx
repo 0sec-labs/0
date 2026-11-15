@@ -7,7 +7,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Ellipsis, Monitor, Search, Server, Trash2 } from "lucide-react";
-import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared";
+import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { useBackendSelection } from "@/backend-context";

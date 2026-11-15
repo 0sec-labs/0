@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BackendDescriptorSchema, BackendListSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared";
+import { BackendDescriptorSchema, BackendListSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { startVisibleInterval } from "./lib/polling";
 import { makeQueryClient, SCOPED_QUERY_DEFAULTS } from "./lib/query-client";
 import { createBackendApi, localControlFetch } from "./api";

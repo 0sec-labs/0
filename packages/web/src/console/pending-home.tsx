@@ -1,5 +1,5 @@
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared";
+import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
 import { v } from "@/lib/vocabulary";
 import { Button } from "@/components/ui/button";
 
