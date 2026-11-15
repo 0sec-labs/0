@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const SUFFIX = "0.security";
+const SUFFIX = "0security";
 
 const TITLES: Array<[RegExp, string]> = [
   [/^\/chats(?:\/|$)/, "Home"],
@@ -25,7 +25,7 @@ const TITLES: Array<[RegExp, string]> = [
 
 const KNOWN = /^\/(?:onboarding|setup|console|dashboard|live|engagements|skills)(?:\/|$)|^\/$/;
 
-/** Per-route document title, e.g. "Findings · 0.security". Unknown paths read as a 404. */
+/** Per-route document title, e.g. "Findings · 0security". Unknown paths read as a 404. */
 export function pageTitleFor(pathname: string): string {
   const hit = TITLES.find(([pattern]) => pattern.test(pathname));
   if (hit) return `${hit[1]} · ${SUFFIX}`;

@@ -1,7 +1,7 @@
 {
   "name": "@0/cli",
   "version": "0.29.0",
-  "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
+  "description": "0security CLI: build security agents that find vulnerabilities, prove them, fix them, verify the fix and keep watching.",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "bin": {

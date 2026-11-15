@@ -14,7 +14,7 @@ export function BrandMark({
       <svg
         data-brand-mark="compact"
         role="img"
-        aria-label="0.security"
+        aria-label="0security"
         viewBox="-2 -2 24 24"
         className={cn("size-9 text-[#403D39] dark:text-[#FCFAF6]", className)}
       >
@@ -31,7 +31,7 @@ export function BrandMark({
   return (
     <div className={cn("flex flex-col items-center gap-2", className)}>
       <img
-        alt="0.security"
+        alt="0security"
         data-brand-variant="ink"
         src={wordmarkInkUrl}
         width={240}
@@ -39,7 +39,7 @@ export function BrandMark({
         className="h-auto w-48 max-w-full dark:hidden"
       />
       <img
-        alt="0.security"
+        alt="0security"
         data-brand-variant="white"
         src={wordmarkWhiteUrl}
         width={240}

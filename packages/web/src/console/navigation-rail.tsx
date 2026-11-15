@@ -121,7 +121,7 @@ export function ConsoleNavigationRail({
         <Tooltip content="Home" side="bottom">
           <a
             href={newChatHref}
-            aria-label={v("0.security new {mission}")}
+            aria-label={v("0security new {mission}")}
             className="-ml-1 flex h-(--h-control-sm) shrink-0 items-center justify-center rounded-(--radius-button) px-1 outline-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset"
           >
             <BrandMark className="h-auto w-28" />

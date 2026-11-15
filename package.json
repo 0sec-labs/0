@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.29.0",
-  "description": "Your self-improving, open-source cybersecurity team.",
+  "description": "0security is a framework for building security agents.",
   "bin": {
     "0": "dist/0.js"
   },
@@ -74,7 +74,7 @@
     "autonomous-agents",
     "security-research"
   ],
-  "author": "0.security",
+  "author": "0security",
   "homepage": "https://0.security",
   "bugs": {
     "url": "https://0.security/contact"

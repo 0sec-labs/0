@@ -5,7 +5,7 @@ import { Check, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProviderIcon } from "@/components/provider-icon";
 
-export const setupPrompt = `Help me use 0.security for my task from this coding agent. Use the CLI directly when shell access is available; MCP is optional for clients that require a structured tool connection.
+export const setupPrompt = `Help me use 0security for my task from this coding agent. Use the CLI directly when shell access is available; MCP is optional for clients that require a structured tool connection.
 
 Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 doctor, and 0 workbench status --json. Choose among review, scan, workflow, sessions, runs, findings, api, and web for the smallest operation serving my task.
 
