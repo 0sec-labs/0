@@ -22,7 +22,7 @@ RUN mkdir /tmp/foxguard-policy-smoke \
     && printf 'print("ok")\n' > /tmp/foxguard-policy-smoke/fixture.py \
     && /out/foxguard --format json /tmp/foxguard-policy-smoke/fixture.py > /tmp/foxguard-policy-smoke/report.json
 
-FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
+FROM node:26.13.1-bookworm@sha256:b7087bc4d973034b30854b378ba107f9fab622b47514cb7e2592e41b8bab8d49 AS node-runtime
 
 FROM node-runtime AS native-deps
 ENV PNPM_HOME=/root/.local/share/pnpm \
@@ -53,7 +53,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
     && npm rebuild tree-sitter tree-sitter-c --build-from-source --no-audit --no-fund \
     && node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int workbench(void) { return 24; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("published native C parser:", root.toString());'
 
-FROM node:24.21.0-bookworm-slim@sha256:24b8bc17702002d2ed0c1da9ad66c3ee507cc279d0856726662ff2b6fc35c149 AS debian-base
+FROM node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS debian-base
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TOOLBOX_PROFILE=core-web
