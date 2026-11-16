@@ -196,7 +196,7 @@ export function classifyTransportFailure(error: unknown): TransportFailure {
   // cannot have submitted the inference POST. Generic timeouts/resets can.
   const beforeDispatch = ["EAI_AGAIN", "ENOTFOUND", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
     || (code === "ETIMEDOUT" && metadata.syscall === "connect")
-    || (["ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED"].includes(code) || /^ERR_(?:SSL|TLS)/.test(code)
+    || ((["ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED"].includes(code) || /^ERR_(?:SSL|TLS)/.test(code))
       && Boolean(metadata.socket && typeof metadata.socket === "object" && (metadata.socket as { bytesWritten?: unknown }).bytesWritten === 0));
   return { code, beforeDispatch, message: closedMessage || code === "CONNECTION_CLOSED" ? "The connection closed before a complete response was received" : message };
 }
