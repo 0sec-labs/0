@@ -5,6 +5,7 @@ summary: "Pin actions, cut permissions and fix script injection in GitHub workfl
 category: "Code review"
 version: 1
 applicable_roles:
+  - attack
   - audit
   - review
 tags:
@@ -30,7 +31,7 @@ verify:
   network: none
   timeout: 180s
   success:
-    baseline: no-worse
+    baseline: improves
     metric: "(\\d+) findings?"
   canary:
     step: zizmor

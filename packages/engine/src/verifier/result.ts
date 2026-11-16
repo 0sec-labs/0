@@ -18,6 +18,8 @@ export interface VerifierResult {
   durationMs: number;
   /** Last 2 KB of combined step output, secrets redacted. */
   logTail: string;
+  /** Exit code of the first failing step, 0 when every step exited 0, null when no step finished. */
+  exitCode?: number | null;
   canary: CanaryState;
   baseline?: { before: number; after: number };
   /** Skill that declared the verifier, when there was one. */

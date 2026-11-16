@@ -11,19 +11,19 @@ import { exec } from "./process.js";
 
 type Exec = typeof exec;
 
-export interface DockerRunnerOptions {
+export interface OciRunnerOptions {
   /** Candidate binaries in order of preference. */
   binaries?: string[];
   exec?: Exec;
 }
 
-export class DockerRunner implements ContainerRunner {
+export class OciRunner implements ContainerRunner {
   readonly isolation = "container" as const;
   #bin: string | undefined;
   readonly #binaries: string[];
   readonly #exec: Exec;
 
-  constructor(options: DockerRunnerOptions = {}) {
+  constructor(options: OciRunnerOptions = {}) {
     this.#binaries = options.binaries ?? ["docker", "podman"];
     this.#exec = options.exec ?? exec;
   }

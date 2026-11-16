@@ -871,6 +871,8 @@ export type {
 // already reproduced finding, validates it in an isolated Git worktree, then
 // optionally applies the same patch after the source contract and test command
 // both pass.
+export { parseVerifySpec, inlineVerifySpec, verificationLine, isVerified, gateDone, claimsFixed, runVerifier, OciRunner, HostRunner, snapshotWorktree, snapshotHead, isGitRepo, isPinnedImage } from "./verifier/index.js";
+export type { VerifySpec, VerifierResult, ContainerRunner } from "./verifier/index.js";
 export { runSourceFix, verifySourceFixCandidate, applySourceFixCandidate, planSourceFixPublication, publishSourceFixDraftPR } from "./fix/index.js";
 export { resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs } from "./fix/index.js";
 export type {

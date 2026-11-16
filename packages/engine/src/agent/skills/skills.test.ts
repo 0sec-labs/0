@@ -14,6 +14,7 @@ import type { SkillDefinition, SkillSummary } from "./types.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const EXPECTED_SKILL_IDS = [
+  "workflow-hardening",
   "graphql-introspection",
   "attack-surface-diff",
   "cloud-iac-review",
@@ -212,7 +213,7 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(23);
+      expect(reviewSkills.length).toBe( 24);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         // Offline / read-only security-engine routing skills (all review-applicable).
@@ -241,6 +242,7 @@ describe("Skill Registry", () => {
         "supabase-appsec",
         "variant-hunting",
         "visualize",
+        "workflow-hardening",
       ]);
     });
 

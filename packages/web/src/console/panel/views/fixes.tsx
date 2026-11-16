@@ -7,6 +7,7 @@ import {
   CapyBranchIcon as GitBranch,
   CapyPullRequestIcon as GitPullRequest,
 } from "@/ui/icons/capy";
+import { verificationLine } from "@0/engine/shared/verifier-result";
 import { useBackendApi } from "@/api";
 import type { Workflow } from "@/components/console-control/contracts";
 import { Badge } from "@/components/ui/badge";
@@ -150,6 +151,11 @@ function FixCard({ entry, backendId }: { entry: PanelFix; backendId: string }) {
                 ? "passed"
                 : `exit ${test.exitCode}`}{" "}
           · {(test.durationMs / 1000).toFixed(1)}s
+        </p>
+      )}
+      {test && (
+        <p className="text-xs text-muted-foreground">
+          {test.verification ? verificationLine(test.verification) : "Not verified: no check was recorded"}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">

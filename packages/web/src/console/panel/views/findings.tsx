@@ -37,7 +37,7 @@ export function SeverityDot({ severity, className }: { severity: SeverityLevel; 
 const STATUS_FILTERS: readonly { value: FindingStatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "open", label: "Open" },
-  { value: "verified", label: "Verified" },
+  { value: "verified", label: "Corroborated" },
   { value: "accepted", label: "Accepted" },
   { value: "fixed", label: "Fixed" },
 ];

@@ -4,7 +4,7 @@ import type { Command } from "commander";
 import type { Finding } from "@0/engine/shared";
 import {
   createRuntime,
-  runSourceFix, budgetNativeRuntime, workflowPolicyRuntime,
+  runSourceFix, isPinnedImage, verificationLine, budgetNativeRuntime, workflowPolicyRuntime,
   type NativeRuntime,
   type RuntimeType,
   type SourceFixResult,
@@ -26,6 +26,7 @@ interface FixOptions {
   dbPath?: string;
   verificationResult?: string;
   testCommand: string;
+  verifyImage?: string;
   runtime: string;
   model?: string;
   apiKey?: string;
@@ -148,6 +149,7 @@ export function registerFixCommand(program: Command): void {
     .option("--db-path <path>", "Database containing --finding-id")
     .option("--verification-result <path>", "Optional verification_result JSON from `0 scan verify`; required when the finding does not already carry one")
     .requiredOption("--test-command <command>", "Explicit regression command to run in the isolated candidate worktree")
+    .option("--verify-image <image>", "Run --test-command in this digest-pinned container image with the network off; without it the command runs on this machine and the fix is never labelled Verified")
     .option("--runtime <runtime>", "Fix runtime: auto or api", "auto")
     .option("-m, --model <model>", "Model identifier for the selected runtime")
     .option("--api-key <key>", "API key for the selected runtime")
@@ -161,6 +163,7 @@ export function registerFixCommand(program: Command): void {
       const timeout = parsePositiveInteger(opts.timeout, "--timeout");
       const testTimeoutMs = parsePositiveInteger(opts.testTimeout, "--test-timeout");
       const maxAttempts = parsePositiveInteger(opts.maxAttempts, "--max-attempts");
+      if (opts.verifyImage && !isPinnedImage(opts.verifyImage)) throw new Error("--verify-image must be pinned by digest (name@sha256:<64 hex>)");
       const finding = await resolveFixFinding(opts);
       if (opts.verificationResult) {
         Object.assign(finding as unknown as Record<string, unknown>, {
@@ -188,6 +191,7 @@ export function registerFixCommand(program: Command): void {
         runtime: workflowPolicyRuntime(budgetNativeRuntime(runtime, context.costLedger, context.signal, context.plan.costCapUsd, context.plan)),
         signal: context.signal,
         testCommand: opts.testCommand,
+        ...(opts.verifyImage ? { verifyImage: opts.verifyImage } : {}),
         apply: opts.apply,
         maxAttempts,
         testTimeoutMs,
@@ -198,6 +202,7 @@ export function registerFixCommand(program: Command): void {
         await writePatch(opts.output, result.patch);
       }
 
+      if (result.test) process.stderr.write(`${result.verification ? verificationLine(result.verification) : "Not verified: no check was recorded"}\n`);
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       process.exitCode = exitCodeFor(result);
     });

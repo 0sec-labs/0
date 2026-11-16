@@ -62,6 +62,17 @@ describe("0 threads (console actions)", () => {
     expect(JSON.parse(h.out[0]!)).toMatchObject({ session: { status: "ready" }, reply: "done" });
   });
 
+  it("start --skill is sent on create; --wait prints the recorded verification line and exits 1 when the claim was blocked", async () => {
+    const h = harness(call => {
+      if (call.method === "GET") return { snapshot: { session: { id: "m1", status: "ready" }, lastOutcome: { stopReason: "end_turn", verification: { line: "Not verified: no container runtime is available", claimBlocked: true } }, messages: [{ role: "assistant", content: [{ type: "text", text: "All fixed." }] }] } };
+      return { session: { id: "m1", status: "ready" } };
+    });
+    await h.run("start", "harden", "--skill", "workflow-hardening", "--wait");
+    expect(h.calls[0]).toMatchObject({ body: { verifySkill: "workflow-hardening" } });
+    expect(h.out[0]).toContain("All fixed.\n\nNot verified: no container runtime is available");
+    expect(process.exitCode).toBe(1);
+  });
+
   it("start --cost-ceiling is sent on create; --wait prints the reply with usage and exits 1 when the ceiling stopped it", async () => {
     const h = harness(call => {
       if (call.method === "GET") return { snapshot: { session: { id: "m1", status: "ready", lastTurnFailed: true, costCeilingUsd: 0.5, costCeilingExceeded: true }, lastOutcome: { stopReason: "cancelled" }, usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.52 }, messages: [{ role: "assistant", content: [{ type: "text", text: "partial" }] }] } };

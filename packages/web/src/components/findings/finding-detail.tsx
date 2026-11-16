@@ -348,7 +348,7 @@ function ActivitySection({ family, loading }: { family: FindingFamilyResponse | 
 function SupportingDetails({ family }: { family: FindingFamilyResponse }) {
   const { workflow } = family;
   const metrics: [string, string, boolean?][] = [
-    ["Verdict", `${workflow.consensus} · ${workflow.evidenceSignal} signal`],
+    ["Verdict", `${workflow.consensus === "verified" ? "corroborated" : workflow.consensus} · ${workflow.evidenceSignal} signal`],
     ["Votes (real / false / unsure)", `${workflow.verdictCounts.truePositive} / ${workflow.verdictCounts.falsePositive} / ${workflow.verdictCounts.unsure}`],
     ["Seen", `${family.rows.length}×`],
     ["Target type", family.case ? family.case.targetType.replaceAll("-", " ") : "Unknown"],

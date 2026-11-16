@@ -84,6 +84,9 @@ export function severityCounts(groups: readonly FindingGroup[]): Record<Severity
   return counts;
 }
 
+/** The independent-agent verdict is "Corroborated"; "Verified" is reserved for a check the harness ran. */
+export const consensusLabel = (value: string) => value === "verified" ? "Corroborated" : statusLabel(value);
+
 export function statusLabel(value: string): string {
   const text = value.replaceAll("_", " ").replaceAll("-", " ").trim();
   return text ? text[0]!.toUpperCase() + text.slice(1) : "Unknown";

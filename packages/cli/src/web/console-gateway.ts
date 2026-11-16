@@ -1,3 +1,4 @@
+import { captureBaseRev, resolveThreadVerifier, verifyThreadTurn, type ThreadVerification, type ThreadVerifier } from "./thread-verifier.js";
 import { loadOperatorInstructions } from "./operator-instructions.js";
 import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { connectConsoleMcp } from "../console-mcp.js";
@@ -16,7 +17,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import {
   features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
-  type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
+  type ContainerRunner, type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
   type McpToolHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall, type ToolResult,
 } from "@0/engine";
@@ -82,6 +83,8 @@ type QueuedWorkflowRequest = {
 export const CONSOLE_CANCELLATION_TIMEOUT_MS = 15_000;
 
 export interface ConsoleGatewayOptions {
+  /** Test seam: the container runner for verifier skills. Defaults to Docker or podman. */
+  verifierRunner?: ContainerRunner;
   /** Local OSS ChatGPT plan registration is unavailable on hosted/team workspaces. */
   allowChatGptPlan?: boolean;
   remoteProviderRelays?: RemoteProviderRelayBroker;
@@ -123,6 +126,8 @@ type ManagedSession = {
   autonomyMode: DesktopConsoleAutonomyMode; title: string; titleSource: ConversationTitleSource; titleInFlight?: boolean; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
+  /** Built-in skill whose declared verifier gates this thread's "fixed" claims. */
+  verifier?: ThreadVerifier;
   /** Hard skill allow-list for this session (Sentinel runs); undefined is unrestricted. */
   skillAllowList?: string[];
   /** Standing session this one was activated from (Sentinel home mission). */
@@ -432,7 +437,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId", "costCeilingUsd"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId", "costCeilingUsd", "verifySkill"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated thread ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -479,7 +484,13 @@ export class ConsoleGateway {
       parentSessionId = text(raw.parentSessionId, "Parent session ID", 128);
       if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent thread was not found.", 404);
     }
+    let verifier: ThreadVerifier | undefined;
+    if (raw.verifySkill !== undefined) {
+      try { verifier = resolveThreadVerifier(text(raw.verifySkill, "Skill ID", 128)); }
+      catch (error) { throw new ConsoleGatewayError(errorMessage(error), 400); }
+    }
     const managed: ManagedSession = {
+      ...(verifier ? { verifier } : {}),
       ...(workflowId ? { workflowId } : {}),
       ...(skillAllowList ? { skillAllowList } : {}),
       ...(parentSessionId ? { parentSessionId } : {}),
@@ -1430,9 +1441,16 @@ export class ConsoleGateway {
     managed.userAttributions.push({ text: body, ...(author ? { author: structuredClone(author) } : {}) });
     if (managed.userAttributions.length > 10000) managed.userAttributions.splice(0, managed.userAttributions.length - 10000);
     this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, attachments, ...(author ? { author: structuredClone(author) } : {}) });
+    // A thread with a verifier skill gets the skill's instructions once and remembers the commit it started from.
+    let modelBody = body;
+    if (managed.verifier && !managed.verifier.briefed) {
+      managed.verifier.briefed = true;
+      managed.verifier.baseRev = await captureBaseRev(managed.workspacePath ?? this.#projectPath ?? process.cwd());
+      modelBody = `${managed.verifier.instructions}\n\n---\n\n${body}`;
+    }
     const turn = (async () => {
       try {
-        const outcome = await this.#skillActor.run(author, () => session.send(body, {
+        let outcome = await this.#skillActor.run(author, () => session.send(modelBody, {
           onAssistantDelta: (text) => this.#emit(managed, { type: "assistant-delta", text }), onReasoningDelta: (text) => this.#emit(managed, { type: "reasoning-delta", text }),
           onToolStart: (call) => this.#emit(managed, { type: "tool-start", call: this.#withCallId(call) }),
           onToolResult: (call, result) => this.#emitToolResult(managed, call, result),
@@ -1464,9 +1482,16 @@ export class ConsoleGateway {
           onRetry: (notice) => this.#emit(managed, { type: "retry", retry: { reason: notice.reason, status: notice.status, delayMs: notice.delayMs, attempt: notice.attempt, maxAttempts: notice.maxAttempts } }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
         }, { signal: abort.signal, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));
+        let verification: ThreadVerification | undefined;
+        if (managed.verifier && outcome.stopReason === "end_turn" && !abort.signal.aborted) {
+          this.#emit(managed, { type: "notice", text: "Running the check." });
+          const gated = await verifyThreadTurn({ verifier: managed.verifier, repo: managed.workspacePath ?? this.#projectPath ?? process.cwd(), claim: outcome.assistantText, ...(this.#options.verifierRunner ? { runner: this.#options.verifierRunner } : {}), signal: abort.signal });
+          verification = gated.verification;
+          outcome = { ...outcome, assistantText: gated.message };
+        }
         if (outcome.stopReason === "end_turn" && !abort.signal.aborted && managed.titleSource === "default") void this.#autoTitle(managed, firstUserText, outcome.assistantText);
         managed.lastTurnSilentWork = outcome.toolCalls.some(item => item.result.success);
-        managed.lastOutcome = this.#outcome(abort.signal.aborted ? { ...outcome, stopReason: "cancelled" } : outcome); managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
+        managed.lastOutcome = { ...this.#outcome(abort.signal.aborted ? { ...outcome, stopReason: "cancelled" } : outcome), ...(verification ? { verification } : {}) }; managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
         this.#emit(managed, { type: "turn-complete", ...managed.lastOutcome });
         if (outcome.stopReason === "cancelled" && managed.execution.backend === "smolvm" && managed.execution.status === "stopped") {
           await session.cleanup();

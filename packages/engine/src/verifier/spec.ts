@@ -20,8 +20,8 @@ export interface VerifySuccess {
   exit0: boolean;
   /** Combined step output must match this regular expression. */
   regex?: string;
-  /** "no worse than before": the failure metric after must not exceed the metric before. */
-  baseline?: "no-worse";
+  /** "no-worse": the failure metric after must not exceed the metric before. "improves": it must drop, unless it was already 0. */
+  baseline?: "no-worse" | "improves";
   /** Regex whose first capture group is an integer count; absent means exit code != 0 counts as 1. */
   metric?: string;
 }
@@ -115,13 +115,13 @@ export function parseVerifySpec(raw: unknown): ParseVerifyResult {
   const successRaw = raw.success === undefined || raw.success === "exit0" ? {} : raw.success;
   if (!isRecord(successRaw)) return fail("success must be a mapping");
   for (const key of Object.keys(successRaw)) if (!["exit0", "regex", "baseline", "metric"].includes(key)) return fail(`unknown success key "${key}"`);
-  if (successRaw.baseline !== undefined && successRaw.baseline !== "no-worse") return fail('success.baseline must be "no-worse"');
+  if (successRaw.baseline !== undefined && successRaw.baseline !== "no-worse" && successRaw.baseline !== "improves") return fail('success.baseline must be "no-worse" or "improves"');
   if (successRaw.exit0 !== undefined && typeof successRaw.exit0 !== "boolean") return fail("success.exit0 must be true or false");
   for (const key of ["regex", "metric"] as const) {
     if (successRaw[key] !== undefined) { const err = validRegex(successRaw[key], `success.${key}`); if (err) return fail(err); }
   }
   if (successRaw.metric !== undefined && successRaw.baseline === undefined) return fail("success.metric needs success.baseline");
-  const baseline = successRaw.baseline === "no-worse" ? ("no-worse" as const) : undefined;
+  const baseline = successRaw.baseline === "no-worse" || successRaw.baseline === "improves" ? successRaw.baseline : undefined;
   const success: VerifySuccess = {
     exit0: typeof successRaw.exit0 === "boolean" ? successRaw.exit0 : baseline === undefined,
     ...(typeof successRaw.regex === "string" ? { regex: successRaw.regex } : {}),

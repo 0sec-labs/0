@@ -1,5 +1,6 @@
 import type { Finding } from "./types.js";
 import type { Visualization } from "./visualization.js";
+import type { VerifierResult } from "../verifier/result.js";
 
 /**
  * Renderer-neutral contract between the browser and the local console daemon.
@@ -321,6 +322,8 @@ export interface ConsoleTurnOutcome {
   usage?: { inputTokens: number; outputTokens: number };
   contextInputTokens?: number;
   outputCap?: { checkpoint: ConsoleJsonValue; continuations: number; message: string };
+  /** Harness-run check recorded for this turn; present only for a skill that declares a verifier. */
+  verification?: { line: string; claimBlocked: boolean; result: VerifierResult };
 }
 
 /** Why a finished turn left the operator without a visible answer. */

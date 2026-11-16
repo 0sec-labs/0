@@ -11,6 +11,8 @@ const REASONS: Record<string, string> = {
   "not-a-git-repo": "the folder is not a Git repository",
   "no-baseline": "the tree before the change could not be captured",
   timeout: "the check timed out",
+  "no-improvement": "findings did not go down",
+  "worse-than-baseline": "there are more findings than before",
 };
 
 /** One plain line for the UI and the reply. */

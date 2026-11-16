@@ -24,6 +24,7 @@
  * the required `--test-command` option of `0 scan fix`.
  */
 
+import { verificationLine } from "@0/engine";
 import type { SourceFixPublicationPlan, SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/engine";
 
 type FixEligibility =
@@ -182,6 +183,7 @@ function fixResultLines(result: SourceFixResult): string[] {
   const lines: string[] = [];
   lines.push(result.sourceFile ? `source ${result.sourceFile}` : "source file not resolved");
   lines.push(result.test ? `${describeTest(result.test)} in ${result.test.durationMs}ms` : "test command did not run");
+  if (result.test) lines.push(result.verification ? verificationLine(result.verification) : "Not verified: no check was recorded");
   lines.push(
     result.patch
       ? result.applied

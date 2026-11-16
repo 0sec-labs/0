@@ -95,7 +95,8 @@ export async function runVerifier(input: RunVerifierInput): Promise<VerifierResu
     return done("error", bad?.timedOut ? "timeout" : "infra-error", redactTail(bad?.infraError ?? log), canary);
   }
   const total = after.reduce((sum, o) => sum + o.durationMs, 0);
-  const finish = (status: "pass" | "fail", reason: string, extra: Partial<VerifierResult> = {}) => ({ ...done(status, reason, redactTail(log), canary, extra), durationMs: total });
+  const exitCode = after.find((o) => o.exitCode !== 0)?.exitCode ?? 0;
+  const finish = (status: "pass" | "fail", reason: string, extra: Partial<VerifierResult> = {}) => ({ ...done(status, reason, redactTail(log), canary, { exitCode, ...extra }), durationMs: total });
 
   const baseline = before !== undefined ? { before, after: after.reduce((sum, o) => sum + counted(o, spec.success.metric), 0) } : undefined;
   const extra = baseline ? { baseline } : {};
@@ -105,5 +106,6 @@ export async function runVerifier(input: RunVerifierInput): Promise<VerifierResu
   }
   if (spec.success.regex && !new RegExp(spec.success.regex, "m").test(log)) return finish("fail", "output-did-not-match", extra);
   if (baseline && baseline.after > baseline.before) return finish("fail", "worse-than-baseline", extra);
+  if (baseline && spec.success.baseline === "improves" && baseline.before > 0 && baseline.after >= baseline.before) return finish("fail", "no-improvement", extra);
   return finish("pass", "criteria-met", extra);
 }

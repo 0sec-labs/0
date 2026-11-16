@@ -6,7 +6,7 @@ export type { GateDecision, GateInput } from "./gate.js";
 export type { ContainerRunner, StepRequest, StepOutcome, Probe } from "./port.js";
 export { runVerifier } from "./runner.js";
 export type { RunVerifierInput } from "./runner.js";
-export { DockerRunner } from "./docker-runner.js";
+export { OciRunner } from "./docker-runner.js";
 export { HostRunner } from "./host-runner.js";
 export { snapshotWorktree, snapshotHead, isGitRepo } from "./snapshot.js";
 export type { Snapshot } from "./snapshot.js";

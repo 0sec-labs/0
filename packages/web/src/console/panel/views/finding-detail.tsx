@@ -9,7 +9,7 @@ import { buildEvidence } from "./evidence-model";
 import { EvidenceCard } from "./evidence";
 import { useFindingActions } from "./finding-actions";
 import { SeverityDot } from "./findings";
-import { fixPrByFindingId, normalizeSeverity, prLabel, SEVERITY_LABELS, statusLabel } from "./findings-model";
+import { fixPrByFindingId, normalizeSeverity, prLabel, SEVERITY_LABELS, consensusLabel, statusLabel } from "./findings-model";
 import { useChatFindings } from "./use-chat-findings";
 
 /** `finding:<fingerprint>` tab: a compact version of the finding page, from the dashboard record only. */
@@ -25,7 +25,7 @@ export const FindingDetailView: PanelViewComponent = ({ viewId, snapshot, sessio
   const evidence = buildEvidence([group])[0];
   const meta: [string, string][] = [
     ["Status", statusLabel(workflow?.status ?? latest.status)],
-    ...(workflow?.consensus ? [["Consensus", statusLabel(workflow.consensus)] as [string, string]] : []),
+    ...(workflow?.consensus ? [["Consensus", consensusLabel(workflow.consensus)] as [string, string]] : []),
     ...(latest.cvssScore != null ? [["CVSS", `${latest.cvssScore.toFixed(1)}${latest.cvssVector ? ` ${latest.cvssVector}` : ""}`] as [string, string]] : []),
     ...(latest.confidence != null ? [["Confidence", `${Math.round(latest.confidence <= 1 ? latest.confidence * 100 : latest.confidence)}%`] as [string, string]] : []),
     ["Category", latest.category],

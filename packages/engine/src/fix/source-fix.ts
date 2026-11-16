@@ -7,6 +7,9 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { defaultGitClient, defaultGhClient, buildPrTitle, type GitClient, type GhClient } from "../emit/pr-emitter.js";
 import { z } from "zod";
+import type { ContainerRunner } from "../verifier/port.js";
+import type { VerifierResult } from "../verifier/result.js";
+import { runFixCheck, type FixCheckOptions } from "./fix-verify.js";
 import type { Finding } from "../shared/index.js";
 import { applyPatchOps, parsePatch, type PatchOp } from "../agent/apply-patch.js";
 import { resolveScopedPath } from "../agent/tools/scope-path.js";
@@ -67,6 +70,8 @@ export interface SourceFixTestResult {
   stderr: string;
   durationMs: number;
   timedOut: boolean;
+  /** Typed result from the shared verifier runner; absent on records written before it existed. */
+  verification?: VerifierResult;
 }
 
 export interface SourceFixAttempt {
@@ -98,6 +103,7 @@ interface VerifiedCandidate {
   sourceFile: string;
   diff: string;
   testCommand: string;
+  check: FixCheckOptions;
   originalSource: Buffer;
   reviewedSource: Buffer;
   plan?: SourceFixPublicationPlan;
@@ -120,6 +126,8 @@ export interface SourceFixResult {
   precondition?: SourceVerificationResult;
   postcondition?: SourceVerificationResult;
   test?: SourceFixTestResult;
+  /** The recorded verification of the regression command (same object as test.verification). */
+  verification?: VerifierResult;
   patch?: string;
   /** Actual Git diff of the generated source change, not a template or model claim. */
   diff?: string;
@@ -139,6 +147,10 @@ export interface SourceFixOptions {
   apply?: boolean;
   /** Bounded generator retries. Defaults to 3 and never exceeds 3. */
   maxAttempts?: number;
+  /** Digest-pinned container image for the test command; without it the command runs on the host and is never Verified. */
+  verifyImage?: string;
+  /** Test seam for the container runner. */
+  verifyRunner?: ContainerRunner;
   /** Per test-command wall-clock budget. Defaults to five minutes. */
   testTimeoutMs?: number;
   /** Preserve a validated local candidate for review and separately approved publication. */
@@ -288,45 +300,8 @@ async function resetCandidate(worktree: string): Promise<void> {
   await git(worktree, ["clean", "-fd"]);
 }
 
-async function runTestCommand(
-  command: string,
-  cwd: string,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<SourceFixTestResult> {
-  const startedAt = Date.now();
-  try {
-    const { stdout, stderr } = await execFileAsync("/bin/sh", ["-lc", command], {
-      cwd,
-      timeout: timeoutMs,
-      maxBuffer: MAX_TEST_OUTPUT_BYTES,
-      signal,
-    });
-    return {
-      command,
-      exitCode: 0,
-      stdout: truncate(String(stdout)),
-      stderr: truncate(String(stderr)),
-      durationMs: Date.now() - startedAt,
-      timedOut: false,
-    };
-  } catch (error) {
-    const child = error as NodeJS.ErrnoException & {
-      code?: number | string;
-      stdout?: string | Buffer;
-      stderr?: string | Buffer;
-      killed?: boolean;
-      signal?: string | null;
-    };
-    return {
-      command,
-      exitCode: typeof child.code === "number" ? child.code : null,
-      stdout: truncate(child.stdout?.toString()),
-      stderr: truncate(child.stderr?.toString() || errorMessage(error)),
-      durationMs: Date.now() - startedAt,
-      timedOut: child.killed === true || child.signal === "SIGTERM",
-    };
-  }
+function runTestCommand(command: string, cwd: string, timeoutMs: number, signal: AbortSignal | undefined, check: FixCheckOptions): Promise<SourceFixTestResult> {
+  return runFixCheck(command, cwd, timeoutMs, signal, check);
 }
 
 
@@ -443,6 +418,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
     ? Math.max(1, Math.min(MAX_ATTEMPTS, Math.floor(requestedAttempts)))
     : MAX_ATTEMPTS;
   const testCommand = options.testCommand.trim();
+  const check: FixCheckOptions = { ...(options.verifyImage ? { image: options.verifyImage } : {}), ...(options.verifyRunner ? { runner: options.verifyRunner } : {}) };
   if (!testCommand) {
     return failureResult(options.finding, "precondition_failed", attempts, "a non-empty test command is required");
   }
@@ -563,7 +539,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       let postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
       const generatedSourceTransition = hasSemanticFixSignal(postcondition);
       options.onProgress?.({ stage: "regression-start", attempt });
-      const test = await runTestCommand(testCommand, candidateWorktree.root, testTimeoutMs, options.signal);
+      const test = await runTestCommand(testCommand, candidateWorktree.root, testTimeoutMs, options.signal, check);
       options.onProgress?.({ stage: "regression-completed", attempt, test });
       postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
       lastCandidate = { sourceFile, precondition, postcondition, test, diff: generatedDiff, patch: proposal.patch, rationale: proposal.rationale };
@@ -604,7 +580,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
             recordPath: `${candidateWorktree.root}.json`,
           };
           await writeFile(candidate.recordPath, JSON.stringify({
-            findingId: options.finding.id, sourceFile, diff: generatedDiff, test,
+            findingId: options.finding.id, sourceFile, diff: generatedDiff, test, ...(test.verification ? { verification: test.verification } : {}),
             precondition, postcondition, rationale: proposal.rationale, candidate,
           }, null, 2), { mode: 0o600 });
           retained = true;
@@ -617,6 +593,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
           precondition,
           postcondition,
           test,
+          ...(test.verification ? { verification: test.verification } : {}),
           patch: proposal.patch,
           diff: generatedDiff,
           candidate,
@@ -626,7 +603,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
         if (candidate) verifiedCandidates.set(result, {
           finding: structuredClone(options.finding),
           candidate: structuredClone(candidate),
-          sourceFile, diff: generatedDiff, testCommand,
+          sourceFile, diff: generatedDiff, testCommand, check,
           originalSource: sourceBytes,
           reviewedSource: await readFile(resolveScopedPath(candidateWorktree.root, sourceFile)),
         });
@@ -665,6 +642,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
           precondition,
           postcondition: appliedPostcondition,
           test,
+          ...(test.verification ? { verification: test.verification } : {}),
           patch: proposal.patch,
           diff: generatedDiff,
           rationale: proposal.rationale,
@@ -751,7 +729,7 @@ export async function verifySourceFixCandidate(
     if (!precondition.passed) throw new Error("original source no longer reproduces the finding's verified contract");
     const postcondition = await evaluateVerificationSpec(verified.finding.verificationSpec!, verified.candidate.worktree);
     if (!hasSemanticFixSignal(postcondition)) throw new Error("candidate no longer makes a valid semantic transition out of the vulnerable-source contract");
-    const test = await runTestCommand(verified.testCommand, verified.candidate.worktree, options.testTimeoutMs ?? 300_000, options.signal);
+    const test = await runTestCommand(verified.testCommand, verified.candidate.worktree, options.testTimeoutMs ?? 300_000, options.signal, verified.check);
     options.signal?.throwIfAborted();
     if (test.exitCode !== 0 || test.timedOut) {
       return { ...result, status: "not_fixed", precondition, postcondition, test, error: "candidate regression command failed" };
@@ -913,7 +891,7 @@ export async function publishSourceFixDraftPR(
   verified.verificationFailed = true;
   const sourceCheck = await evaluateVerificationSpec(spec, cwd);
   if (!hasSemanticFixSignal(sourceCheck)) throw new Error("candidate no longer passes the source fix re-check");
-  const test = await runTestCommand(verified.testCommand, cwd, 300_000, options.signal);
+  const test = await runTestCommand(verified.testCommand, cwd, 300_000, options.signal, verified.check);
   options.signal?.throwIfAborted();
   if (test.exitCode !== 0 || test.timedOut) throw new Error(`publication regression command failed: ${test.stderr || test.stdout || test.exitCode}`);
   if ((await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"])) !== verified.diff) {

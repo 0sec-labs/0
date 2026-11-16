@@ -1,3 +1,4 @@
+import type { VerifierResult } from "@0/engine/shared/verifier-result";
 import type { Finding, ScanPlan, ScanAttemptOutcome, ConsoleExecutionSnapshot } from "@0/engine/shared";
 
 export interface RuntimeInfo {
@@ -53,7 +54,7 @@ export interface Workflow {
 }
 export interface FixResult {
   status: string; findingId: string; sourceFile?: string; attempts: { attempt: number; reason: string }[];
-  precondition?: unknown; postcondition?: unknown; test?: { command: string; exitCode: number | null; stdout: string; stderr: string; durationMs: number; timedOut: boolean };
+  precondition?: unknown; postcondition?: unknown; test?: { command: string; exitCode: number | null; stdout: string; stderr: string; durationMs: number; timedOut: boolean; verification?: VerifierResult };
   patch?: string; diff?: string; candidate?: { repoRoot: string; worktree: string; baseCommit: string; baseBranch?: string; recordPath: string };
   rationale?: string; applied: boolean; error?: string;
 }

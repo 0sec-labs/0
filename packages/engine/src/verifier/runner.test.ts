@@ -154,3 +154,14 @@ describe("gateDone", () => {
     expect(gateDone({ declared: true, claim: "I could not fix this; needs a human.", result: { ...pass, status: "fail", reason: "step-failed:x" } }).allowed).toBe(true);
   });
 });
+
+describe("baseline improves", () => {
+  it("fails when nothing improved and passes when the count drops or was already zero", async () => {
+    const s = spec({ success: { baseline: "improves", metric: "(\\d+) findings" } });
+    const before = tree(); const after = tree();
+    const run = (b: number, a: number) => new FakeRunner((req) => ({ exitCode: 1, output: `${req.dir === before ? b : a} findings` }));
+    expect(await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(2, 2) })).toMatchObject({ status: "fail", reason: "no-improvement" });
+    expect((await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(2, 1) })).status).toBe("pass");
+    expect((await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(0, 0) })).status).toBe("pass");
+  });
+});

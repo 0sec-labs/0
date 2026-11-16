@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadSkillRegistry } from "../agent/skills/index.js";
-import { DockerRunner } from "./docker-runner.js";
+import { OciRunner } from "./docker-runner.js";
 import { gateDone } from "./gate.js";
 import { runVerifier } from "./runner.js";
 import { parseVerifySpec } from "./spec.js";
@@ -19,8 +19,8 @@ const dirs: string[] = [];
 const temp = () => { const d = mkdtempSync(join(tmpdir(), "verifier-it-")); dirs.push(d); return d; };
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
-describe.skipIf(!hasDocker)("DockerRunner (real container)", () => {
-  const runner = new DockerRunner();
+describe.skipIf(!hasDocker)("OciRunner (real container)", () => {
+  const runner = new OciRunner();
 
   it("runs a command on a copy of the tree, with the network off, and reports exit codes", async () => {
     const dir = temp();
@@ -63,7 +63,7 @@ describe.skipIf(!hasDocker)("workflow-hardening verifier (real zizmor and action
   const spec = loadSkillRegistry().get("workflow-hardening")!.verify!;
   const workflow = (action: string) => `name: ci\non:\n  pull_request:\npermissions: {}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ${action}\n      - run: echo hi\n`;
   const repo = (action: string) => { const d = temp(); mkdirSync(join(d, ".github/workflows"), { recursive: true }); writeFileSync(join(d, ".github/workflows/ci.yml"), workflow(action)); return d; };
-  const runner = new DockerRunner();
+  const runner = new OciRunner();
 
   it("passes a hardened tree against an unpinned baseline, with the canary flagged", async () => {
     const before = repo("some-org/some-action@v1");

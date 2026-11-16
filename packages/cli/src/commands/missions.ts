@@ -84,15 +84,16 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
     .option("--model <model>", "Model for this thread").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
     .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp()).addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--yolo").hideHelp()).addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).option("--folder <path>", "Folder the thread works in")
     .option("--target <target>", "Authorized target").option("--scope <path>", "Scope policy JSON file")
+    .option("--skill <id>", "Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it")
     .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
     .option("--cost-ceiling <usd>", "Stop the thread when its estimated spend reaches this many USD")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
-      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
+      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string; target?: string; scope?: string; skill?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const config = {
         ...(Object.keys(runtime).length ? { runtime } : {}),
-        ...(flags.target ? { target: flags.target } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
+        ...(flags.target ? { target: flags.target } : {}), ...(flags.skill ? { verifySkill: flags.skill } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
         ...(flags.scope ? { scope: JSON.parse(deps.readFile(flags.scope)) as unknown } : {}),
       };
       const created = asJson(asJson(await client.request("POST", "/api/console/sessions", config)).session);
@@ -117,8 +118,11 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
           const failed = session.status === "failed" || session.lastTurnFailed === true || session.costCeilingExceeded === true || Boolean(outcome.error);
           const error = session.costCeilingExceeded ? `Stopped at the $${String(session.costCeilingUsd)} cost ceiling.` : typeof outcome.error === "string" ? outcome.error : undefined;
           const cost = typeof usage.costUsd === "number" ? `$${usage.costUsd.toFixed(4)}${usage.costUnavailable ? "+ (some pricing unknown)" : ""}` : "unknown";
-          print(options, { session, usage, ...(reply ? { reply } : {}), ...(error ? { error } : {}) },
-            `${summarize(session)}${reply ? `\n\n${reply}` : ""}${error ? `\n\nError: ${error}` : ""}\n\nUsage: ${String(usage.inputTokens ?? 0)} input tokens, ${String(usage.outputTokens ?? 0)} output tokens, cost ${cost}`);
+          const verification = outcome.verification === undefined ? undefined : asJson(outcome.verification);
+          const verifiedLine = typeof verification?.line === "string" ? verification.line : undefined;
+          if (verification?.claimBlocked === true) process.exitCode = 1;
+          print(options, { session, usage, ...(reply ? { reply } : {}), ...(verification ? { verification } : {}), ...(error ? { error } : {}) },
+            `${summarize(session)}${reply ? `\n\n${reply}` : ""}${verifiedLine ? `\n\n${verifiedLine}` : ""}${error ? `\n\nError: ${error}` : ""}\n\nUsage: ${String(usage.inputTokens ?? 0)} input tokens, ${String(usage.outputTokens ?? 0)} output tokens, cost ${cost}`);
           if (failed) process.exitCode = 1;
           return;
         }

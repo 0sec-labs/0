@@ -41,13 +41,14 @@ export async function snapshotWorktree(repo: string): Promise<Snapshot> {
   return handle(dir);
 }
 
-/** The committed tree at HEAD, the "before" side of a baseline comparison. */
-export async function snapshotHead(repo: string): Promise<Snapshot> {
+/** The committed tree at a commit (default HEAD), the "before" side of a baseline comparison. */
+export async function snapshotHead(repo: string, rev = "HEAD"): Promise<Snapshot> {
+  if (rev !== "HEAD" && !/^[0-9a-f]{40}$/.test(rev)) throw new Error("rev must be HEAD or a full commit id");
   const root = resolve(repo);
   const dir = scratch();
   const index = join(scratch(), "index");
   try {
-    await git(root, ["read-tree", "HEAD"], { GIT_INDEX_FILE: index });
+    await git(root, ["read-tree", rev], { GIT_INDEX_FILE: index });
     await git(root, ["checkout-index", "-a", "-f", `--prefix=${dir}/`], { GIT_INDEX_FILE: index });
   } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
   finally { rmSync(dirname(index), { recursive: true, force: true }); }
