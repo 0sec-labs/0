@@ -29,7 +29,7 @@ printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packag
 (
   cd "$smoke_dir"
   ./0 --version
-  ./0 --help | grep -q "security harness that fixes what it finds"
+  ./0 --help | grep -q "Security agents for your repositories"
   # Run the dashboard from the same empty directory. This must use the
   # manifest embedded by bun-compile, not workspace assets.
   ./0 web --db-path dashboard.db --port 48123 --no-open --ready-json > dashboard.log 2>&1 &

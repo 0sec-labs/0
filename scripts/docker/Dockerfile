@@ -213,7 +213,7 @@ ENV HOME=/data \
     ZERO_ALLOWED_HOSTS=localhost,127.0.0.1
 
 LABEL org.opencontainers.image.title="0" \
-      org.opencontainers.image.description="Open-source security harness that fixes what it finds." \
+      org.opencontainers.image.description="Security agents for your repositories." \
       org.opencontainers.image.source="https://github.com/0sec-labs/0security" \
       org.opencontainers.image.documentation="https://0security.dev/docs/docker" \
       org.opencontainers.image.licenses="MIT OR Apache-2.0" \

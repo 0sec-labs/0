@@ -195,7 +195,7 @@ jobs:
             org.opencontainers.image.version=${{ needs.plan.outputs.version || steps.source.outputs.short_sha }}
             org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
             org.opencontainers.image.title=0
-            org.opencontainers.image.description=Open-source security harness that fixes what it finds.
+            org.opencontainers.image.description=Security agents for your repositories.
             org.opencontainers.image.source=https://github.com/0sec-labs/0security
             org.opencontainers.image.licenses=MIT OR Apache-2.0
           annotations: |
