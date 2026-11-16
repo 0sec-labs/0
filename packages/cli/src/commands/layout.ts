@@ -75,7 +75,7 @@ interface NewFormStub { readonly name: string; readonly args: string; readonly d
 
 /** Visible subcommands that have no implementation command of their own: `command-compat.ts` rewrites them before parsing, so the action only runs on incomplete input. */
 const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
-  findings: [{ name: "update", args: "<id>", description: "Change a finding's status", options: [["--status <status>", "accepted | suppressed | open | false-positive"]] }],
+  findings: [{ name: "update", args: "<id>", description: "Change a finding's status", options: [["--status <status>", "accepted | suppressed | open | false-positive"], ["--note <text>", "Why (optional)"], ["--reason <text>", "Why; required with false-positive"], ["--db-path <path>", "Path to SQLite database"]] }],
   memory: [{ name: "set", args: "[id] [on|off]", description: "Turn a memory on or off, load memories with --import, or manage triage memories with --add and --remove <id>", options: [["--import <file>", "Import memories from a file"], ["--add", "Add a triage memory (see findings triage)"], ["--remove", "Remove a triage memory"]] }],
   models: [
     { name: "set", args: "[model]", description: "Show or choose the default model", options: [["--provider <provider>", "Provider of the model"]] },

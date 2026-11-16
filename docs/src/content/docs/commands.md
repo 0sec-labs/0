@@ -84,6 +84,9 @@ Change a finding's status. `--status accepted` runs `findings accept`, `suppress
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--status <status>` | — | accepted \| suppressed \| open \| false-positive |
+| `--note <text>` | — | Why (optional) |
+| `--reason <text>` | — | Why; required with false-positive |
+| `--db-path <path>` | — | Path to SQLite database |
 
 ### memory set
 
@@ -231,7 +234,7 @@ Guide: [Read the workflow](/threads/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--port <port>` | `48123` | Port to bind; 0 chooses a free loopback port |
 | `--host <host>` | `127.0.0.1` | Loopback host to bind (127.0.0.0/8 or ::1) |
-| `--asset-dir <path>` | — | Path to built dashboard assets |
+| `--asset-dir <path>` | — | Path to the built web app |
 | `--dev-url <url>` | — | Loopback Vite server for authenticated frontend hot reload |
 | `--team-config <path>` | — | Enable workspace accounts, roles, and shared conversation controls |
 | `--engine-token-env <name>` | — | Environment variable holding the engine bearer credential (32–4096 characters) |
@@ -247,9 +250,9 @@ Guide: [Read the workflow](/threads/).
 | `--public-url <url>` | — | Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL |
 | `--access-token-env <name>` | — | Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated |
 | `--shutdown-timeout <seconds>` | — | Server mode: seconds to finish in-flight requests on SIGTERM (default 20) |
-| `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
+| `--ready-json` | — | Emit the bound console URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
-| `--headless` | — | Serve the API only: no browser, and no dashboard assets needed (use with `0 threads`) |
+| `--headless` | — | Serve the API only: no browser, and no web app files needed (use with `0 threads`) |
 | `--engines-config <path>` | — | Trusted engine connection registry JSON (default ~/.0/engines.json) |
 
 ### api
@@ -1311,6 +1314,7 @@ List findings from the database
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--all` | — | Show raw finding rows instead of grouped fingerprints |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--scan <scanId>` | — | Filter by scan ID |
 | `--severity <severity>` | — | Filter by severity: critical, high, medium, low, info |
@@ -1408,6 +1412,10 @@ Export selected findings, or a whole scan, as `json`, `md`, `sarif`, `html` or `
 | `--scan <id>` | — | Export every finding of this scan instead of selected IDs |
 | `--format <format>` | `json` | json, md, sarif, html or pdf |
 | `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--severity <severity>` | — | With no IDs: only this severity |
+| `--category <category>` | — | With no IDs: only this category |
+| `--status <status>` | — | With no IDs: only this status |
+| `--triage <triage>` | — | With no IDs: only this triage state |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print the result of writing a file as JSON |
 
@@ -5380,6 +5388,7 @@ Change a Agent's settings.
 | `--max-runs <n>` | — | Maximum runs per day |
 | `--file <path>` | — | Patch JSON object |
 | `--version <n>` | — | Reviewed version (default: the current one) |
+| `--state <state>` | — | active, paused, acknowledged, archived or deleted |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 

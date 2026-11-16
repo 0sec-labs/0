@@ -69,8 +69,11 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
   ignoredAccessOptions(consoleFlags(group.command("set <id>").description("Change an Agent's settings")
     .option("--name <name>", "Name").option("--mission <text>", "One-line purpose")
     .option("--daily-usd <usd>", "Daily budget in USD").option("--max-runs <n>", "Maximum runs per day")
-    .option("--file <path>", "Patch JSON object").option("--version <n>", "Reviewed version (default: the current one)")))
-    .action((id: string, options: ConsoleFlags & { name?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; dailyUsd?: string; maxRuns?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
+    .option("--file <path>", "Patch JSON object").option("--version <n>", "Reviewed version (default: the current one)")
+    .option("--state <state>", "active, paused, acknowledged, archived or deleted")))
+    .action((id: string, options: ConsoleFlags & { state?: string; name?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; dailyUsd?: string; maxRuns?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
+      // A valid --state is rewritten to pause, resume, ... before parsing (command-compat.ts); only a bad value arrives here.
+      if (options.state !== undefined) throw new UsageError(`Unknown state "${options.state}". Use active, paused, acknowledged, archived or deleted.`);
       noteIgnoredAccessFlags(givenAccessOption(options as Record<string, unknown>), { json: options.json });
       const current = await sentinel(client, id);
       const dailyUsd = positive("--daily-usd", options.dailyUsd);

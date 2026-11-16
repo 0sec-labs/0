@@ -219,6 +219,7 @@ Options:
   --max-runs <n>     Maximum runs per day
   --file <path>      Patch JSON object
   --version <n>      Reviewed version (default: the current one)
+  --state <state>    active, paused, acknowledged, archived or deleted
   --json             Print machine-readable JSON
   --db-path <path>   Control database (default: the user database)
   -h, --help         display help for command
@@ -1130,15 +1131,19 @@ Options:
 ### 0 findings export (hidden)
 Usage: 0 findings export [options] [ids...]
 
-Export findings or a whole scan as json, md, sarif, html or pdf
+Export findings, a whole scan or, with no IDs, every finding as json, md, sarif, html or pdf
 
 Options:
-  --scan <id>          Export every finding of this scan instead of selected IDs
-  --format <format>    json, md, sarif, html or pdf (default: "json")
-  -o, --output <file>  Write to a file instead of stdout
-  --db-path <path>     Path to SQLite database
-  --json               Print the result of writing a file as JSON
-  -h, --help           display help for command
+  --scan <id>            Export every finding of this scan instead of selected IDs
+  --format <format>      json, md, sarif, html or pdf (default: "json")
+  -o, --output <file>    Write to a file instead of stdout
+  --severity <severity>  With no IDs: only this severity
+  --category <category>  With no IDs: only this category
+  --status <status>      With no IDs: only this status
+  --triage <triage>      With no IDs: only this triage state
+  --db-path <path>       Path to SQLite database
+  --json                 Print the result of writing a file as JSON
+  -h, --help             display help for command
 
 ### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]
@@ -1189,6 +1194,7 @@ Usage: 0 findings list [options]
 List findings from the database
 
 Options:
+  --all                  Show raw finding rows instead of grouped fingerprints
   --db-path <path>       Path to SQLite database
   --scan <scanId>        Filter by scan ID
   --severity <severity>  Filter by severity: critical, high, medium, low, info
@@ -1353,6 +1359,9 @@ Change a finding's status
 
 Options:
   --status <status>  accepted | suppressed | open | false-positive
+  --note <text>      Why (optional)
+  --reason <text>    Why; required with false-positive
+  --db-path <path>   Path to SQLite database
   -h, --help         display help for command
 
 ### 0 lab (hidden)
@@ -3242,7 +3251,7 @@ Options:
 ### 0 models usage (hidden)
 Usage: 0 models usage [options]
 
-Show spend and tokens of the open missions, by model or by mission
+Show spend and tokens of the open threads, by model or by thread
 
 Options:
   --by <model|mission>  Group by model (default) or list each thread
@@ -4649,7 +4658,7 @@ Options:
   --db-path <path>              Path to SQLite database
   --port <port>                 Port to bind; 0 chooses a free loopback port (default: "48123")
   --host <host>                 Loopback host to bind (127.0.0.0/8 or ::1) (default: "127.0.0.1")
-  --asset-dir <path>            Path to built dashboard assets
+  --asset-dir <path>            Path to the built web app
   --dev-url <url>               Loopback Vite server for authenticated frontend hot reload
   --team-config <path>          Enable workspace accounts, roles, and shared conversation controls
   --engine-token-env <name>     Environment variable holding the engine bearer credential (32–4096
@@ -4673,9 +4682,9 @@ Options:
                                 characters); default ZERO_ACCESS_TOKEN, else one is generated
   --shutdown-timeout <seconds>  Server mode: seconds to finish in-flight requests on SIGTERM
                                 (default 20)
-  --ready-json                  Emit the bound dashboard URL as machine-readable JSON
+  --ready-json                  Emit the bound console URL as machine-readable JSON
   --no-open                     Do not auto-open a browser
-  --headless                    Serve the API only: no browser, and no dashboard assets needed (use
+  --headless                    Serve the API only: no browser, and no web app files needed (use
                                 with `0 threads`)
   --engines-config <path>       Trusted engine connection registry JSON (default ~/.0/engines.json)
   -h, --help                    display help for command
