@@ -88,12 +88,23 @@ export async function localControlFetch(path: string, init?: RequestInit): Promi
   return request();
 }
 
+/**
+ * A host that is frozen or wedged never answers and never closes the socket, so a read waited forever and the page just
+ * looked stuck. Reads give up after this long (a long poll after its wait plus a margin) and count as a drop.
+ */
+const READ_TIMEOUT_MS = 30_000;
+export function readTimeoutMs(path: string): number {
+  const wait = /[?&]wait=(\d+)(?:&|$)/.exec(path)?.[1];
+  return wait ? Math.max(READ_TIMEOUT_MS, (Number(wait) + 15) * 1000) : READ_TIMEOUT_MS;
+}
 export function createBackendApi(backendId: string, descriptor?: BackendDescriptor) {
   const client = new BackendClient(backendId, localControlFetch, descriptor);
   const webFetch = (path: string, init?: RequestInit) => client.request(path, init);
   const teamClient = createTeamClient(backendId, webFetch);
 async function webFetchJsonOnce<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await webFetch(path, init);
+  const read = !init?.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
+  const timeout = read ? AbortSignal.timeout(readTimeoutMs(path)) : undefined;
+  const response = await webFetch(path, timeout ? { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout } : init);
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as unknown;
