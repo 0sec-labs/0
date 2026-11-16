@@ -240,7 +240,7 @@ describe("createConsoleSession", () => {
       endTurn("Here is the payload."),
     ]);
 
-    const session = createConsoleSession({ runtime });
+    const session = createConsoleSession({ runtime, toolset: "full" });
 
     const seen: string[] = [];
     const outcome = await session.send("find me a jsfuck alert payload", {
@@ -3464,7 +3464,7 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
       { content: [{ type: "tool_use", id: "load-specialists", name: "load_tool", input: { names: ["crawl", "submit_form"] } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("ready"),
     ]);
-    const session = createConsoleSession({ runtime });
+    const session = createConsoleSession({ runtime, toolset: "full" });
     expect(session.tools.some(tool => tool.name === "crawl")).toBe(true);
     const outcome = await session.send("prepare the web tools");
     const first = runtime.calls[0]!.tools.map(tool => tool.name);
@@ -3479,7 +3479,7 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
     expect(checkpoint.loadedMcpTools).toEqual(["crawl", "submit_form"]);
     await session.cleanup();
     const resumedRuntime = new ScriptedRuntime([endTurn("resumed")]);
-    const resumed = createConsoleSession({ runtime: resumedRuntime, initialCheckpoint: checkpoint });
+    const resumed = createConsoleSession({ runtime: resumedRuntime, initialCheckpoint: checkpoint, toolset: "full" });
     try {
       await resumed.send("continue");
       expect(resumedRuntime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["crawl", "submit_form"]));

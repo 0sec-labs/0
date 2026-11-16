@@ -22,6 +22,12 @@ export interface SkillDefinition {
   tags: string[];
   triggers: string[]; // regex patterns
   estimated_tokens: number;
+  /**
+   * Tool packs this skill needs (names from TOOL_PACKS in ../toolset.ts). Loading
+   * the skill advertises those tools on the next turn when the console runs the
+   * `core` toolset. Honoured for built-in skills only; never grants authority.
+   */
+  tools?: string[];
   content: string; // markdown methodology
 }
 

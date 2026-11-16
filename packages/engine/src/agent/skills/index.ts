@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import type { SkillDefinition, SkillSummary } from "./types.js";
 import type { VulnClass } from "../prompts.js";
+import { TOOL_PACKS, isKnownPackRef } from "../toolset.js";
 import { EMBEDDED_SKILL_YAML } from "./skills.generated.js";
 
 export type { SkillDefinition, SkillSummary } from "./types.js";
@@ -115,6 +116,11 @@ function validateSkill(raw: unknown, filePath: string): SkillDefinition {
   }
   if (typeof obj.estimated_tokens !== "number" || obj.estimated_tokens <= 0) {
     throw new Error(`Skill file ${filePath}: "estimated_tokens" must be a positive number`);
+  }
+  if (obj.tools !== undefined) {
+    if (!Array.isArray(obj.tools) || obj.tools.some((pack) => !isKnownPackRef(pack))) {
+      throw new Error(`Skill file ${filePath}: "tools" must be an array of "core" or known tool pack names, optionally written pack:<name> (${Object.keys(TOOL_PACKS).join(", ")})`);
+    }
   }
   if (typeof obj.content !== "string" || obj.content.length === 0) {
     throw new Error(`Skill file ${filePath}: "content" must be a non-empty string`);

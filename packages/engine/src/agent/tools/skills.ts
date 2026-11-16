@@ -57,11 +57,10 @@ export const skillsToolDefinitions: Record<string, ToolDefinition> = {
   load_skill: {
     name: "load_skill",
     description:
-      "Load a skill's instructions into your working context. Resolve referenced resources relative to its skill directory and read them only as needed. Loading a skill does not execute its scripts. Use list_skills first to see available IDs.",
+      "Load a skill's instructions into your working context. Resolve referenced resources relative to its skill directory and read them only as needed. Loading a skill does not execute its scripts. Call with no skill_id to list the available skills. Some skills make extra tools callable on your next turn.",
     parameters: {
-      skill_id: { type: "string", description: "Skill ID from list_skills" },
+      skill_id: { type: "string", description: "Skill ID; omit to list available skills" },
     },
-    required: ["skill_id"],
   },
 };
 

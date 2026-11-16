@@ -297,15 +297,15 @@ describe("Skill Tools (#457)", () => {
       expect(result.error).toContain("nonexistent-skill-xyz");
     });
 
-    it("returns error when skill_id is missing", async () => {
+    it("lists the available skills when skill_id is missing", async () => {
       const executor = new ToolExecutor(makeCtx());
       const result = await executor.execute({
         name: "load_skill",
         arguments: {},
       });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("skill_id is required");
+      expect(result.success).toBe(true);
+      expect(JSON.stringify(result.output)).toContain("sqli-advanced");
     });
   });
 
@@ -376,7 +376,7 @@ describe("Skill Tools (#457)", () => {
       expect(TOOL_DEFINITIONS.load_skill).toBeDefined();
       expect(TOOL_DEFINITIONS.load_skill.name).toBe("load_skill");
       expect(TOOL_DEFINITIONS.load_skill.parameters.skill_id).toBeDefined();
-      expect(TOOL_DEFINITIONS.load_skill.required).toEqual(["skill_id"]);
+      expect(TOOL_DEFINITIONS.load_skill.required ?? []).toEqual([]);
     });
   });
 });

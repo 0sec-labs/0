@@ -37,7 +37,7 @@ it("includes recursive child usage once with actual model and cache breakdowns",
       },
     };
   };
-  const session = createConsoleSession({ runtime: atDepth(0), role: "audit", allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: atDepth(0), role: "audit", toolset: "full", allowModelSelfExtension: false });
   try {
     const outcome = await session.send("Investigate in a small coordinated team.", { onUsage: report => reports.push(report) });
     expect(outcome.usage).toEqual({ inputTokens: 90, outputTokens: 9 });

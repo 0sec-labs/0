@@ -57,6 +57,7 @@ import { JSFUCK_ALERT_PAYLOAD, JSFUCK_XSS_PAYLOAD } from "./payloads.js";
 import { parsePatch, applyPatchOps } from "./apply-patch.js";
 import { listScopedFiles, readScopedFile, searchScopedFiles } from "./tools/scoped-source.js";
 import { normalizeFindingTitle, levenshtein, evidenceRequestPrefix, FUZZY_TITLE_DISTANCE_THRESHOLD, findMatchingFindingCandidate } from "./tools-helpers.js";
+import { resolvePacks } from "./toolset.js";
 import { listSkillSummaries, getSkillById, matchTriggers, loadSkillRegistry } from "./skills/index.js";
 import type { SkillDefinition } from "./skills/index.js";
 import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
@@ -7046,7 +7047,8 @@ export class ToolExecutor {
   private loadSkill(args: Record<string, unknown>): ToolResult {
     const skillId = args.skill_id as string;
     if (!skillId) {
-      return { success: false, output: null, error: "skill_id is required" };
+      // `list_skills` is merged into `load_skill`: no id lists what can be loaded.
+      return this.listSkills(args);
     }
     if (!this.skillAllowed(skillId)) {
       return { success: false, output: null, error: `Skill "${skillId}" is not on this run's skill allow-list. Use list_skills to see permitted skills.` };
@@ -7113,6 +7115,17 @@ export class ToolExecutor {
       role: this.ctx.role,
     });
 
+    // Tool packs: only built-in skills (trusted source) may declare them. Packs
+    // only advertise tools the run's role/scope/flag gates already allow; every
+    // call still passes the dispatch gates.
+    let packNote: { tools_available_next_turn: string[]; unavailable?: string[] } | undefined;
+    const registry = !isFolderSkill ? deferredToolsOf(this.ctx) : undefined;
+    if (registry && skill.tools?.length) {
+      const wanted = resolvePacks(skill.tools).tools;
+      const result = registry.load(wanted);
+      packNote = { tools_available_next_turn: result.loaded, ...(result.unknown.length ? { unavailable: result.unknown } : {}) };
+    }
+
     return {
       success: true,
       output: {
@@ -7120,6 +7133,7 @@ export class ToolExecutor {
         skill_id: skill.id,
         name: skill.name,
         estimated_tokens: skill.estimated_tokens,
+        ...(packNote ?? {}),
         content: skill.content,
       },
     };

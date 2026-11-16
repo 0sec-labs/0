@@ -417,6 +417,12 @@ export interface ConsoleSessionConfig {
   maxTurnTokens?: number;
   /** Opt in to generic-scanner tool wrappers (sqlmap/nikto/…). Default off. */
   allowScanners?: boolean;
+  /**
+   * Which model-visible tool list to use: `core` (default for the console: a small
+   * core plus skill-provided packs) or `full` (every tool the role allows).
+   * ZERO_TOOLSET overrides the default but not an explicit value here.
+   */
+  toolset?: "core" | "full";
   /** Built-in web search, independently of target scope and network authorization. */
   webSearchEnabled?: boolean;
   /** System-prompt override. Defaults to {@link buildConsoleSystemPrompt}. */

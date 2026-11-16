@@ -13,6 +13,7 @@ import { getWorkspaceHarnessTrust } from "../../plugins/harness-trust.js";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../../agent/tools.js";
 import type { McpHost } from "../../agent/mcp-host.js";
 import { toNativeToolDef, toNativeExtensionToolDef } from "../../agent/native-tooldef.js";
+import { partitionForToolset, resolveToolset } from "../../agent/toolset.js";
 import { DeferredToolRegistry, partitionToolDefinitions, DEFERRED_TOOLS_MIN, DEFERRED_CONTROL_TOOL_NAMES, LIST_TOOLS_NAME, LOAD_TOOL_NAME, listToolsDef, loadToolDef } from "../../agent/deferred-tools.js";
 import { LearningStore, learningProjectId } from "../../storage/index.js";
 import { HuntMemoryStore } from "../../memory/hunt-memory.js";
@@ -335,10 +336,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const tools = sourceRememberEnabled
     ? [...roleTools.filter(tool => tool.name !== "remember_codebase"), TOOL_DEFINITIONS.remember_codebase]
     : roleTools.filter(tool => tool.name !== "remember_codebase");
-  toolContext.delegationTools = tools;
-  const basePartition = config.tools === undefined
-    ? partitionToolDefinitions(tools)
-    : { immediate: tools, deferred: [] as ToolDefinition[] };
+  // Core toolset: advertise the small core; every other built-in tool is held back
+  // and can only be added by a loaded skill that declares its pack. Explicit
+  // `config.tools` overrides keep their exact list.
+  const toolset = config.tools === undefined ? resolveToolset({ explicit: config.toolset, surfaceDefault: "core" }) : "full";
+  const corePartition = toolset === "core" ? partitionForToolset(tools, "core") : undefined;
+  const packToolNames = new Set((corePartition?.packOnly ?? []).map(tool => tool.name));
+  toolContext.delegationTools = corePartition ? corePartition.advertised : tools;
+  const basePartition = corePartition
+    ? { immediate: corePartition.advertised, deferred: corePartition.packOnly }
+    : config.tools === undefined
+      ? partitionToolDefinitions(tools)
+      : { immediate: tools, deferred: [] as ToolDefinition[] };
   const baseNativeTools = basePartition.immediate.map(toNativeToolDef);
 
   // `self_extend` is never advertised by getToolsForRole; inject it into the
@@ -469,9 +478,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     deferredDefinitions = catalog;
     deferredTools.seed(catalog, provenance);
     if (catalog.length > 0) {
-      extras.push(listToolsNativeDef, loadToolNativeDef);
-      ro[LIST_TOOLS_NAME] = true;
-      ro[LOAD_TOOL_NAME] = true;
+      // In the core toolset, pack tools are reached through skills; list_tools and
+      // load_tool appear only when plugin, MCP or management tools need them.
+      if (catalog.some(tool => !packToolNames.has(tool.name))) {
+        extras.push(listToolsNativeDef, loadToolNativeDef);
+        ro[LIST_TOOLS_NAME] = true;
+        ro[LOAD_TOOL_NAME] = true;
+      }
       extras.push(...deferredTools.loadedDefinitions().map(toNativeToolDef));
     }
 
