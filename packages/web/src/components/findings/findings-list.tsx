@@ -10,8 +10,7 @@ import { isAcceptedFinding, prLabel } from "@/console/panel/views/findings-model
 import type { FindingGroup, FindingWorkflowStatus } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
-  ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange,
-  type FindingStatus, type ListRow,
+  ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange, type ListRow
 } from "./findings-model";
 
 export type ContextActions = {

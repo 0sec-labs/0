@@ -6,7 +6,7 @@ import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Ellipsis, Monitor, Search, Server, Trash2 } from "lucide-react";
+import { ChevronDown, Ellipsis, Search, Trash2 } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared/backend-protocol";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { errorText, isMissingMissionText } from "@/lib/api-error";

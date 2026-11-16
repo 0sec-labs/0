@@ -1,6 +1,7 @@
 import { avatarIconId, avatarInitials, presentStatus, type Sentinel } from "@/sentinels/model";
 import { SENTINEL_ICONS } from "./sentinel-icons";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const SIZE = { xs: "size-5 rounded-md text-[10px]", sm: "size-8 rounded-md text-xs", lg: "size-14 rounded-xl text-xl" } as const;
 const ICON_SIZE = { xs: 12, sm: 16, lg: 28 } as const;
@@ -18,7 +19,6 @@ export function SentinelAvatar({ sentinel, size = "xs", dot = false, className }
 export function SentinelStatusBadge({ sentinel }: { sentinel: Pick<Sentinel, "status" | "attention"> }) {
   return <StatusText {...presentStatus(sentinel)} />;
 }
-import { Badge } from "@/components/ui/badge";
 function StatusText({ label, tone }: { label: string; tone: "success" | "warning" | "neutral" | "info" }) {
   return <Badge variant={tone === "neutral" ? "neutral" : tone}>{label}</Badge>;
 }

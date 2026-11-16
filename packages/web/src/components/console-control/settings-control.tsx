@@ -24,6 +24,7 @@ import { SettingsRow, SettingsSection } from "./settings-section";
 import { StatusSettings } from "./status-row";
 import { isProtectedSetting, planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
+import { privacyDisclosure, settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
 export function useConsoleSettings() {
   const { client, webFetchJson } = useBackendApi();
@@ -33,7 +34,6 @@ export function useConsoleSettings() {
 }
 
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
-import { privacyDisclosure, settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
 function SettingRow({ definition, value, scope, pending, isolatedReady, apply, group }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; isolatedReady?: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void; group?: { keys: string[]; values: Record<string, unknown> } }) {
   if (group && group.keys.length > 1) {

@@ -1,5 +1,5 @@
 import { useNow } from "@/ui/lib/use-now";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityMark } from "./loading-state";
 import { AgentAvatar } from "./agent-avatar";
 import { Link } from "react-router-dom";

@@ -6,7 +6,7 @@ import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { errorText } from "@/lib/api-error";
 
 const MAX_BYTES = 1_048_576;

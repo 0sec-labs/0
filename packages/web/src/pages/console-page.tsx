@@ -15,11 +15,8 @@ import { setWebTheme } from "@/lib/web-theme";
 import { useAppNotice } from "@/components/app-notice";
 import { isTransientMessage, useReconnecting } from "@/lib/network-resilience";
 import {
-  isMissingSession,
-  rememberSessionAlias,
-  staleSessionRecovery,
-  useResolvedSessionId,
-  type SessionAlias,
+  isMissingSession, staleSessionRecovery,
+  useResolvedSessionId
 } from "@/console/session-recovery";
 import { Textarea } from "@/components/ui/textarea";
 import { createPortal } from "react-dom";
@@ -30,10 +27,7 @@ import {
   Link,
   useNavigate,
   useParams,
-  useSearchParams,
-  type NavigateFunction,
-  type NavigateOptions,
-  type To,
+  useSearchParams
 } from "react-router-dom";
 import { useQuery, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { findCommand, getCommandByName, SLASH_COMMANDS } from "@0/engine/shared/slash-commands";
@@ -56,7 +50,7 @@ import { BackendApiContext, BackendSelectionContext, useBackendSelection } from 
 import { ChatBackendScope, ChatHostSelectionScope } from "@/chat-backend-scope";
 import { chatResourceKey, parseChatResourceKey, backendRouteHref } from "@/console/chat-host";
 import { createChatOnExecutionHost, configureChatRuntime } from "@/console/model-source";
-import { HostSidebarChatHistory, type PendingChatSelection } from "@/components/host-sidebar-chat-history";
+import { HostSidebarChatHistory } from "@/components/host-sidebar-chat-history";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";

@@ -7,7 +7,6 @@ import { apiErrorFrom } from "./lib/api-error";
 import { withRememberedModel } from "./lib/last-model-choice";
 import { outage, withTransientRetry, TransientNetworkError, NonJsonResponseError, isTransientNetworkError } from "./lib/network-resilience";
 import { expandSummaryWorkers, MESSAGE_PAGE, OPEN_WINDOW, type ConsoleMessagesPage, type WindowedSnapshot } from "./console/snapshot-window";
-export { useBackendApi } from "./backend-context";
 import type {
   ConsoleCreateSessionInput,
   ConsoleEventsPage,
@@ -24,12 +23,9 @@ import type {
 import type {
   DashboardResponse,
   FindingFamilyResponse,
-  FindingWorkflowStatus,
-  RecentEventsResponse,
-  ScanEventsResponse,
-  ScanFindingsResponse,
-  ScanRecord,
+  FindingWorkflowStatus, ScanEventsResponse
 } from "./types";
+export { useBackendApi } from "./backend-context";
 
 /** Read the per-session control token injected by the dashboard server. */
 function getControlToken(): string | null {

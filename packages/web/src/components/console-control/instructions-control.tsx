@@ -3,7 +3,7 @@ import { queryKeys } from "@/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Feedback, SubmitButton } from "./control-ui";
 import { isTransientNetworkError } from "@/lib/network-resilience";

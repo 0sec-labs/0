@@ -1,6 +1,6 @@
 import { VOCAB } from "@/lib/vocabulary";
 import type { ConsoleCreateSessionInput, ConsoleRuntimeSelection, ConsoleRuntimeSnapshot, DesktopConsoleSession } from "@0/engine/shared";
-import {localControlFetch,type BackendApi} from "@/api";
+import { localControlFetch, type BackendApi } from "@/api";
 
 /** Model ownership is separate from the engine that executes the chat's tools. */
 export function usesLocalModels(runtime:ConsoleRuntimeSnapshot|null|undefined):boolean {

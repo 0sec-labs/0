@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/ui/components/toast";
 import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
-import { v } from "@/lib/vocabulary";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { requestMissionStart } from "@/lib/mission-start";
 import { usePersistentState } from "@/lib/use-persistent-state";

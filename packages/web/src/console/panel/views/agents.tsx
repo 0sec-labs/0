@@ -1,5 +1,5 @@
 import { useNow as useSharedNow } from "@/ui/lib/use-now";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { CirclePause, Square } from "lucide-react";
 import {
   CapyCheckIcon as Check,

@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, type ReactNode } from "react";
 import { SourceContext } from "../../source-context";
 import { ToolCatalog } from "../../tool-catalog";
 import type { PanelViewComponent } from "../types";

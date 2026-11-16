@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { DockviewApi } from "dockview-react";
 import { usePersistentState } from "@/lib/use-persistent-state";
-import { normalizePersistedViews, restoreViewPanels, snapshotViewPanels, type DockApiLike, type PersistedPanelViews } from "./dock-views";
+import { normalizePersistedViews, restoreViewPanels, snapshotViewPanels, type PersistedPanelViews } from "./dock-views";
 
 export const panelViewsStorageKey = (sessionId: string | undefined) => `0-console-panel:${sessionId ?? "new"}`;
 

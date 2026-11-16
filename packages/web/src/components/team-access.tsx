@@ -1,6 +1,5 @@
 import { queryKeys } from "@/queries";
 import { ConnectionLost } from "./connection-lost";
-import { v } from "@/lib/vocabulary";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { localControlFetch } from "@/api";

@@ -4,7 +4,7 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
-import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyPlugIcon, CapyPuzzleIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
+import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openWhatsNew } from "@/lib/whats-new";
@@ -34,6 +34,9 @@ import { useTeamAccess } from "./team-access";
 import { useSentinels } from "@/sentinels/api";
 import { sentinelHref } from "@/sentinels/model";
 import { filterAppSearch, footerHints, highlightParts, LOCAL_RECENT_GROUP, nextTab, parseRecents, plainPreview, pushRecent, RECENT_GROUP, searchKeywords, SEARCH_GROUPS, SEARCH_TABS, type RecentEntry, type SearchGroup, type SearchTab } from "./app-search";
+import { takeHeldSearchText } from "./search-events";
+import type { SearchMode } from "./search-events";
+import { errorText } from "@/lib/api-error";
 
 type PaletteAction = {
   id: string;
@@ -53,9 +56,6 @@ type PaletteAction = {
 };
 
 export { openAppSearch, type SearchMode, type SearchRequest } from "./search-events";
-import { takeHeldSearchText } from "./search-events";
-import type { SearchMode } from "./search-events";
-import { errorText } from "@/lib/api-error";
 
 const GROUPS = SEARCH_GROUPS;
 

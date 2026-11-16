@@ -1,4 +1,4 @@
-import { VOCAB, v } from "@/lib/vocabulary";
+import { v } from "@/lib/vocabulary";
 /** Explicit web capabilities: newly added terminal settings are never exposed automatically. */
 export const settingsCategories = [
   { id: "general", label: "Updates" },

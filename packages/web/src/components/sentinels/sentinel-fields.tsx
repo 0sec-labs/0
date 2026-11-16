@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/ui/components/select";
 import { SENTINEL_LIMITS, type SentinelFormState } from "@/sentinels/model";
 
 function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {

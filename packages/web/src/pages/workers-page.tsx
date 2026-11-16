@@ -4,7 +4,6 @@ import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
 import { createChatOnExecutionHost } from "@/console/model-source";
 import { backendRouteHref } from "@/console/chat-host";
-import { Tooltip } from "@/components/ui/tooltip";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +16,7 @@ import { useBackendSelection } from "@/backend-context";
 import type { BackendDescriptor } from "@0/engine/shared/backend-protocol";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { errorText } from "@/lib/api-error";
 

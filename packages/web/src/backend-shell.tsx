@@ -11,7 +11,6 @@ import { App } from "./App";
 import { BackendConnectionPicker } from "./components/backend-connection-picker";
 import { ActivityMark } from "./console/loading-state";
 import { descriptorForRoute } from "./console/chat-host-readiness";
-import { Button } from "./components/ui/button";
 import { TeamAccess, useTeamAccess } from "./components/team-access";
 import { ConnectionLost } from "./components/connection-lost";
 import { ShellFrame } from "./components/shell-skeleton";

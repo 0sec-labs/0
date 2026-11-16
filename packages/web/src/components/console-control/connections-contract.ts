@@ -1,4 +1,3 @@
-import { safeLogo } from "./connections-model";
 
 /** Pure client for the connection routes (/api/console/connections/*). Every call takes an injected fetch so it is testable without a DOM. */
 export type FetchJson = <T>(path: string, init?: RequestInit) => Promise<T>;

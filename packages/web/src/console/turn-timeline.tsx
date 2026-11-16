@@ -1,5 +1,5 @@
 import { useNow } from "@/ui/lib/use-now";
-import { memo, Fragment, useEffect, useId, useState, type ReactNode } from "react";
+import { memo, Fragment, useId, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { Markdown } from "./markdown";
 import { MessageClamp } from "./message-clamp";

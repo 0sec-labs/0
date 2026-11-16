@@ -8,9 +8,7 @@ import type {
   ConsoleCreateSessionInput,
   ConsoleMessageInput,
   ConsoleSavedSession,
-  ConsoleSessionSnapshot,
-  DesktopConsoleEvent,
-  DesktopConsoleSession,
+  ConsoleSessionSnapshot, DesktopConsoleSession
 } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
@@ -35,12 +33,7 @@ import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
 import {
   SNAPSHOT_CACHE_MS,
-  SNAPSHOT_RESYNC_MS,
-  POLL_ACTIVE_MS,
-  POLL_IDLE_MS,
-  POLL_RECOVER_MS,
-  POLL_OFFSCREEN_MS,
-  LONG_POLL_WAIT_S,
+  SNAPSHOT_RESYNC_MS, LONG_POLL_WAIT_S,
   LONG_POLL_MIN_HOLD_MS,
   LIST_STALE_MS,
   applyEvents,
@@ -48,13 +41,13 @@ import {
   pollDelay,
   shouldResyncSnapshot,
   snapshotActive,
-  waitForVisible,
+  waitForVisible
 } from "./workspace-events";
-export { applyEvents, findingSignal, pollDelay, shouldResyncSnapshot, snapshotActive } from "./workspace-events";
 import { SAVED_POLL_MS, sessionsRefetchInterval } from "./session-polling";
 import { SAVED_OPEN_WINDOW, savedTranscriptSnapshot } from "./saved-snapshot";
 import { rememberSessionAlias } from "./session-recovery";
 import { resumeSavedOnce } from "@/lib/lazy-resume";
+export { applyEvents, findingSignal, pollDelay, shouldResyncSnapshot, snapshotActive } from "./workspace-events";
 
 /** Host/account-scoped snapshots can be prefetched by history before navigation. */
 export function consoleSnapshotKey(backendId: string, sessionId: string, workspaceId?: string, userId?: string) {

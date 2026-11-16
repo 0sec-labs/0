@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSentinelMutations } from "@/sentinels/api";
 import { TRIGGER_FREQUENCIES, blankTriggerDraft, triggerRequestFromDraft, type Sentinel, type SentinelAutomation, type TriggerDraft } from "@/sentinels/model";
 

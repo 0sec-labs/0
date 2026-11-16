@@ -1,7 +1,5 @@
 import { queryKeys } from "@/queries";
-import { v } from "@/lib/vocabulary";
 import { ActivityIndicator } from "@/console/loading-state";
-import { Link } from "react-router-dom";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Hand, Plus, Trash2 } from "lucide-react";

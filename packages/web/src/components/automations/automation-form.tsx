@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState, type Ref } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/queries";
 import { useBackendApi } from "@/api";
 import { useModelCatalog } from "@/console/use-model-catalog";
 import { arrangeCatalog, isModelEnabled, providerLabel } from "@/components/model-picker";
 import { ListChecks, Save, Trash2 } from "lucide-react";
-import { CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
 import { parseSecurityWorkflowInput } from "@0/engine/shared/security-workflows";
 import { Link } from "react-router-dom";
@@ -29,8 +27,6 @@ import { workflowInput } from "@/components/workflow-editing";
 import { WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
 import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, validateAutomationDraft } from "./automation-model";
-import { usePersistentState } from "@/lib/use-persistent-state";
-import { STORAGE_KEYS } from "@/lib/storage";
 import { errorText } from "@/lib/api-error";
 import { readAutomationDraft, writeAutomationDraft } from "./automation-draft";
 

@@ -1,5 +1,5 @@
 import { Columns3, Download, List } from "lucide-react";
-import { CapyDocumentIcon as FileText, CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
+import { CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/ui/components/select";
 import { Tooltip } from "@/ui/components/tooltip";

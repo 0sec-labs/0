@@ -13,7 +13,6 @@ import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { boundModelStale, curateSlashCommands, groupSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
 import {
-  Activity,
   ArrowDown,
   ArrowUp,
   Box,
@@ -28,9 +27,8 @@ import {
   Terminal,
   Users,
   Wrench,
-  Square,
+  Square
 } from "lucide-react";
-import { Popover } from "@/ui/components/popover";
 import type {
   ConsoleMessageInput,
   ConsoleSessionSnapshot,
@@ -48,7 +46,6 @@ import { ReasoningPicker } from "./reasoning-picker";
 import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { FilePathPicker } from "./file-path-picker";
 import { QueuedMessages } from "./queued-messages";
-type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
 import { ConnectModelStep } from "./connect-model-step";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +74,7 @@ import { TaskProgress } from "./task-progress";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { errorText } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
+type SendBehavior = "queue" | "steer";
 
 export function Conversation({
   emptyState,
