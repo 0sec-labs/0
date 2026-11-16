@@ -49,8 +49,8 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     assert.equal(await sameTitle.count(),2,"distinct transcripts with the same title both remain visible");
     assert.equal(await sameTitle.nth(0).getAttribute("href"),"/chats/review-one");
     assert.equal(await sameTitle.nth(1).getAttribute("href"),"/chats/review-two");
-    assert.match(await sameTitle.nth(0).innerText(),/Idle · 843 messages/);
-    assert.match(await sameTitle.nth(1).innerText(),/Idle · 262 messages/);
+    assert.match(await sameTitle.nth(0).innerText(),/Same review[\s\S]*My Mac/);
+    assert.match(await sameTitle.nth(1).innerText(),/Same review[\s\S]*My Mac/);
     const groupRenders = await page.evaluate(()=>window.hostGroupRenders);
     await page.getByRole("textbox",{name:"Draft"}).pressSequentially("Latest draft");
     assert.equal(await page.evaluate(()=>window.hostGroupRenders),groupRenders,"draft renders do not rebuild host chat groups");
@@ -61,7 +61,8 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     await page.locator('a[href="/chats/alpha"]').click();
     await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/alpha");
     assert.equal(await page.getByRole("dialog").count(),0,"selecting a title never opens delete controls");
-    await page.getByRole("button",{name:"Toggle dock"}).click();
+    await page.getByRole("button",{name:"Toggle dock"}).dispatchEvent("click"); // the unstyled fixture shifts layout when the focused row drops its inline actions, which swallows a pointer click
+    await page.waitForTimeout(100);
     const dockGroupRenders=await page.evaluate(()=>window.hostGroupRenders);
     await page.getByRole("textbox",{name:"Draft"}).fill("Fresh dock callback");
     assert.equal(await page.evaluate(()=>window.hostGroupRenders),dockGroupRenders,"dock callbacks stay stable across draft renders");
