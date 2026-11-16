@@ -32,7 +32,7 @@ export { renderInstallPrompt, type InstallPrompt } from "./core/prompt.js";
 export type { ExtensionState, ExtensionEntry, ImportReport } from "./core/state.js";
 export type { ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, Snapshot } from "./ports.js";
 export { approvalRefusal, currentApprovalEnvironment, type ApprovalEnvironment } from "./approval-gate.js";
-export { ExtensionInstaller } from "./installer.js";
+export { ExtensionInstaller, approvalFor } from "./installer.js";
 export { FsExtensionStore, extensionsRoot } from "./adapters/fs-store.js";
 export { DefaultSourceResolver } from "./adapters/source-resolver.js";
 export { GitSource } from "./adapters/git-source.js";
@@ -65,7 +65,7 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
     overview: project => extensionOverview(store, project ? projectKeyOf(project) : null),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
-      const entry = state.value.plugins[name];
+      const entry = state.value.extensions[name];
       if (!entry) return err("not_installed", `${name} is not installed.`);
       if (entry.legacy || !entry.active) return err("legacy", entry.legacy?.reason ?? "no installed revision");
       const files = readVerified(store, entry, entry.active); if (!files.ok) return files;

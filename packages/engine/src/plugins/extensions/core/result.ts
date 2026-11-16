@@ -2,7 +2,7 @@
 export type ExtensionErrorCode =
   | "bad_source" | "invalid_manifest" | "legacy_executable" | "unsafe_content" | "content_mismatch" | "sha_not_found" | "fetch_failed"
   | "reserved_name" | "name_taken" | "name_changed" | "not_installed" | "review_mismatch" | "needs_approval" | "needs_confirmation"
-  | "builtin" | "tampered" | "missing" | "legacy" | "state_corrupt" | "io";
+  | "builtin" | "tampered" | "missing" | "legacy" | "state_corrupt" | "agent_session" | "io";
 
 export interface ExtensionError { readonly code: ExtensionErrorCode; readonly message: string }
 export type Result<T, E = ExtensionError> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };

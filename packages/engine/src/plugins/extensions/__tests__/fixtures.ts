@@ -32,3 +32,9 @@ export function makeRepo(commits: Array<Record<string, string | { content: strin
 
 export const MCP_JSON = JSON.stringify({ mcpServers: { docs: { command: "npx", args: ["-y", "docs-mcp"], env: { DOCS_TOKEN: "x" } } } });
 export const SKILL = (name: string) => `---\nname: ${name}\ndescription: A skill called ${name}\n---\n\nDo the thing.\n`;
+
+import { approvalFor } from "../installer.js";
+import type { ExtensionService } from "../index.js";
+import type { Approval, PreparedInstall } from "../ports.js";
+/** Commit with the approval an operator would give for exactly this prompt; `over` overrides fields to test mismatches. */
+export const approve = (svc: ExtensionService, prepared: PreparedInstall, over: Partial<Approval> = {}) => svc.installer.commit(prepared, { ...approvalFor(prepared), ...over });

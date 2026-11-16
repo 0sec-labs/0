@@ -67,6 +67,7 @@ import { homeStateDir } from "../shared/index.js";
 import { isSafePluginId } from "./loader.js";
 import { PLUGIN_CAPABILITIES, type PluginCapability, type PluginManifest } from "./manifest.js";
 import { BUILTIN_PLUGINS, getBuiltinPlugin } from "./builtin.js";
+import { readBuiltinEnablement, writeBuiltinEnablement } from "./builtin-store.js";
 
 // ── On-disk layout / permissions ─────────────────────────────────────────────
 
@@ -82,12 +83,10 @@ export const ENABLEMENT_FILE_MODE = 0o600;
 /** Bump only on an incompatible on-disk shape change. */
 export const ENABLEMENT_SCHEMA_VERSION = 2;
 /**
- * Schema 1 records (and a missing, unreadable or corrupt file) predate default-on
- * built-ins: for them a built-in absent from `enabled` simply means "never
- * touched", so {@link withBuiltinDefaults} turns it on. In schema 2 an absent
- * built-in means an operator explicitly disabled it.
+ * Per-project records of INSTALLED plugins. Built-in enablement is not stored here any more: its one store is
+ * `extensions/state.json` (builtin-store.ts), which also migrates the old schema-2 records once. In the old records a
+ * built-in absent from a schema-2 `enabled` meant an explicit disable; schema 1 meant "never touched".
  */
-const LEGACY_SCHEMA_VERSION = 1;
 /** Largest enablement file we will read off disk. */
 const MAX_ENABLEMENT_BYTES = 1024 * 1024;
 
@@ -110,6 +109,8 @@ export interface EnabledPluginRecord {
 
 export interface EnablementRecord {
   schema: number;
+  /** Built-ins whose recorded enablement could not be trusted (id -> why). Absent from `enabled` too. */
+  builtinIssues?: Record<string, string>;
   /** realpath of the project at write time. Diagnostic only; key is the hash. */
   project: string;
   enabled: Record<string, EnabledPluginRecord>;
@@ -347,25 +348,6 @@ export function coerceEnablementRecord(raw: unknown, project: string): Enablemen
   return base;
 }
 
-/**
- * Apply the default-on built-ins (scope). Legacy records gain a default entry for
- * every built-in they never mentioned and keep an explicit approval as it is
- * (explicit = strict, as before). Built-in approvals always carry the current
- * version, so a first-party version bump never strands a user's choice.
- */
-export function withBuiltinDefaults(record: EnablementRecord, legacy: boolean): EnablementRecord {
-  const enabled = { ...record.enabled };
-  for (const builtin of BUILTIN_PLUGINS) {
-    const current = enabled[builtin.id];
-    if (current) {
-      enabled[builtin.id] = { ...current, version: builtin.version, capabilities: [...builtin.capabilities] };
-    } else if (legacy && builtin.defaultEnabled) {
-      enabled[builtin.id] = { version: builtin.version, capabilities: [...builtin.capabilities], enabledAt: 0, origin: "default" };
-    }
-  }
-  return { schema: ENABLEMENT_SCHEMA_VERSION, project: record.project, enabled };
-}
-
 // ── fs layer (never throws) ──────────────────────────────────────────────────
 
 /** Absolute path of the enablement directory: `<homeStateDir>/plugin-enablement`. */
@@ -398,26 +380,27 @@ export function readEnablement(projectPath: string, homeDir?: string): Enablemen
     real = resolve(projectPath);
   }
   const path = enablementFilePath(projectPath, homeDir);
-  // A missing, unreadable, oversized or corrupt file is a legacy record: the
-  // default-on built-ins stay on (scope must not switch off because a file broke).
-  const legacyEmpty = (): EnablementRecord => withBuiltinDefaults(emptyEnablement(real), true);
-  let text: string;
+  // Per-project approvals of installed plugins. Built-ins are NOT read from here: their one store is
+  // extensions/state.json (see builtin-store.ts), so a per-project file can neither switch scope off nor on.
+  let record = emptyEnablement(real);
   try {
-    text = readFileSync(path, "utf-8");
+    const text = readFileSync(path, "utf-8");
+    if (text.length <= MAX_ENABLEMENT_BYTES) record = coerceEnablementRecord(JSON.parse(text), real);
   } catch {
-    return legacyEmpty();
+    // Missing, unreadable, oversized or corrupt: no plugin approvals (fail closed for plugins).
   }
-  if (text.length > MAX_ENABLEMENT_BYTES) return legacyEmpty();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return legacyEmpty();
+  const enabled: Record<string, EnabledPluginRecord> = {};
+  for (const [id, value] of Object.entries(record.enabled)) if (!getBuiltinPlugin(id)) enabled[id] = value;
+  const issues: Record<string, string> = {};
+  const legacy = { dir: enablementDir(homeDir), projectFile: path };
+  for (const builtin of BUILTIN_PLUGINS) {
+    const state = readBuiltinEnablement(builtin.id, legacy, homeDir);
+    if (state.kind === "corrupt") { issues[builtin.id] = state.message ?? "its enablement record is corrupt"; continue; }
+    if (state.kind === "off") continue;
+    const base = { version: builtin.version, capabilities: [...builtin.capabilities], enabledAt: 0 };
+    enabled[builtin.id] = state.kind === "explicit" ? base : { ...base, origin: "default" };
   }
-  const schema = typeof parsed === "object" && parsed !== null && typeof (parsed as { schema?: unknown }).schema === "number"
-    ? (parsed as { schema: number }).schema
-    : LEGACY_SCHEMA_VERSION;
-  return withBuiltinDefaults(coerceEnablementRecord(parsed, real), schema < ENABLEMENT_SCHEMA_VERSION);
+  return { schema: ENABLEMENT_SCHEMA_VERSION, project: real, enabled, ...(Object.keys(issues).length ? { builtinIssues: issues } : {}) };
 }
 
 /**
@@ -433,6 +416,18 @@ export function writeEnablement(
 ): boolean {
   const dir = enablementDir(homeDir);
   const path = enablementFilePath(projectPath, homeDir);
+  // Built-ins go to their one store; the per-project file keeps only installed-plugin approvals.
+  const legacy = { dir, projectFile: path };
+  const files: Record<string, EnabledPluginRecord> = {};
+  for (const [id, value] of Object.entries(record.enabled)) if (!getBuiltinPlugin(id)) files[id] = value;
+  for (const builtin of BUILTIN_PLUGINS) {
+    if (record.builtinIssues?.[builtin.id] !== undefined && record.enabled[builtin.id] === undefined) continue;
+    const entry = record.enabled[builtin.id];
+    const wanted = entry === undefined ? "off" : entry.origin === "default" ? "default" : "explicit";
+    const current = readBuiltinEnablement(builtin.id, legacy, homeDir).kind;
+    const now = current === "off" ? "off" : current === "explicit" ? "explicit" : "default";
+    if (wanted !== now && !writeBuiltinEnablement(builtin.id, wanted, homeDir)) return false;
+  }
   try {
     mkdirSync(dir, { recursive: true, mode: ENABLEMENT_DIR_MODE });
     chmodSync(dir, ENABLEMENT_DIR_MODE);
@@ -444,7 +439,7 @@ export function writeEnablement(
     const normalized: EnablementRecord = {
       schema: ENABLEMENT_SCHEMA_VERSION,
       project: record.project,
-      enabled: record.enabled,
+      enabled: files,
     };
     writeFileSync(path, `${JSON.stringify(normalized, null, 2)}\n`, {
       mode: ENABLEMENT_FILE_MODE,

@@ -34,21 +34,24 @@ export interface AuditEvent { readonly event: string; readonly [key: string]: un
 /** Persistence for state, immutable revision folders and the audit trail. */
 export interface ExtensionStore {
   read(): Result<ExtensionState>;
-  /** Read-modify-write. Persists only when `fn` returns ok. */
-  update<T>(fn: (state: ExtensionState) => Result<T>): Result<T>;
-  /** Write a revision folder. Immutable: an existing folder must hash to `treeHash` or the call fails. */
+  /**
+   * Read-modify-write under a lock. Persists only when `fn` returns ok. `audit` builds the audit event for the change;
+   * it is appended BEFORE the state is written and a failed append aborts the change (fail closed: an approval that
+   * cannot be audited is not recorded). Refused in an agent session.
+   */
+  update<T>(fn: (state: ExtensionState) => Result<T>, audit?: (value: T) => AuditEvent): Result<T>;
+  /** Write a revision folder. Immutable: an existing folder must hash to `treeHash` or the call fails. Refused in an agent session. */
   putRevision(name: string, revision: string, files: readonly FolderFile[], treeHash: string): Result<void>;
   readRevision(name: string, revision: string, location: RevisionRecord["location"]): Result<FolderFile[]>;
   /** Absolute folder of a revision, for processes the extension starts. */
   revisionPath(name: string, revision: string, location: RevisionRecord["location"]): string;
   deleteRevisions(name: string, revisions: readonly string[]): Result<void>;
-  audit(event: AuditEvent): void;
 }
 
 export interface Clock { now(): Date }
 
 export interface PreparedInstall { readonly prompt: InstallPrompt; readonly manifest: ExtensionManifest; readonly snapshot: Snapshot }
-export interface Approval { approvedRevision: string; enable?: { scope: "global" } | { scope: "project"; project: string } }
+export interface Approval { approvedRevision: string; promptId: string; capabilityDigest: string; enable?: { scope: "global" } | { scope: "project"; project: string } }
 
 /** Install lifecycle as the CLI and the future Extensions page see it. */
 export interface Installer {

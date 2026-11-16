@@ -47,29 +47,29 @@ describe("one-time importer", () => {
 
     // GitHub-installed executable plugin: kept disabled with SHA, approval record and the projects it was enabled in; cannot run.
     const s = svc.store.read(); if (!s.ok) throw new Error("state");
-    const gh = s.value.plugins["gh-plug"]!;
+    const gh = s.value.extensions["gh-plug"]!;
     expect(gh.legacy).toMatchObject({ kind: "executable-github", repo: "acme/gh-plug", sha: SHA, permissionHash: "p".repeat(64), approvedCapabilities: ["filesystem-read", "network"], enabledIn: ["/work/app"] });
     expect(gh.enabled).toEqual({ global: false, projects: [] });
-    expect(s.value.plugins["hand-made"]!.legacy?.kind).toBe("executable-other");
-    expect(s.value.plugins["model-tool"]!.legacy?.kind).toBe("model-authored");
+    expect(s.value.extensions["hand-made"]!.legacy?.kind).toBe("executable-other");
+    expect(s.value.extensions["model-tool"]!.legacy?.kind).toBe("model-authored");
     expect(report.notMigrated.map(i => `${i.kind}:${i.name}`)).toEqual(expect.arrayContaining(["github-plugin:gh-plug", "plugin:hand-made", "model-authored:model-tool", "connection:slack"]));
     expect(report.notMigrated.find(i => i.name === "gh-plug")?.detail).toContain(`acme/gh-plug@${SHA.slice(0, 12)}`);
 
     // MCP servers become local extensions, need re-approval, keep their enabled flag, never carry secret values.
-    const docs = s.value.plugins["docs"]!;
+    const docs = s.value.extensions["docs"]!;
     expect(docs).toMatchObject({ enabled: { global: true, projects: [] }, source: null }); expect(docs.revisions[docs.active!]).toMatchObject({ approvedAt: null, location: { kind: "store" } });
-    expect(s.value.plugins["remote"]!.enabled.global).toBe(false);
+    expect(s.value.extensions["remote"]!.enabled.global).toBe(false);
     const stored = readFileSync(join(home, ".0", "extensions", "docs", docs.active!, ".mcp.json"), "utf8");
     expect(stored).toContain("${DOCS_TOKEN}");
     for (const file of Object.values(snapshot(join(home, ".0", "extensions"), "never"))) for (const secret of ["SECRET-ENV-VALUE-123", "SECRET-HEADER-VALUE-456", "ghp_SECRET_TOKEN_789"]) expect(file).not.toContain(secret);
 
     // Skills: GitHub provenance (pinned SHA + approval time) carried over; subpath installs keep provenance in the note; custom skills adopted.
-    const skill = s.value.plugins["gh-skill"]!;
+    const skill = s.value.extensions["gh-skill"]!;
     expect(skill).toMatchObject({ active: SKILL_SHA, approvedRevision: SKILL_SHA, source: { type: "git", url: "https://github.com/acme/skills.git" }, enabled: { global: true } });
     expect(skill.revisions[SKILL_SHA]).toMatchObject({ approvedAt: "2026-02-03T00:00:00.000Z", location: { kind: "external", path: join(home, ".0", "skills-library", "skills", "gh-skill") } });
     expect(skill.revisions[SKILL_SHA]!.approvedCapabilities?.runs).toEqual(["scripts/run.sh"]);
-    expect(s.value.plugins["sub-skill"]!.note).toContain("acme/mono/skills/sub"); expect(s.value.plugins["sub-skill"]!.source).toBeNull();
-    expect(s.value.plugins["my-notes"]!.active).toMatch(/^local-/);
+    expect(s.value.extensions["sub-skill"]!.note).toContain("acme/mono/skills/sub"); expect(s.value.extensions["sub-skill"]!.source).toBeNull();
+    expect(s.value.extensions["my-notes"]!.active).toMatch(/^local-/);
     expect(report.migrated.map(i => `${i.kind}:${i.name}`)).toEqual(expect.arrayContaining(["mcp-server:docs", "connection:github", "github-skill:gh-skill", "skill:my-notes"]));
   });
 

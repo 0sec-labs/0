@@ -678,7 +678,7 @@ export class ToolExecutor {
     const assertAuthority = ownAuthority && inheritedAuthority && ownAuthority !== inheritedAuthority
       ? () => { inheritedAuthority(); ownAuthority(); }
       : ownAuthority ?? inheritedAuthority;
-    const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!(this.ctx.scope || this.ctx.publicNetwork?.scope || this.ctx.enforcement));
+    const scopeEnforcement = getScopeEnforcementState(this.ctx.workspaceRoot ?? this.ctx.scopePath, undefined, !!(this.ctx.scope || this.ctx.publicNetwork?.scope || this.ctx.enforcement));
     this.ctx.scopeEnforcement = scopeEnforcement;
     return withLocalSourceBoundary(this._localSourceBoundary ?? getLocalSourceBoundary(), () => withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
     try {
@@ -825,7 +825,7 @@ export class ToolExecutor {
   private async _beforeCommandGate(call: ToolCall): Promise<ToolResult | null> {
     const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
     const input = hookInputForTool(call.name, (call.arguments ?? {}) as Record<string, unknown>, {
-      cwd: this.ctx.workspaceRoot ?? process.cwd(),
+      cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot ?? process.cwd(),
       thread: { scope: networkScope, pathPrefixes: this.ctx.enforcement?.pathPolicy.snapshot(), canAskScope: false },
     });
     if (!input) return null;

@@ -24,11 +24,17 @@ const legacySchema = z.object({
 const entrySchema = z.object({
   name: z.string(), source: sourceSchema.nullable(), active: z.string().nullable(), approvedRevision: z.string().nullable(), revisions: z.record(z.string(), revisionSchema),
   enabled: z.object({ global: z.boolean(), projects: z.array(z.string()) }), importedFrom: z.string().optional(), legacy: legacySchema.optional(), note: z.string().optional(),
+  /** Set when the entry's seal did not verify: its approvals were dropped and it needs a fresh approval. */
+  sealBroken: z.boolean().optional(),
 });
 const reportItem = z.object({ kind: z.string(), name: z.string(), detail: z.string() });
 export const stateSchema = z.object({
-  version: z.literal(STATE_SCHEMA), plugins: z.record(z.string(), entrySchema),
-  builtins: z.record(z.string(), z.object({ enabled: z.boolean(), changedAt: z.string().optional() })),
+  version: z.literal(STATE_SCHEMA), extensions: z.record(z.string(), entrySchema),
+  /** The ONE record of built-in enablement. Absent = default on (not explicit); `explicit` = an operator turned it on, so it enforces even with no scope defined. */
+  builtins: z.record(z.string(), z.object({ enabled: z.boolean(), explicit: z.boolean().optional(), changedAt: z.string().optional() })),
+  /** HMAC of each approval-bearing record (`ext:<name>`, `builtin:<name>`); see seal.ts. */
+  seals: z.record(z.string(), z.string()).default({}),
+  migrations: z.object({ builtinEnablement: z.string().optional() }).default({}),
   import: z.object({ importedAt: z.string(), migrated: z.array(reportItem), notMigrated: z.array(reportItem), notes: z.array(z.string()) }).nullable(),
 });
 
@@ -40,9 +46,14 @@ export type ImportReport = NonNullable<ExtensionState["import"]>;
 export type ImportReportItem = z.infer<typeof reportItem>;
 export type EnableScope = { scope: "global" } | { scope: "project"; project: string };
 
-export const emptyState = (): ExtensionState => ({ version: STATE_SCHEMA, plugins: {}, builtins: {}, import: null });
+export const emptyState = (): ExtensionState => ({ version: STATE_SCHEMA, extensions: {}, builtins: {}, seals: {}, migrations: {}, import: null });
 
+/** Read a state file. The key `plugins` of the first builds is renamed to `extensions` here (one-time migration; the next write persists it). */
 export function parseState(raw: unknown): Result<ExtensionState> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && "plugins" in raw && !("extensions" in raw)) {
+    const { plugins, ...rest } = raw as Record<string, unknown>;
+    raw = { ...rest, extensions: plugins };
+  }
   const r = stateSchema.safeParse(raw);
   return r.success ? ok(r.data) : err("state_corrupt", "extensions/state.json has an unknown shape; fix or remove it.");
 }
@@ -51,7 +62,7 @@ export const newEntry = (name: string, source: SourceRecord | null): ExtensionEn
 
 /** Record an approved install of `prompt.revision`; it becomes the active and last-approved revision. */
 export function applyInstall(state: ExtensionState, prompt: InstallPrompt, treeHash: string, now: string, enable?: EnableScope): Result<{ replaced: string | null }> {
-  const entry = state.plugins[prompt.name] ?? newEntry(prompt.name, prompt.source);
+  const entry = state.extensions[prompt.name] ?? newEntry(prompt.name, prompt.source);
   if (entry.legacy) return err("name_taken", `${prompt.name} is an old-format extension kept by the importer; remove it first.`);
   const replaced = entry.active && entry.active !== prompt.revision ? entry.active : null;
   entry.source = prompt.source;
@@ -61,7 +72,7 @@ export function applyInstall(state: ExtensionState, prompt: InstallPrompt, treeH
   };
   entry.active = prompt.revision; entry.approvedRevision = prompt.revision;
   if (enable) applyScope(entry, enable, true);
-  state.plugins[prompt.name] = entry;
+  state.extensions[prompt.name] = entry;
   return ok({ replaced });
 }
 

@@ -23,8 +23,9 @@ export function loadable(store: ExtensionStore, projectKey: string | null): Load
   const state = store.read();
   if (!state.ok) return { extensions: [], builtins: [], refused: [{ name: "*", code: "state", reason: state.error.message }] };
   const out: LoadResult = { extensions: [], builtins: BUILTIN_EXTENSIONS.filter(b => state.value.builtins[b.name]?.enabled !== false).map(b => b.name), refused: [] };
-  for (const entry of Object.values(state.value.plugins)) {
+  for (const entry of Object.values(state.value.extensions)) {
     if (entry.legacy) { if (isEnabledFor(entry, projectKey)) out.refused.push({ name: entry.name, code: "legacy", reason: entry.legacy.reason }); continue; }
+    if (entry.sealBroken) { out.refused.push({ name: entry.name, code: "not_approved", reason: "its approval record did not verify (edited by hand or never sealed): approve it again with `0 skills extensions enable --yes`" }); continue; }
     if (!isEnabledFor(entry, projectKey) || !entry.active) continue;
     const record = entry.revisions[entry.active];
     if (!record?.approvedAt) { out.refused.push({ name: entry.name, code: "not_approved", reason: "not approved: re-approve it with `0 skills extensions enable --yes`" }); continue; }
@@ -45,7 +46,7 @@ export interface ListRow { name: string; kind: "built-in" | "git" | "local" | "u
 export function listRows(store: ExtensionStore, projectKey: string | null): { rows: ListRow[]; error?: string } {
   const state = store.read(); if (!state.ok) return { rows: [], error: state.error.message };
   const rows: ListRow[] = BUILTIN_EXTENSIONS.map(b => ({ name: b.name, kind: "built-in", revision: null, version: b.version, status: "built-in", enabled: state.value.builtins[b.name]?.enabled !== false, projects: [], detail: b.description }));
-  for (const e of Object.values(state.value.plugins).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+  for (const e of Object.values(state.value.extensions).sort((a, b) => (a.name < b.name ? -1 : 1))) {
     const record = e.active ? e.revisions[e.active] : undefined;
     rows.push({ name: e.name, kind: e.legacy ? "unmigrated" : e.source?.type ?? "local", revision: e.active, version: record?.version ?? "", status: statusOf(e, projectKey), enabled: isEnabledFor(e, projectKey), projects: e.enabled.projects, detail: e.note ?? e.legacy?.reason ?? "" });
   }

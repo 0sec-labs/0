@@ -27,16 +27,23 @@ export interface ScopeEnforcementState {
   readonly scopeDefined: boolean;
   /** A scope is defined but the plugin is disabled: commands are denied. */
   readonly denied: boolean;
+  /** The recorded enablement was corrupt: why (shown instead of the generic disabled message). */
+  readonly corrupt?: string;
 }
 
 const executionState = new AsyncLocalStorage<ScopeEnforcementState>();
 
-function describe(pluginEnabled: boolean, enabled: boolean, scopeDefined: boolean): string {
+const REENABLE = "`0 skills extensions enable scope --yes`";
+
+function describe(pluginEnabled: boolean, enabled: boolean, scopeDefined: boolean, corrupt?: string): string {
+  if (corrupt !== undefined && scopeDefined) {
+    return `Scope enablement record is corrupt (${corrupt}) while a scope is defined: commands and network access are DENIED (fail closed). Fix or remove the record, or re-enable with ${REENABLE}.`;
+  }
   if (!pluginEnabled && scopeDefined) {
-    return "Scope extension disabled while a scope is defined: commands and network access are DENIED (fail closed). Re-enable with `0 plugin enable scope` for this project.";
+    return `Scope extension disabled while a scope is defined: commands and network access are DENIED (fail closed). Re-enable with ${REENABLE}.`;
   }
   if (!pluginEnabled) {
-    return "Scope extension disabled for this project: no scope is defined, so nothing is restricted. If a scope is defined, commands will be denied until it is re-enabled.";
+    return "Scope extension disabled: no scope is defined, so nothing is restricted. If a scope is defined, commands will be denied until it is re-enabled.";
   }
   return enabled
     ? "Scope extension on: engagement authorization checks are active; configure policy or approve scope where the workflow requires it."
@@ -51,23 +58,26 @@ function describe(pluginEnabled: boolean, enabled: boolean, scopeDefined: boolea
  */
 export function getScopeEnforcementState(projectPath?: string, homeDir?: string, scopeDefined = false): ScopeEnforcementState {
   const current = executionState.getStore();
-  if (current && projectPath === undefined && homeDir === undefined) {
+  // Built-in enablement is global (one store), so a pinned snapshot holds for any project the run touches.
+  if (current && homeDir === undefined && (projectPath === undefined || resolve(projectPath) === current.projectPath)) {
     // The pinned snapshot is authoritative for the run; a scope can only add enforcement.
     if (!scopeDefined || current.scopeDefined) return current;
-    return derive(current.projectPath, current.pluginEnabled, current.explicit, true);
+    return derive(current.projectPath, current.pluginEnabled, current.explicit, true, current.corrupt);
   }
+  // The project is the thread's working directory or workspace root, passed by the caller; process.cwd() is only the last resort.
   const project = resolve(projectPath ?? process.cwd());
   const plugin = getBuiltinPluginState(SCOPE_PLUGIN_ID, project, homeDir);
-  return derive(plugin?.project ?? project, plugin?.enabled ?? false, plugin?.explicit ?? false, scopeDefined);
+  return derive(plugin?.project ?? project, plugin?.enabled ?? false, plugin?.explicit ?? false, scopeDefined, plugin?.corrupt);
 }
 
-function derive(projectPath: string, pluginEnabled: boolean, explicit: boolean, defined: boolean): ScopeEnforcementState {
+function derive(projectPath: string, pluginEnabled: boolean, explicit: boolean, defined: boolean, corrupt?: string): ScopeEnforcementState {
   const enabled = pluginEnabled && (explicit || defined);
   return Object.freeze({
     pluginId: SCOPE_PLUGIN_ID,
     enabled,
     projectPath,
-    message: describe(pluginEnabled, enabled, defined),
+    message: describe(pluginEnabled, enabled, defined, corrupt),
+    ...(corrupt !== undefined ? { corrupt } : {}),
     pluginEnabled,
     explicit,
     scopeDefined: defined,

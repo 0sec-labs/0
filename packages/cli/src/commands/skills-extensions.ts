@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { approvalRefusal, createExtensionService, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
+import { approvalFor, approvalRefusal, createExtensionService, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
 import { EXIT_FAILURE, EXIT_USAGE, UsageError, consoleOptions, emit, renderTable, type CommandIo, type OutputOptions } from "./console-output.js";
 
 type Options = OutputOptions & { yes?: boolean; preview?: boolean; enable?: boolean; project?: string; to?: string; force?: boolean };
@@ -56,7 +56,7 @@ export async function addExtension(io: CommandIo, source: string, options: Optio
     if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
     if (!operatorOnly(io, options, "install an extension")) return;
     if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
-    const done = svc.installer.commit(p, { approvedRevision: p.prompt.revision, ...(options.enable ? { enable: options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const } } : {}) });
+    const done = svc.installer.commit(p, approvalFor(p, options.enable ? (options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const }) : undefined));
     if (!done.ok) return fail(io, options, done.error.message);
     emit(io, options, { installed: true, name: done.value.name, revision: done.value.revision, enabled: options.enable === true }, () => `Installed extension ${done.value.name} at ${done.value.revision.slice(0, 12)}.${options.enable ? "" : ` Not enabled: \`0 skills extensions enable ${done.value.name}\`.`}`);
   });
@@ -115,7 +115,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
       if (options.yes !== true) { showPrompt(io, options, p, `Re-run with --yes --to ${p.prompt.revision} to approve this revision.`); io.setExitCode(EXIT_USAGE); return; }
       if (!operatorOnly(io, options, "approve an extension update")) return;
       if (p.prompt.pinned && options.to !== p.prompt.revision) return fail(io, options, `--yes needs --to ${p.prompt.revision}: approve the exact revision you reviewed.`, EXIT_USAGE);
-      const done = svc.installer.commit(p, { approvedRevision: p.prompt.revision });
+      const done = svc.installer.commit(p, approvalFor(p));
       if (!done.ok) return fail(io, options, done.error.message);
       emit(io, options, { updated: true, ...done.value }, () => `Updated ${name} to ${done.value.revision.slice(0, 12)}.`);
     }));

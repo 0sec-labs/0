@@ -80,7 +80,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // Ask-first is the global setting, not a mode. An older "standard" value passed here still asks.
   let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(cp?.autonomyMode) ? "ask" : "auto");
   const scopeIsDefined = () => !!(sessionScope || configuredScope || toolContext.publicNetwork?.scope);
-  let sessionScopeEnforcement = getScopeEnforcementState(undefined, undefined, !!(cp ? cp.grantedScope ?? cp.configuredScope : config.scope));
+  let sessionScopeEnforcement = getScopeEnforcementState(workspaceRoot, undefined, !!(cp ? cp.grantedScope ?? cp.configuredScope : config.scope));
 
   // In-memory mutable scope state — updated by requestScope, NEVER written
   // to disk. Seeded from checkpoint when provided.
@@ -1259,7 +1259,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   function send(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
     if (!turnInProgress) {
-      sessionScopeEnforcement = getScopeEnforcementState(undefined, undefined, scopeIsDefined());
+      sessionScopeEnforcement = getScopeEnforcementState(workspaceRoot, undefined, scopeIsDefined());
       toolContext.scopeEnforcement = sessionScopeEnforcement;
     }
     return withScopeEnforcement(sessionScopeEnforcement, () => sendWithContribution(userText, callbacks, opts));

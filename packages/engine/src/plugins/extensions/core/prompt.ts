@@ -3,16 +3,20 @@
  * (step 3) renders it. It carries: repo @ full commit, what the extension can do, and the diff since the last
  * approved version. Third-party extensions never update without a new prompt.
  */
-import { canDoLines, capabilityDelta, providerEnvNames, type Capabilities } from "./capabilities.js";
+import { createHash } from "node:crypto";
+import { canDoLines, capabilityDelta, capabilityKey, providerEnvNames, type Capabilities } from "./capabilities.js";
 import { diffFolders, type FolderDiff } from "./diff.js";
 import { hiddenUnicodeFiles, type FolderFile } from "./files.js";
 import type { ExtensionManifest } from "./manifest.js";
 
-export type SourceRecord = { type: "git"; url: string } | { type: "local"; path: string };
+/** `subpath`: the extension is a folder inside the repository (an `owner/repo/path` skill), so an update reads that folder. */
+export type SourceRecord = { type: "git"; url: string; subpath?: string } | { type: "local"; path: string };
 
 export interface PromptDiff extends FolderDiff { fromRevision: string; capabilityDelta: { added: string[]; removed: string[] } }
 
 export interface InstallPrompt {
+  /** Identifies this exact prompt: name, revision, source and capability digest. The approval must echo it. */
+  id: string;
   kind: "install" | "update";
   name: string; version: string; description: string; format: string;
   source: SourceRecord;
@@ -30,6 +34,9 @@ export interface InstallPrompt {
   diff: PromptDiff | null;
   warnings: string[];
 }
+
+export const promptId = (p: { name: string; revision: string; source: SourceRecord; capabilities: Capabilities }): string =>
+  createHash("sha256").update(JSON.stringify([p.name, p.revision, p.source, capabilityKey(p.capabilities)])).digest("hex");
 
 export interface PromptInput {
   manifest: ExtensionManifest; capabilities: Capabilities; source: SourceRecord; revision: string; files: readonly FolderFile[];
@@ -49,6 +56,7 @@ export function buildInstallPrompt(i: PromptInput): InstallPrompt {
   }
   const where = i.source.type === "git" ? i.source.url : i.source.path;
   return {
+    id: promptId({ name: i.manifest.name, revision: i.revision, source: i.source, capabilities: i.capabilities }),
     kind: i.previous ? "update" : "install", name: i.manifest.name, version: i.manifest.version, description: i.manifest.description, format: i.manifest.format,
     source: i.source, revision: i.revision, pinned: i.source.type === "git", repoAtCommit: `${where} @ ${i.revision}`, licence: i.manifest.license,
     files: i.files.map(f => ({ path: f.path, size: f.size })), hiddenUnicode: hiddenUnicodeFiles(i.files), capabilities: i.capabilities, canDo: canDoLines(i.capabilities),

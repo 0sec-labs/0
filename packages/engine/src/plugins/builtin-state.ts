@@ -14,15 +14,19 @@ export interface BuiltinPluginState {
    */
   readonly explicit: boolean;
   readonly project: string;
+  /** Why the recorded enablement could not be trusted (a corrupt record); `enabled` is then false. */
+  readonly corrupt?: string;
 }
 
-/** Never throws; an unreadable record resolves to the built-in's default. */
+/** What an operator's records say about one first-party built-in. Read through the one store (extensions/state.json). Never throws; a missing or unparseable record resolves to the built-in's default. */
 export function getBuiltinPluginState(id: string, projectPath?: string, homeDir?: string): BuiltinPluginState | undefined {
   const builtin = getBuiltinPlugin(id);
   if (!builtin) return undefined;
   const record = readEnablement(resolve(projectPath ?? process.cwd()), homeDir);
   const entry = record.enabled[id];
+  const corrupt = record.builtinIssues?.[id];
   return Object.freeze({
+    ...(corrupt !== undefined ? { corrupt } : {}),
     id,
     version: builtin.version,
     enabled: entry !== undefined,

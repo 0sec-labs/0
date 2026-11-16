@@ -54,7 +54,7 @@ export const scopeBeforeCommandPolicy: BeforeCommandPolicy = {
     // An explicit local source folder bounds paths and the working directory whether or not a host scope exists.
     const outside = outsideLocalRoot(input);
     if (outside) return { decision: "deny", reason: `path '${outside}' is outside the local source folder this run is limited to` };
-    const state = getScopeEnforcementState(undefined, undefined, defined);
+    const state = getScopeEnforcementState(input.cwd, undefined, defined);
     if (state.denied) return { decision: "deny", reason: state.message };
     if (!defined || !state.enabled) return { decision: "allow" };
     const paths = pathPrefixes?.length ? new PathPolicy([...pathPrefixes]) : undefined;

@@ -60,12 +60,12 @@ describe("first-party scope activation", () => {
     expect(getScopeEnforcementState(project, home).denied).toBe(false);
   });
 
-  it("does not activate another project", () => {
+  it("enablement of a built-in is global: one store, not one record per project", () => {
     const approval = enable(emptyEnablement(project), "scope", { version: "1.1.0", capabilities: [], now: 1 });
     if (!approval.ok) throw new Error(approval.error);
     expect(writeEnablement(project, approval.record, home)).toBe(true);
     expect(getScopeEnforcementState(project, home).enabled).toBe(true);
-    expect(getScopeEnforcementState(root, home).enabled).toBe(false);
+    expect(getScopeEnforcementState(root, home).enabled).toBe(true);
   });
 
   it("keeps approval changes from weakening authorization in the middle of an execution", async () => {
