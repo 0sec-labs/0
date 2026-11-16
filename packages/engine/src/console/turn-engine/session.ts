@@ -341,10 +341,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // `config.tools` overrides keep their exact list.
   const toolset = config.tools === undefined ? resolveToolset({ explicit: config.toolset, surfaceDefault: "core" }) : "full";
   const corePartition = toolset === "core" ? partitionForToolset(tools, "core") : undefined;
-  const packToolNames = new Set((corePartition?.packOnly ?? []).map(tool => tool.name));
+  // Pack tools live in their own registry so list_tools/load_tool can never reach them.
+  const packTools = new DeferredToolRegistry();
+  if (corePartition) {
+    packTools.seed(corePartition.packOnly);
+    (toolContext as ToolContext & { packTools?: DeferredToolRegistry }).packTools = packTools;
+  }
   toolContext.delegationTools = corePartition ? corePartition.advertised : tools;
   const basePartition = corePartition
-    ? { immediate: corePartition.advertised, deferred: corePartition.packOnly }
+    ? { immediate: corePartition.advertised, deferred: [] as ToolDefinition[] }
     : config.tools === undefined
       ? partitionToolDefinitions(tools)
       : { immediate: tools, deferred: [] as ToolDefinition[] };
@@ -478,15 +483,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     deferredDefinitions = catalog;
     deferredTools.seed(catalog, provenance);
     if (catalog.length > 0) {
-      // In the core toolset, pack tools are reached through skills; list_tools and
-      // load_tool appear only when plugin, MCP or management tools need them.
-      if (catalog.some(tool => !packToolNames.has(tool.name))) {
-        extras.push(listToolsNativeDef, loadToolNativeDef);
-        ro[LIST_TOOLS_NAME] = true;
-        ro[LOAD_TOOL_NAME] = true;
-      }
+      extras.push(listToolsNativeDef, loadToolNativeDef);
+      ro[LIST_TOOLS_NAME] = true;
+      ro[LOAD_TOOL_NAME] = true;
       extras.push(...deferredTools.loadedDefinitions().map(toNativeToolDef));
     }
+
+    if (corePartition) extras.push(...packTools.loadedDefinitions().map(toNativeToolDef));
 
     networkCapableTools = net;
     localScopeTools = loc;
@@ -495,7 +498,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   };
 
   // Refresh whenever a deferred catalog or an injected source is present.
-  const injectableToolsPresent = basePartition.deferred.length > 0 || selfExtensionEnabled || config.pluginHost !== undefined || config.mcpHost !== undefined || config.conversationHistory !== undefined || config.workflowAuthoring !== undefined || config.workflowLifecycle !== undefined;
+  const injectableToolsPresent = basePartition.deferred.length > 0 || (corePartition?.packOnly.length ?? 0) > 0 || selfExtensionEnabled || config.pluginHost !== undefined || config.mcpHost !== undefined || config.conversationHistory !== undefined || config.workflowAuthoring !== undefined || config.workflowLifecycle !== undefined;
 
   // `nativeTools` is a `let`: the base (built-in) portion is captured in
   // `baseNativeTools`, and the union of injected tools is refreshed at each turn
@@ -503,14 +506,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let nativeTools: NativeToolDef[] = baseNativeTools;
   if (injectableToolsPresent) refreshInjectedTools();
   if (cp?.loadedMcpTools.length) {
-    const restored = deferredTools.load(cp.loadedMcpTools);
+    const restoredPacks = corePartition ? packTools.load(cp.loadedMcpTools) : { loaded: [] as string[], unknown: cp.loadedMcpTools };
+    const restored = deferredTools.load(restoredPacks.unknown);
     if (restored.unknown.length) throw new Error(`Previously loaded tools are unavailable: ${restored.unknown.join(", ")}`);
     refreshInjectedTools();
   }
 
   const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
   const operatorInstructionsBlock = buildOperatorInstructionsBlock(config.operatorInstructions);
-  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -578,7 +582,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (executionPolicy(autonomyMode, approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
   }
 
@@ -589,7 +593,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       sessionTarget = target;
       toolContext.target = target;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
       notify?.(`Target set to ${target}; scope plugin is disabled, authorization is not enforced.`);
       return;
@@ -687,7 +691,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     sessionScope = expanded;
     toolContext.scope = expanded;
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
     notify?.(
       `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
@@ -1285,7 +1289,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
     if (customSystemPrompt === undefined && !turnInProgress) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
@@ -2254,7 +2258,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       toolContext.autonomyMode = autonomyMode;
       toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
     },
     configureWorkspace: (path) => {
@@ -2284,7 +2288,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
       }
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
     },
     reconfigureRuntime: (sel) => {
@@ -2344,7 +2348,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           recentToolResultTexts: [...(toolContext.recentToolResultTexts ?? [])],
         },
         executor: executor.exportCheckpoint(),
-        loadedMcpTools: deferredTools?.loadedDefinitions().map(tool => tool.name) ?? [],
+        loadedMcpTools: [...(deferredTools?.loadedDefinitions().map(tool => tool.name) ?? []), ...(corePartition ? packTools.loadedDefinitions().map(tool => tool.name) : [])],
         selfExtensionEnabled,
         selfExtensionSnapshot: selfExtension?.snapshot() ?? null,
         harnessRoot: harnessRoot ?? null,

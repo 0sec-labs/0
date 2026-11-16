@@ -163,6 +163,11 @@ export function mcpHostOf(ctx: ToolContext): McpHost | undefined {
  */
 export interface DeferredToolsCtx {
   deferredTools?: DeferredToolRegistry;
+  /** Core toolset: tools that only a loaded skill's pack can add. Never reachable through load_tool. */
+  packTools?: DeferredToolRegistry;
+}
+export function packToolsOf(ctx: ToolContext): DeferredToolRegistry | undefined {
+  return (ctx as ToolContext & DeferredToolsCtx).packTools;
 }
 export function deferredToolsOf(ctx: ToolContext): DeferredToolRegistry | undefined {
   return (ctx as ToolContext & DeferredToolsCtx).deferredTools;

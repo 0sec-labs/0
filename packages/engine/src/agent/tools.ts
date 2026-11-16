@@ -100,7 +100,7 @@ import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool, containsUnquotedShel
 import { validateScopedCommand, validateTargetUrl } from "./tools/target-validation.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult, SOURCE_FILE_RE, evaluateDoneCoverageGate } from "./tools/verification.js";
 import { type ProbePrincipal, type ProbeResponse, is2xx, diffAccessResponses, probeEvidence, citedSourceHasKnownMarker, capText, tracebackTail } from "./tools/probe-helpers.js";
-import { SUBAGENT_PEER_PAGE_SIZE, sanitizeSubagentNote, REPORT_STATUS_TOOL, CHILD_LOCAL_DISPATCH, messagingRuntimeOf, mcpHostOf, deferredToolsOf, buildSendMessageTool, subagentSiblingPrefix, buildSiblingMessagingBatch, CHECK_MESSAGES_TOOL, renderSubagentMessagingPrompt, PERSIST_POLL_MS, PERSIST_IDLE_TTL_MS, PERSIST_MAX_REVIVES, subagentWorkspaceSchema, subagentModelSelectionSchema, validateSpawnPersistentAgentArgs, MONITOR_READY_TIMEOUT_DEFAULT_S, MONITOR_TIMEOUT_MAX_S, MONITOR_POLL_MS, validateMonitorArgs, type SubagentOutcome, type SubagentRunReport, type SubagentLifecycleBase, buildSubagentProgress, buildSubagentMessage, type SubagentDeps } from "./tools/subagents.js";
+import { SUBAGENT_PEER_PAGE_SIZE, sanitizeSubagentNote, REPORT_STATUS_TOOL, CHILD_LOCAL_DISPATCH, messagingRuntimeOf, mcpHostOf, deferredToolsOf, packToolsOf, buildSendMessageTool, subagentSiblingPrefix, buildSiblingMessagingBatch, CHECK_MESSAGES_TOOL, renderSubagentMessagingPrompt, PERSIST_POLL_MS, PERSIST_IDLE_TTL_MS, PERSIST_MAX_REVIVES, subagentWorkspaceSchema, subagentModelSelectionSchema, validateSpawnPersistentAgentArgs, MONITOR_READY_TIMEOUT_DEFAULT_S, MONITOR_TIMEOUT_MAX_S, MONITOR_POLL_MS, validateMonitorArgs, type SubagentOutcome, type SubagentRunReport, type SubagentLifecycleBase, buildSubagentProgress, buildSubagentMessage, type SubagentDeps } from "./tools/subagents.js";
 import { executionPolicy, legacyAskedFirst, normalizeAccess, DEFAULT_CONSOLE_ACCESS } from "../shared/approvals.js";
 
 // ── Tool registry (0#611) ──
@@ -7119,7 +7119,7 @@ export class ToolExecutor {
     // only advertise tools the run's role/scope/flag gates already allow; every
     // call still passes the dispatch gates.
     let packNote: { tools_available_next_turn: string[]; unavailable?: string[] } | undefined;
-    const registry = !isFolderSkill ? deferredToolsOf(this.ctx) : undefined;
+    const registry = !isFolderSkill ? (packToolsOf(this.ctx) ?? deferredToolsOf(this.ctx)) : undefined;
     if (registry && skill.tools?.length) {
       const wanted = resolvePacks(skill.tools).tools;
       const result = registry.load(wanted);

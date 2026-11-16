@@ -7,11 +7,11 @@ import { loadSkillRegistry } from "../agent/skills/index.js";
 
 class ScriptedRuntime implements NativeRuntime {
   readonly type = "api" as const;
-  calls: Array<{ tools: NativeToolDef[] }> = [];
+  calls: Array<{ tools: NativeToolDef[]; system: string }> = [];
   constructor(private readonly script: NativeRuntimeResult[]) {}
   async isAvailable(): Promise<boolean> { return true; }
-  async executeNative(_system: string, _messages: NativeMessage[], tools: NativeToolDef[]): Promise<NativeRuntimeResult> {
-    this.calls.push({ tools });
+  async executeNative(system: string, _messages: NativeMessage[], tools: NativeToolDef[]): Promise<NativeRuntimeResult> {
+    this.calls.push({ tools, system });
     const next = this.script.shift();
     if (!next) throw new Error("script exhausted");
     return next;
@@ -68,6 +68,19 @@ describe("core toolset in the console", () => {
     } finally { await session.cleanup(); }
   });
 
+  it("only tells the model to delegate when spawn_agent is offered", async () => {
+    const coreRuntime = new ScriptedRuntime([end("a")]);
+    const fullRuntime = new ScriptedRuntime([end("a")]);
+    const core = createConsoleSession({ runtime: coreRuntime, allowModelSelfExtension: false, refineObjective: false });
+    const full = createConsoleSession({ runtime: fullRuntime, toolset: "full", allowModelSelfExtension: false, refineObjective: false });
+    try {
+      await core.send("hi");
+      await full.send("hi");
+      expect(coreRuntime.calls[0]!.system).not.toContain("spawn_agent");
+      expect(fullRuntime.calls[0]!.system).toContain("spawn_agent");
+    } finally { await core.cleanup(); await full.cleanup(); }
+  });
+
   it("keeps the full list when asked", async () => {
     const runtime = new ScriptedRuntime([end("a")]);
     const session = createConsoleSession({ runtime, toolset: "full", allowModelSelfExtension: false, refineObjective: false });
@@ -88,6 +101,19 @@ describe("core toolset in the console", () => {
       expect(names(runtime.calls[0]!.tools)).not.toContain("ad_attack_paths");
       expect(names(runtime.calls[1]!.tools)).toEqual(expect.arrayContaining(["ad_attack_paths", "entra_posture", "intel"]));
       expect(names(runtime.calls[1]!.tools)).not.toContain("proxy");
+    } finally { await session.cleanup(); }
+  });
+
+  it("keeps pack tools out of list_tools and load_tool even when other deferred tools exist", async () => {
+    const runtime = new ScriptedRuntime([call("list_tools", {}), call("load_tool", { names: ["crawl", "start_run"] }), end("done")]);
+    const session = createConsoleSession({ runtime, workflowLifecycle: { invoke: async () => ({}) } as never, allowModelSelfExtension: false, refineObjective: false });
+    try {
+      const outcome = await session.send("what else can I load");
+      const listed = JSON.stringify(outcome.toolCalls[0]!.result.output);
+      expect(listed).toContain("start_run");
+      expect(listed).not.toContain("crawl");
+      expect(JSON.stringify(outcome.toolCalls[1]!.result.output)).toContain("crawl");
+      expect(names(runtime.calls[2]!.tools)).not.toContain("crawl");
     } finally { await session.cleanup(); }
   });
 
