@@ -16,7 +16,7 @@ function NoneFrame() {
 export function BackdropTiles({ value, onChange }: { value: BackdropKind; onChange: (next: BackdropKind) => void }) {
   const [live, setLive] = useState<BackdropKind | null>(null);
   return <ChoiceGroup label="Background" value={value} options={BACKDROPS.map(item => ({ value: item.id, label: item.label }))} onChange={onChange} onActive={setLive}
-    className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" itemClassName="group flex min-w-0 flex-col gap-1.5 rounded-md text-left">
+    className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" itemClassName="group flex min-w-0 flex-col gap-1.5 rounded-md text-left">
     {(option, selected) => <>
       <span className={cn("relative block aspect-[16/10] w-full overflow-hidden rounded-md border-[0.5px] border-border-2 bg-background transition-shadow duration-100 group-hover:shadow-overlay", selected && "ring-2 ring-primary ring-offset-2 ring-offset-card")}>
         {option.value === "none" ? <NoneFrame /> : live === option.value ? <Backdrop kind={option.value} preview playing /> : <BackdropStill kind={option.value} variant="tile" />}

@@ -1,16 +1,15 @@
-import { describe, expect, it } from "vitest"
-import { AURORA_BLOBS, auroraDrift, renderStill } from "./still"
-import { STILL_TIME } from "./engine"
+import { describe, expect, it, vi } from "vitest"
+import { renderStill } from "./still"
 import { BACKDROPS, tileOpacity } from "./kinds"
 
 /** Records what a still draws: every path point, rect and gradient, so "something was painted" and "it is not one flat fill" are checkable without a canvas. */
 function recorder() {
-  const log = { points: new Set<string>(), drawn: 0, gradients: 0, stops: [] as string[], bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity } }
+  const log = { points: new Set<string>(), drawn: 0, bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity } }
   const track = (x: number, y: number) => {
     log.points.add(`${Math.round(x)},${Math.round(y)}`)
     log.bounds.minX = Math.min(log.bounds.minX, x); log.bounds.maxX = Math.max(log.bounds.maxX, x); log.bounds.minY = Math.min(log.bounds.minY, y); log.bounds.maxY = Math.max(log.bounds.maxY, y)
   }
-  const gradient = { addColorStop: (_: number, color: string) => log.stops.push(color) }
+  vi.stubGlobal("Path2D", class { moveTo(x: number, y: number) { track(x, y) } lineTo(x: number, y: number) { track(x, y) } })
   const ctx = new Proxy({} as Record<string, unknown>, {
     get: (target, key: string) => {
       if (key === "moveTo" || key === "lineTo") return (x: number, y: number) => track(x, y)
@@ -18,7 +17,7 @@ function recorder() {
       if (key === "fillRect") return (x: number, y: number, w: number, h: number) => { log.drawn++; track(x, y); track(x + w, y + h) }
       if (key === "fillText") return (_: string, x: number, y: number) => { log.drawn++; track(x, y) }
       if (key === "stroke" || key === "fill") return () => { log.drawn++ }
-      if (key === "createRadialGradient") return () => { log.gradients++; return gradient }
+      if (key === "canvas") return undefined
       return key in target ? target[key] : () => {}
     },
     set: (target, key: string, value) => { target[key] = value; return true },
@@ -40,27 +39,21 @@ describe("renderStill", () => {
   it("paints nothing for none or an empty box", () => {
     const { ctx, log } = recorder()
     renderStill(ctx, "none", 160, 100, { ink: "#000" })
-    renderStill(ctx, "grid", 0, 100, { ink: "#000" })
+    renderStill(ctx, "ink", 0, 100, { ink: "#000" })
     expect(log.drawn).toBe(0)
   })
-  it("aurora draws its colour blobs as ink fading to the same ink, not black", () => {
-    const { ctx, log } = recorder()
-    renderStill(ctx, "aurora", 160, 100, { ink: "rgb(212, 212, 216)" })
-    expect(log.gradients).toBe(AURORA_BLOBS.length)
-    expect(log.stops).toContain("rgb(212, 212, 216)")
-    expect(log.stops).toContain("rgba(212, 212, 216, 0)")
-  })
   it("a frame changes with time for the animated kinds and is deterministic for the same time", () => {
-    const at = (time: number) => { const { ctx, log } = recorder(); renderStill(ctx, "waves", 400, 250, { ink: "#555555" }, time); return [...log.points].join("|") }
-    expect(at(STILL_TIME)).toBe(at(STILL_TIME))
-    expect(at(STILL_TIME)).not.toBe(at(STILL_TIME + 20))
-  })
-  it("the aurora drift stays inside the CSS keyframe range and alternates", () => {
-    for (const blob of AURORA_BLOBS) for (const t of [0, 5, 40, 80, 300]) {
-      const drift = auroraDrift(blob, t)
-      expect(drift.dx).toBeGreaterThanOrEqual(-0.06 - 1e-9); expect(drift.dx).toBeLessThanOrEqual(0.08 + 1e-9)
-      expect(drift.scale).toBeGreaterThanOrEqual(1); expect(drift.scale).toBeLessThanOrEqual(1.16 + 1e-9)
+    for (const kind of ["dither", "contours", "school", "plankton"] as const) {
+      const at = (time: number) => { const { ctx, log } = recorder(); renderStill(ctx, kind, 400, 250, { ink: "#555555" }, time); return [...log.points].join("|") }
+      expect(at(8), kind).toBe(at(8))
+      expect(at(8), kind).not.toBe(at(20))
     }
+  })
+  it("uses the dark or light tone from the ink unless told", () => {
+    const light = recorder(), dark = recorder()
+    renderStill(light.ctx, "dither", 200, 120, { ink: "rgb(82, 82, 91)" })
+    renderStill(dark.ctx, "dither", 200, 120, { ink: "rgb(212, 212, 216)" })
+    expect(light.log.drawn).toBeGreaterThan(0); expect(dark.log.drawn).toBeGreaterThan(0)
   })
   it("tiles are boosted well above the screen cap but never opaque", () => {
     for (const kind of kinds) { expect(tileOpacity(kind)).toBeGreaterThan(0.3); expect(tileOpacity(kind)).toBeLessThanOrEqual(0.75) }

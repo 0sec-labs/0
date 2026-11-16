@@ -1,0 +1,165 @@
+<!--
+Name: Sonar
+Idea: a slow radar sweep over dotted range rings; the arm leaves a Bayer-dithered afterglow and a handful of faint accent blips surface where it passes, then fade.
+Params (CFG below): fps, scale (css px per dither pixel), period (seconds per sweep), tail (afterglow length, radians), rings, blips, palette.
+URL: ?theme=dark|light  ?overlay=1  ?t=seconds  ?still=1
+-->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>print-sonar.js</title></head><body><script>
+const CFG = {
+  mode: 'pixel', scale: 3, fps: 15,
+  period: 18,        // seconds per revolution
+  tail: 2.5,         // afterglow length (rad)
+  rings: 6,          // dotted range rings
+  ringAlpha: 0.30,   // resting brightness of ring dots (0..1)
+  glow: 0.42,        // afterglow peak brightness (0..1)
+  blips: 11,         // concurrent blip slots
+  blipLife: 9,       // seconds a blip stays visible
+  t0: 6,
+  dark:  { ink: '#9a9ca3', accent: '#e4663f' },
+  light: { ink: '#1b1c1f', accent: '#c23a16' },
+};
+// ---------- shared harness (identical in every file) ----------
+const Q = new URLSearchParams(location.search);
+const DARK = Q.get('theme') !== 'light';
+const BG = DARK ? [11, 11, 12] : [247, 247, 245];
+const PAL = DARK ? CFG.dark : CFG.light;
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const INK = hex(PAL.ink), ACC = hex(PAL.accent), INK2 = PAL.ink2 ? hex(PAL.ink2) : INK;
+const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const pack = c => ((255 << 24) | ((c[2] + .5) << 16) | ((c[1] + .5) << 8) | (c[0] + .5)) >>> 0;
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const smooth = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+const BAYER8 = (() => { const m = [[0, 2], [3, 1]]; let b = m; for (let n = 0; n < 2; n++) { const s = b.length, o = []; for (let y = 0; y < s * 2; y++) { o.push([]); for (let x = 0; x < s * 2; x++) o[y].push(4 * b[y % s][x % s] + m[(y / s) | 0][(x / s) | 0]); } b = o; } const f = new Float32Array(64); for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) f[y * 8 + x] = (b[y][x] + .5) / 64; return f; })();
+const PERM = new Uint8Array(512); (() => { let s = 1337; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; const p = []; for (let i = 0; i < 256; i++) p.push(i); for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0; const t = p[i]; p[i] = p[j]; p[j] = t; } for (let i = 0; i < 512; i++) PERM[i] = p[i & 255]; })();
+function vnoise(x, y, z) {
+  const xf = Math.floor(x), yf = Math.floor(y), zf = Math.floor(z);
+  let fx = x - xf, fy = y - yf, fz = z - zf;
+  fx = fx * fx * fx * (fx * (fx * 6 - 15) + 10); fy = fy * fy * fy * (fy * (fy * 6 - 15) + 10); fz = fz * fz * fz * (fz * (fz * 6 - 15) + 10);
+  const X = xf & 255, Y = yf & 255, Z = zf & 255, X1 = (X + 1) & 255, Y1 = (Y + 1) & 255, Z1 = (Z + 1) & 255;
+  const a = PERM[X] + Y, b = PERM[X1] + Y, c = PERM[X] + Y1, d = PERM[X1] + Y1;
+  const aa = PERM[a], ba = PERM[b], ab = PERM[c], bb = PERM[d];
+  const v000 = PERM[aa + Z], v100 = PERM[ba + Z], v010 = PERM[ab + Z], v110 = PERM[bb + Z];
+  const v001 = PERM[aa + Z1], v101 = PERM[ba + Z1], v011 = PERM[ab + Z1], v111 = PERM[bb + Z1];
+  const x00 = v000 + (v100 - v000) * fx, x10 = v010 + (v110 - v010) * fx, x01 = v001 + (v101 - v001) * fx, x11 = v011 + (v111 - v011) * fx;
+  const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;
+  return (y0 + (y1 - y0) * fz) / 255;
+}
+const hash1 = (a, b) => { let h = (a * 374761393 + b * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `html,body{margin:0;height:100%;overflow:hidden;background:rgb(${BG})}
+canvas#bd{position:fixed;left:0;top:0;display:block;${CFG.mode === 'pixel' ? 'image-rendering:pixelated;image-rendering:crisp-edges;image-rendering:pixelated;' : ''}}
+#ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font:14px/1.4 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;pointer-events:none}
+#ov .box{width:620px;height:100px;box-sizing:border-box;border-radius:16px;padding:18px 20px;color:${DARK ? '#8b8b92' : '#85858b'};background:${DARK ? 'rgba(17,17,19,.9)' : 'rgba(255,255,255,.92)'};border:1px solid ${DARK ? 'rgba(255,255,255,.09)' : 'rgba(0,0,0,.09)'};box-shadow:0 8px 40px rgba(0,0,0,${DARK ? '.35' : '.06'})}
+#ov .chips{display:flex;gap:8px}
+#ov .chips i{font-style:normal;font-size:13px;padding:6px 12px;border-radius:999px;border:1px solid ${DARK ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.14)'};color:${DARK ? '#d4d4d8' : '#2a2a2e'}}`;
+  document.head.appendChild(st);
+})();
+if (Q.get('overlay') === '1') {
+  const d = document.createElement('div'); d.id = 'ov';
+  d.innerHTML = '<div class="box">Ask anything, / for commands, @ for context</div><div class="chips"><i>Audit a repository</i><i>Triage findings</i><i>Review a diff</i></div>';
+  document.body.appendChild(d);
+}
+const ptr = { x: 0, y: 0 };
+function run(o) {
+  const cv = document.createElement('canvas'); cv.id = 'bd'; document.body.prepend(cv);
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const fps = Math.min(CFG.fps, 30);
+  let W, H, S, ctx, T = parseFloat(Q.get('t') || CFG.t0 || 6), tx = 0, ty = 0;
+  const draw = () => { ptr.x += (tx - ptr.x) * .06; ptr.y += (ty - ptr.y) * .06; o.frame(T); };
+  function size() {
+    const cw = innerWidth, ch = innerHeight;
+    if (CFG.mode === 'pixel') { S = CFG.scale; W = Math.ceil(cw / S); H = Math.ceil(ch / S); cv.style.width = W * S + 'px'; cv.style.height = H * S + 'px'; }
+    else { S = 1 / dpr; W = Math.round(cw * dpr); H = Math.round(ch * dpr); cv.style.width = cw + 'px'; cv.style.height = ch + 'px'; }
+    cv.width = W; cv.height = H; ctx = cv.getContext('2d', { alpha: false });
+    o.resize(ctx, W, H, S, dpr); draw();
+    window.__lab = { setTime(t) { T = t; draw(); }, canvas: cv, S, W, H, dark: DARK, BG };
+  }
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(size, 120); });
+  addEventListener('pointermove', e => { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; }, { passive: true });
+  const still = Q.get('still') === '1' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let vis = !document.hidden, inView = true, running = false, last = 0, raf = 0;
+  function tick(now) {
+    if (!running) return; raf = requestAnimationFrame(tick);
+    const dt = now - last; if (dt < 1000 / fps - 5) return;
+    last = now; T += Math.min(dt, 100) / 1000; draw();
+  }
+  function sync() {
+    const want = vis && inView && !still;
+    if (want && !running) { running = true; last = performance.now(); raf = requestAnimationFrame(tick); }
+    else if (!want && running) { running = false; cancelAnimationFrame(raf); }
+  }
+  document.addEventListener('visibilitychange', () => { vis = !document.hidden; sync(); });
+  new IntersectionObserver(e => { inView = e[e.length - 1].isIntersecting; sync(); }).observe(cv);
+  size(); sync();
+}
+// ---------- end harness ----------
+
+let cRing, W_, H_, ang, rad, base, lut, img, u32, cx, cy, R, cOn, cHi, cAcc;
+const TAU = Math.PI * 2, LUTN = 2048;
+run({
+  resize(ctx, W, H, S) {
+    W_ = W; H_ = H; cx = W * .5; cy = H * .5; R = Math.min(W, H) * .5 * .96;
+    ang = new Float32Array(W * H); rad = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const dx = x + .5 - cx, dy = y + .5 - cy; let a = Math.atan2(dx, -dy); if (a < 0) a += TAU;
+      ang[y * W + x] = a; rad[y * W + x] = Math.hypot(dx, dy);
+    }
+    // static layer: dotted rings, bearing ticks and axes, plotted as exact pixels
+    base = new Float32Array(W * H);
+    const plot = (x, y, v) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < W && y < H) base[y * W + x] = Math.max(base[y * W + x], v); };
+    for (let i = 1; i <= CFG.rings; i++) {
+      const r = R * i / CFG.rings, n = Math.round(TAU * r / (i === CFG.rings ? 5 : 7));
+      for (let j = 0; j < n; j++) { const a = j / n * TAU; plot(cx + Math.sin(a) * r, cy - Math.cos(a) * r, 1); }
+    }
+    for (let r = 4; r < R; r += 8) { plot(cx + r, cy, .8); plot(cx - r, cy, .8); plot(cx, cy + r, .8); plot(cx, cy - r, .8); }
+    for (let d = 0; d < 360; d += 5) { const a = d * Math.PI / 180, l = d % 30 === 0 ? 5 : 2; for (let q = 3; q <= l + 3; q += 2) plot(cx + Math.sin(a) * (R + q), cy - Math.cos(a) * (R + q), 1); }
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) plot(cx + ox, cy + oy, 1);
+    lut = new Float32Array(LUTN); for (let i = 0; i < LUTN; i++) lut[i] = Math.pow(Math.max(0, 1 - (i / LUTN * TAU) / CFG.tail), 1.9);
+    img = ctx.createImageData(W, H); u32 = new Uint32Array(img.data.buffer);
+    cRing = pack(mixc(BG, INK, CFG.ringAlpha)); cOn = pack(mixc(BG, INK, .62)); cHi = pack(mixc(BG, INK, .95)); cAcc = [pack(mixc(BG, ACC, .4)), pack(mixc(BG, ACC, .7)), pack(mixc(BG, ACC, .95))];
+    u32.fill(pack(BG));
+  },
+  frame(t) {
+    const ctx = document.getElementById('bd').getContext('2d');
+    const W = W_, H = H_, arm = ((t / CFG.period) % 1) * TAU;
+    const bg = pack(BG), N = W * H, G = CFG.glow, RA = CFG.ringAlpha, k = LUTN / TAU;
+    for (let y = 0; y < H; y++) {
+      const by = (y & 7) << 3;
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x; let d = arm - ang[i]; if (d < 0) d += TAU;
+        const r = rad[i]; const inside = r < R;
+        const gl = inside ? lut[(d * k) | 0] * G * (.25 + .75 * smooth(0, .9, r / R)) * (1 - .6 * smooth(.9, 1, r / R)) : 0;
+        const b = base[i];
+        const v = b * lut[(d * k) | 0] * 1.4 + gl;
+        const th = BAYER8[by + (x & 7)];
+        u32[i] = (v > th) ? (d < .018 && inside ? cHi : cOn) : (b > 0 ? cRing : bg);
+      }
+    }
+    // the sweep arm: a clean dotted line
+    for (let r = 2; r < R; r += 1) { const x = (cx + Math.sin(arm) * r) | 0, y = (cy - Math.cos(arm) * r) | 0; if (((r >> 1) & 1) === 0) u32[y * W + x] = cHi; }
+    // blips
+    const rev = t / CFG.period, tl = CFG.blipLife;
+    for (let s = 0; s < CFG.blips; s++) {
+      for (let kk = 0; kk < 2; kk++) {
+        const e = Math.floor(rev / 3) - kk, sel = hash1(s, e);
+        const r0 = e * 3 + Math.floor(hash1(s + 100, e) * 3), th = hash1(s + 200, e) * TAU, rr = (.18 + hash1(s + 300, e) * .72) * R;
+        if (sel < .3) continue;
+        const te = (r0 + th / TAU) * CFG.period, age = t - te; if (age < 0 || age > tl) continue;
+        const life = age / tl, br = Math.pow(1 - life, 1.4) * (age < .25 ? age / .25 : 1);
+        const bx = cx + Math.sin(th) * rr, by = cy - Math.cos(th) * rr;
+        const rad2 = 1.6 + 5 * smooth(0, 1, life) , ringR = 5 + life * 14;
+        for (let oy = -20; oy <= 20; oy++) for (let ox = -20; ox <= 20; ox++) {
+          const px = (bx + ox) | 0, py = (by + oy) | 0; if (px < 0 || py < 0 || px >= W || py >= H) continue;
+          const dd = Math.hypot(px - bx, py - by); let v = 0;
+          if (dd < 2.2) v = br * 1.2; else if (dd < 4.5) v = br * .6; else if (Math.abs(dd - ringR) < .8) v = br * .6 * (1 - life);
+          if (v <= 0) continue;
+          if (v > BAYER8[((py & 7) << 3) + (px & 7)]) u32[py * W + px] = cAcc[v > .8 ? 2 : v > .45 ? 1 : 0];
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+});
+</script></body></html>

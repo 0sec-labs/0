@@ -15,7 +15,6 @@ const ROUNDED_ALLOWED: Record<string, string> = {
 const STYLE_ALLOWED: Record<string, string> = {
   "ui/components/loader.tsx": "Animation delay per cell is computed from its grid position.",
   "ui/components/sidebar.tsx": "Publishes the dragged sidebar width as a CSS variable.",
-  "ui/components/dither-backdrop.tsx": "Builds a CSS mask from a computed image.",
   "components/command-palette.tsx": "Positions the palette dialog relative to the viewport.",
   "components/findings/finding-detail.tsx": "Skeleton row widths are computed per row.",
   "components/findings/findings-list.tsx": "Virtualised list height is computed from row layout.",
@@ -28,8 +27,7 @@ const STYLE_ALLOWED: Record<string, string> = {
   "console/viz/timeline-view.tsx": "Marker color comes from severity per datum.",
   "pages/findings-page.tsx": "Workspace height and panel width are measured at runtime.",
   "console/loading-state.tsx": "Skeleton widths vary per row.",
-  "ui/backdrops/aurora.tsx": "Each blob has its own position, size and drift time.",
-  "ui/backdrops/index.tsx": "Layer opacity is computed per theme from the contrast guard; the mask is a runtime gradient.",
+  "ui/backdrops/index.tsx": "Layer opacity is computed per theme from the contrast guard.",
   "console/context-popover.tsx": "Meter fill width is a runtime percentage.",
   "console/panel/cost-popover.tsx": "Cost share bars and swatches are runtime values.",
 };

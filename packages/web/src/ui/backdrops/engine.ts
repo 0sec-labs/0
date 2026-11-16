@@ -15,10 +15,10 @@ export interface LoopEnv { raf: (callback: (now: number) => void) => number; caf
 const browserEnv: LoopEnv = { raf: callback => requestAnimationFrame(callback), caf: id => cancelAnimationFrame(id) }
 export interface Loop { play(): void; pause(): void; draw(): void; readonly running: boolean }
 
-/** A frame-capped loop on a virtual clock: pausing never makes the scene jump when it resumes. */
-export function createLoop(frame: (seconds: number) => void, env: LoopEnv = browserEnv): Loop {
-  const interval = 1000 / MAX_FPS - 1
-  let clock = STILL_TIME, last = -1, id = 0, on = false
+/** A frame-capped loop (`fps` at most the engine cap) on a virtual clock that starts at `start`: pausing never makes the scene jump when it resumes. */
+export function createLoop(frame: (seconds: number) => void, env: LoopEnv = browserEnv, fps = MAX_FPS, start = STILL_TIME): Loop {
+  const interval = 1000 / Math.min(MAX_FPS, fps) - 1
+  let clock = start, last = -1, id = 0, on = false
   const tick = (now: number) => {
     id = env.raf(tick)
     if (last < 0) { last = now; return }

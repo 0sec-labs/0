@@ -13,8 +13,6 @@
 @property --sf-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @keyframes sf-top { from { --sf-top: 0px; } to { --sf-top: var(--sf-size, 24px); } }
 @keyframes sf-bottom { from { --sf-bottom: var(--sf-size, 24px); } to { --sf-bottom: 0px; } }
-/* Aurora backdrop: one slow drift shared by its blobs (ui/backdrops/aurora.tsx). */
-@keyframes backdrop-drift { from { transform: translate3d(-6%, -4%, 0) scale(1); } to { transform: translate3d(8%, 6%, 0) scale(1.16); } }
 @utility scroll-fade-y {
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sf-top), #000 calc(100% - var(--sf-bottom)), transparent 100%);
   @supports (animation-timeline: scroll()) {

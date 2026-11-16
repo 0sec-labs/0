@@ -7,7 +7,11 @@ describe("parseAppearance", () => {
     expect(parseAppearance({ mode: "sepia", theme: "nope", accent: 4, background: "matrix", fontSize: "huge", motion: null })).toEqual(DEFAULT_APPEARANCE);
   });
   it("keeps valid values", () => {
-    expect(parseAppearance({ mode: "dark", theme: "zero", accent: "blue", background: "aurora", fontSize: "large", motion: "reduce" })).toEqual({ mode: "dark", theme: "zero", accent: "blue", background: "aurora", fontSize: "large", motion: "reduce" });
+    expect(parseAppearance({ mode: "dark", theme: "zero", accent: "blue", background: "ink", fontSize: "large", motion: "reduce" })).toEqual({ mode: "dark", theme: "zero", accent: "blue", background: "ink", fontSize: "large", motion: "reduce" });
+  });
+  it("reads a removed background as Dither and keeps none", () => {
+    for (const old of ["aurora", "grid", "scanline", "code-rain", "waves", "ripple", "constellation", "topography"]) expect(parseAppearance({ background: old }).background, old).toBe("dither");
+    expect(parseAppearance({ background: "none" }).background).toBe("none");
   });
   it("drops an accent the theme cannot take", () => {
     expect(parseAppearance({ theme: "nord", accent: "rose" }).accent).toBe("neutral");
@@ -20,8 +24,8 @@ describe("parseAppearance", () => {
 describe("migrateAppearance", () => {
   const reader = (data: Record<string, string>) => (key: string) => data[key] ?? null;
   it("reads the current keys", () => {
-    const { settings, writes } = migrateAppearance(reader({ "zero-web-theme": "light", "zero-web-background": "waves", "zero-web-font-size": "small", "zero-web-motion": "full", "zero-web-accent-v2": "green" }));
-    expect(settings).toMatchObject({ mode: "light", background: "waves", fontSize: "small", motion: "full", accent: "green" });
+    const { settings, writes } = migrateAppearance(reader({ "zero-web-theme": "light", "zero-web-background": "contours", "zero-web-font-size": "small", "zero-web-motion": "full", "zero-web-accent-v2": "green" }));
+    expect(settings).toMatchObject({ mode: "light", background: "contours", fontSize: "small", motion: "full", accent: "green" });
     expect(writes).toEqual({});
   });
   it("carries over a legacy non-orange accent once and ignores the old orange default", () => {

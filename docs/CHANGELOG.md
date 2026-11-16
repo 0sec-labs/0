@@ -14,6 +14,7 @@ on the GitHub Release tag.
 
 ### Changed
 
+- Settings > Appearance > Background has new backgrounds: Dither (now Dither flow, still the default), Contours, Glyph contours, Fish school, Plankton and Ink, plus None. The old Aurora, Grid, Scanline, Code rain, Waves, Ripple, Constellation and Topography were removed, and a saved choice of any of them falls back to Dither. Each tile shows a real frame and plays on hover.
 - There is now one Memory: short plain notes 0 remembers across threads, per folder or everywhere. They are Markdown files under `~/.0/memory/`, and the Memory page lists every note, including the ones the old page hid. Threads read the notes at the start of each turn as untrusted context and have one `memory` tool (remember, forget).
 - `0 memory` is now `list`, `add`, `remove`, `clear`, `export` and `import`. `0 findings update --status false-positive` remembers why as an `avoid` note, and scans show `avoid` notes to the verifier. `0 findings triage memory add|list|remove` still works for one release with a `moved:` line.
 - Migration: the first time Memory opens, the older stores (source lessons in hunt memory, craft memory files, lessons and triage memories in the database) are copied into notes once. Nothing is deleted. The report is in `~/.0/memory/import-report.json`; a lesson you had switched off is not imported.

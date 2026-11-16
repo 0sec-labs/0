@@ -16,7 +16,7 @@ One page, Settings > Appearance, owns every look-and-feel preference. Everything
 | Font size | Settings > Appearance select | `appearance-control.tsx` | |
 | Compact transcript | Engine setting `density` rendered as a generic switch row in the Appearance section | `console-control/web-settings.ts` | now inside Text and layout with a before and after sample |
 | Reduce motion | Settings > Appearance select | `appearance-control.tsx` | |
-| Background | Settings > Appearance, 10 tiny tiles; Aurora was CSS blobs sized in `vw`, so a tile showed none of them | `appearance-control.tsx` `BackgroundPicker`, `ui/backdrops/aurora.tsx` | |
+| Background | Settings > Appearance, 10 tiny tiles; Aurora was CSS blobs sized in `vw`, so a tile showed none of them | `appearance-control.tsx` `BackgroundPicker` | now six canvas scenes plus None, all with a real still on the tile (see Backgrounds) |
 | | Command palette "Change background" | `command-palette.tsx` | kept |
 | Search | Settings search entries for each row | `console-control/settings-index.ts` | anchors unchanged |
 
@@ -36,8 +36,24 @@ Each group is a keyboard radiogroup (`ChoiceGroup`). One-line descriptions, plai
 
 - `lib/appearance-settings.ts`: typed `AppearanceSettings`, defaults, validation, which accents and modes a theme allows, and the migration of the old browser keys (`zero-web-theme`, `-color-theme`, `-accent-v2` with the legacy `-accent`, `-background`, `-font-size`, `-motion`).
 - `components/appearance/use-appearance.ts`: one hook that reads and writes the existing stores; `useResolvedMode`.
-- `ui/backdrops/still.ts`: `renderStill(ctx, kind, width, height, { ink }, time)` runs the same sketches the live backdrop runs at a fixed time; Aurora and Dither get canvas twins. `BackdropStill` draws it. The CPU, pause and visibility rules and the contrast guard are unchanged; stills run no loop.
-- Adding or removing a backdrop: an entry in `kinds.ts` (`BACKDROPS`, `PEAK_ALPHA`) and its sketch in `sketches.ts`. The tiles and preview follow.
+- `ui/backdrops/still.ts`: `renderStill(ctx, kind, width, height, { ink }, time?)` runs the same sketch the live backdrop runs, fast-forwarded to `time` (default: that scene's own still time). `BackdropStill` draws it. The CPU, pause and visibility rules and the contrast guard are unchanged; stills run no loop.
+- Adding or removing a backdrop: an entry in `kinds.ts` (`BACKDROPS`: id, label, peak opacity) and its factory in `sketches.ts` (a missing factory is a type error). The tiles and preview follow.
+
+## Backgrounds
+
+Settings > Appearance > Background offers None plus six scenes. Each is a canvas 2D sketch with its own frame cap, a still frame for tiles and reduced motion, and the same theme-ink colouring and contrast cap.
+
+| Option | What it is | Cap |
+| --- | --- | --- |
+| None | Nothing behind the thread | |
+| Dither (default) | Dither flow v2: a domain-warped noise field, lit by three drifting lights, ordered-dithered in two tones with sparse accent dots | 12 fps |
+| Contours | A printed survey map: marching squares on a drifting field, minor, major and index lines, dot-tally elevation marks | 10 fps |
+| Glyph contours | A field of monospace punctuation chosen from a density ramp, densest along the ridges of drifting noise | 10 fps |
+| Fish school | Three depth layers of boids drawn as tapered fish with trails, dithered | 20 fps |
+| Plankton | Drifting plankton with dithered glow halos and four slow jellyfish | 16 fps |
+| Ink | Two ink plumes carried by a divergence-free flow, thinning into dithered wisps | 20 fps |
+
+Aurora, Grid, Scanline, Code rain, Waves, Ripple, Constellation and the old Topography were removed. A saved choice of any of them reads as Dither (`REMOVED_BACKDROPS` and `parseBackdrop` in `kinds.ts`); None stays None. Shared modules: `noise.ts` (simplex and value noise), `bayer.ts`, `boids.ts`, `curl.ts`, `pixels.ts` and `pixel-sketch.ts` (the low-resolution dither surface and its fixed-step host). Dither scenes keep the lab's low internal resolution and pixelated upscale. `assets/backdrops/print-sonar.html` is a spare candidate for the marketing site and is not part of the app.
 
 ## Capy reference
 
