@@ -41,9 +41,8 @@ describe("sealed approvals (defence in depth)", () => {
     cleanup(join(home, ".0", "extensions", ".seal-key"));
     expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("needs-approval");
   });
-  it("re-approving through enable --yes restores the extension and clears the mark", async () => {
+  it("a sealed change made through the store stays valid", async () => {
     const { svc } = await installed();
-    const first = svc.store.read(); if (!first.ok) throw new Error("x");
     unwrap(svc.store.update(s => { s.extensions["demo"]!.enabled.global = false; return ok(undefined); }));
     expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("disabled");
   });

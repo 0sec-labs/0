@@ -9,7 +9,7 @@
  */
 import { posix } from "node:path";
 import { z } from "zod";
-import { LOADER_ENV } from "./env.js";
+import { isSafeExtensionEnvName } from "./env.js";
 import { type FolderFile, textOf } from "./files.js";
 import { err, ok, type Result } from "./result.js";
 
@@ -34,7 +34,7 @@ export function sanitizeName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z]+/, "").replace(/[._-]{2,}/g, "-").replace(/[._-]+$/, "").slice(0, 64);
 }
 
-const envName = z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/).refine(n => !LOADER_ENV.test(n), "loader variables are not allowed");
+const envName = z.string().refine(isSafeExtensionEnvName, "not an allowed variable name: use UPPER_CASE ending in _TOKEN, _KEY, _SECRET, _URL, _ID, _HOST ... (PATH, GIT_*, LD_*, NODE_OPTIONS and other loader variables are never allowed)");
 const text = z.string().min(1).max(512).refine(s => !s.includes("\0"));
 const relPath = text.refine(p => !p.includes("\\") && !p.startsWith("/") && !/^[A-Za-z]:/.test(p) && ![".", ".."].includes(posix.normalize(p)) && !posix.normalize(p).startsWith("../"), "must be a relative path inside the extension").transform(p => posix.normalize(p).replace(/^\.\//, "").replace(/\/$/, ""));
 const list = <T extends z.ZodType>(item: T, max = 64) => z.array(item).max(max).default([]);
@@ -96,8 +96,8 @@ function mcpDecls(map: z.infer<typeof mcpMap>): Result<McpServerDecl[]> {
   const out: McpServerDecl[] = [];
   for (const [name, s] of Object.entries(map)) {
     const env = Object.keys(s.env);
-    const badEnv = env.find(k => LOADER_ENV.test(k) || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(k));
-    if (badEnv) return bad(`MCP server ${name} sets a disallowed environment variable ${JSON.stringify(badEnv)}.`);
+    const badEnv = env.find(k => !isSafeExtensionEnvName(k));
+    if (badEnv) return bad(`MCP server ${name} sets a disallowed environment variable ${JSON.stringify(badEnv)}: names must match the allowed pattern (UPPER_CASE ending in _TOKEN, _KEY, _SECRET, _URL, _ID, _HOST ...) and never be a loader variable such as PATH, PYTHONPATH, NODE_PATH, GIT_*, LD_*, DYLD_*, BASH_ENV or NODE_OPTIONS.`);
     const type = s.type ?? s.transport;
     out.push({ name, transport: s.url ? (type === "sse" ? "sse" : "http") : "stdio", ...(s.command ? { command: s.command } : {}), args: s.args, ...(s.url ? { url: s.url } : {}), env: env.sort(), headers: Object.keys(s.headers).sort() });
   }

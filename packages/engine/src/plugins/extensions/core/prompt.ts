@@ -79,7 +79,8 @@ export function renderInstallPrompt(p: InstallPrompt): string {
     if (d.capabilityDelta.added.length || d.capabilityDelta.removed.length) {
       out.push("  capability changes:", ...d.capabilityDelta.added.map(l => `    + ${l}`), ...d.capabilityDelta.removed.map(l => `    - ${l}`));
     }
-    if (d.patch) out.push("", d.patch, ...(d.patchTruncated ? ["... diff truncated"] : []));
+    for (const m of d.modeChanges) out.push(`  mode changed: ${m.path} ${m.from} -> ${m.to}${m.to === "755" ? " (now executable)" : ""}`);
+    if (d.patch) out.push("", d.patch, ...(d.patchTruncated ? [`note: ${d.summarised.length} file(s) are summarised by size and hash above; every changed path is listed in full. Read them in the stored revision before approving.`] : []));
   }
   out.push("", "Never updates automatically. Any change asks again.");
   return out.join("\n");

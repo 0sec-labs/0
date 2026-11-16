@@ -13,9 +13,29 @@ export interface FolderFile { readonly path: string; readonly size: number; read
 const sha1 = (parts: Array<Buffer | string>) => { const hash = createHash("sha1"); for (const part of parts) hash.update(part); return hash.digest(); };
 export const sha256Hex = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 
-/** Paths must be relative, normalized, free of `.git` and traversal, and the folder must fit the limits. */
+/** How a case-insensitive or normalising file system would see a path: NFC, lower case. `A.md` and `a.md`, or NFC and NFD `é`, are one file there. */
+const foldKey = (path: string): string => path.normalize("NFC").toLowerCase();
+
+/** The first pair of paths (or a file and a directory) that fold to the same name, or null. Pure; checked at prepare time. */
+export function findNameCollision(files: readonly FolderFile[]): [string, string] | null {
+  const seen = new Map<string, string>();
+  for (const file of files) {
+    const parts = file.path.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join("/"); const key = foldKey(prefix);
+      const other = seen.get(key);
+      if (other !== undefined && other !== prefix) return [other, prefix];
+      seen.set(key, prefix);
+    }
+  }
+  return null;
+}
+
+/** Paths must be relative, normalized, free of `.git` and traversal, free of case/Unicode-normalisation collisions, and the folder must fit the limits. */
 export function validateFolder(files: readonly FolderFile[]): Result<void> {
   if (files.length > LIMITS.files) return err("unsafe_content", `More than ${LIMITS.files} files.`);
+  const collision = findNameCollision(files);
+  if (collision) return err("unsafe_content", `Files ${JSON.stringify(collision[0])} and ${JSON.stringify(collision[1])} differ only by letter case or Unicode normalisation; on a case-insensitive disk one would overwrite the other, so the folder is refused.`);
   let bytes = 0;
   for (const file of files) {
     const parts = file.path.split("/");

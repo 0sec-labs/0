@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFile, spawn } from "node:child_process";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +11,17 @@ import type { ExtensionSource, Snapshot } from "../ports.js";
 const run = promisify(execFile);
 export const FULL_SHA = /^[0-9a-f]{40}$/;
 
+/** The fallback fetch (all branches and tags) is the unbounded one: cap its time and the bytes it may put on disk. */
+export const FALLBACK_FETCH_LIMITS = { timeoutMs: 60_000, maxBytes: 128 * 1024 * 1024 } as const;
+/** Proxy settings are the only parent-environment variables git is given; every other secret stays out. */
+export const GIT_PROXY_ENV = ["HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"] as const;
+
+const dirBytes = (dir: string): number => {
+  let total = 0;
+  try { for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); try { total += e.isDirectory() ? dirBytes(p) : statSync(p).size; } catch { /* vanished */ } } } catch { /* vanished */ }
+  return total;
+};
+
 /**
  * A git repository at one commit. Fetches only that commit and reads its files out of the object database:
  * no checkout, no hooks, no submodules, no LFS, nothing executed. The files must hash to the commit's tree.
@@ -18,7 +29,7 @@ export const FULL_SHA = /^[0-9a-f]{40}$/;
  */
 export class GitSource implements ExtensionSource {
   readonly label: string; readonly suggestedName: string;
-  constructor(readonly url: string, readonly sha: string | null, readonly local: boolean) {
+  constructor(readonly url: string, readonly sha: string | null, readonly local: boolean, readonly subpath?: string) {
     this.label = url; this.suggestedName = sanitizeName(basename(url).replace(/\.git$/, ""));
   }
   get pinned() { return this.sha !== null; }
@@ -27,9 +38,28 @@ export class GitSource implements ExtensionSource {
     const protocols = ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always", ...(this.local ? ["-c", "protocol.file.allow=always"] : [])];
     const { stdout } = await run("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...protocols, ...args], {
       cwd, encoding: "buffer", timeout: 120_000, maxBuffer,
-      env: { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+      env: this.#env(),
     });
     return stdout;
+  }
+
+  #env(): Record<string, string> {
+    const proxy = Object.fromEntries(GIT_PROXY_ENV.flatMap(k => (process.env[k] ? [[k, process.env[k]!] as const] : [])));
+    return { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "", ...proxy, GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  }
+
+  /** Run git with a time limit and a cap on what it may write under `cwd`; kills it and fails when either is exceeded. */
+  #gitBounded(args: string[], cwd: string, limits: { timeoutMs: number; maxBytes: number } = FALLBACK_FETCH_LIMITS): Promise<void> {
+    const protocols = ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always", ...(this.local ? ["-c", "protocol.file.allow=always"] : [])];
+    return new Promise((resolveRun, reject) => {
+      const child = spawn("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...protocols, ...args], { cwd, env: this.#env(), stdio: "ignore" });
+      let failure: string | null = null;
+      const stop = (why: string) => { failure ??= why; child.kill("SIGKILL"); };
+      const timer = setTimeout(() => stop(`timed out after ${limits.timeoutMs / 1000}s`), limits.timeoutMs);
+      const watch = setInterval(() => { if (dirBytes(cwd) > limits.maxBytes) stop(`more than ${Math.round(limits.maxBytes / 1024 / 1024)} MB to download`); }, 250);
+      child.on("error", e => { clearTimeout(timer); clearInterval(watch); reject(e); });
+      child.on("close", code => { clearTimeout(timer); clearInterval(watch); failure ? reject(new Error(`fetch stopped: ${failure}`)) : code === 0 ? resolveRun() : reject(new Error(`git exited with ${code}`)); });
+    });
   }
 
   async fetch(): Promise<Result<Snapshot>> {
@@ -40,20 +70,22 @@ export class GitSource implements ExtensionSource {
   }
 
   async #fetchInto(work: string): Promise<Result<Snapshot>> {
+    if (this.subpath !== undefined && !/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(this.subpath) || this.subpath?.split("/").some(p => p === "." || p === "..")) return err("bad_source", "The folder inside the repository must be a plain relative path.");
     const g = (args: string[], max?: number) => this.#git(args, work, max);
     const helper = !this.local && /^https:\/\/github\.com\//.test(this.url) ? ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"] : [];
     await g(["init", "-q"]);
     let sha = this.sha;
     if (sha) {
       try { await g([...helper, "fetch", "-q", "--depth", "1", "--no-tags", "--no-recurse-submodules", "--", this.url, sha]); }
-      catch { await g([...helper, "fetch", "-q", "--no-tags", "--no-recurse-submodules", "--", this.url, "+refs/heads/*:refs/remotes/o/*", "+refs/tags/*:refs/tags/*"]); }
+      catch { await this.#gitBounded([...helper, "fetch", "-q", "--no-tags", "--no-recurse-submodules", "--", this.url, "+refs/heads/*:refs/remotes/o/*", "+refs/tags/*:refs/tags/*"], work); }
       try { await g(["cat-file", "-e", `${sha}^{commit}`]); } catch { return err("sha_not_found", `Commit ${sha} was not found in ${this.label}.`); }
     } else {
       await g([...helper, "fetch", "-q", "--depth", "1", "--no-tags", "--no-recurse-submodules", "--", this.url, "HEAD"]);
       sha = (await g(["rev-parse", "--verify", "FETCH_HEAD^{commit}"])).toString("utf8").trim();
       if (!FULL_SHA.test(sha)) return err("fetch_failed", "Could not resolve a commit.");
     }
-    const rows = (await g(["ls-tree", "-r", "-z", "--full-tree", sha], 16 * 1024 * 1024)).toString("utf8").split("\0").filter(Boolean);
+    const root = this.subpath ? `${sha}:${this.subpath}` : sha;
+    const rows = (await g(["ls-tree", "-r", "-z", ...(this.subpath ? [] : ["--full-tree"]), root], 16 * 1024 * 1024)).toString("utf8").split("\0").filter(Boolean);
     if (rows.length > LIMITS.files) return err("unsafe_content", `More than ${LIMITS.files} files.`);
     const entries: Array<{ path: string; oid: string; executable: boolean }> = [];
     for (const row of rows) {
@@ -73,8 +105,8 @@ export class GitSource implements ExtensionSource {
     files.sort((a, b) => (a.path < b.path ? -1 : 1));
     const valid = validateFolder(files); if (!valid.ok) return valid;
     const treeHash = gitTreeHash(files);
-    const expected = (await g(["rev-parse", "--verify", `${sha}^{tree}`])).toString("utf8").trim();
+    const expected = (await g(["rev-parse", "--verify", this.subpath ? root : `${sha}^{tree}`])).toString("utf8").trim();
     if (treeHash !== expected) return err("content_mismatch", "The fetched files do not hash to the commit's tree; refusing to install.");
-    return ok({ revision: sha, files, treeHash, source: { type: "git", url: this.url } });
+    return ok({ revision: sha, files, treeHash, source: { type: "git", url: this.url, ...(this.subpath ? { subpath: this.subpath } : {}) } });
   }
 }

@@ -33,7 +33,9 @@ export function capabilityLines(c: Capabilities): string[] {
   const out: string[] = [];
   for (const s of c.skills) out.push(`skill: ${s}`);
   for (const f of c.runs) out.push(`runs commands: ${f}`);
-  for (const s of c.mcp) out.push(`connects to MCP server: ${s.name} (${s.url ?? [s.command, ...s.args].join(" ")})${s.env.length ? ` env ${s.env.join(",")}` : ""}${s.headers.length ? ` headers ${s.headers.join(",")}` : ""}`);
+  // Everything that decides where the server connects and what it receives is in the line, so any change re-prompts:
+  // transport, command, EVERY arg, url, env NAMES and header NAMES (never values).
+  for (const s of c.mcp) out.push(`connects to MCP server: ${s.name} ${s.transport}${s.command ? ` command ${JSON.stringify(s.command)}` : ""}${s.args.length ? ` args ${JSON.stringify(s.args)}` : ""}${s.url ? ` url ${JSON.stringify(s.url)}` : ""}${s.env.length ? ` env ${s.env.join(",")}` : ""}${s.headers.length ? ` headers ${s.headers.join(",")}` : ""}`);
   if (c.service) out.push(`calls a service: ${c.service.service} via ${c.service.auth}${c.service.hosts.length ? ` hosts ${c.service.hosts.join(",")}` : ""} read ${c.service.read.join(",") || "-"} write ${c.service.write.join(",") || "-"}`);
   if (c.scope) out.push(`defines a scope: ${c.scope}`);
   if (c.verify) out.push(`verifier: ${c.verify}`);
@@ -54,7 +56,7 @@ export function capabilityDelta(previous: Capabilities | null, next: Capabilitie
 export function canDoLines(c: Capabilities): string[] {
   const out: string[] = [];
   if (c.runs.length) out.push(`runs commands through bash (${c.runs.length}): ${c.runs.slice(0, 8).join(", ")}${c.runs.length > 8 ? ", ..." : ""}`);
-  for (const s of c.mcp) out.push(`connects to MCP server ${s.name}: ${s.url ?? [s.command, ...s.args].join(" ")}${s.env.length ? ` (env ${s.env.join(", ")})` : ""}`);
+  for (const s of c.mcp) out.push(`connects to MCP server ${s.name}: ${s.url ?? [s.command, ...s.args].join(" ")}${s.env.length ? ` (env ${s.env.join(", ")})` : ""}${s.headers.length ? ` (headers ${s.headers.join(", ")})` : ""}`);
   if (c.service) out.push(`calls a service: ${c.service.service}${c.service.hosts.length ? ` (${c.service.hosts.join(", ")})` : ""}; read: ${c.service.read.join(", ") || "none"}; write: ${c.service.write.join(", ") || "none"}`);
   if (c.scope) out.push(`defines a scope (${c.scope})`);
   if (c.verify) out.push(`provides a verifier (${c.verify})`);

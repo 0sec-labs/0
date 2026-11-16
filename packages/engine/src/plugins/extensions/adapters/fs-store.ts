@@ -63,11 +63,14 @@ export class FsExtensionStore implements ExtensionStore {
       const result = fn(state.value); if (!result.ok) return result;
       let key: Buffer;
       try { key = ensureSealKey(this.root); } catch { return err("io", "Could not create the extensions seal key; nothing was recorded."); }
-      state.value.seals = sealAll(state.value, key);
+      // Normalise through the schema first, so what is sealed is exactly what will be read back (unknown fields are dropped).
+      const normal = parseState(JSON.parse(JSON.stringify(state.value))); if (!normal.ok) return normal;
+      const next = normal.value;
+      next.seals = sealAll(next, key);
       // Audit first, fail closed: a change that cannot be audited is not recorded.
       if (audit) { const logged = this.#appendAudit(audit(result.value)); if (!logged.ok) return logged; }
       const temp = join(this.root, `.state-${randomUUID()}.tmp`);
-      try { writeFileSync(temp, `${JSON.stringify(state.value, null, 2)}\n`, { mode: 0o600, flag: "wx" }); renameSync(temp, join(this.root, "state.json")); }
+      try { writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600, flag: "wx" }); renameSync(temp, join(this.root, "state.json")); }
       catch { return err("io", "Could not write extensions/state.json."); }
       finally { rmSync(temp, { force: true }); }
       return result;

@@ -11,7 +11,7 @@ import type { InstallPrompt } from "./prompt.js";
 
 export const STATE_SCHEMA = 1;
 
-const sourceSchema = z.discriminatedUnion("type", [z.object({ type: z.literal("git"), url: z.string() }), z.object({ type: z.literal("local"), path: z.string() })]);
+const sourceSchema = z.discriminatedUnion("type", [z.object({ type: z.literal("git"), url: z.string(), subpath: z.string().optional() }), z.object({ type: z.literal("local"), path: z.string() })]);
 const revisionSchema = z.object({
   version: z.string(), format: z.string(), treeHash: z.string(), installedAt: z.string(),
   location: z.discriminatedUnion("kind", [z.object({ kind: z.literal("store") }), z.object({ kind: z.literal("external"), path: z.string() })]),
@@ -23,7 +23,7 @@ const legacySchema = z.object({
 });
 const entrySchema = z.object({
   name: z.string(), source: sourceSchema.nullable(), active: z.string().nullable(), approvedRevision: z.string().nullable(), revisions: z.record(z.string(), revisionSchema),
-  enabled: z.object({ global: z.boolean(), projects: z.array(z.string()) }), importedFrom: z.string().optional(), legacy: legacySchema.optional(), note: z.string().optional(),
+  enabled: z.object({ global: z.boolean(), projects: z.array(z.string()) }), importedFrom: z.string().optional(), importKey: z.string().optional(), legacy: legacySchema.optional(), note: z.string().optional(),
   /** Set when the entry's seal did not verify: its approvals were dropped and it needs a fresh approval. */
   sealBroken: z.boolean().optional(),
 });

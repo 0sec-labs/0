@@ -14,7 +14,7 @@ export class LocalSource implements ExtensionSource {
   async fetch(): Promise<Result<Snapshot>> {
     let real: string;
     try { real = realpathSync(this.path); if (!statSync(real).isDirectory()) return err("bad_source", `${this.path} is not a folder.`); } catch { return err("bad_source", `${this.path} does not exist.`); }
-    const files = readFolder(real); if (!files.ok) return files;
+    const files = readFolder(real, { skipGit: true }); if (!files.ok) return files;
     const treeHash = gitTreeHash(files.value);
     return ok({ revision: `local-${treeHash.slice(0, 16)}`, files: files.value, treeHash, source: { type: "local", path: real } });
   }
