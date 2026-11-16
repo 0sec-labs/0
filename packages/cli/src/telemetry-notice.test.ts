@@ -90,6 +90,8 @@ describe("telemetry surface", () => {
   it("is web for `0 web` and a bare `0`, otherwise cli", () => {
     expect(surfaceFromArgv(["node", "0"])).toBe("web");
     expect(surfaceFromArgv(["node", "0", "web", "--port", "1"])).toBe("web");
+    expect(surfaceFromArgv(["node", "0", "--headless", "--ready-json"])).toBe("web");
+    expect(surfaceFromArgv(["node", "0", "--host=127.0.0.1", "--no-open"])).toBe("web");
     expect(surfaceFromArgv(["node", "0", "scan", "web", "x"])).toBe("cli");
     expect(surfaceFromArgv(["node", "0", "doctor"])).toBe("cli");
   });

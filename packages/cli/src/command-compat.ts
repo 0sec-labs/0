@@ -15,6 +15,7 @@
  */
 import { statSync } from "node:fs";
 import { rewriteMovedCommand } from "./command-aliases.js";
+import { CONSOLE_FLAGS } from "./surface.js";
 
 type Args = readonly string[];
 
@@ -314,11 +315,6 @@ export function rewriteNewForms(args: Args): string[] | undefined {
 }
 
 /** The flags of the web console. `0 --headless`, `0 --port 8080` and the rest mean `0 web ...`; bare `0` with none of them opens the console. */
-const CONSOLE_FLAGS = new Set([
-  "--db-path", "--port", "--host", "--asset-dir", "--dev-url", "--team-config", "--engine-token-env", "--engine-workspace", "--engine-scope", "--engine-target",
-  "--engine-allow-apply", "--engine-time-cap", "--engine-cost-cap", "--server-mode", "--allowed-host", "--trusted-proxy", "--public-url", "--access-token-env",
-  "--shutdown-timeout", "--ready-json", "--no-open", "--headless", "--engines-config", "--backends-config",
-]);
 export function rewriteBareConsoleFlags(args: Args): string[] | undefined {
   const first = args[0]?.split("=")[0];
   return first !== undefined && CONSOLE_FLAGS.has(first) ? ["web", ...args] : undefined;
