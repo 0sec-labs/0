@@ -49,6 +49,12 @@ describe("protected paths: text analysis", () => {
     expect(hit("", "/home/op/.0", ["extensions/state.json"])).not.toBeNull();
   });
 
+  it("does not crash on odd glob characters and still flags a real one", () => {
+    expect(() => hit('printf x > "/tmp/a[b" ; cat ~/.0/ext[')).not.toThrow();
+    expect(hit("cat ~/.0/ext[a-z]nsions/state.json")).not.toBeNull();
+    expect(hit('{"command":"printf x > \\"/home/x/effect\\"","files":{"a[0":1}}')).toBeNull();
+  });
+
   it("leaves ordinary commands and other state alone", () => {
     for (const command of ["ls -la", "cat /work/README.md", "cat ~/.0/runs/x/log.txt", "ls ~/.0", "echo extensions > notes.txt", "git status", "cat ~/.bashrc", "cd /tmp && ls"]) {
       expect(hit(command), command).toBeNull();

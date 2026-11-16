@@ -63,7 +63,7 @@ describe("python_exec tool handler", () => {
 
   it("EGRESS: blocks raw sockets when an engagement scope is set", async () => {
     process.env[FLAG] = "1";
-    const ex = new ToolExecutor(baseCtx({ scope: {} as unknown as ScopePolicy }), null);
+    const ex = new ToolExecutor(baseCtx({ scope: { match: () => ({ allowed: true, reason: "" }), raw: {} } as unknown as ScopePolicy }), null);
     const res = await ex.execute({ name: "python_exec", arguments: { code: "import socket\nsocket.socket()" } });
     await ex.cleanup();
     expect(res.success).toBe(false);
@@ -72,7 +72,7 @@ describe("python_exec tool handler", () => {
 
   it("EGRESS: urllib.urlopen fails closed when an engagement scope is set", async () => {
     process.env[FLAG] = "1";
-    const ex = new ToolExecutor(baseCtx({ scope: {} as unknown as ScopePolicy }), null);
+    const ex = new ToolExecutor(baseCtx({ scope: { match: () => ({ allowed: true, reason: "" }), raw: {} } as unknown as ScopePolicy }), null);
     const res = await ex.execute({
       name: "python_exec",
       arguments: { code: "import urllib.request\nurllib.request.urlopen('http://example.com')" },

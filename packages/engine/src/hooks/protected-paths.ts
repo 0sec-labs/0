@@ -57,7 +57,12 @@ const expandHome = (text: string, home: string): string =>
   text.replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, home).replace(/(^|[=:,'"(\s])~(?=\/|$)/g, (_m, pre: string) => `${pre}${home}`);
 
 const GLOB = /[*?[]/;
-const globRegex = (segment: string): RegExp => new RegExp(`^${segment.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")}$`);
+const globRegex = (segment: string): RegExp => {
+  const body = (text: string) => text.replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]");
+  try { return new RegExp(`^${body(segment.replace(/[.+^${}()|\\]/g, "\\$&"))}$`); }
+  // An unbalanced `[` is not a valid class; match it as text rather than fail.
+  catch { return new RegExp(`^${body(segment.replace(/[.+^${}()|\\[\]]/g, "\\$&"))}$`); }
+};
 
 function realOf(path: string, real: (p: string) => string): string {
   try { return real(path); } catch { return path; }
