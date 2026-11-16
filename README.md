@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">Ship fixes, not findings</h1>
+<h1 align="center">AI security agents for the enterprise</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
