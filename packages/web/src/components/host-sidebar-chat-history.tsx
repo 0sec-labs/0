@@ -1,12 +1,11 @@
 import { queryKeys } from "@/queries";
 import { SAVED_POLL_MS, sessionsRefetchInterval } from "@/console/session-polling";
 import { VOCAB, v } from "@/lib/vocabulary";
-import { LaptopIcon, ServerIcon } from "@/ui/icons/device";
 import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Ellipsis, Search, Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared/backend-protocol";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { errorText, isMissingMissionText } from "@/lib/api-error";
@@ -14,7 +13,12 @@ import { useBackendSelection } from "@/backend-context";
 import { useTeamAccess } from "./team-access";
 import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
-import { DropdownMenu } from "./ui/dropdown-menu";
+import { SidebarLabel } from "@/ui/components/sidebar";
+import { SidebarListHeader } from "./sidebar/sidebar-list-header";
+import { RowAge, RowSubline, RowTitleLine, sidebarRowClasses } from "./sidebar/sidebar-row";
+import { rowNavigation } from "./sidebar/use-row-navigation";
+import { useSidebarDensity } from "./sidebar/use-sidebar-list";
+import { folderMonogram, threadSubline } from "@/lib/sidebar-rows";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { markMissionsDeleting } from "@/lib/deleting-missions";
 import { rememberSidebarActivity, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
@@ -63,6 +67,7 @@ interface HostActions {
 }
 interface MergedRow { id: string; slice: HostSlice; row: SessionRailRow; title: string }
 
+const SORTS = [{ value: "updated", label: "Recent" }, { value: "name", label: "Name" }] as const;
 const ATTENTION: Record<string, string> = { working: "Responding", cancelling: "Stopping", waiting: "Waiting for you", failed: "Needs attention" };
 
 /**
@@ -74,7 +79,8 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
   const [sort, setSort] = usePersistentState<"updated" | "name">(STORAGE_KEYS.sidebarSort, "updated");
-  const [collapsed, setCollapsed] = usePersistentState(STORAGE_KEYS.sidebarChatsCollapsed, false);
+  const [density, setDensity] = useSidebarDensity();
+  const navigate = useNavigate();
   const [slices, setSlices] = useState<Record<string, HostSlice>>({});
   /* Row actions are mounted (not faded) while a row is hovered or holds focus; touch has no hover, so they stay mounted. */
   const [actionsFor, setActionsFor] = useState<string | null>(null);
@@ -98,27 +104,18 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const items: MergedRow[] = published.flatMap(slice => slice.rows.map(row => ({ id: `${slice.host.id}:${row.key}`, slice, row, title: sidebarChatTitle(row) })));
   items.sort((a, b) => sort === "name" ? a.title.localeCompare(b.title) || a.id.localeCompare(b.id) : b.row.timestamp - a.row.timestamp || a.id.localeCompare(b.id));
   const multiHost = hosts.length > 1;
-  const { client: pageClient } = useBackendApi();
   const loading = items.length === 0 && (published.length < hosts.length || published.some(slice => slice.loading));
   const failedHosts = published.filter(slice => slice.failed);
   const error = published.find(slice => slice.error)?.error;
   const now = Date.now();
   return <div className="flex h-full min-h-0 flex-col">
-    <div className="mx-0.5 mt-2.5 flex h-7 shrink-0 items-center gap-1">
-      <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)} className="group/collapsible flex h-7 min-w-0 cursor-pointer items-center gap-1 rounded-(--radius-button) px-2 text-xs font-medium text-muted-foreground-2 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-ring-inset">{v("{Missions}")}<ChevronDown aria-hidden="true" className={cn("size-3 shrink-0 text-muted-foreground-3 transition-[opacity,rotate] duration-100", collapsed ? "-rotate-90 opacity-100" : "opacity-0 group-hover/collapsible:opacity-100 group-focus-visible/collapsible:opacity-100")} /></button>
-      <div className="ml-auto flex items-center">
-        <Tooltip content={v("Search {missions}")} side="bottom"><Button variant="ghost" size="icon-sm" aria-label={v("Search {missions}")} onClick={event => openAppSearch("chats", event.currentTarget)} className="text-muted-foreground-1"><Search className="size-(--icon-sm)" /></Button></Tooltip>
-        <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label={v("{Mission} list options")} className="relative text-muted-foreground-1" />}><Ellipsis className="size-(--icon-sm)" />{sort !== "updated" && <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" />}</DropdownMenu.Trigger><DropdownMenu.Content align="end" sideOffset={4} className="w-48"><DropdownMenu.Group>
-          <DropdownMenu.Label>{v("Sort {missions}")}</DropdownMenu.Label>
-          <DropdownMenu.Item selected={sort === "updated"} onClick={() => setSort("updated")}>Last updated</DropdownMenu.Item>
-          <DropdownMenu.Item selected={sort === "name"} onClick={() => setSort("name")}>Name</DropdownMenu.Item>
-        </DropdownMenu.Group></DropdownMenu.Content></DropdownMenu>
-      </div>
-    </div>
+    <SidebarListHeader title={v("{Missions}")} newLabel={v("New {mission}")} onNew={() => props.onCreate ? props.onCreate(hostId) : navigate(backendRouteHref(hostId, "/chats?new=1"))} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity}>
+      <Tooltip content={v("Search {missions}")} side="bottom"><Button variant="ghost" size="icon-sm" aria-label={v("Search {missions}")} onClick={event => openAppSearch("chats", event.currentTarget)} className="text-muted-foreground-1"><Search className="size-(--icon-sm)" /></Button></Tooltip>
+    </SidebarListHeader>
     {hosts.map(host => <HostChatSource key={host.id} host={host} publish={publish} navigationVersion={navigationVersion} selectedId={props.selectedId} selectedBackendId={hostId} onSelect={select} onPendingChatChange={pendingChatChange} isPendingChatCurrent={pendingChatCurrent} onOpenDockChat={props.onOpenDockChat ? openDockChat : undefined} sort={sort} filter="" />)}
     {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
-    <div className={cn("min-h-0 flex-1 overflow-y-auto scroll-fade-y", collapsed && "hidden")}>
-      {loading ? <ChatHistorySkeleton /> : <div role="list" aria-label={v("{Missions}")} className="relative isolate flex flex-col gap-px">
+    <div onKeyDown={rowNavigation} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-fade-y px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {loading ? <ChatHistorySkeleton /> : <div role="list" aria-label={v("{Missions}")} className="relative isolate flex flex-col">
         {items.map(({ id, slice, row, title }) => {
           const { host } = slice;
           const session = row.session;
@@ -128,37 +125,31 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const attention = live ? ATTENTION[live] ?? ((row.session as { lastTurnIncomplete?: boolean }).lastTurnIncomplete ? "Needs attention" : (row.session as { lastTurnFailed?: boolean }).lastTurnFailed ? "Last turn failed" : undefined) : undefined;
           const working = live === "working" || live === "cancelling";
           const count = (row.session as { messageCount?: number }).messageCount;
-          // Every row gets a second line (like Capy's thread rows): attention/detail text first, else a quiet status summary.
-          const summary = [live ? (working ? (live === "cancelling" ? "Stopping" : "Working") : "Idle") : "Saved", typeof count === "number" && count > 0 ? `${count} ${count === 1 ? "message" : "messages"}` : ""].filter(Boolean).join(" · ");
-          const sub = attention ?? summary;
+          // Second line: the waiting/failed text in the accent colour, else the folder and the computer. Running work shows its spinner instead.
+          const waiting = working ? undefined : attention;
           const hostLabel = `${host.name}${slice.offline ? " · offline" : ""}`;
-          const tag = (multiHost && host.id !== pageClient.backendId) || slice.offline ? hostLabel : "";
-          const Icon = host.id === "local" ? LaptopIcon : ServerIcon;
-          const showIcon = true;
+          const subline = threadSubline({ attention: waiting, workspacePath: (row.session as { workspacePath?: string }).workspacePath, computer: hostLabel });
           const age = formatRelativeAge(row.timestamp, now);
-          return <div key={id} role="listitem" data-ui-selected={selected || undefined} onPointerEnter={event => { if (event.pointerType !== "touch") setActionsFor(id); }} onPointerLeave={event => { if (!event.currentTarget.contains(document.activeElement)) setActionsFor(current => current === id ? null : current); }} onFocus={() => setActionsFor(id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActionsFor(current => current === id ? null : current); }} className="group relative mx-0.5 flex min-w-0 items-center rounded-(--radius-button) transition-colors duration-100 hover:bg-secondary data-[ui-selected]:bg-secondary">
+          return <div key={id} role="listitem" data-active={selected || undefined} onPointerEnter={event => { if (event.pointerType !== "touch") setActionsFor(id); }} onPointerLeave={event => { if (!event.currentTarget.contains(document.activeElement)) setActionsFor(current => current === id ? null : current); }} onFocus={() => setActionsFor(id)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setActionsFor(current => current === id ? null : current); }} className={cn("group", sidebarRowClasses(density))}>
             <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => slice.actions.prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => slice.actions.prefetch(session.id, isSaved)} aria-busy={slice.openingId === session.id || undefined} aria-current={selected ? "page" : undefined} href={backendRouteHref(host.id, `/chats/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true}
               onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }}
               onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }}
               onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); slice.actions.click(row, title); } }}
-              title={sub ? `${title} — ${sub}` : title}
-              className={cn("grid min-w-0 flex-1 items-center", showIcon ? "grid-cols-[--spacing(4)_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)]", " gap-x-2 gap-y-0.5 rounded-md px-2 text-muted-foreground-1 outline-none select-none group-hover:text-foreground group-data-[ui-selected]:text-foreground focus-visible:outline-ring-inset", "py-1.5")}>
-              {showIcon && <span title={host.name} className="inline-flex size-(--icon-sm) place-self-center"><Icon className="size-(--icon-sm)" /></span>}
-              <span className="flex min-w-0 items-center gap-2">
-                <span className={cn("min-w-0 truncate text-sm font-normal", sidebarChatTitlePending(row) && "ui-text-shimmer")}>{title}</span>
-                <span className="ml-auto flex min-w-6 shrink-0 items-center justify-end">
-                  {working
-                    ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
-                    : <span className={cn("block text-2xs leading-none font-normal text-muted-foreground-2 tabular-nums", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</span>}
-                </span>
-              </span>
-              {(tag || sub) && <span className={cn(showIcon ? "col-start-2" : "col-start-1", "flex min-w-0 items-center gap-1 text-2xs font-normal whitespace-nowrap text-muted-foreground-2")}>
-                {tag && <span className="min-w-0 shrink-[3] truncate">{tag}</span>}
-                {sub && tag && <span aria-hidden="true" className="shrink-0">·</span>}
-                {sub && <span className={cn("min-w-0 shrink truncate", attention ? "text-primary-ink" : "text-muted-foreground-2")}>{sub}</span>}
-              </span>}
+              data-sidebar-row title={title}
+              className="-mx-2 flex h-full min-w-0 flex-1 flex-col justify-center gap-1 rounded-md px-2 outline-none select-none focus-visible:outline-ring-inset">
+              <RowTitleLine className={sidebarChatTitlePending(row) ? "ui-text-shimmer" : undefined} title={title} trailing={<span className="flex min-w-6 shrink-0 items-center justify-end">
+                {working
+                  ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
+                  : <RowAge className={cn(!readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</RowAge>}
+              </span>} />
+              {density === "comfortable" && (subline.kind === "needs-you"
+                ? <RowSubline className="text-primary-ink">{subline.text}</RowSubline>
+                : <span className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground-1">
+                  {subline.folder && <><span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center rounded-sm bg-secondary text-[9px] leading-none font-semibold">{folderMonogram(subline.folder)}</span><SidebarLabel className="flex-initial">{subline.folder}</SidebarLabel></>}
+                  <SidebarLabel className="max-w-[60%] flex-none text-right ml-auto">{subline.computer}</SidebarLabel>
+                </span>)}
             </a>
-            {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute inset-y-0 right-0 flex items-start rounded-r-(--radius-button) bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pt-1 pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
+            {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute inset-y-0 right-0 flex items-center rounded-r-md bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
               <Button variant="ghost" size="icon-xs" disabled={slice.busy || slice.unavailable} tooltip={`Delete ${VOCAB.mission.singular}`} className="size-5.5 p-1 text-muted-foreground hover:bg-transparent hover:text-destructive" aria-label={`Delete ${title}`} onClick={() => slice.actions.requestDelete(session.id, title, isSaved)}><Trash2 className="size-(--icon-sm)" /></Button>
             </div>}
           </div>;

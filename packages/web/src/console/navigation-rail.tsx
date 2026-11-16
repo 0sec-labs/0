@@ -17,7 +17,6 @@ import {
   SidebarHeader,
   SidebarKbd,
   SidebarLabel,
-  SidebarScroll,
   sidebarItemClasses,
 } from "@/ui/components/sidebar";
 import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
@@ -27,6 +26,9 @@ import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
+import { SidebarModeToggle } from "@/components/sidebar/sidebar-mode-toggle";
+import { useSidebarListMode } from "@/components/sidebar/use-sidebar-list";
+import { cn } from "@/lib/utils";
 
 /** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except formatted editors, where ⌘B is bold. */
 export function useSidebarShortcut(toggle: () => void) {
@@ -103,6 +105,7 @@ export function ConsoleNavigationRail({
   // Seven items, no overflow menu: New thread, Findings, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
   const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const active = (to: string) => isSidebarDestinationActive(to, currentPath);
+  const list = useSidebarListMode();
 
   return (
     <nav aria-label="Command Center navigation" className="flex h-full min-h-0 w-full flex-col pt-2">
@@ -170,10 +173,12 @@ export function ConsoleNavigationRail({
           </NavLink>
         ))}
       </SidebarGroup>
-      <SentinelSidebarSection />
-      <SidebarScroll id="navigation-chat-history">
+      {list.supported && <SidebarModeToggle mode={list.mode} onChange={list.setMode} />}
+      {/* Both lists stay mounted: the Threads source keeps its queries and polling while Agents is shown. */}
+      {list.mode === "agents" && <SentinelSidebarSection />}
+      <div id="navigation-chat-history" className={cn("flex min-h-0 flex-1 flex-col", list.mode === "agents" && "hidden")}>
         <div ref={onHistorySlot} className="flex h-full min-h-0 flex-col" />
-      </SidebarScroll>
+      </div>
       <SidebarCards />
       <SidebarFooter>
         <AccountMenu settingsHref={settingsHref} />
