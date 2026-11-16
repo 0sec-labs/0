@@ -5,7 +5,7 @@ import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } f
 import { type ExecutablePluginConfiguration } from "../../agent/executable-plugins.js";
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
 import type { EvolutionConfig } from "../../improvement/types.js";
-import type { McpHost } from "../../agent/mcp-host.js";
+import type { McpToolHost } from "../../agent/mcp-host.js";
 import { LearningStore, type osecDB } from "../../storage/index.js";
 import { HuntMemoryStore } from "../../memory/hunt-memory.js";
 import type { PluginHost } from "../../plugins/loader.js";
@@ -539,7 +539,7 @@ export interface ConsoleSessionConfig {
    * advertises its discovered tools at turn boundaries, routes `mcp__` calls to
    * it via the executor, and closes it on cleanup. Absent = no MCP tools.
    */
-  mcpHost?: McpHost;
+  mcpHost?: McpToolHost;
   /**
    * Read-only access to persisted console session transcripts. When supplied,
    * the model-facing tools `list_conversations` and `read_conversation` are

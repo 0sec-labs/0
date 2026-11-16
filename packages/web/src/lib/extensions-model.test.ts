@@ -43,3 +43,11 @@ describe("extensions view model", () => {
     expect(failureLine("review_mismatch", "x")).toMatch(/Review it again/); expect(failureLine("bad_source", "Bad.")).toBe("Bad.");
   });
 });
+
+describe("MCP tool review on an enabled extension", () => {
+  it("warns with the one-line reason when a tool changed, and stays On otherwise", () => {
+    const review = { server: "docs", state: "needs-approval" as const, reason: "changed: echo; blocked until you approve them again" };
+    expect(statusView(row({ status: "enabled", enabled: true, mcp: [review] }))).toEqual({ label: "Tools need approval", tone: "warning", detail: "MCP server docs: changed: echo; blocked until you approve them again" });
+    expect(statusView(row({ status: "enabled", enabled: true, mcp: [{ ...review, state: "approved", reason: "" }] })).label).toBe("On");
+  });
+});

@@ -31,7 +31,7 @@ const hasApproval = (e: ExtensionEntry): boolean => e.enabled.global || e.enable
 
 /** Drop every approval from an entry; it stays installed and must be approved again. */
 export function stripApprovals(entry: ExtensionEntry): void {
-  for (const r of Object.values(entry.revisions)) Object.assign(r, { approvedAt: null, approvedCapabilities: null, approvedCapabilityKey: null, approvedEnv: [] });
+  for (const r of Object.values(entry.revisions)) Object.assign(r, { approvedAt: null, approvedCapabilities: null, approvedCapabilityKey: null, approvedEnv: [], mcpPins: undefined });
   entry.approvedRevision = null; entry.enabled = { global: false, projects: [] }; entry.sealBroken = true;
 }
 

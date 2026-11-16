@@ -10,7 +10,7 @@ import type { SubagentModelSelection } from "../../runtime/types.js";
 import { formatTruncated } from "../output-truncation.js";
 import type { SubagentLifecyclePayload, SubagentProgressPayload, SubagentMessagePayload, SubagentToolMessage } from "../../events/bus.js";
 import { isValidPeerId } from "../../hub/mailbox.js";
-import type { McpHost } from "../mcp-host.js";
+import type { McpToolHost } from "../mcp-host.js";
 import { DeferredToolRegistry } from "../deferred-tools.js";
 import { decideAddressing, type MessagingRuntime } from "../agent-messaging.js";
 import { TOOL_DEFINITIONS } from "./index.js";
@@ -147,9 +147,9 @@ export function messagingRuntimeOf(ctx: ToolContext): MessagingRuntime | undefin
 
 /** Session-scoped MCP client host, attached to the context like agentMessaging. */
 export interface McpHostCtx {
-  mcpHost?: McpHost;
+  mcpHost?: McpToolHost;
 }
-export function mcpHostOf(ctx: ToolContext): McpHost | undefined {
+export function mcpHostOf(ctx: ToolContext): McpToolHost | undefined {
   return (ctx as ToolContext & McpHostCtx).mcpHost;
 }
 

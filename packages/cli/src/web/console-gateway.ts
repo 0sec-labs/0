@@ -1,6 +1,7 @@
 import { loadOperatorInstructions } from "./operator-instructions.js";
 import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { connectConsoleMcp } from "../console-mcp.js";
+import { connectExtensionMcp } from "../console-extension-mcp.js";
 import { loadServicePluginConnections } from "./service-plugins.js";
 import { connectCustomMcpServers } from "./custom-mcp.js";
 import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
@@ -19,7 +20,7 @@ import {
   type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
-  type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall, type ToolResult,
+  type McpToolHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall, type ToolResult,
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
@@ -1295,9 +1296,9 @@ export class ConsoleGateway {
             });
           } else {
             const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
-            let mcpHost: McpHost | undefined;
+            let mcpHost: McpToolHost | undefined;
             try {
-              mcpHost = await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath)), managed.workspacePath ?? this.#projectPath);
+              mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath)), managed.workspacePath ?? this.#projectPath), managed.workspacePath ?? this.#projectPath);
               session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}) }, this.#options.dbPath);
             } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
             const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;

@@ -1,11 +1,12 @@
 import { createReadStream, createWriteStream, writeSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ScopePolicy, withScopeEnforcement, eventBus, connectServicePlugins, TOOL_DEFINITIONS, observeExecutionResources,
-  type ConsoleSession, type ConsoleSessionConfig, type McpHost } from "@0/engine";
+  type ConsoleSession, type ConsoleSessionConfig, type McpToolHost } from "@0/engine";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
+import { connectExtensionMcp } from "./console-extension-mcp.js";
 import { loadServicePluginConnections } from "./web/service-plugins.js";
 import { connectCustomMcpServers } from "./web/custom-mcp.js";
 import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
@@ -43,7 +44,7 @@ export async function runHostConsoleWorker(): Promise<void> {
   let session: ConsoleSession | undefined;
   let turn: AbortController | undefined;
   let bootstrap: HostConsoleBootstrap;
-  let mcpHost: McpHost | undefined;
+  let mcpHost: McpToolHost | undefined;
   let plugins: Awaited<ReturnType<typeof createSessionPluginHostManager>> | undefined;
   let learningStore: LearningStore | undefined;
   let active = false;
@@ -139,7 +140,7 @@ export async function runHostConsoleWorker(): Promise<void> {
         } as ConsoleSessionConfig["workflowAuthoring"];
         if (bootstrap.callbacks.includes("workflowInvoke")) config.workflowLifecycle = { invoke: (...args: unknown[]) => invoke("workflowInvoke", args) };
         plugins = await createSessionPluginHostManager({ projectPath: config.workspaceRoot, reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
-        mcpHost = await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd())), config.workspaceRoot ?? process.cwd());
+        mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd())), config.workspaceRoot ?? process.cwd()), config.workspaceRoot ?? process.cwd());
         const lease = plugins.acquire(); releasePlugins = lease.release;
         config.pluginHost = lease.host; config.mcpHost = mcpHost;
         config.onHarnessUpdate = value => { emit({ type: "harness", value }); snapshot(); };

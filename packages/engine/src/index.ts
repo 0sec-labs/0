@@ -444,6 +444,7 @@ export {
   parseMcpConfig,
   connectMcpServers,
   type McpServerConfig,
+  type McpToolHost,
 } from "./agent/mcp-host.js";
 // Named bundles of ZERO_FEATURE_* vars — the documented way to enable the
 // full FP moat for an A/B run. See `agent/feature-presets.ts`.
@@ -921,6 +922,7 @@ export {
 export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,
   ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
+  McpServerStatus as ExtensionMcpServerStatus, McpToolStatus as ExtensionMcpToolStatus, McpGate as ExtensionMcpGate,
 } from "./plugins/extensions/index.js";
 // Connector contract (extension manifest `connector`): declaration, auth port, token adapter, secret store.
 export { listConnectors, defaultAdapter, TokenConnector, FsConnectionSecrets, GITHUB_CONNECTOR, hostAllowed } from "./plugins/extensions/index.js";

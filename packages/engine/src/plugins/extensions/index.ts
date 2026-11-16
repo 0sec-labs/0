@@ -9,12 +9,20 @@
  */
 import { projectKeyOf } from "./project-key.js";
 import { DefaultSourceResolver } from "./adapters/source-resolver.js";
-import { FsExtensionStore } from "./adapters/fs-store.js";
+import { FsExtensionStore, extensionsRoot } from "./adapters/fs-store.js";
 import { FsConnectionSecrets } from "./adapters/fs-connection-secrets.js";
 import { LegacyImporter } from "./import/index.js";
 import { ExtensionInstaller } from "./installer.js";
 import { listRows, loadable } from "./runtime.js";
 import { extensionOverview, type ExtensionOverview } from "./overview.js";
+import { ExtensionMcpHost } from "./mcp/host.js";
+import { StdioMcpConnector } from "./mcp/adapters/stdio.js";
+import { SdkMcpConnector } from "./mcp/adapters/http.js";
+import { StatePinStore } from "./mcp/adapters/pins.js";
+import { FileObservationLog } from "./mcp/adapters/observed.js";
+import { mcpServerStatuses, type McpServerStatus } from "./mcp/status.js";
+import type { McpConnector, McpGate } from "./mcp/ports.js";
+import type { McpToolHost } from "../../agent/mcp-host.js";
 import { readVerified } from "./verify.js";
 import { parseManifest } from "./core/manifest.js";
 import { capabilitiesOf } from "./core/capabilities.js";
@@ -56,6 +64,10 @@ export interface ExtensionService {
   /** Everything the Extensions page lists, in one read-only call. */
   overview(project?: string): ExtensionOverview;
   /** The install prompt for what is installed now, after checking the folder still matches its pin. */
+  /** The MCP servers an installed extension declares, with approved tool hashes against what each last showed. Connects to nothing. */
+  mcpStatus(name: string): Result<McpServerStatus[]>;
+  /** A lazy host for the MCP servers of the extensions enabled for `project`. `base` keeps the operator's own servers working. */
+  mcpHost(options: { project?: string; gate: McpGate; base?: McpToolHost; connector?: McpConnector; parentEnv?: Record<string, string | undefined> }): ExtensionMcpHost;
   info(name: string): Result<{ prompt: InstallPrompt; manifest: import("./core/manifest.js").ExtensionManifest; entry: import("./core/state.js").ExtensionEntry }>;
 }
 
@@ -66,11 +78,14 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
   const sources = options.sources ?? new DefaultSourceResolver(options.home);
   const secrets = new FsConnectionSecrets(options.home);
   const installer = new ExtensionInstaller({ store, sources, clock, projectKey: projectKeyOf });
-  return {
+  const pins = new StatePinStore(store, clock); const observed = new FileObservationLog(extensionsRoot(options.home));
+  const service: ExtensionService = {
     store, secrets, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
     list: project => listRows(store, project ? projectKeyOf(project) : null),
     loadable: project => loadable(store, project ? projectKeyOf(project) : null, secrets),
-    overview: project => extensionOverview(store, project ? projectKeyOf(project) : null),
+    overview: project => extensionOverview(store, project ? projectKeyOf(project) : null, { pins, observed }),
+    mcpStatus(name) { const r = service.info(name); return r.ok ? ok(mcpServerStatuses(r.value.manifest, pins.pins(name, r.value.entry.active!), observed.read(name, r.value.entry.active!))) : r; },
+    mcpHost: o => new ExtensionMcpHost({ extensions: loadable(store, o.project ? projectKeyOf(o.project) : null, secrets).extensions, connector: o.connector ?? new SdkMcpConnector(new StdioMcpConnector()), pins, observed, gate: o.gate, ...(o.base ? { base: o.base } : {}), ...(o.parentEnv ? { parentEnv: o.parentEnv } : {}) }),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
       const entry = state.value.extensions[name];
@@ -83,7 +98,9 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
       return ok({ prompt, manifest: manifest.value, entry });
     },
   };
+  return service;
 }
+export * from "./mcp/index.js";
 export type { ExtensionOverview, ExtensionOverviewRow } from "./overview.js";
 export { extensionSkillRoots, type ExtensionSkillRoot } from "./skills.js";
 export { runStartupImport } from "./startup.js";

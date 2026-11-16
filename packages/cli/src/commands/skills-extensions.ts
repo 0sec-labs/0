@@ -79,7 +79,11 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
   consoleOptions(ext.command("info <name>").description("Show the install prompt for an installed extension"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
       const r = svc.info(name); if (!r.ok) return fail(io, options, r.error.message);
-      emit(io, options, { prompt: r.value.prompt, enabled: r.value.entry.enabled }, () => renderInstallPrompt(r.value.prompt));
+      const mcp = svc.mcpStatus(name); const servers = mcp.ok ? mcp.value : [];
+      emit(io, options, { prompt: r.value.prompt, enabled: r.value.entry.enabled, mcp: servers }, () => [renderInstallPrompt(r.value.prompt), ...(servers.length ? ["", "MCP servers (tool hashes: approved / last seen):", ...servers.flatMap(x => [
+        `  ${x.server}  ${x.transport}  ${x.state}${x.reason ? `  ${x.reason}` : ""}`,
+        ...x.tools.map(t => `    ${t.state.padEnd(10)} ${t.name}  ${(t.approvedHash ?? "-").slice(0, 12)} / ${(t.seenHash ?? "-").slice(0, 12)}`),
+      ])] : [])].join("\n"));
     }));
 
   consoleOptions(ext.command("enable <name>").description("Enable globally, or for one project with --project").option("--project <dir>", "Enable for this project only").option("--yes", "Approve an unapproved revision (for example an imported one)"))

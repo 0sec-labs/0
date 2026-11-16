@@ -236,6 +236,19 @@ export ZERO_MCP="$(node --input-type=module -e '
 
 A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the tools from your deployment. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys). You can also connect Elastic from **Plugins**.
 
+## MCP servers in extensions
+
+An extension can bundle MCP servers, so installing one is a single, reviewed step. Declare them in `extension.json` under `"0": { "mcp": { ... } }`, or ship a Claude-style `.mcp.json`. The shape is the same as `.mcp.json`: a `command` and `args` for a local server, or a `url` (with `"type": "http"` or `"sse"`) for a remote one, plus the names of environment variables the server needs under `env` and an optional one-line `description`. Values are never stored in the extension. The install prompt lists every server, command, argument, URL and variable name, and changing any of them asks again.
+
+- **Lazy.** Nothing starts when a thread opens. The tool list holds one entry per server (its name and one line), which you can see with `list_tools`. When the model needs a server it calls `load_tool` on that entry; the server starts, its tools are checked, and they become callable on the next turn. Tool schemas never sit in every prompt, so the default tool list stays small and identical from turn to turn.
+- **Commands and network.** Starting a local server is a `process` command and connecting to a URL is a `network` command, so both go through `beforeCommand` with your scope and "Ask before running commands" setting. A deny keeps the server from starting. Local servers run in the extension's folder with only the variable names they declared (plus a small base set); model provider keys are not passed unless declared and approved.
+- **Pinned tools.** The first time a server connects, 0 asks you to approve its tools. It records a sha256 of each tool's name, description, input schema and annotations. On every later connection the hashes are compared. If any tool is changed, new or removed, the whole server is blocked, nothing from it is advertised or callable, and the thread shows one line such as `changed: echo; blocked until you approve them again`. Approve again in the thread when asked, or review it on the Extensions page, which shows Changed, New and Removed. With nobody to ask (no approval channel), it stays blocked.
+- **Untrusted results.** A tool's output is labelled as untrusted data, cannot close its own label, and is cut at 32 KB. A tool description is the server's own text and is shown to the model as such; it is never part of the system prompt and cannot change scope, approvals or rules.
+
+`0 skills extensions info <name>` lists the extension's servers and, for each tool, the approved hash and the hash last seen.
+
+Servers you added yourself on the MCP page keep working. The importer turns them into local extensions that need approval; once such an extension is approved and enabled, it is the extension that starts the server.
+
 ## Service connections
 
 In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new threads. Leaving a saved secret field blank keeps it.

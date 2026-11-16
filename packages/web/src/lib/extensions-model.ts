@@ -10,6 +10,8 @@ export interface ExtensionRowDto {
   refusal: { code: string; reason: string } | null; note: string;
   /** The connector contract it declares, when it is a connector (its card is on the Connections section). */
   connector?: import("./connector-model").ConnectorDto | null;
+  /** MCP servers the extension declares; `needs-approval` means a tool changed, is new or was removed (or was never approved). */
+  mcp?: Array<{ server: string; state: "not-connected" | "approved" | "needs-approval"; reason: string }>;
 }
 export interface ImportReportDto { importedAt: string; migrated: Array<{ kind: string; name: string; detail: string }>; notMigrated: Array<{ kind: string; name: string; detail: string }>; notes: string[] }
 export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string }
@@ -41,7 +43,10 @@ export function statusView(row: ExtensionRowDto): StatusView {
     case "refused": return { label: "Refused", tone: "danger", detail: row.refusal?.reason ?? "It will not run." };
     case "unmigrated": return { label: "Could not migrate", tone: "warning", detail: row.note || "It used the old plugin format and cannot run." };
     case "needs-approval": return { label: "Needs approval", tone: "warning", detail: "Review what it can do before turning it on." };
-    case "enabled": return { label: "On", tone: "success", detail: "" };
+    case "enabled": {
+      const review = row.mcp?.find(server => server.state === "needs-approval");
+      return review ? { label: "Tools need approval", tone: "warning", detail: `MCP server ${review.server}: ${review.reason}` } : { label: "On", tone: "success", detail: "" };
+    }
     case "built-in": return row.enabled ? { label: "On", tone: "success", detail: "" } : { label: "Off", tone: "warning", detail: "" };
     default: return { label: "Off", tone: "neutral", detail: "" };
   }

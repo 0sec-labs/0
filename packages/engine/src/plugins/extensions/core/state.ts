@@ -12,10 +12,15 @@ import type { InstallPrompt } from "./prompt.js";
 export const STATE_SCHEMA = 1;
 
 const sourceSchema = z.discriminatedUnion("type", [z.object({ type: z.literal("git"), url: z.string(), subpath: z.string().optional() }), z.object({ type: z.literal("local"), path: z.string() })]);
+/** Per-tool hashes the operator approved for one MCP server of one revision (rug-pull defence, see mcp/core/review.ts). */
+const mcpPinSchema = z.object({ approvedAt: z.string(), tools: z.record(z.string(), z.string()) });
+export type McpPinRecord = z.infer<typeof mcpPinSchema>;
 const revisionSchema = z.object({
   version: z.string(), format: z.string(), treeHash: z.string(), installedAt: z.string(),
   location: z.discriminatedUnion("kind", [z.object({ kind: z.literal("store") }), z.object({ kind: z.literal("external"), path: z.string() })]),
   approvedAt: z.string().nullable(), approvedCapabilities: z.custom<Capabilities>().nullable(), approvedCapabilityKey: z.string().nullable(), approvedEnv: z.array(z.string()),
+  /** MCP tool pins by server name. Absent until the operator approves the tools a server first shows. */
+  mcpPins: z.record(z.string(), mcpPinSchema).optional(),
 });
 const legacySchema = z.object({
   kind: z.enum(["executable-github", "executable-other", "model-authored"]), dir: z.string().optional(), repo: z.string().optional(), ref: z.string().nullable().optional(), sha: z.string().optional(),
@@ -90,4 +95,12 @@ export function statusOf(entry: ExtensionEntry, project: string | null): RowStat
   if (entry.legacy) return "unmigrated";
   if (!entry.active || !entry.revisions[entry.active]?.approvedAt) return "needs-approval";
   return isEnabledFor(entry, project) ? "enabled" : "disabled";
+}
+
+/** Record the operator's approval of exactly these tool hashes for one MCP server of the active revision. */
+export function applyMcpPins(state: ExtensionState, name: string, revision: string, server: string, tools: Record<string, string>, now: string): Result<void> {
+  const record = state.extensions[name]?.revisions[revision];
+  if (!record || !record.approvedAt) return err("needs_approval", `${name} is not approved: approve the extension before its MCP tools.`);
+  record.mcpPins = { ...(record.mcpPins ?? {}), [server]: { approvedAt: now, tools: { ...tools } } };
+  return ok(undefined);
 }

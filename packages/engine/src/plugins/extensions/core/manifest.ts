@@ -15,7 +15,7 @@ import { type FolderFile, textOf } from "./files.js";
 import { err, ok, type Result } from "./result.js";
 
 export type ManifestFormat = "extension" | "claude" | "plugin-json" | "skill-folder";
-export interface McpServerDecl { name: string; transport: "stdio" | "http" | "sse"; command?: string; args: string[]; url?: string; env: string[]; headers: string[] }
+export interface McpServerDecl { name: string; transport: "stdio" | "http" | "sse"; command?: string; args: string[]; url?: string; env: string[]; headers: string[]; /** One line shown to the model in the tool index. Not part of the approval. */ description?: string }
 export type { ConnectorDecl } from "./connector.js";
 export interface SkillDecl { name: string; description: string; path: string }
 export interface ExtensionManifest {
@@ -42,10 +42,12 @@ const list = <T extends z.ZodType>(item: T, max = 64) => z.array(item).max(max).
 
 const connectorSchema = connectorShape.extend({ surface: relPath.optional() });
 const zeroSchema = z.object({
+  /** MCP servers declared in the `0` block (same shape as `.mcp.json`). */
+  mcp: z.lazy(() => mcpMap).optional(),
   connector: connectorSchema.optional(), scope: relPath.optional(), verify: relPath.optional(),
   requires: z.object({ bins: list(text, 32), env: list(envName), "0": z.string().max(32).optional() }).default({ bins: [], env: [] }),
 });
-const mcpEntry = z.object({ command: z.string().optional(), url: z.string().optional(), type: z.string().optional(), transport: z.string().optional(), args: list(z.string(), 128), env: z.record(z.string(), z.string()).default({}), headers: z.record(z.string(), z.string()).default({}) })
+const mcpEntry = z.object({ description: z.string().max(300).optional(), command: z.string().optional(), url: z.string().optional(), type: z.string().optional(), transport: z.string().optional(), args: list(z.string(), 128), env: z.record(z.string(), z.string()).default({}), headers: z.record(z.string(), z.string()).default({}) })
   .refine(s => s.command || s.url, "needs a command or a url");
 const mcpMap = z.record(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/), mcpEntry);
 const baseSchema = z.object({
@@ -97,7 +99,7 @@ function mcpDecls(map: z.infer<typeof mcpMap>): Result<McpServerDecl[]> {
     const badEnv = env.find(k => !isSafeExtensionEnvName(k));
     if (badEnv) return bad(`MCP server ${name} sets a disallowed environment variable ${JSON.stringify(badEnv)}: names must match the allowed pattern (UPPER_CASE ending in _TOKEN, _KEY, _SECRET, _URL, _ID, _HOST ...) and never be a loader variable such as PATH, PYTHONPATH, NODE_PATH, GIT_*, LD_*, DYLD_*, BASH_ENV or NODE_OPTIONS.`);
     const type = s.type ?? s.transport;
-    out.push({ name, transport: s.url ? (type === "sse" ? "sse" : "http") : "stdio", ...(s.command ? { command: s.command } : {}), args: s.args, ...(s.url ? { url: s.url } : {}), env: env.sort(), headers: Object.keys(s.headers).sort() });
+    out.push({ name, transport: s.url ? (type === "sse" ? "sse" : "http") : "stdio", ...(s.command ? { command: s.command } : {}), args: s.args, ...(s.url ? { url: s.url } : {}), env: env.sort(), headers: Object.keys(s.headers).sort(), ...(s.description ? { description: s.description.replace(/\s+/g, " ").trim() } : {}) });
   }
   return ok(out);
 }
@@ -126,6 +128,12 @@ function fromJson(tree: Tree, raw: unknown, format: ManifestFormat, manifestPath
   const zero = zeroSchema.safeParse(zeroRaw);
   if (!zero.success) return bad(`"0": ${zodMessage(zero.error)}`);
   const z0 = zero.data;
+  if (z0.mcp) {
+    const d = mcpDecls(z0.mcp); if (!d.ok) return d;
+    const dup = d.value.find(x => servers.some(y => y.name === x.name));
+    if (dup) return bad(`MCP server ${dup.name} is declared twice (in "0".mcp and in .mcp.json or mcpServers).`);
+    servers = [...servers, ...d.value];
+  }
   for (const [label, path] of [["verify", z0.verify], ["scope", z0.scope]] as const) if (path && !tree.has(path)) return bad(`${label} points at ${path}, which does not exist.`);
   if (z0.connector?.surface && !tree.has(z0.connector.surface) && !tree.dir(z0.connector.surface)) return bad(`connector.surface points at ${z0.connector.surface}, which does not exist.`);
   const problem = z0.connector ? connectorProblem(z0.connector) : null;

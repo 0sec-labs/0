@@ -80,7 +80,33 @@ interface ConnectedServer {
  * session.
  */
 export interface McpToolGateFlags { networkCapable: boolean; localScope: boolean; readOnly: boolean }
-export class McpHost {
+
+/** The lazily started servers of a host: one index entry per unloaded server, and which advertised tools are already loaded. */
+export interface McpLazyView { readonly index: readonly ToolDefinition[]; readonly loaded: ReadonlySet<string> }
+/** What the thread gives a host so it can put a server start and a tool re-approval in front of the operator. */
+export interface McpOperatorChannel {
+  readonly approve?: (request: { name: string; summary: string }) => Promise<boolean>;
+  readonly thread: () => import("../hooks/before-command.js").BeforeCommandThread;
+  readonly cwd: string;
+}
+
+/**
+ * What the console and the executor need from an MCP host. `McpHost` (eager, operator-configured servers) and the
+ * extension host (lazy, hash-pinned servers declared by extensions) both satisfy it.
+ */
+export interface McpToolHost {
+  registeredTools(): ToolDefinition[];
+  toolGateFlags?(name: string): McpToolGateFlags | undefined;
+  callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+  closeAll(): Promise<void>;
+  /** Lazy servers only. Absent on an eager host. */
+  lazyServers?(): McpLazyView;
+  /** Starts one lazy server (by index name) and reports what the model may now load. Never throws. */
+  loadServer?(indexName: string): Promise<{ readonly ok: boolean; readonly message: string }>;
+  attachOperator?(channel: McpOperatorChannel): void;
+}
+
+export class McpHost implements McpToolHost {
   private readonly trustedFlags = new Map<string, McpToolGateFlags>();
   ownsTool(name: string): boolean { return this.registeredTools().some(tool => tool.name === name); }
   /** Trusted host configuration only: never accept capability claims from remote tool metadata. */

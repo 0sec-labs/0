@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { constants, chmodSync, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { McpHost, isAllowedLocalOrigin, isPrivateAddress } from "@0/engine";
+import { McpHost, createExtensionService, isAllowedLocalOrigin, isPrivateAddress } from "@0/engine";
 import { homeStateDir } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { connectorLogo } from "./connector-logos.js";
@@ -350,14 +350,27 @@ export class CustomMcpServices {
   }
 }
 
+/**
+ * Servers the importer turned into extensions that are approved and enabled: the extension host (lazy, hash-pinned) owns
+ * them now, so this legacy path must not start a second copy. Unadopted rows keep loading here until the legacy store goes.
+ */
+function adoptedByExtensions(homeDir?: string): Set<string> {
+  try {
+    const state = createExtensionService(homeDir ? { home: homeDir } : {}).store.read();
+    if (!state.ok) return new Set();
+    return new Set(Object.values(state.value.extensions).filter(e => e.importKey?.startsWith("mcp-servers:") && e.active && e.revisions[e.active]?.approvedAt && (e.enabled.global || e.enabled.projects.length > 0)).map(e => e.importKey!.slice("mcp-servers:".length)));
+  } catch { return new Set(); }
+}
+
 /** Enabled and reviewed servers only. Fail-soft; one bad server never blocks a mission. */
 export async function connectCustomMcpServers(existing: McpHost | undefined, workspaceRoot: string, options: { homeDir?: string } = {}): Promise<McpHost | undefined> {
   if (consoleExecutionProfile(options.homeDir) === "smolvm") return existing;
   let rows: StoredServer[];
   try { rows = readStore(options.homeDir); } catch { return existing; }
   const host = existing ?? new McpHost();
+  const adopted = adoptedByExtensions(options.homeDir);
   for (const row of rows) {
-    if (!row.enabled || host.hasServer(row.id)) continue;
+    if (!row.enabled || host.hasServer(row.id) || adopted.has(row.id)) continue;
     try { if (row.approvedFingerprint !== configFingerprint(row, options.homeDir)) continue; } catch { continue; }
     try {
       if (row.transport !== "stdio") await assertRemoteAllowed(row.url!);

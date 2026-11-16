@@ -11,7 +11,7 @@ import { createExecutablePlugins, executableModelResult, parseExecutableModelReq
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
 import { getWorkspaceHarnessTrust } from "../../plugins/harness-trust.js";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../../agent/tools.js";
-import type { McpHost } from "../../agent/mcp-host.js";
+import type { McpToolHost } from "../../agent/mcp-host.js";
 import { toNativeToolDef, toNativeExtensionToolDef } from "../../agent/native-tooldef.js";
 import { partitionForToolset, resolveToolset } from "../../agent/toolset.js";
 import { DeferredToolRegistry, partitionToolDefinitions, DEFERRED_TOOLS_MIN, DEFERRED_CONTROL_TOOL_NAMES, LIST_TOOLS_NAME, LOAD_TOOL_NAME, listToolsDef, loadToolDef } from "../../agent/deferred-tools.js";
@@ -44,6 +44,7 @@ import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZE
 import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
 import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
 import { runBeforeCommand } from "../../agent/before-command.js";
+import { loadMcpServers, mcpLoadResult } from "./mcp-load.js";
 import { beforeCommandInputForCall } from "./before-command.js";
 import { executionPolicy, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
 
@@ -292,8 +293,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   if (config.mcpHost) {
     // Same cast pattern: the executor's _dispatch resolves mcp__ tool calls to
     // THIS session's connected host.
-    (toolContext as ToolContext & { mcpHost?: McpHost }).mcpHost = config.mcpHost;
+    (toolContext as ToolContext & { mcpHost?: McpToolHost }).mcpHost = config.mcpHost;
   }
+  config.mcpHost?.attachOperator?.({
+    cwd: workspaceRoot, thread: () => ({ id: scanId, scope: sessionScope, approvals, canAskScope: false }),
+    ...(config.approveTool ? { approve: ({ name, summary }) => config.approveTool!({ name, arguments: { summary } }) } : {}),
+  });
   // One session catalog covers specialist built-ins and connected MCP tools.
   // Discovery changes schema exposure only; dispatch and approval gates remain intact.
   const deferredTools = new DeferredToolRegistry();
@@ -466,10 +471,19 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         if (flags.localScope) loc[name] = true;
         if (flags.readOnly) ro[name] = true;
       };
-      if (mcpDefs.length >= DEFERRED_TOOLS_MIN) {
-        catalog.push(...mcpDefs);
+      // A lazy host (extension MCP servers) adds one catalog line per unloaded server; the tools of servers the model
+      // already loaded are advertised directly, so the default tool list never carries an MCP schema.
+      const lazy = config.mcpHost.lazyServers?.();
+      if (lazy) {
+        catalog.push(...lazy.index);
+        for (const def of lazy.index) provenance.set(def.name, "mcp");
+      }
+      const eager = lazy ? mcpDefs.filter(def => !lazy.loaded.has(def.name)) : mcpDefs;
+      if (lazy) extras.push(...mcpDefs.filter(def => lazy.loaded.has(def.name)).map(toNativeToolDef));
+      if (eager.length >= DEFERRED_TOOLS_MIN) {
+        catalog.push(...eager);
       } else {
-        extras.push(...mcpDefs.map(toNativeToolDef));
+        extras.push(...eager.map(toNativeToolDef));
       }
       for (const def of mcpDefs) {
         classifyMcp(def.name);
@@ -1252,6 +1266,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       return dispatchConversationHistoryTool(call, config.conversationHistory);
     }
     if (config.pluginHost?.ownsTool(call.name)) return dispatchPluginTool(config.pluginHost, call);
+    const mcpLoad = await loadMcpServers(config.mcpHost, call);
+    if (mcpLoad) {
+      const other = mcpLoad.rest.length ? await executor.execute({ ...call, arguments: { ...call.arguments, names: mcpLoad.rest } }, { signal, assertAuthority }) : null;
+      return mcpLoadResult(mcpLoad.messages, other);
+    }
     return executor.execute(call, { signal, assertAuthority });
   }
 

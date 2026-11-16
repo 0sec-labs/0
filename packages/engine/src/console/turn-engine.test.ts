@@ -30,6 +30,8 @@ import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 
 import { estimateCost, DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "../shared/index.js";
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
+import { ExtensionMcpHost, type McpConnector } from "../plugins/extensions/index.js";
+import { MemoryObserved, MemoryPins, allow, stdioExtension } from "../plugins/extensions/__tests__/mcp-fixtures.js";
 
 /**
  * A scripted NativeRuntime: replays a queue of pre-baked results so the turn
@@ -3422,6 +3424,30 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
     const round3 = runtime.calls[2].tools.map((t) => t.name);
     expect(round3).toContain("mcp__srv__tool3");
     expect(round3.filter((n) => n.startsWith("mcp__srv__"))).toEqual(["mcp__srv__tool3"]);
+  });
+
+  it("lazy extension MCP servers: one index line, no schema until loaded, byte-stable tools, untrusted results", async () => {
+    const tools = [{ name: "echo", description: "Echo.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }];
+    const connector: McpConnector = { connect: async () => ({ tools: async () => tools, call: async (_n, args) => ({ text: `echo:${String(args["text"])}`, isError: false }), close: async () => undefined }) };
+    const host = new ExtensionMcpHost({ extensions: [stdioExtension("docs", "v1")], connector, pins: new MemoryPins(), observed: new MemoryObserved(), gate: allow, parentEnv: {} });
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "c1", name: "list_tools", input: {} }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c2", name: "load_tool", input: { names: ["mcp__docs-fake"] } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c3", name: "mcp__docs-fake__echo", input: { text: "hi" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("done"),
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = createConsoleSession({ runtime, mcpHost: host as any, approveTool: async () => true });
+    const outcome = await session.send("use docs");
+    const names = (round: number) => runtime.calls[round].tools.map(t => t.name);
+    expect(names(0).some(n => n.startsWith("mcp__"))).toBe(false);
+    expect(String(outcome.toolCalls[0].result.output)).toContain('MCP server "docs-fake"');
+    expect(JSON.stringify(runtime.calls[0].tools)).toBe(JSON.stringify(runtime.calls[1].tools));
+    expect(String(outcome.toolCalls[1].result.output)).toContain("loaded");
+    expect(names(2)).toContain("mcp__docs-fake__echo");
+    expect(names(2).filter(n => n.startsWith("mcp__"))).toEqual(["mcp__docs-fake__echo"]);
+    expect(JSON.stringify(runtime.calls[2].tools)).toBe(JSON.stringify(runtime.calls[3].tools));
+    expect(String(outcome.toolCalls[2].result.output ? JSON.stringify(outcome.toolCalls[2].result.output) : "")).toContain("Untrusted data from MCP tool echo");
   });
 
   it("advertises a small MCP catalog directly (no deferral)", async () => {
