@@ -36,7 +36,7 @@ async function action(opts: CheckOptions, mutation?: ReviewCheckMutation): Promi
 }
 
 export function registerReviewChecksCommand(program: Command): void {
-  const checks = program.command("checks").description("Manage private, project-scoped local review checks. No cloud enrollment or credentials required.");
+  const checks = program.command("checks").description("Manage private local review checks for this folder. No cloud enrollment or credentials required.");
   const scoped = (command: Command): Command => command
     .option("--project <path>", "Local project directory (defaults to this checkout's root)")
     .option("--json", "Machine-readable result");

@@ -137,7 +137,7 @@ export function registerSkillsCommand(program: Command, io: CommandIo = defaultI
   registerExtensionCommands(skills, io);
 
   consoleOptions(skills.command("add <source>").description("Add a skill (instructions) or an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path; shows one prompt first")
-    .option("--preview", "Only show the review").option("--yes", "Install the reviewed commit").option("--enable", "Extensions: also enable it").option("--project <dir>", "Extensions: with --enable, enable for this project only"))
+    .option("--preview", "Only show the review").option("--yes", "Install the reviewed commit").option("--enable", "Extensions: also enable it").option("--project <dir>", "Extensions: with --enable, enable for this folder only"))
     .action(async (source: string, options: OutputOptions & { preview?: boolean; yes?: boolean; enable?: boolean; project?: string }) => { if (isExtensionSource(source) && await addExtension(io, source, options) === "done") return; await run(options, async client => {
       const repo = /^([^/]+\/[^/]+)(?:\/(.+))?$/.exec(source);
       const target = repo ? { repo: repo[1], path: repo[2] ?? "" } : { id: source };

@@ -607,7 +607,7 @@ Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH host) an
 Options:
   --ssh <user@host>        SSH target host (BatchMode; key auth from ssh config/agent)
   --lima <name>            Lima instance name (default: "zero-worker")
-  --target-git <url>       Repository the remote server clones into the engine workspace instead of
+  --target-git <url>       Repository the remote server clones into the engine folder instead of
                            the bundled demo target
   --ssh-config <path>      OpenSSH config file for the SSH target (e.g. a Lima instance's
                            ssh.config)
@@ -783,7 +783,7 @@ Usage: 0 config import [options] <file>
 Merge a shared config into the global (default) or --project layer
 
 Options:
-  --project   Import into the per-project override instead of the global config
+  --project   Import into the override for this folder instead of the global config
   --global    Import into the global config (default)
   --yes       Accept changes to security-sensitive settings (required to flip them)
   -h, --help  display help for command
@@ -813,7 +813,7 @@ Usage: 0 config set [options] <key> <value>
 Change one setting (global by default, --project for this folder)
 
 Options:
-  --project   Write the per-project override
+  --project   Write the override for this folder
   --yes       Confirm a security-sensitive setting
   --json      Print JSON
   -h, --help  display help for command
@@ -883,13 +883,13 @@ Options:
 Commands:
   upgrade [options]  Fetch and install the latest 0 binary (re-runs install.sh)
   workbench          Set up and inspect the sandboxed execution workbench (no Docker)
-  checks             Manage private, project-scoped local review checks. No cloud enrollment or
+  checks             Manage private local review checks for this folder. No cloud enrollment or
                      credentials required.
 
 ### 0 doctor checks
 Usage: 0 doctor checks [options] [command]
 
-Manage private, project-scoped local review checks. No cloud enrollment or credentials required.
+Manage private local review checks for this folder. No cloud enrollment or credentials required.
 
 Options:
   -h, --help              display help for command
@@ -4063,7 +4063,7 @@ Options:
   --preview         Only show the review
   --yes             Install the reviewed commit
   --enable          Extensions: also enable it
-  --project <dir>   Extensions: with --enable, enable for this project only
+  --project <dir>   Extensions: with --enable, enable for this folder only
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
@@ -4145,7 +4145,7 @@ Options:
   --preview         Only show the install prompt
   --yes             Install the exact revision shown
   --enable          Also enable it
-  --project <dir>   With --enable: enable for this project only
+  --project <dir>   With --enable: enable for this folder only
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
@@ -4153,10 +4153,10 @@ Options:
 ### 0 skills extensions disable (hidden)
 Usage: 0 skills extensions disable [options] <name>
 
-Disable globally, or for one project with --project
+Disable globally, or for one folder with --project
 
 Options:
-  --project <dir>   Disable for this project only
+  --project <dir>   Disable for this folder only
   --yes             Confirm disabling a built-in
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
@@ -4165,10 +4165,10 @@ Options:
 ### 0 skills extensions enable (hidden)
 Usage: 0 skills extensions enable [options] <name>
 
-Enable globally, or for one project with --project
+Enable globally, or for one folder with --project
 
 Options:
-  --project <dir>   Enable for this project only
+  --project <dir>   Enable for this folder only
   --yes             Approve an unapproved revision (for example an imported one)
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
@@ -4218,7 +4218,7 @@ Options:
   --preview          Only show the install prompt
   --yes              Install the exact revision shown
   --enable           Also enable it
-  --project <dir>    With --enable, enable for this project only
+  --project <dir>    With --enable, enable for this folder only
   --json             Print machine-readable JSON
   --db-path <path>   Use this engine database instead of the default
   -h, --help         display help for command

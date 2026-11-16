@@ -349,7 +349,7 @@ export function registerConfigCommand(program: Command): void {
   config
     .command("set <key> <value>")
     .description("Change one setting (global by default, --project for this folder)")
-    .option("--project", "Write the per-project override")
+    .option("--project", "Write the override for this folder")
     .option("--yes", "Confirm a security-sensitive setting")
     .option("--json", "Print JSON")
     .action((key: string, value: string, opts: { project?: boolean; yes?: boolean; json?: boolean }) => exitWhenDone(runConfigSet(key, value, opts)));
@@ -372,7 +372,7 @@ export function registerConfigCommand(program: Command): void {
   config
     .command("import <file>")
     .description("Merge a shared config into the global (default) or --project layer")
-    .option("--project", "Import into the per-project override instead of the global config")
+    .option("--project", "Import into the override for this folder instead of the global config")
     .option("--global", "Import into the global config (default)")
     .option("--yes", "Accept changes to security-sensitive settings (required to flip them)")
     .action((file: string, opts: { project?: boolean; global?: boolean; yes?: boolean }) => {

@@ -441,7 +441,7 @@ Change one setting, with the same validation as the Settings page. It writes the
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--project` | — | Write the per-project override |
+| `--project` | — | Write the override for this folder |
 | `--yes` | — | Confirm a security-sensitive setting |
 | `--json` | — | Print JSON |
 
@@ -492,7 +492,7 @@ Merge a shared config into the global (default) or --project layer
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--project` | — | Import into the per-project override instead of the global config |
+| `--project` | — | Import into the override for this folder instead of the global config |
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
 
@@ -3445,7 +3445,7 @@ select that computer in the browser before starting remote work.
 | --- | --- | --- |
 | `--ssh <user@host>` | — | SSH target host (BatchMode; key auth from ssh config/agent) |
 | `--lima <name>` | `zero-worker` | Lima instance name |
-| `--target-git <url>` | — | Repository the remote server clones into the engine workspace instead of the bundled demo target |
+| `--target-git <url>` | — | Repository the remote server clones into the engine folder instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
 | `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
@@ -4012,7 +4012,7 @@ Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
 | `--preview` | — | Only show the review |
 | `--yes` | — | Install the reviewed commit |
 | `--enable` | — | Extensions: also enable it |
-| `--project <dir>` | — | Extensions: with --enable, enable for this project only |
+| `--project <dir>` | — | Extensions: with --enable, enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 
@@ -4043,7 +4043,7 @@ Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
 | `--preview` | — | Only show the install prompt |
 | `--yes` | — | Install the exact revision shown |
 | `--enable` | — | Also enable it |
-| `--project <dir>` | — | With --enable: enable for this project only |
+| `--project <dir>` | — | With --enable: enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 
@@ -4066,7 +4066,7 @@ Add one MCP server as a local extension
 | `--preview` | — | Only show the install prompt |
 | `--yes` | — | Install the exact revision shown |
 | `--enable` | — | Also enable it |
-| `--project <dir>` | — | With --enable, enable for this project only |
+| `--project <dir>` | — | With --enable, enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 
@@ -4115,7 +4115,7 @@ Enable globally, or for one project with --project
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--project <dir>` | — | Enable for this project only |
+| `--project <dir>` | — | Enable for this folder only |
 | `--yes` | — | Approve an unapproved revision (for example an imported one) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
@@ -4134,7 +4134,7 @@ Disable globally, or for one project with --project
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--project <dir>` | — | Disable for this project only |
+| `--project <dir>` | — | Disable for this folder only |
 | `--yes` | — | Confirm disabling a built-in |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |

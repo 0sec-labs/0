@@ -124,7 +124,7 @@ export function registerDashboardCommand(program: Command): void {
       }
       if (!serverMode && !isLoopbackDashboardHost(host)) {
         throw new Error(
-          "Dashboard only binds loopback addresses (127.0.0.0/8 or ::1). Use an SSH tunnel or an authenticated reverse proxy bound to local loopback for remote access, or run a single-node server with --server-mode (see the Docker page).",
+          "The console only binds loopback addresses (127.0.0.0/8 or ::1). Use an SSH tunnel or an authenticated reverse proxy bound to local loopback for remote access, or run a single-node server with --server-mode (see the Docker page).",
         );
       }
       if (serverMode && opts.devUrl) throw new Error("--server-mode cannot be combined with --dev-url.");

@@ -82,10 +82,10 @@ export async function addExtension(io: CommandIo, source: string, options: Optio
 export function registerExtensionCommands(skills: Command, io: CommandIo): void {
   const ext = skills.command("extensions").description("Extensions that connect 0 to your tools and services: list, info, enable, disable, update, remove (install with `0 skills add`)");
 
-  consoleOptions(ext.command("add <source>").description("Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this project only"))
+  consoleOptions(ext.command("add <source>").description("Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this folder only"))
     .action(async (source: string, options: Options) => { await addExtension(io, source, options); });
 
-  consoleOptions(ext.command("mcp <name> [command...]").description("Add one MCP server as a local extension: `mcp docs --url https://host/mcp` or `mcp docs -- npx -y some-mcp`; shows the same prompt first").option("--url <https-url>", "A remote server instead of a command").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable, enable for this project only"))
+  consoleOptions(ext.command("mcp <name> [command...]").description("Add one MCP server as a local extension: `mcp docs --url https://host/mcp` or `mcp docs -- npx -y some-mcp`; shows the same prompt first").option("--url <https-url>", "A remote server instead of a command").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable, enable for this folder only"))
     .action((name: string, command: string[], options: Options & { url?: string }) => guarded(io, options, async svc => {
       const [program, ...args] = command ?? [];
       if (Boolean(options.url) === Boolean(program)) throw new UsageError("Give either --url <https-url> or a command after `--`.");
@@ -115,7 +115,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
       ])] : [])].join("\n"));
     }));
 
-  consoleOptions(ext.command("enable <name>").description("Enable globally, or for one project with --project").option("--project <dir>", "Enable for this project only").option("--yes", "Approve an unapproved revision (for example an imported one)"))
+  consoleOptions(ext.command("enable <name>").description("Enable globally, or for one folder with --project").option("--project <dir>", "Enable for this folder only").option("--yes", "Approve an unapproved revision (for example an imported one)"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
       if (!operatorOnly(io, options, "change extension enablement")) return;
       const r = svc.installer.enable(name, { ...(options.project ? { project: resolve(options.project) } : {}), approve: options.yes === true });
@@ -123,7 +123,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
       emit(io, options, r.value, () => `Enabled ${name}${options.project ? ` for ${resolve(options.project)}` : ""}.`);
     }));
 
-  consoleOptions(ext.command("disable <name>").description("Disable globally, or for one project with --project").option("--project <dir>", "Disable for this project only").option("--yes", "Confirm disabling a built-in"))
+  consoleOptions(ext.command("disable <name>").description("Disable globally, or for one folder with --project").option("--project <dir>", "Disable for this folder only").option("--yes", "Confirm disabling a built-in"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
       if (!operatorOnly(io, options, "change extension enablement")) return;
       const r = svc.installer.disable(name, { ...(options.project ? { project: resolve(options.project) } : {}), confirm: options.yes === true });
