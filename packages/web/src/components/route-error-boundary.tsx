@@ -31,10 +31,10 @@ export class RouteErrorBoundary extends Component<{ resetKey: string; silent?: b
   }
   componentDidMount() { window.addEventListener("online", this.reset); window.addEventListener("vite:preloadError", this.onPreloadError); }
   /**
-   * Vite fires this when a lazy chunk's preload fails; a reload of the new build is the fix, and it is guarded to once.
+   * Vite fires this when a lazy chunk's preload fails; a reload of the new build is the fix, and it is guarded to once. The event is not cancelled: Vite then rethrows the import error, which the boundary recognises as a chunk failure (cancelling resolves the import to undefined and surfaces a raw TypeError).
    * Only when the server answers: while it restarts (an update) a reload would land on the browser's error page and use up the guard.
    */
-  private onPreloadError = (event: Event) => { event.preventDefault(); reloadIfServerIsUp(); };
+  private onPreloadError = () => { reloadIfServerIsUp(); };
   componentWillUnmount() { window.removeEventListener("online", this.reset); window.removeEventListener("vite:preloadError", this.onPreloadError); window.clearInterval(this.retryTimer); }
   /** A failed chunk import also happens while the server is down (the browser can still be "online"), so keep retrying until it loads. */
   private syncRetryTimer() {
