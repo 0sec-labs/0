@@ -39,7 +39,7 @@ on the GitHub Release tag.
 
 ## [0.36.0] - 2026-11-15
 
-This release replaces the old plugin system with extensions: one installable, commit-pinned unit for skills, scripts, MCP servers, connectors and scope policies, with one decision point before every command.
+This release replaces the old plugin system with extensions. Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit and never updates on its own, with one decision point before every command.
 
 ### Added
 
