@@ -1,0 +1,61 @@
+id: workflow-hardening
+name: "GitHub Actions Workflow Hardening"
+description: "Harden GitHub Actions workflows in a repository: pin third-party actions to full commit SHAs that exist, give every workflow and job the least permissions it needs, and move untrusted expressions out of run scripts into env. The harness re-runs zizmor (with the repository's own configuration) and actionlint in a pinned container before the work counts as verified."
+summary: "Pin actions, cut permissions and fix script injection in GitHub workflows."
+category: "Code review"
+version: 1
+applicable_roles:
+  - audit
+  - review
+tags:
+  - github-actions
+  - workflows
+  - supply-chain
+  - remediation
+  - zizmor
+triggers:
+  - "harden .*workflow"
+  - "github actions? (security|hardening|pin)"
+  - "pin actions"
+  - "zizmor"
+estimated_tokens: 420
+verify:
+  steps:
+    - name: actionlint
+      image: rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+      run: actionlint
+    - name: zizmor
+      image: ghcr.io/zizmorcore/zizmor@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
+      run: zizmor --offline --no-progress --format plain .
+  network: none
+  timeout: 180s
+  success:
+    baseline: no-worse
+    metric: "(\\d+) findings?"
+  canary:
+    step: zizmor
+    file: .github/workflows/zz-0-canary.yml
+    content: |
+      name: canary
+      on: workflow_dispatch
+      jobs:
+        canary:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: some-org/some-action@v1
+    expect: "unpinned-uses"
+content: |
+  ## GitHub Actions workflow hardening
+
+  Work only in `.github/workflows/`. Make the smallest change that fixes each issue.
+
+  ### Fix, in this order
+  1. Pin every third-party `uses:` to a full 40-character commit SHA and keep the old tag as a trailing comment (`uses: owner/repo@<sha> # v1.2.3`). Look the SHA up for the exact tag in the action's own repository. Never invent or guess a SHA; if you cannot confirm it exists, leave the action as it is and say so.
+  2. Set top-level `permissions: {}` or `contents: read`, then grant each job only the extra scopes it uses.
+  3. Never place `${{ github.event.* }}`, `github.head_ref` or other untrusted input directly in a `run:` script. Pass it through `env:` and read the variable in the script.
+  4. Add `persist-credentials: false` to `actions/checkout` unless a later step pushes.
+
+  ### Rules
+  - Do not edit the repository's `.github/zizmor.yml` or any detector configuration. The check uses the original.
+  - Do not add ignore comments to silence a finding.
+  - Do not say the work is fixed or verified. The harness runs the check after you finish and records the result; report what you changed and what you could not change.

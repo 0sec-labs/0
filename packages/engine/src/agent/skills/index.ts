@@ -10,6 +10,7 @@ import { parse as parseYaml } from "yaml";
 import type { SkillDefinition, SkillSummary } from "./types.js";
 import type { VulnClass } from "../prompts.js";
 import { TOOL_PACKS, isKnownPackRef } from "../toolset.js";
+import { parseVerifySpec } from "../../verifier/spec.js";
 import { EMBEDDED_SKILL_YAML } from "./skills.generated.js";
 
 export type { SkillDefinition, SkillSummary } from "./types.js";
@@ -121,6 +122,11 @@ function validateSkill(raw: unknown, filePath: string): SkillDefinition {
     if (!Array.isArray(obj.tools) || obj.tools.some((pack) => !isKnownPackRef(pack))) {
       throw new Error(`Skill file ${filePath}: "tools" must be an array of "core" or known tool pack names, optionally written pack:<name> (${Object.keys(TOOL_PACKS).join(", ")})`);
     }
+  }
+  if (obj.verify !== undefined) {
+    const parsed = parseVerifySpec(obj.verify);
+    if (!parsed.ok) throw new Error(`Skill file ${filePath}: ${parsed.error}`);
+    obj.verify = parsed.spec;
   }
   if (typeof obj.content !== "string" || obj.content.length === 0) {
     throw new Error(`Skill file ${filePath}: "content" must be a non-empty string`);

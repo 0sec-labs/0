@@ -6,6 +6,8 @@
  * monolithic playbook injection with targeted, on-demand knowledge.
  */
 
+import type { VerifySpec } from "../../verifier/spec.js";
+
 export interface SkillDefinition {
   id: string;
   name: string;
@@ -28,6 +30,11 @@ export interface SkillDefinition {
    * `core` toolset. Honoured for built-in skills only; never grants authority.
    */
   tools?: string[];
+  /**
+   * Harness-run verifier. When present, a Thread started with this skill cannot
+   * finish with a "fixed" or "verified" claim unless the harness ran this and it passed.
+   */
+  verify?: VerifySpec;
   content: string; // markdown methodology
 }
 

@@ -1,0 +1,12 @@
+export { parseVerifySpec, inlineVerifySpec, isPinnedImage, imageDigest } from "./spec.js";
+export type { VerifySpec, VerifyStep, VerifySuccess, VerifyCanary, VerifyNetwork, ParseVerifyResult } from "./spec.js";
+export type { VerifierResult, VerifyStatus, CanaryState } from "./result.js";
+export { verificationLine, isVerified, gateDone, claimsFixed } from "./gate.js";
+export type { GateDecision, GateInput } from "./gate.js";
+export type { ContainerRunner, StepRequest, StepOutcome, Probe } from "./port.js";
+export { runVerifier } from "./runner.js";
+export type { RunVerifierInput } from "./runner.js";
+export { DockerRunner } from "./docker-runner.js";
+export { HostRunner } from "./host-runner.js";
+export { snapshotWorktree, snapshotHead, isGitRepo } from "./snapshot.js";
+export type { Snapshot } from "./snapshot.js";

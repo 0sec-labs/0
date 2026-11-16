@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "n
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { extensionSkillRoots, type ExtensionSkillRoot } from "../../plugins/extensions/skills.js";
+import { parseVerifySpec, type VerifySpec } from "../../verifier/spec.js";
 import type { SkillDefinition } from "./types.js";
 
 export interface AgentSkillDiscoveryOptions {
@@ -41,6 +42,8 @@ export interface AgentSkillMetadata {
   root: string;
   tags: string[];
   estimated_tokens: number;
+  /** Declared verifier. Parsed and shown; the harness only runs verifiers of built-in skills in this slice. */
+  verify?: VerifySpec;
 }
 
 export interface AgentSkillDiscovery {
@@ -77,10 +80,17 @@ export function validateAgentSkillContent(content: string, expectedFolderName?: 
   if (typeof fm.description !== "string" || !fm.description.trim() || fm.description.length > 1024) throw new Error("Skill description must contain 1–1024 characters.");
   const body = match[2]!.trim();
   if (!body) throw new Error("SKILL.md requires instructions after the frontmatter.");
+  let verify: VerifySpec | undefined;
+  if (fm.verify !== undefined) {
+    const parsed = parseVerifySpec(fm.verify);
+    if (!parsed.ok) throw new Error(parsed.error);
+    verify = parsed.spec;
+  }
   return {
     name: fm.name,
     description: fm.description.trim(),
     body,
+    ...(verify ? { verify } : {}),
     tags: Array.isArray(fm.tags) ? fm.tags.filter((tag): tag is string => typeof tag === "string") : [],
   };
 }
@@ -143,7 +153,7 @@ export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): A
           seen.add(id);
           if (spec.source === "project" || spec.source === "personal") scopedNames.add(parsed.name);
           result.skills.push({ id, name: parsed.name, description: parsed.description, source: spec.source,
-            directory, entrypoint, root, tags: parsed.tags, ...(spec.extension ? { extension: spec.extension } : {}), estimated_tokens: Math.max(1, Math.ceil(parsed.body.length / 4)) });
+            directory, entrypoint, root, tags: parsed.tags, ...(spec.extension ? { extension: spec.extension } : {}), estimated_tokens: Math.max(1, Math.ceil(parsed.body.length / 4)), ...(parsed.verify ? { verify: parsed.verify } : {}) });
         } catch (error) {
           result.diagnostics.push({ path: candidate, message: error instanceof Error ? error.message : String(error) });
         }
