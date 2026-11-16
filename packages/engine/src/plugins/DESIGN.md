@@ -71,8 +71,8 @@ name**:
 
 - **scope-on-demand** (`maybeResolveScope`, ~line 748): only fires for
   `NETWORK_CAPABLE_TOOLS`; extracts URLs and forces scope approval.
-- **yolo hard-deny** (~line 751 inside `maybeResolveScope`): a network-capable
-  tool with no covering scope is denied outright in yolo mode.
+- **auto hard-deny** (~line 751 inside `maybeResolveScope`): a network-capable
+  tool with no covering scope is denied outright in the default mode.
 - **local-filesystem gate** (`maybeResolveLocalScope`, ~line 874): only fires
   for `LOCAL_SCOPE_TOOLS`; asks the operator for a directory.
 - **co-pilot approval** (`maybeApproveTool`, ~line 1007): in copilot mode,
@@ -81,7 +81,7 @@ name**:
 The critical property: **a tool absent from all three maps is treated as the
 least-dangerous class** — not network-capable, no local scope needed, and (by
 being outside `READ_ONLY_TOOLS` it still requires copilot approval, but) it
-never triggers scope resolution and is never denied in yolo. It is
+never triggers scope resolution and is never denied in the default mode. It is
 danger-by-omission-of-safety.
 
 ---
@@ -94,7 +94,7 @@ bypasses every network and filesystem gate.** A plugin tool called
 `acme_exfil` that is not in `NETWORK_CAPABLE_TOOLS` would:
 
 - never trigger scope-on-demand — it can hit any host with no operator approval;
-- never be denied in yolo mode — the hard-deny only checks network-capable
+- never be denied in the default mode — the hard-deny only checks network-capable
   tools;
 - never trigger the local-filesystem gate — it can read outside the approved
   directory;
@@ -140,7 +140,7 @@ The naive-and-wrong designs, concretely:
 
 | capability          | → gate map(s)                       | effect                                   |
 | ------------------- | ----------------------------------- | ---------------------------------------- |
-| `network`           | `NETWORK_CAPABLE_TOOLS`             | scope-on-demand + yolo hard-deny         |
+| `network`           | `NETWORK_CAPABLE_TOOLS`             | scope-on-demand + auto hard-deny         |
 | `process-exec`      | `NETWORK_CAPABLE_TOOLS`             | same — a process can open any socket     |
 | `filesystem-read`   | `LOCAL_SCOPE_TOOLS` (+ read-only)   | local-directory gate; copilot-exempt     |
 | `filesystem-write`  | `LOCAL_SCOPE_TOOLS`                 | local-directory gate; NOT read-only      |
@@ -247,7 +247,7 @@ enablement is a deliberate, informed action:
   and surfaced if unmet.
 - **What approval does NOT grant**: enabling a plugin does not waive the
   per-call gates. An approved `network` plugin tool still triggers
-  scope-on-demand and the yolo hard-deny on every call; an approved
+  scope-on-demand and the auto hard-deny on every call; an approved
   `filesystem-*` tool still triggers the local-directory gate. Enablement is
   "this plugin may participate"; the per-call gates remain the runtime
   authority.

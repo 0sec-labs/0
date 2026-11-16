@@ -1,6 +1,6 @@
 import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import type { WorkspaceIdentity } from "./workspace-identity.js";
-import type { ApprovalsChoice, LegacyAutonomyMode } from "../shared/approvals.js";
+import type { ApprovalsChoice } from "../shared/approvals.js";
 import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "../shared/index.js";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { ScopeEnforcementState } from "../scope/activation.js";
@@ -248,19 +248,6 @@ export interface ToolResultMeta {
 
 // ── Console autonomy (scoped source-audit gate) ──
 
-/**
- * Access, as seen by the tool executor: `read-only` or `changes`. Mirrors the console's
- * `ConsoleAutonomyMode` (`console/turn-engine.ts`), kept here to avoid a layering inversion
- * (`agent/` is a lower layer than `console/`). Older stored values are read through
- * `normalizeAccess`.
- *
- * Only the scoped-source-audit allow-list gate in `ToolExecutor.execute` and the capability
- * policy consult this. It is OPTIONAL: when absent (every non-console caller, including the
- * scan pipeline), the audit gate behaves exactly as it did before the field existed, a hard
- * denial of any non-allow-listed tool. `read-only` is never auto-lifted, because the
- * console's own capability gate already refuses effectful tools before dispatch.
- */
-export type ToolAutonomyMode = "read-only" | "changes";
 
 /**
  * Payload handed to {@link ToolContext.escalateScopedAudit} when a scoped
@@ -563,14 +550,6 @@ export interface ToolContext {
    * whose acquisition contract is unchanged.
    */
   consoleSession?: boolean;
-  /**
-   * Current console autonomy mode, re-read by the scoped-source-audit gate on
-   * every `execute()` so switching mode mid-session takes effect immediately
-   * (no executor rebuild). Absent for every non-console caller — the scan
-   * pipeline never sets it — in which case the gate behaves byte-identically
-   * to the pre-autonomy hard denial. See {@link ToolAutonomyMode}.
-   */
-  autonomyMode?: ToolAutonomyMode | LegacyAutonomyMode;
   /** The "Ask before running commands" setting; `ask` gates effectful tools through approvals. */
   approvals?: ApprovalsChoice;
   /**

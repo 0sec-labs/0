@@ -135,3 +135,21 @@ describe("Together AI credentials", () => {
     expect(injected).toEqual({ PATH: "/bin" });
   });
 });
+
+describe("bash child environment override", () => {
+  const parent = { PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-x", GITHUB_TOKEN: "ghp_x", AWS_SECRET_ACCESS_KEY: "aws", CUSTOM_BUILD_FLAG: "1" };
+  it("strips provider keys and tokens by default", () => {
+    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin" });
+  });
+  it("ZERO_BASH_ENV_ALLOW adds exactly the named variables", () => {
+    const env = sanitizedEnv({ ...parent, ZERO_BASH_ENV_ALLOW: "CUSTOM_BUILD_FLAG, not a name,GITHUB_TOKEN" });
+    expect(env.CUSTOM_BUILD_FLAG).toBe("1");
+    expect(env.GITHUB_TOKEN).toBe("ghp_x");
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+  });
+  it("ZERO_BASH_ENV_PASSTHROUGH_ALL=1 turns the allowlist off", () => {
+    expect(sanitizedEnv({ ...parent, ZERO_BASH_ENV_PASSTHROUGH_ALL: "1" }).ANTHROPIC_API_KEY).toBe("sk-ant-x");
+    expect(sanitizedEnv({ ...parent, ZERO_BASH_ENV_PASSTHROUGH_ALL: "yes" }).ANTHROPIC_API_KEY).toBeUndefined();
+  });
+});

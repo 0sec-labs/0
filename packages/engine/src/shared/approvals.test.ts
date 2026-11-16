@@ -1,70 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { executionPolicy, legacyAskedFirst, normalizeAccess, parseAccess, parseApprovals, type ConsoleAccess } from "./approvals.js";
+import { LEGACY_ACCESS_VALUES, executionPolicy, legacyAskedFirst, parseApprovals } from "./approvals.js";
 
 /**
- * Golden characterisation of what each of the two access states allows. This table was deliberately re-baselined
- * when the four engine modes (standard, recon, copilot, yolo) collapsed into two states:
+ * Golden characterisation of the one execution policy. There is a single mode (shell access); the only switch is the
+ * global operator setting "Ask before running commands".
  *
- *  - read-only grants exactly what the former recon mode did: nothing effectful. Effectful tools are refused outright,
- *    there is no public network, no full shell, no automatic folder grants and scope never grows on its own.
- *  - changes grants exactly what the former yolo mode did: public-network tools, full shell syntax, the lifted audit
- *    allow-list, inherited console tools, automatic folder grants, verification receipts and target-related scope growth.
- *
- * "Ask before running commands" is not a state. It is the global setting, applied on top of changes: it gates every
- * effectful tool call through approvals (asksBeforeEffectfulTools) and keeps the narrower capability set the setting always
- * had (the former standard row: no public-network shortcut, tokenised commands, every grant behind a prompt). It grants
- * nothing and does nothing to read-only.
+ *  - default (auto): public-network tools, full shell syntax, the lifted audit allow-list, inherited console tools,
+ *    automatic folder grants, verification receipts and target-related scope growth. Scope guard, budget and sandbox still bound it.
+ *  - Ask before running commands: every effectful call goes to the operator (asksBeforeEffectfulTools) and the narrower
+ *    capability set the setting always had (no public-network shortcut, tokenised commands, every grant behind a prompt).
  * If this table changes, the safety posture changed, and that must be a deliberate decision.
  */
-const GOLDEN: Record<ConsoleAccess, ReturnType<typeof executionPolicy>> = {
-  "read-only": { asksBeforeEffectfulTools: false, refusesEffectfulTools: true, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" },
-  changes: { asksBeforeEffectfulTools: false, refusesEffectfulTools: false, publicNetwork: true, fullShell: true, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: true, verificationReceipts: true, scopeExpansion: "target-related" },
-};
-const GOLDEN_ASK_FIRST = { asksBeforeEffectfulTools: true, refusesEffectfulTools: false, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" } as const;
+const GOLDEN_AUTO = { asksBeforeEffectfulTools: false, publicNetwork: true, fullShell: true, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: true, verificationReceipts: true, scopeExpansion: "target-related" };
+const GOLDEN_ASK_FIRST = { asksBeforeEffectfulTools: true, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" };
 
 describe("execution policy golden table", () => {
-  for (const access of Object.keys(GOLDEN) as ConsoleAccess[]) {
-    it(`${access} keeps its capability flags`, () => expect(executionPolicy(access)).toEqual(GOLDEN[access]));
-  }
-  it("changes with Ask before running commands on gates tool execution through approvals", () => {
-    expect(executionPolicy("changes", "ask")).toEqual(GOLDEN_ASK_FIRST);
-    expect(executionPolicy("changes", "auto")).toEqual(GOLDEN.changes);
+  it("default keeps its capability flags", () => expect(executionPolicy()).toEqual(GOLDEN_AUTO));
+  it("Ask before running commands gates tool execution through approvals", () => {
+    expect(executionPolicy("ask")).toEqual(GOLDEN_ASK_FIRST);
+    expect(executionPolicy(true)).toEqual(GOLDEN_ASK_FIRST);
+    expect(executionPolicy("auto")).toEqual(GOLDEN_AUTO);
   });
-  it("read-only cannot run commands or mutate, whatever the approvals setting says", () => {
-    for (const approvals of [undefined, "ask", "auto"] as const) {
-      expect(executionPolicy("read-only", approvals)).toEqual(GOLDEN["read-only"]);
-      expect(executionPolicy("read-only", approvals).refusesEffectfulTools).toBe(true);
-    }
-  });
-  it("unknown or missing values get the most restrictive (read-only) capabilities", () => {
-    for (const value of [undefined, "", "constructor", "nope"]) expect(executionPolicy(value)).toEqual(GOLDEN["read-only"]);
-  });
-  it("only changes unlocks public network, full shell and automatic folder grants", () => {
-    const unlockers = (Object.keys(GOLDEN) as ConsoleAccess[]).filter(a => executionPolicy(a).publicNetwork || executionPolicy(a).fullShell || executionPolicy(a).autoGrantsLocalPaths);
-    expect(unlockers).toEqual(["changes"]);
+  it("has no state that refuses effectful tools", () => {
+    for (const approvals of [undefined, "ask", "auto"] as const) expect(executionPolicy(approvals)).not.toHaveProperty("refusesEffectfulTools");
   });
 });
 
-describe("older stored values stay readable", () => {
-  it("reads every older value as one of the two states", () => {
-    for (const value of ["recon", "observe", "read-only"]) expect(normalizeAccess(value)).toBe("read-only");
-    for (const value of ["standard", "copilot", "yolo", "propose", "run", "act", "changes", "commands", "pull-requests"]) expect(normalizeAccess(value)).toBe("changes");
+describe("older stored access values all load as the single mode", () => {
+  it("no legacy value is refused or narrows the policy, except the two that used to ask first", () => {
+    for (const value of [...LEGACY_ACCESS_VALUES, "observe", "recon", "read-only", undefined, null, "", "nope"]) {
+      expect(executionPolicy("auto", value)).toEqual(GOLDEN_ASK_FIRST.asksBeforeEffectfulTools && legacyAskedFirst(value) ? GOLDEN_ASK_FIRST : GOLDEN_AUTO);
+      expect(() => executionPolicy(undefined, value)).not.toThrow();
+    }
   });
-  it("defaults when absent and reads garbage as read-only", () => {
-    expect(normalizeAccess(undefined)).toBe("read-only");
-    expect(normalizeAccess(undefined, "changes")).toBe("changes");
-    expect(normalizeAccess("nope", "changes")).toBe("read-only");
-    expect(parseAccess("nope")).toBeUndefined();
+  it("read-only, observe and recon are the one mode with full shell", () => {
+    for (const value of ["read-only", "observe", "recon"]) expect(executionPolicy(undefined, value)).toEqual(GOLDEN_AUTO);
   });
   it("knows which older values asked before every action", () => {
     expect(legacyAskedFirst("standard")).toBe(true);
     expect(legacyAskedFirst("propose")).toBe(true);
-    for (const value of ["recon", "copilot", "yolo", "act", "run", "observe", "changes", undefined]) expect(legacyAskedFirst(value)).toBe(false);
+    for (const value of ["recon", "copilot", "yolo", "act", "run", "observe", "changes", "read-only", undefined]) expect(legacyAskedFirst(value)).toBe(false);
   });
   it("an older standard value handed to the engine still asks first", () => {
-    expect(executionPolicy("standard")).toEqual(GOLDEN_ASK_FIRST);
-    expect(executionPolicy("yolo")).toEqual(GOLDEN.changes);
-    expect(executionPolicy("recon")).toEqual(GOLDEN["read-only"]);
+    expect(executionPolicy(undefined, "standard")).toEqual(GOLDEN_ASK_FIRST);
   });
 });
 

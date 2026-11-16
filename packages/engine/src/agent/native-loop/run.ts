@@ -10,7 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult } from "../../runtime/types.js";
 import { join, resolve } from "node:path";
 import type { HarnessUiInput } from "../../shared/index.js";
-import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "../../shared/index.js";
+import { resolveIdentities, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "../../shared/index.js";
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
 import { getWorkspaceHarnessTrust } from "../../plugins/harness-trust.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolContext } from "../types.js";
@@ -86,7 +86,7 @@ export async function runNativeAgentLoop(
     try {
       capture = getConfiguredRunContributionClient()?.begin({
         runId: opts.config.scanId, model: opts.runtime.resolvedModel?.() ?? opts.config.costModel ?? "unknown",
-        scope: { target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, autonomyMode: opts.config.autonomyMode ?? DEFAULT_AUTONOMY_MODE, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null },
+        scope: { target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null },
         objective: opts.config.systemPrompt, versions: { loop: "native-v1", runtime: opts.runtime.type },
         authSecretValues: secrets,
       }) ?? undefined;
@@ -94,7 +94,7 @@ export async function runNativeAgentLoop(
   }
   if (!capture) return runNativeAgentLoopInternal(opts);
   capture.protectSecrets(secrets);
-  if (!parent) capture.setInitialScope({ context: capture.manifest.scope, target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, autonomyMode: opts.config.autonomyMode ?? DEFAULT_AUTONOMY_MODE, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null });
+  if (!parent) capture.setInitialScope({ context: capture.manifest.scope, target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null });
   const agentId = randomUUID();
   const parentAgentId = parent === capture ? currentContributionAgent() ?? null : null;
   return withRunContribution(capture, agentId, parentAgentId, async () => {
@@ -261,7 +261,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
-    autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
     publicNetwork: config.publicNetwork,
     findings: [],
     attackResults: [],

@@ -180,7 +180,6 @@ export interface NativeAgentConfig {
   trustGraph?: TrustGraphConfig;
   /** Sandboxed TypeScript tools, skills, and agent programs; never enabled for verifier roles. */
   allowModelSelfExtension?: boolean;
-  autonomyMode?: ToolContext["autonomyMode"];
   publicNetwork?: ToolContext["publicNetwork"];
   executablePlugins?: ExecutablePluginConfiguration;
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;

@@ -165,7 +165,7 @@ describe("Auto finding verification workflow", () => {
     } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
   });
 
-  it.each(["read-only", "standard"] as const)("does not prescribe automatic PoCs in %s mode", (autonomyMode) => {
+  it.each(["standard"] as const)("does not prescribe automatic PoCs for an older %s value (it asks first)", (autonomyMode) => {
     expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("Auto verification workflow");
   });
 });
@@ -1030,7 +1030,7 @@ describe("Console autonomy — denied-host memory", () => {
     });
 
     const first = await session.send("go");
-    session.setAutonomyMode("yolo");
+    session.setApprovals("auto");
     const second = await session.send("go again");
     expect(prompts).toBe(1);
     expect(first.toolCalls[0].result.success).toBe(false);
@@ -1166,7 +1166,7 @@ describe("Console autonomy — approval integrity", () => {
     expect(session.scope).toBeUndefined();
   });
 
-  it("moves between access and the ask-first setting while preserving conversation and updating the system prompt", async () => {
+  it("moves the ask-first setting on and off while preserving conversation and updating the system prompt", async () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "c1", name: "bash", input: { command: "echo standard" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("Standard done."),
@@ -1196,8 +1196,7 @@ describe("Console autonomy — approval integrity", () => {
     expect(outcome.toolCalls[0].result.success).toBe(false);
 
     // ── Setting off (still Can make changes): tool auto-executes without a per-action prompt ──
-    session.setAutonomyMode("changes", "auto");
-    expect(session.autonomyMode).toBe("changes");
+    session.setApprovals("auto");
     expect(session.approvals).toBe("auto");
     expect(session.systemPrompt).not.toContain("Ask before running commands is on");
 
@@ -1205,9 +1204,8 @@ describe("Console autonomy — approval integrity", () => {
     expect(approvals).toBe(1); // approveTool not called
     expect(outcome.toolCalls[0].result.success).toBe(true);
 
-    // ── Older stored values are read as one of the two states ──
-    session.setAutonomyMode("yolo");
-    expect(session.autonomyMode).toBe("changes");
+    // ── Setting it again changes nothing ──
+    session.setApprovals("auto");
 
     outcome = await session.send("older value turn");
     expect(approvals).toBe(1);
@@ -1232,7 +1230,6 @@ describe("clearConversation", () => {
     expect(session.messages).toHaveLength(0);
     expect(session.scanId).toBe("test-scan");
     expect(session.target).toBe("https://example.test");
-    expect(session.autonomyMode).toBe("changes");
   });
 
   it("removes all accumulated messages after a turn", async () => {
@@ -1246,7 +1243,7 @@ describe("clearConversation", () => {
     expect(session.messages).toHaveLength(0);
   });
 
-  it("does not affect session identity, target, scope, autonomy mode, or tools", async () => {
+  it("does not affect session identity, target, scope, or tools", async () => {
     const runtime = new ScriptedRuntime([endTurn("hi")]);
     const session = createConsoleSession({
       runtime,
@@ -1261,7 +1258,6 @@ describe("clearConversation", () => {
     // Capture pre-clear state of preserved fields.
     const scanId = session.scanId;
     const target = session.target;
-    const mode = session.autonomyMode;
     const tools = session.tools;
     const sysPrompt = session.systemPrompt;
 
@@ -1271,7 +1267,6 @@ describe("clearConversation", () => {
     // Everything else untouched.
     expect(session.scanId).toBe(scanId);
     expect(session.target).toBe(target);
-    expect(session.autonomyMode).toBe(mode);
     expect(session.tools).toBe(tools);
     expect(session.systemPrompt).toBe(sysPrompt);
   });
@@ -2420,8 +2415,8 @@ describe("Console operator target selection", () => {
     const session = openSession(runtime, { scope });
     await session.send("first.test");
     await session.send("second.test");
-    session.setAutonomyMode("standard");
-    session.setAutonomyMode("yolo");
+    session.setApprovals("ask");
+    session.setApprovals("auto");
     expect(session.scope).toBe(scope);
     expect(session.target).toBe("https://second.test/");
     expect((await session.send("Inspect outside endpoint")).toolCalls[1].result.success).toBe(false);
@@ -2477,7 +2472,7 @@ describe("Console operator target selection", () => {
       requestScope: async () => { prompts++; return null; },
     });
     await session.send("Inspect the requested endpoint");
-    session.setAutonomyMode("yolo");
+    session.setApprovals("auto");
     const outcome = await session.send("declined.test");
     expect(outcome.toolCalls[1].result.error).toContain("already declined");
     expect(prompts).toBe(2);
@@ -2905,7 +2900,7 @@ describe("Console source acquisition is not target authorization", () => {
       requestScope: async () => { prompts++; return null; },
     });
     expect((await session.send("Get Go source")).toolCalls[0].result.success).toBe(false);
-    session.setAutonomyMode("yolo");
+    session.setApprovals("auto");
     expect((await session.send("Try again")).toolCalls[0].result.success).toBe(false);
     expect(prompts).toBe(1);
   });
@@ -2923,152 +2918,24 @@ describe("Console source acquisition is not target authorization", () => {
   });
 });
 
-// ── Console autonomy — recon (passive, capability-restricted) ──
+// ── The SSRF rail is not an access setting ──
 
-describe("Console autonomy — recon: passive, in-scope, no exploitation", () => {
-
-  it("runs a read-only tool without a prompt or a refusal", async () => {
-    // A READ_ONLY tool is non-exploitative, so recon runs it — and recon never
-    // uses the per-action approval flow, so no approveTool is consulted.
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "payload_lookup", input: { name: "jsfuck_alert" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "recon",
-      target: "https://engagement.test",
-      approveTool: async () => {
-        throw new Error("approveTool must not be called in recon");
-      },
-    });
-    const outcome = await session.send("look up a payload");
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.success).toBe(true);
-    expect(outcome.toolCalls[0].result.error ?? "").not.toContain("Read-only");
-  });
-
-  it("REFUSES an effectful/mutating tool with a clean reason — never prompting", async () => {
-    // apply_patch mutates state → outside the passive allow-list. Recon refuses
-    // it outright, and the refusal must be a capability denial, not a prompt:
-    // neither approveTool nor requestScope is consulted.
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "apply_patch", input: { patch: "*** Begin Patch\n*** End Patch" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "recon",
-      target: "https://engagement.test",
-      approveTool: async () => {
-        throw new Error("approveTool must not be called in recon");
-      },
-      requestScope: async () => {
-        throw new Error("requestScope must not be called for a recon-refused tool");
-      },
-      requestLocalScope: async () => {
-        throw new Error("requestLocalScope must not be called for a recon-refused tool");
-      },
-    });
-    const outcome = await session.send("patch it");
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("Read-only");
-    expect(outcome.toolCalls[0].result.error).toContain("not permitted");
-  });
-
-  it("REFUSES an exploit/shell tool (run_command) with a capability denial", async () => {
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "run_command", input: { command: "echo x" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    const session = createConsoleSession({ runtime, autonomyMode: "recon", target: "https://engagement.test" });
-    const outcome = await session.send("run it");
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("Read-only");
-  });
-
-  it("REFUSES raw http_request in recon (can carry any method/body)", async () => {
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "https://engagement.test/" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    const session = createConsoleSession({ runtime, autonomyMode: "recon", target: "https://engagement.test" });
-    const outcome = await session.send("fetch it");
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("Read-only");
-  });
-
-  it("allows a PASSIVE recon tool past the capability gate but does NOT auto-expand scope", async () => {
-    // crawl is a passive-recon tool → permitted by recon's capability gate. But
-    // recon (unlike copilot) never auto-expands scope: an in-anchor subdomain
-    // still goes to the operator via requestScope. Here we prove BOTH: the tool
-    // reached the SCOPE gate (so recon did not refuse it on capability), and the
-    // scope gate PROMPTED rather than silently widening.
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "crawl", input: { url: "https://api.engagement.test/" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    let scopePrompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "recon",
-      target: "https://engagement.test",
-      requestScope: async () => {
-        scopePrompts += 1;
-        return null; // decline → the call is denied at the scope gate
-      },
-    });
-    const outcome = await session.send("map the api host");
-    // The scope gate fired (recon prompts like standard; no copilot auto-expand).
-    expect(scopePrompts).toBe(1);
-    // The denial came from the SCOPE gate, not the recon capability gate.
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error ?? "").not.toContain("not permitted");
-    expect(outcome.toolCalls[0].result.error).toContain("declined");
-    // No scope was silently added.
-    expect(session.scope).toBeUndefined();
-  });
-
-  it("stays inside the target anchor — a foreign host for a passive tool is put to the operator, not auto-reached", async () => {
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "surface_sweep", input: { domain: "https://unrelated.example/" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    let scopePrompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "recon",
-      target: "https://engagement.test",
-      requestScope: async () => {
-        scopePrompts += 1;
-        return null;
-      },
-    });
-    const outcome = await session.send("sweep the other host");
-    expect(scopePrompts).toBe(1);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(session.scope).toBeUndefined();
-  });
-
-  it("the SSRF / private-network rail STILL blocks in recon for a passive recon tool", async () => {
-    // Recon routes its allowed passive tools through the SAME executor, so the
-    // absolute SSRF rail in validateTargetUrl applies unchanged: a public base
-    // target may never be used to reach a private/metadata address, even when
-    // the operator-approved scope covers it.
+describe("Console SSRF rail", () => {
+  it("the SSRF / private-network rail still blocks for a passive recon tool", async () => {
+    // Passive tools go through the same executor, so the absolute SSRF rail in validateTargetUrl applies:
+    // a public base target may never be used to reach a private/metadata address, even when the scope covers it.
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "c1", name: "discover_api_surface", input: { domain: "http://169.254.169.254/" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("done"),
     ]);
     const session = createConsoleSession({
       runtime,
-      autonomyMode: "recon",
       target: "https://target.test", // public base target
       scope: ScopePolicy.fromJson({ in_scope: ["169.254.169.254", "target.test"] }),
     });
     const outcome = await session.send("map the metadata endpoint");
-    // The passive tool was NOT refused by recon's capability gate (it is allowed)…
     expect(outcome.toolCalls[0].result.error ?? "").not.toContain("Read-only");
-    // …and it discovered NO internal assets: every fetch to the private address
+    // It discovered NO internal assets: every fetch to the private address
     // was thrown by the SSRF rail inside the scoped fetch, so nothing internal
     // was ever contacted.
     const out = outcome.toolCalls[0].result.output as { total?: number } | null;
@@ -3637,7 +3504,7 @@ describe("console live driver authority", () => {
       autonomyMode: "standard", approveTool: async () => true, requestScope });
     try {
       await session.send("inspect");
-      session.setAutonomyMode("yolo");
+      session.setApprovals("auto");
       await session.send("https://denied.test./");
       expect(session.target).toBe("");
       expect(session.scope?.match("https://denied.test./").allowed ?? false).toBe(false);
@@ -4120,16 +3987,6 @@ describe("caller-owned workflow lifecycle tools", () => {
       const result = runtime.calls[2]!.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "launch-1");
       expect(result && "content" in result ? result.content : "").toContain('"status":"queued"');
     } finally { await session.cleanup(); }
-  });
-  it("rejects launch requests in recon mode before reaching the caller adapter", async () => {
-    const invoke = vi.fn();
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "launch-recon", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("Cannot run assessments in recon mode."),
-    ]);
-    const session = createConsoleSession({ runtime, autonomyMode: "recon", refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
-    try { await session.send("Run review"); expect(invoke).not.toHaveBeenCalled(); }
-    finally { await session.cleanup(); }
   });
 });
 

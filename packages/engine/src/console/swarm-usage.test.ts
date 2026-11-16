@@ -63,7 +63,7 @@ function parentWithChild(child: NativeRuntime, persistent = false, afterInitial?
   };
 }
 
-it("allows a three-worker batch after switching from recon to yolo without approval", async () => {
+it("allows a three-worker batch without approval", async () => {
   isolatedHome();
   const approveTool = vi.fn(async () => false);
   let parentCalls = 0;
@@ -87,15 +87,9 @@ it("allows a three-worker batch after switching from recon to yolo without appro
         : { content: [{ type: "text", text: "Evidence review finished." }], stopReason: "end_turn", durationMs: 0 };
     },
   };
-  const session = createConsoleSession({ runtime, autonomyMode: "recon", approveTool, allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime, approveTool, allowModelSelfExtension: false });
   try {
-    const blocked = await session.send("Review existing evidence with three workers.");
-    expect(blocked.toolCalls[0].result.error).toContain("Read-only");
-    expect(childCalls).toBe(0);
-    expect(approveTool).not.toHaveBeenCalled();
-
-    session.setAutonomyMode("yolo");
-    const allowed = await session.send("Retry the same three-worker evidence review.");
+    const allowed = await session.send("Review existing evidence with three workers.");
     expect(allowed.toolCalls[0].call.name).toBe("spawn_agent");
     expect(allowed.toolCalls[0].result.success).toBe(true);
     expect(childCalls).toBe(3);

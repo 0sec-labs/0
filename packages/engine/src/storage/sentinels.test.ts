@@ -16,7 +16,8 @@ describe("SentinelStore", () => {
   it("creates inert defaults and seeds default files", () => {
     const store = new SentinelStore(":memory:");
     const sentinel = store.create({ name: "Watcher", instructions: "Watch deps." });
-    expect(sentinel).toMatchObject({ status: "paused", autonomy: "observe", toolAccess: "read-only", homeMissionId: null, version: 1, hostId: null, model: null });
+    expect(sentinel).toMatchObject({ status: "paused", homeMissionId: null, version: 1, hostId: null, model: null });
+    expect(sentinel).not.toHaveProperty("autonomy");
     expect(sentinel.scope.production).toBe(false);
     expect(sentinel.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
     expect(sentinel).not.toHaveProperty("crew");

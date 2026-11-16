@@ -45,7 +45,7 @@ describe("scoped source-audit escalation gate", () => {
     let approve!: (value: boolean) => void;
     const waiting = new Promise<void>(resolve => { entered = resolve; });
     const executor = new ToolExecutor(baseCtx({
-      scopePath: root, autonomyMode: "standard",
+      scopePath: root, approvals: "ask",
       escalateScopedAudit: () => { entered(); return new Promise(resolve => { approve = resolve; }); },
     }), null);
     try {
@@ -68,7 +68,7 @@ describe("scoped source-audit escalation gate", () => {
     const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "yolo" }),
+        baseCtx({ scopePath: root, approvals: "auto" }),
         null,
       );
       const result = await exec.execute(patchCall);
@@ -85,7 +85,7 @@ describe("scoped source-audit escalation gate", () => {
     // No scopePath: the allow-list gate does not even engage, and the handler's
     // own scope guard blocks the call. Auto grants nothing without a scope.
     const exec = new ToolExecutor(
-      baseCtx({ autonomyMode: "yolo" /* no scopePath */ }),
+      baseCtx({ approvals: "auto" /* no scopePath */ }),
       null,
     );
     const result = await exec.execute(patchCall);
@@ -98,7 +98,7 @@ describe("scoped source-audit escalation gate", () => {
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "standard", escalateScopedAudit: escalate }),
+        baseCtx({ scopePath: root, approvals: "ask", escalateScopedAudit: escalate }),
         null,
       );
 
@@ -120,7 +120,7 @@ describe("scoped source-audit escalation gate", () => {
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => false);
       const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "standard", escalateScopedAudit: escalate }),
+        baseCtx({ scopePath: root, approvals: "ask", escalateScopedAudit: escalate }),
         null,
       );
 
@@ -147,7 +147,7 @@ describe("scoped source-audit escalation gate", () => {
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "copilot", escalateScopedAudit: escalate }),
+        baseCtx({ scopePath: root, approvals: "auto", escalateScopedAudit: escalate }),
         null,
       );
       const result = await exec.execute(patchCall);
@@ -160,32 +160,12 @@ describe("scoped source-audit escalation gate", () => {
     }
   });
 
-  it("recon + approving callback → still prompts (recon keeps the standard escalation flow)", async () => {
-    // Recon is NOT auto-lifted (only yolo/copilot are). Anything that reaches
-    // this gate in recon is a genuine allow-list escalation decision, so the
-    // callback is invoked exactly as in standard. (In practice the console
-    // refuses effectful recon tools upstream; this pins the gate's own policy.)
-    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
-    try {
-      const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
-      const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "recon", escalateScopedAudit: escalate }),
-        null,
-      );
-      const result = await exec.execute(patchCall);
-      expect(escalate).toHaveBeenCalledTimes(1);
-      expect(result.error).not.toMatch(BLOCK_MSG);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
   it("a tool already in SCOPED_SOURCE_AUDIT_TOOLS never triggers escalation", async () => {
     const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
-        baseCtx({ scopePath: root, autonomyMode: "standard", escalateScopedAudit: escalate }),
+        baseCtx({ scopePath: root, approvals: "ask", escalateScopedAudit: escalate }),
         null,
       );
       // read_file is allow-listed → runs directly, callback untouched.
@@ -197,11 +177,11 @@ describe("scoped source-audit escalation gate", () => {
     }
   });
 
-  it("switching the autonomy field between calls changes the outcome without rebuilding the executor", async () => {
+  it("switching the approvals setting between calls changes the outcome without rebuilding the executor", async () => {
     const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       // Standard, no callback → hard denial (default behaviour).
-      const ctx = baseCtx({ scopePath: root, autonomyMode: "standard" });
+      const ctx = baseCtx({ scopePath: root, approvals: "ask" });
       const exec = new ToolExecutor(ctx, null);
 
       const blocked = await exec.execute(patchCall);
@@ -209,12 +189,12 @@ describe("scoped source-audit escalation gate", () => {
       expect(blocked.error).toMatch(BLOCK_MSG);
 
       // Flip the same context object to Auto — no new executor.
-      ctx.autonomyMode = "yolo";
+      ctx.approvals = "auto";
       const opened = await exec.execute(patchCall);
       expect(opened.error).not.toMatch(BLOCK_MSG);
 
       // And back to standard/no-callback → blocked again, same session.
-      ctx.autonomyMode = "standard";
+      ctx.approvals = "ask";
       const reblocked = await exec.execute(patchCall);
       expect(reblocked.success).toBe(false);
       expect(reblocked.error).toMatch(BLOCK_MSG);

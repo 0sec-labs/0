@@ -128,6 +128,13 @@ const CHILD_ENV_ALLOWLIST = [
   "ZERO_BASH_TIMEOUT_MS",
 ] as const;
 
+/** Operator override names; documented in configuration.md. */
+export const BASH_ENV_ALLOW = "ZERO_BASH_ENV_ALLOW";
+export const BASH_ENV_PASSTHROUGH_ALL = "ZERO_BASH_ENV_PASSTHROUGH_ALL";
+function operatorAllowedNames(env: NodeJS.ProcessEnv): string[] {
+  return (env[BASH_ENV_ALLOW] ?? "").split(",").map(name => name.trim()).filter(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name));
+}
+
 /**
  * Build a minimal environment for an agent-controlled child process from an
  * allowlist, then merge caller-supplied extras. Everything else in
@@ -141,9 +148,16 @@ export function allowlistedChildEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const key of CHILD_ENV_ALLOWLIST) {
-    const value = env[key];
-    if (value !== undefined) out[key] = value;
+  // Operator override, set in the environment 0 itself runs in (never by the model):
+  //   ZERO_BASH_ENV_PASSTHROUGH_ALL=1  turns the allowlist off and passes the whole environment.
+  //   ZERO_BASH_ENV_ALLOW=NAME,NAME    adds exactly these variable names to the allowlist.
+  if (env[BASH_ENV_PASSTHROUGH_ALL] === "1") {
+    for (const [key, value] of Object.entries(env)) if (value !== undefined) out[key] = value;
+  } else {
+    for (const key of [...CHILD_ENV_ALLOWLIST, ...operatorAllowedNames(env)]) {
+      const value = env[key];
+      if (value !== undefined) out[key] = value;
+    }
   }
   for (const [key, value] of Object.entries(extras)) {
     // Case-insensitive: a lowercase alias (`github_token`) must be screened the

@@ -28,7 +28,6 @@ export type {
   ConsoleCompactionEvent,
   ConsoleTurnOutcome,
   ConsoleStopReason,
-  ConsoleAutonomyMode,
   ConsoleScopeRequest,
   ConsoleScopeResolution,
   ConsoleLocalScopeRequest,

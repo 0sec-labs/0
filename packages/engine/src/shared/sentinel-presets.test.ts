@@ -16,8 +16,8 @@ describe("sentinel presets", () => {
       expect(parsed.role).toBe(preset.id);
       expect(parsed.status).toBe("paused");
       expect(parsed.scope.production).toBe(false);
-      expect(["observe", "act"]).toContain(parsed.autonomy);
-      expect(parsed.toolAccess).not.toBe("exec");
+      expect(parsed).not.toHaveProperty("autonomy");
+      expect(parsed).not.toHaveProperty("toolAccess");
     }
   });
   it("resolves skill ids and automation templates against the real catalogs", () => {
@@ -39,8 +39,11 @@ describe("sentinel presets", () => {
       expect(parseSentinelCreate(preset.sentinel).avatar.icon).toBe(preset.avatar.icon);
     }
   });
-  it("stores only observe or act, with read-only tools unless justified", () => {
-    for (const preset of SENTINEL_PRESETS) expect(["act", "observe"]).toContain(preset.autonomy);
-    expect(SENTINEL_PRESETS.filter(preset => preset.sentinel.toolAccess !== "read-only").map(preset => preset.id).sort()).toEqual(["attack-surface-monitor", "pen-tester", "regression-tester"]);
+  it("presets carry no access fields", () => {
+    for (const preset of SENTINEL_PRESETS) {
+      expect(preset).not.toHaveProperty("autonomy");
+      expect(preset.sentinel).not.toHaveProperty("autonomy");
+      expect(preset.sentinel).not.toHaveProperty("toolAccess");
+    }
   });
 });

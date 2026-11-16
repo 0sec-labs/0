@@ -10,11 +10,10 @@ import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import type { ToolContext } from "./types.js";
 
 it.each([
-  { mode: "yolo", bounded: false, hasHttp: true },
-  { mode: "copilot", bounded: false, hasHttp: true },
-  { mode: "standard", bounded: false, hasHttp: false },
-  { mode: "yolo", bounded: true, hasHttp: false },
-] as const)("inherits only approved console tools in $mode (source boundary=$bounded)", async ({ mode, bounded, hasHttp }) => {
+  { mode: "auto", bounded: false, hasHttp: true },
+  { mode: "ask", bounded: false, hasHttp: false },
+  { mode: "auto", bounded: true, hasHttp: false },
+] as const)("inherits only approved console tools with approvals $mode (source boundary=$bounded)", async ({ mode, bounded, hasHttp }) => {
   const root = mkdtempSync(join(tmpdir(), "0-console-web-delegation-"));
   const fetch = vi.spyOn(http, "fetchScoped").mockResolvedValue(new Response("public metadata", { status: 200 }));
   let advertisedHttp = false;
@@ -37,7 +36,7 @@ it.each([
   };
   const ctx: ToolContext = {
     target: "https://allowed.test", scanId: "console-web-delegation-test", role: "audit", consoleSession: true,
-    scopePath: root, scope: ScopePolicy.fromJson({ in_scope: ["allowed.test"] }), autonomyMode: mode,
+    scopePath: root, scope: ScopePolicy.fromJson({ in_scope: ["allowed.test"] }), approvals: mode,
     delegationTools: [TOOL_DEFINITIONS.http_request!, TOOL_DEFINITIONS.done!],
     findings: [], attackResults: [], targetInfo: {},
   };

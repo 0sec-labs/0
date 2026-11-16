@@ -1104,7 +1104,6 @@ export type {
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
   ConsoleTurnOutcome,
-  ConsoleAutonomyMode,
   ConsoleScopeRequest,
   ConsoleUsageReport,
   AutoTitleInput,

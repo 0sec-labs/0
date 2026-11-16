@@ -1,5 +1,5 @@
 import { type WorkerPolicy } from "../../workflow-execution-policy.js";
-import { type ApprovalsChoice, type ConsoleAccess, type LegacyAutonomyMode } from "../../shared/approvals.js";
+import { type ApprovalsChoice, type LegacyAutonomyMode } from "../../shared/approvals.js";
 import { type HarnessSnapshot, type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } from "../../runtime/types.js";
 import { type ExecutablePluginConfiguration } from "../../agent/executable-plugins.js";
@@ -111,34 +111,16 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
 // ── Console autonomy / scope resolution (0 lab console) ──
 
 /**
- * What a console session may do. Two states, everywhere:
+ * A console session has one mode: the agent has shell access. What limits it is the target scope,
+ * the budget, the optional sandbox and the global "Ask before running commands" setting
+ * (`ApprovalsChoice`). An older stored access value is accepted and ignored, except that the two
+ * values that used to ask first (standard, propose) keep asking.
  *
- * - `"read-only"`: passive, in-scope reconnaissance, the most capability-restricted
- *   state. It operates strictly within the configured scope / target anchor and never
- *   auto-expands scope. Only non-exploitative work is permitted: read-only tools plus a
- *   conservative set of passive network-recon tools (see {@link RECON_PASSIVE_NETWORK_TOOLS}).
- *   Every effectful / mutating / exploitation tool (apply_patch, run_command, browser,
- *   exploit-class scanners, spawn_agent, raw http_request, ...) is refused with a clear
- *   reason, never prompted, never lifted. The target anchor and the absolute SSRF rail
- *   still bound the passive tools it does allow.
- * - `"changes"` (default): may run commands and make changes within scope. Target-related
- *   hosts and local paths are authorized automatically; a new unrelated network target
- *   asks the operator through `requestScope`, and without an approval channel is refused.
- *   Explicit exclusions, denied-decision memory, dangerous-local-root restrictions and
- *   SSRF protections remain.
- *
- * Whether effectful actions are put to the operator first is not a state. It is only the
- * global "Ask before running commands" setting (`ApprovalsChoice`), applied on top of
- * `changes`. Older stored values (observe, recon, standard, copilot, yolo, propose, run,
- * act) are read as one of the two; see `normalizeAccess`.
- *
- * The authorization behavior applies only while the scope plugin is enabled; turning that
- * plugin off skips host/path/local-scope authorization. Credential, private-network,
- * sandbox and resource controls remain independent.
+ * The scope behavior applies only while the scope plugin is enabled; turning that plugin off
+ * skips host/path/local-scope authorization. Credential, private-network, sandbox and resource
+ * controls remain independent.
  */
-export type ConsoleAutonomyMode = ConsoleAccess;
-/** Accepted wherever a mode is set: the two states or an older stored value. */
-export type ConsoleAutonomyInput = ConsoleAccess | LegacyAutonomyMode;
+export type ConsoleAutonomyInput = LegacyAutonomyMode;
 
 /**
  * Request payload passed to `ConsoleSessionConfig.requestScope` when a
@@ -428,8 +410,8 @@ export interface ConsoleSessionConfig {
   /** System-prompt override. Defaults to {@link buildConsoleSystemPrompt}. */
   systemPrompt?: string;
   /**
-   * Access (see {@link ConsoleAutonomyMode}): read-only or changes (default). Older
-   * stored values are accepted and read as one of the two.
+   * Deprecated and ignored: there is one mode. An older stored access value is accepted so
+   * saved sessions load; only the two that used to ask first (standard, propose) still ask.
    */
   autonomyMode?: ConsoleAutonomyInput;
   /**
@@ -643,8 +625,6 @@ export interface ConsoleSession {
   readonly sourceContext?: ConsoleSourceContext;
   /** Full conversation so far (native content blocks). Grows with each turn. */
   readonly messages: NativeMessage[];
-  /** Current autonomy mode (configurable at creation time). */
-  readonly autonomyMode: ConsoleAutonomyMode;
   /** The "Ask before running commands" setting this session is applying. */
   readonly approvals: ApprovalsChoice;
   readonly workerPolicy?: WorkerPolicy;
@@ -662,7 +642,7 @@ export interface ConsoleSession {
    */
   readonly localScopePath: string | undefined;
   /** Switch access (and optionally the ask-first setting) without discarding the conversation or in-memory scope. */
-  setAutonomyMode(mode: ConsoleAutonomyInput, approvals?: ApprovalsChoice): void | Promise<void>;
+  setApprovals(approvals: ApprovalsChoice): void | Promise<void>;
   readonly webSearchEnabled?: boolean;
   /** Idle only; existing child agents must finish before changing their inherited policy. */
   setWebSearchEnabled?(enabled: boolean): void | Promise<void>;

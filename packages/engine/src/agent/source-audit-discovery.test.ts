@@ -15,7 +15,7 @@ describe("scoped source-audit deferred discovery", () => {
     const escalate = vi.fn<NonNullable<ToolContext["escalateScopedAudit"]>>(async () => false);
     const ctx: ToolContext & { deferredTools: DeferredToolRegistry } = {
       target: "local-source", scanId: "discovery-guard-test", findings: [], attackResults: [], targetInfo: {},
-      role, scopePath: process.cwd(), autonomyMode: bounded ? "yolo" : "standard", deferredTools: registry,
+      role, scopePath: process.cwd(), approvals: bounded ? "auto" : "ask", deferredTools: registry,
       escalateScopedAudit: escalate,
     };
     await withLocalSourceBoundary(bounded ? process.cwd() : undefined, async () => {

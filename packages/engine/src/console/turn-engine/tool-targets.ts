@@ -7,34 +7,6 @@ import { normalizeScopeHostname, ScopePolicy } from "../../scope/scope.js";
 import { shellTokens } from "../../agent/shell-tokens.js";
 
 /**
- * Passive network-recon tools permitted in `"recon"` mode ON TOP OF every
- * {@link READ_ONLY_TOOLS} entry. This is a deliberately CONSERVATIVE allow-list
- * ("prefer passive; when unsure, deny"): a network tool earns a place here only
- * when its entire job is passive information gathering about the engagement
- * surface — spidering/crawling, fingerprinting, surface/API discovery, and
- * client-side JS reconnaissance. None of these mutate target state or exercise
- * an exploit.
- *
- * Deliberately EXCLUDED (and therefore refused in recon): everything that can
- * mutate, submit input, or exploit — `http_request` (carries any method/body),
- * `submit_form`, `browser` (drives clicks/forms), `send_prompt`,
- * `access_control_probe`, all `structural_sqli_probe`/`prompt_layer_probe`/
- * `auth_boundary_probe`/`cloud_*` probes, every `run_*` scanner
- * (sqlmap/nmap/ffuf/nuclei — active/intrusive), `oast_*`, `start_scan`, the
- * shell/interpreter tools (`bash`/`run_command`/`pty_session`/`python_exec`),
- * `apply_patch`, and agent-spawning (`spawn_agent`/`spawn_agents`). Recon is the
- * most capability-restricted mode by design.
- */
-export const RECON_PASSIVE_NETWORK_TOOLS: Record<string, true> = {
-  crawl: true,
-  wp_fingerprint: true,
-  discover_api_surface: true,
-  surface_sweep: true,
-  js_recon: true,
-};
-
-
-/**
  * Canonicalize an operator-facing or tool-requested path to an ABSOLUTE,
  * symlink-resolved real path. The deepest existing ancestor is passed through
  * `realpathSync` (resolving every symlink in the prefix — so a symlink can't be

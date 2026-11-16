@@ -37,7 +37,7 @@
  *
  * The three capability flags mirror exactly what `gateFlagsFor` produces and
  * what the console gates consume, so a guard reasons in the same vocabulary as
- * the gates above it. `autonomyMode` and `hasScope` mirror the console's own
+ * the gates above it. `askFirst` and `hasScope` mirror the console's own
  * inputs to `maybeResolveScope` / `maybeApproveTool`.
  *
  * `approvalAvailable` and `capabilitiesResolved` are additions beyond the
@@ -47,7 +47,7 @@
  * them defensively (undefined is treated as the unsafe answer) so a loosely
  * typed JS caller can never widen access by omission.
  */
-import { executionPolicy, legacyAskedFirst, normalizeAccess } from "../shared/approvals.js";
+import { executionPolicy } from "../shared/approvals.js";
 
 export interface GuardContext {
   /** The tool being authorized. Used only for human-readable denial reasons. */
@@ -56,8 +56,6 @@ export interface GuardContext {
   readonly networkCapable: boolean;
   readonly localScope: boolean;
   readonly readOnly: boolean;
-  /** Autonomy mode in effect for this call. */
-  readonly autonomyMode: string;
   /** The "Ask before running commands" setting is on. */
   readonly askFirst?: boolean;
   /** True when an engagement scope is configured. */
@@ -281,7 +279,7 @@ export function guardNetworkRequiresScope(ctx: GuardContext): string | null | un
   // non-explicit-true hasScope as unscoped.
   const networkCapable = ctx.networkCapable !== false;
   const unscoped = ctx.hasScope !== true;
-  if (executionPolicy(ctx.autonomyMode).publicNetwork && networkCapable && unscoped) {
+  if (executionPolicy(ctx.askFirst).publicNetwork && networkCapable && unscoped) {
     return `Tool "${ctx.toolName}" is network-capable but no scope is configured`;
   }
   return null;
@@ -308,7 +306,7 @@ export function guardApprovalUnavailable(ctx: GuardContext): string | null | und
   // true approvalAvailable counts as unavailable.
   const effectful = ctx.readOnly !== true;
   const noApproval = ctx.approvalAvailable !== true;
-  if ((ctx.askFirst === true || legacyAskedFirst(ctx.autonomyMode)) && normalizeAccess(ctx.autonomyMode) === "changes" && effectful && noApproval) {
+  if (ctx.askFirst === true && effectful && noApproval) {
     return `Ask before running commands is on: tool "${ctx.toolName}" requires operator approval, but no approval mechanism is available`;
   }
   return null;

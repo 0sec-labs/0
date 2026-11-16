@@ -9,9 +9,10 @@ import type { Visualization } from "./visualization.js";
  */
 export const DESKTOP_CONSOLE_SCHEMA_VERSION = 1 as const;
 
-export type DesktopConsoleAutonomyMode = "read-only" | "changes";
+/** Deprecated wire constant: there is one mode. Always "changes"; accepted and ignored on write, kept so older clients keep working. */
+export type DesktopConsoleAutonomyMode = "changes";
 
-/** Product default access: Can make changes. Whether it asks first is the separate global setting. Explicit flags/settings win. */
+/** The constant value of the deprecated wire field. */
 export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "changes";
 
 /** Product default for allowModelSelfExtension in non-verify sessions. */

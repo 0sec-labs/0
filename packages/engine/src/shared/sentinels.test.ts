@@ -1,42 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { applySentinelPatch, parseSentinelCreate, sentinelAccessFields, sentinelAccessLevel, sentinelWrittenAutonomy, normalizeSentinelAccessLevel, type Sentinel } from "./sentinels.js";
+import { applySentinelPatch, dropAccessFields, parseSentinelCreate, sentinelReviewFingerprint, type Sentinel } from "./sentinels.js";
 
-describe("Agent access: Read-only or Can make changes", () => {
-  it("derives the level from the stored autonomy without widening anything", () => {
-    expect(sentinelAccessLevel("observe")).toBe("read-only");
-    for (const stored of ["propose", "run", "act"] as const) expect(sentinelAccessLevel(stored)).toBe("changes");
-    expect(sentinelWrittenAutonomy("observe")).toBe("observe");
-    for (const stored of ["propose", "run", "act"] as const) expect(sentinelWrittenAutonomy(stored)).toBe("act");
+describe("Agent access: there is one mode", () => {
+  const stored = (extra: Record<string, unknown>) => ({ ...parseSentinelCreate({ name: "A" }), id: "1", homeMissionId: null, owner: "x", version: 1, createdAt: "", updatedAt: "", ...extra }) as unknown as Sentinel;
+  it("a new Agent stores no access fields", () => {
+    const created = parseSentinelCreate({ name: "A" });
+    expect(created).not.toHaveProperty("autonomy");
+    expect(created).not.toHaveProperty("toolAccess");
   });
-  it("accepts the older access values as aliases of changes", () => {
-    expect(normalizeSentinelAccessLevel("commands")).toBe("changes");
-    expect(normalizeSentinelAccessLevel("pull-requests")).toBe("changes");
-    expect(normalizeSentinelAccessLevel("changes")).toBe("changes");
-    expect(normalizeSentinelAccessLevel("root")).toBeUndefined();
+  it("accepts every older access input on create and ignores it", () => {
+    for (const extra of [{ autonomy: "observe" }, { autonomy: "propose" }, { autonomy: "run" }, { autonomy: "act" }, { toolAccess: "read-only" }, { toolAccess: "read-web" }, { access: "read-only" }, { accessLevel: "changes" }, { access: "commands" }, { access: "anything" }]) {
+      const created = parseSentinelCreate({ name: "A", ...extra });
+      expect(created).toEqual(parseSentinelCreate({ name: "A" }));
+    }
   });
-  it("stores only observe or act for new choices", () => {
-    expect(sentinelAccessFields("changes")).toEqual({ autonomy: "act", toolAccess: "exec" });
-    expect(sentinelAccessFields("read-only")).toEqual({ autonomy: "observe", toolAccess: "read-only" });
-    expect(sentinelAccessFields("changes", { autonomy: "run", toolAccess: "read-only" })).toEqual({ autonomy: "act", toolAccess: "read-only" });
-    expect(sentinelAccessFields("changes", { autonomy: "observe", toolAccess: "read-web" })).toEqual({ autonomy: "act", toolAccess: "exec" });
-    expect(sentinelAccessFields("read-only", { autonomy: "act", toolAccess: "exec" })).toEqual({ autonomy: "observe", toolAccess: "read-only" });
+  it("loads a stored record that still carries the retired fields and patches it without error", () => {
+    for (const legacy of [{ autonomy: "observe", toolAccess: "read-only" }, { autonomy: "propose", toolAccess: "read-web" }, { autonomy: "run", toolAccess: "exec" }, { autonomy: "act", toolAccess: "exec" }]) {
+      const patched = applySentinelPatch(stored(legacy), { version: 1, mission: "m", access: "read-only" });
+      expect(patched.mission).toBe("m");
+      expect(patched).not.toHaveProperty("autonomy");
+      expect(patched).not.toHaveProperty("toolAccess");
+    }
   });
-  it("accepts accessLevel (and its older spellings) as a create alias and still validates the stored shape", () => {
-    for (const level of ["changes", "commands", "pull-requests"]) expect(parseSentinelCreate({ name: "A", accessLevel: level })).toMatchObject({ autonomy: "act", toolAccess: "exec" });
-    expect(parseSentinelCreate({ name: "A", accessLevel: "read-only" })).toMatchObject({ autonomy: "observe", toolAccess: "read-only" });
-    expect(parseSentinelCreate({ name: "A" })).toMatchObject({ autonomy: "observe" });
-    expect(() => parseSentinelCreate({ name: "A", accessLevel: "root" })).toThrow();
+  it("dropAccessFields removes only the retired keys", () => {
+    expect(dropAccessFields({ name: "A", autonomy: "observe", toolAccess: "read-only", access: "x", accessLevel: "y" })).toEqual({ name: "A" });
   });
-  it("saving normalises older values to observe or act and keeps web access", () => {
-    const make = (autonomy: "propose" | "run") => ({ ...parseSentinelCreate({ name: "A", autonomy }), id: "1", homeMissionId: null, owner: "x", version: 1, createdAt: "", updatedAt: "" }) as Sentinel;
-    expect(parseSentinelCreate({ name: "A", autonomy: "propose" })).toMatchObject({ autonomy: "act" });
-    expect(parseSentinelCreate({ name: "A", access: "changes" })).toMatchObject({ autonomy: "act", toolAccess: "exec" });
-    // A stored propose Agent is only rewritten when a save names access; other patches leave the row alone.
-    const stored = { ...make("run"), autonomy: "propose", toolAccess: "read-only" } as Sentinel;
-    expect(applySentinelPatch(stored, { version: 1, mission: "m" })).toMatchObject({ autonomy: "propose" });
-    expect(applySentinelPatch(stored, { version: 1, access: "changes" })).toMatchObject({ autonomy: "act", toolAccess: "read-only" });
-    expect(applySentinelPatch(stored, { version: 1, autonomy: "run" })).toMatchObject({ autonomy: "act" });
-    expect(applySentinelPatch(stored, { version: 1, accessLevel: "commands" })).toMatchObject({ autonomy: "act" });
-    expect(applySentinelPatch(stored, { version: 1, access: "read-only" })).toMatchObject({ autonomy: "observe" });
+  it("the review fingerprint keeps the shell-access constant so reviewed Agents stay reviewed", () => {
+    const sentinel = parseSentinelCreate({ name: "A" });
+    expect(sentinelReviewFingerprint(sentinel)).toContain('"toolAccess":"exec","autonomy":"act"');
   });
 });

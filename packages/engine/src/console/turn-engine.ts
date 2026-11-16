@@ -38,7 +38,7 @@
  * renderer — do not reshape it.
  */
 
-export type { ConsoleCompactionEvent, ConsoleRenderCallbacks, ConsoleUsageReport, ConsoleAutonomyMode, ConsoleScopeRequest, ConsoleScopeResolution, ConsoleLocalScopeRequest, ConsoleLocalScopeResolution, ConsoleStopReason, ConsoleTurnBudget, ConsoleTurnOutcome, ConsoleSendOptions, ConsoleSessionConfig, ConsoleEngagementSelection, ConsoleSourceLesson, ConsoleSourceContext, ConsoleSession } from "./turn-engine/types.js";
+export type { ConsoleCompactionEvent, ConsoleRenderCallbacks, ConsoleUsageReport, ConsoleScopeRequest, ConsoleScopeResolution, ConsoleLocalScopeRequest, ConsoleLocalScopeResolution, ConsoleStopReason, ConsoleTurnBudget, ConsoleTurnOutcome, ConsoleSendOptions, ConsoleSessionConfig, ConsoleEngagementSelection, ConsoleSourceLesson, ConsoleSourceContext, ConsoleSession } from "./turn-engine/types.js";
 export { DEFAULT_MAX_TOOL_ITERATIONS, buildConsoleSystemPrompt, createConsoleRuntime, describeCaughtError } from "./turn-engine/prompt-and-runtime.js";
 export { getWorkflowLifecycleTools } from "./turn-engine/console-tools.js";
 export type { ConsoleConversationHistory } from "./turn-engine/console-tools.js";

@@ -331,6 +331,8 @@ describe("ToolExecutor", () => {
       findings: [],
       attackResults: [],
       targetInfo: {},
+      // The tokenised command path and the scoped source-audit allow-list belong to the ask-first policy.
+      approvals: "ask",
     };
     executor = new ToolExecutor(ctx, null);
   });
@@ -2642,12 +2644,11 @@ describe("containsUnquotedShellChars", () => {
 // ── run_command: Auto lifts the scoped-audit command policy ─────────
 //
 // The tokenized pipeline syntax (no unquoted shell operators, scoped paths) is
-// for the read-only SOURCE-AUDIT modes. In Auto the operator has opted into
-// full autonomy on their own machine, so run_command runs full shell via the
+// for the ask-first policy. By default run_command runs full shell via the
 // same path as the `bash` tool. These pin that the syntax gate is lifted ONLY
-// under yolo and stays enforced otherwise.
+// by default and stays enforced when Ask before running commands is on.
 describe("run_command autonomy gating", () => {
-  const scopedCtx = (autonomyMode?: "yolo" | "standard"): ToolContext =>
+  const scopedCtx = (approvals?: "auto" | "ask"): ToolContext =>
     ({
       target: "https://target.test",
       scanId: "run-command-yolo-test",
@@ -2655,21 +2656,21 @@ describe("run_command autonomy gating", () => {
       attackResults: [],
       targetInfo: {},
       scopePath: mkdtempSync(join(tmpdir(), "0-runcmd-")),
-      ...(autonomyMode ? { autonomyMode } : {}),
+      ...(approvals ? { approvals } : {}),
     }) as ToolContext;
 
-  it("blocks unquoted shell operators outside yolo (scoped-audit policy)", async () => {
-    const exec = new ToolExecutor(scopedCtx("standard"), null);
+  it("blocks unquoted shell operators when Ask before running commands is on (scoped-audit policy)", async () => {
+    const exec = new ToolExecutor(scopedCtx("ask"), null);
     const r = await exec.execute({ name: "run_command", arguments: { command: "echo a && echo b" } });
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/Shell operators/i);
   });
 
-  it("runs full shell (&&, pipes) in yolo via the bash path", async () => {
+  it("runs full shell (&&, pipes) by default via the bash path", async () => {
     const prev = process.env["ZERO_REQUIRE_SCOPE"];
     delete process.env["ZERO_REQUIRE_SCOPE"];
     try {
-      const exec = new ToolExecutor(scopedCtx("yolo"), null);
+      const exec = new ToolExecutor(scopedCtx("auto"), null);
       const r = await exec.execute({ name: "run_command", arguments: { command: "echo a && echo b | cat" } });
       expect(r.success).toBe(true);
       expect(String((r as { output: unknown }).output)).toMatch(/a[\s\S]*b/);
@@ -3085,7 +3086,7 @@ describe("ToolExecutor — explicit console public-network authority", () => {
       target: "https://code.example/operator-approved",
       scanId: "console-repository-identity",
       findings: [], attackResults: [], targetInfo: {},
-      autonomyMode: "yolo",
+      approvals: "auto",
       consoleSession: true,
       publicNetwork: {},
     });
@@ -3103,7 +3104,7 @@ describe("ToolExecutor — explicit console public-network authority", () => {
   });
 
   it("admits absolute public requests without a target only with explicit host opt-in", async () => {
-    const ctx: ToolContext = { target: "", scanId: "public-no-target", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" };
+    const ctx: ToolContext = { target: "", scanId: "public-no-target", findings: [], attackResults: [], targetInfo: {}, approvals: "auto" };
     const executor = new ToolExecutor(ctx);
     try {
       const call = { name: "http_request", arguments: { url: "https://public.invalid/" } };
@@ -3141,7 +3142,7 @@ describe("ToolExecutor — explicit console public-network authority", () => {
       } })).success).toBe(false);
       expect(sent).toHaveLength(2);
       ctx.publicNetwork = undefined;
-      ctx.autonomyMode = "standard";
+      ctx.approvals = "ask";
       expect((await executor.execute({ name: "http_request", arguments: { url: ctx.target } })).success).toBe(true);
       expect(sent[2]).toEqual(["https://foreign.invalid/", null]);
       expect((await executor.execute({ name: "http_request", arguments: {
@@ -4895,7 +4896,7 @@ describe("ToolExecutor engine handoff", () => {
     const root = mkdtempSync(join(tmpdir(), "0-handoff-permission-"));
     const approve = vi.fn(async () => approved);
     const reconsider = vi.fn(async () => !approved);
-    const ctx: ToolContext = { ...context(), role: "audit", scopePath: root, autonomyMode: "standard", escalateScopedAudit: approve };
+    const ctx: ToolContext = { ...context(), role: "audit", scopePath: root, approvals: "ask", escalateScopedAudit: approve };
     const original = new ToolExecutor(ctx);
     let replacement: ToolExecutor | undefined;
     const call: ToolCall = { name: "bash", arguments: { command: "printf checkpoint-permission" } };
@@ -4996,7 +4997,7 @@ describe("approved workspace shell directory", () => {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-shell-workspace-")));
     const previous = process.cwd();
     try {
-      const executor = new ToolExecutor({ target: "", scanId: "workspace-cwd", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" }, null);
+      const executor = new ToolExecutor({ target: "", scanId: "workspace-cwd", findings: [], attackResults: [], targetInfo: {}, approvals: "auto" }, null);
       executor.configureWorkspace(directory);
       const result = await executor.execute({ name: "bash", arguments: { command: "pwd" } });
       expect(result.success).toBe(true);

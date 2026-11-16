@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { resolveCompactionThresholds, isRecoverableOutputCap, OUTPUT_CAP_CONTINUATION_PROMPT } from "../../agent/native-loop.js";
 import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "../context-maintenance.js";
 import { diag } from "../../diagnostics/channel.js";
-import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, buildOperatorInstructionsBlock, homeStateDir, parseSecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, buildOperatorInstructionsBlock, homeStateDir, parseSecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
 import type { NativeContentBlock, NativeMessage, NativeRuntime, NativeRuntimeResult, NativeStreamCallbacks, NativeToolDef } from "../../runtime/types.js";
 import { createExecutablePlugins, executableModelResult, parseExecutableModelRequest, resolveExecutableEvolutionProfiles } from "../../agent/executable-plugins.js";
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
@@ -39,11 +39,11 @@ import { renderInboundBatch } from "../../agent/agent-messaging.js";
 import type { MessagingRuntime } from "../../agent/agent-messaging.js";
 import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture, type RunManifest } from "../../telemetry/run-contribution.js";
 import { registerSignalCleanup } from "../../agent/signal-cleanup.js";
-import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleAutonomyMode, type ConsoleScopeResolution, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
+import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleScopeResolution, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
-import { RECON_PASSIVE_NETWORK_TOOLS, canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
-import { executionPolicy, normalizeAccess, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
+import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
+import { executionPolicy, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
 
 /**
  * Create an interactive console session over the real tool registry + runtime.
@@ -75,7 +75,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
   let workerPolicy = intersectWorkerPolicies(cp?.workerPolicy, config.workerPolicy);
   let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
-  let autonomyMode: ConsoleAutonomyMode = normalizeAccess(cp?.autonomyMode ?? config.autonomyMode, DEFAULT_AUTONOMY_MODE);
   // Ask-first is the global setting, not a mode. An older "standard" value passed here still asks.
   let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(cp?.autonomyMode) ? "ask" : "auto");
   let sessionScopeEnforcement = getScopeEnforcementState();
@@ -191,7 +190,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     target: sessionTarget, scopePath: sessionScopePath ?? null, policy: sessionScope?.raw ?? null,
     configuredPolicy: configuredScope?.raw ?? null, deniedHosts: [...deniedHosts],
     deniedLocalPaths: [...deniedLocalPaths], deniedShellPayloads: [...deniedShellPayloads],
-    autonomyMode, approvals, allowScanners: config.allowScanners ?? false,
+    approvals, allowScanners: config.allowScanners ?? false,
   });
 
   const toolContext: ToolContext = {
@@ -215,9 +214,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // changes what is dispatchable without rebuilding anything. Escalation
     // lifts ONLY the scoped-source-audit allow-list — the network, local
     // filesystem and co-pilot gates in this file still run first.
-    autonomyMode,
     approvals,
-    publicNetwork: executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
+    publicNetwork: executionPolicy(approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
     escalateScopedAudit: config.escalateScopedAudit,
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
@@ -514,7 +512,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
   const operatorInstructionsBlock = buildOperatorInstructionsBlock(config.operatorInstructions);
-  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -579,10 +577,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     toolContext.scope = scope;
     if (configured) {
       configuredScope = scope;
-      if (executionPolicy(autonomyMode, approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
+      if (executionPolicy(approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
   }
 
@@ -593,7 +591,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       sessionTarget = target;
       toolContext.target = target;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
       notify?.(`Target set to ${target}; scope plugin is disabled, authorization is not enforced.`);
       return;
@@ -691,7 +689,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     sessionScope = expanded;
     toolContext.scope = expanded;
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
     notify?.(
       `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
@@ -808,7 +806,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Ask for uncovered targets.
     const requestScope = config.requestScope;
     if (!requestScope) {
-      if (executionPolicy(autonomyMode, approvals).scopeExpansion === "target-related") {
+      if (executionPolicy(approvals).scopeExpansion === "target-related") {
         return { success: false, output: null,
           error: `Approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
       }
@@ -968,7 +966,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
 
     // ── yolo: auto-grant the path's subtree, no prompt (floors above still ran) ──
-    if (executionPolicy(autonomyMode, approvals).autoGrantsLocalPaths) {
+    if (executionPolicy(approvals).autoGrantsLocalPaths) {
       return autoGrantLocalScope(call, requestedPath);
     }
 
@@ -1115,7 +1113,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       networkCapable: networkCapableTools[call.name] === true,
       localScope: localScopeTools[call.name] === true,
       readOnly: readOnlyTools[call.name] === true,
-      autonomyMode,
       askFirst: approvals === "ask",
       hasScope: sessionScope !== undefined,
       approvalAvailable: config.approveTool !== undefined,
@@ -1149,7 +1146,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // engine cannot invent an operator to ask, and this mirrors every other gate's
   // "no callback → defer to the layers beneath" contract.
   async function maybeApproveTool(call: ToolCall): Promise<"approved" | ToolResult> {
-    if (autonomyMode !== "changes" || approvals !== "ask") return "approved";
+    if (approvals !== "ask") return "approved";
     const approveTool = config.approveTool;
     if (!approveTool) return "approved";
     if (readOnlyTools[call.name]) return "approved";
@@ -1167,30 +1164,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       };
     }
     return "approved";
-  }
-
-  // Recon capability gate — the RECON-mode friction, and the strictest one.
-  // Recon permits only non-exploitative, passive/read work: every
-  // READ_ONLY_TOOLS entry plus the conservative RECON_PASSIVE_NETWORK_TOOLS
-  // set. Any effectful / mutating / exploitation tool is REFUSED with a clear
-  // reason — never prompted (recon does not use the per-action approval flow)
-  // and never auto-lifted. This is a hard capability floor, so it runs FIRST in
-  // the dispatch loop: a denied tool never reaches the scope, local-scope,
-  // approval, or plugin-guard gates, so it can never trigger a scope/approval
-  // prompt. Recon still authorizes the passive tools it DOES allow exactly like
-  // standard (target anchor + scope-on-demand, no auto-expansion), and the
-  // executor's SSRF rail and target/scope boundary run underneath. In every
-  // other mode this gate is a no-op.
-  function maybeAllowReconCapability(call: ToolCall): "approved" | ToolResult {
-    if (autonomyMode !== "read-only") return "approved";
-    if (readOnlyTools[call.name] || RECON_PASSIVE_NETWORK_TOOLS[call.name]) {
-      return "approved";
-    }
-    return {
-      success: false,
-      output: null,
-      error: `Read-only: tool "${call.name}" is not permitted. Read-only allows only passive reconnaissance (read-only tools and passive network recon), never effectful, mutating, or exploitation tools. Switch access to Can make changes to run it.`,
-    };
   }
 
   /** Both the planner and executable agents use this exact authorization path. */
@@ -1224,7 +1197,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     if (config.workflowLifecycle && WORKFLOW_LIFECYCLE_NAMES.has(call.name)) {
       try {
         if (!call.arguments || typeof call.arguments !== "object" || Array.isArray(call.arguments)) throw new Error("Workflow tool arguments must be an object.");
-        if (["start_run", "create_schedule", "update_schedule", "delete_schedule"].includes(call.name) && autonomyMode === "read-only") throw new Error("Read-only: cannot start assessment workflows.");
         return { success: true, output: await config.workflowLifecycle.invoke(call.name, call.arguments) };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow lifecycle operation failed." }; }
     }
@@ -1251,8 +1223,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           message: "Draft saved. Inspect it in Automations and use its explicit Run action to execute it." } };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow draft could not be saved." }; }
     }
-    const recon = maybeAllowReconCapability(call);
-    if (recon !== "approved") return recon;
     const scope = await maybeResolveScope(call, notify, allowScopeExpansion);
     if (scope !== "approved") return scope;
     const local = await maybeResolveLocalScope(call, notify, allowScopeExpansion);
@@ -1289,7 +1259,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
     if (customSystemPrompt === undefined && !turnInProgress) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
     }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
@@ -2028,7 +1998,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // reproduction. Build the receipt from the host's finding ledger, not
         // the model's submitted evidence prose. All subsequent verification
         // still passes through dispatchAuthorized and its independent gates.
-        if (executionPolicy(autonomyMode, approvals).verificationReceipts && call.name === "save_finding" && toolResult.success &&
+        if (executionPolicy(approvals).verificationReceipts && call.name === "save_finding" && toolResult.success &&
           toolResult.output && typeof toolResult.output === "object" && "findingId" in toolResult.output) {
           const findingId = toolResult.output.findingId;
           const finding = toolContext.findings.find((item) => item.id === findingId);
@@ -2227,7 +2197,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       return inspectorCatalog;
     },
     messages,
-    get autonomyMode(): ConsoleAutonomyMode { return autonomyMode; },
     get webSearchEnabled(): boolean { return webSearchEnabled; },
     get workerPolicy(): WorkerPolicy | undefined { return workerPolicy; },
     setWorkerPolicy: (policy) => {
@@ -2248,17 +2217,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     get scopeEnforcement(): ScopeEnforcementState { return sessionScopeEnforcement; },
     get localScopePath(): string | undefined { return sessionScopePath; },
     get approvals(): ApprovalsChoice { return approvals; },
-    setAutonomyMode: (mode, approvalsArg) => {
-      // An explicit setting wins; an older value implies one; otherwise the current setting is kept.
-      approvals = approvalsArg ?? (legacyAskedFirst(mode) ? "ask" : mode === "yolo" || mode === "copilot" ? "auto" : approvals);
-      autonomyMode = normalizeAccess(mode, DEFAULT_AUTONOMY_MODE);
+    setApprovals: (approvalsArg) => {
+      approvals = approvalsArg;
       toolContext.approvals = approvals;
       // The executor shares this mutable context object, so updating it here
       // is what makes an approvals change take effect without a restart.
-      toolContext.autonomyMode = autonomyMode;
-      toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
+      toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
     },
     configureWorkspace: (path) => {
@@ -2285,10 +2251,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         sessionScope = undefined;
         configuredScope = undefined;
         toolContext.scope = undefined;
-        toolContext.publicNetwork = executionPolicy(autonomyMode, approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
+        toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
       }
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
     },
     reconfigureRuntime: (sel) => {
@@ -2328,7 +2294,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         workspaceRoot,
         role,
         messages: structuredClone(messages),
-        autonomyMode,
+        autonomyMode: "changes",
         webSearchEnabled,
         ...(workerPolicy !== undefined ? { workerPolicy: workerPolicySchema.parse(workerPolicy) } : {}),
         target: sessionTarget,

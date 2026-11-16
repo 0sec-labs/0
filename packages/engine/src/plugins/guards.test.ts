@@ -20,7 +20,7 @@ function ctx(overrides: Partial<GuardContext> = {}): GuardContext {
     networkCapable: false,
     localScope: false,
     readOnly: true,
-    autonomyMode: "standard",
+    askFirst: true,
     hasScope: true,
     approvalAvailable: true,
     capabilitiesResolved: true,
@@ -173,29 +173,29 @@ describe("guardUnresolvedCapabilities", () => {
 describe("guardNetworkRequiresScope (RETIRED — pure-behaviour pin only)", () => {
   it("denies a network-capable tool with no scope in yolo mode", () => {
     expect(
-      guardNetworkRequiresScope(ctx({ autonomyMode: "yolo", networkCapable: true, hasScope: false })),
+      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: true, hasScope: false })),
     ).toMatch(/network-capable/i);
   });
   it("abstains in yolo when a scope IS configured", () => {
     expect(
-      guardNetworkRequiresScope(ctx({ autonomyMode: "yolo", networkCapable: true, hasScope: true })),
+      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: true, hasScope: true })),
     ).toBeNull();
   });
   it("abstains for a non-network tool in yolo with no scope", () => {
     expect(
-      guardNetworkRequiresScope(ctx({ autonomyMode: "yolo", networkCapable: false, hasScope: false })),
+      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: false, hasScope: false })),
     ).toBeNull();
   });
   it("abstains when Ask before running commands is on (those modes are NOT hard-deny — no contradiction)", () => {
     // The real gate only hard-denies in yolo; ask-first runs scope-on-demand
     // or same-origin fallback. Denying here would contradict turn-engine.
     expect(
-      guardNetworkRequiresScope(ctx({ autonomyMode: "standard", networkCapable: true, hasScope: false })),
+      guardNetworkRequiresScope(ctx({ askFirst: true, networkCapable: true, hasScope: false })),
     ).toBeNull();
   });
   it("fails closed on missing flags in yolo", () => {
     const bad = {
-      ...ctx({ autonomyMode: "yolo" }),
+      ...ctx({ askFirst: false }),
       networkCapable: undefined,
       hasScope: undefined,
     } as unknown as GuardContext;
@@ -206,36 +206,35 @@ describe("guardNetworkRequiresScope (RETIRED — pure-behaviour pin only)", () =
 describe("guardApprovalUnavailable (standard approval gate, fail-closed)", () => {
   it("denies a non-read-only tool in standard when approval is unavailable", () => {
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "standard", readOnly: false, approvalAvailable: false })),
+      guardApprovalUnavailable(ctx({ askFirst: true, readOnly: false, approvalAvailable: false })),
     ).toMatch(/approval/i);
   });
   it("abstains in standard when approval IS available", () => {
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "standard", readOnly: false, approvalAvailable: true })),
+      guardApprovalUnavailable(ctx({ askFirst: true, readOnly: false, approvalAvailable: true })),
     ).toBeNull();
   });
   it("abstains for a read-only tool in standard even without approval", () => {
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "standard", readOnly: true, approvalAvailable: false })),
+      guardApprovalUnavailable(ctx({ askFirst: true, readOnly: true, approvalAvailable: false })),
     ).toBeNull();
   });
-  it("abstains in copilot/yolo/recon (no per-action approval gate there)", () => {
-    // copilot and yolo run prompt-free; recon refuses effectful tools via its
-    // own capability gate, never via per-action approval. None of them couple
-    // dispatch to an approveTool channel, so this guard must not fire there.
+  it("abstains when Ask before running commands is off (no per-action approval gate)", () => {
+    // Without the setting, runs are prompt-free and do not couple dispatch to an
+    // approveTool channel, so this guard must not fire.
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "copilot", readOnly: false, approvalAvailable: false })),
+      guardApprovalUnavailable(ctx({ askFirst: false, readOnly: false, approvalAvailable: false })),
     ).toBeNull();
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "yolo", readOnly: false, approvalAvailable: false })),
+      guardApprovalUnavailable(ctx({ askFirst: false, readOnly: false, approvalAvailable: false })),
     ).toBeNull();
     expect(
-      guardApprovalUnavailable(ctx({ autonomyMode: "recon", readOnly: false, approvalAvailable: false })),
+      guardApprovalUnavailable(ctx({ askFirst: false, readOnly: false, approvalAvailable: false })),
     ).toBeNull();
   });
   it("fails closed on missing flags in standard", () => {
     const bad = {
-      ...ctx({ autonomyMode: "standard" }),
+      ...ctx({ askFirst: true }),
       readOnly: undefined,
       approvalAvailable: undefined,
     } as unknown as GuardContext;
@@ -256,7 +255,7 @@ describe("BUILTIN_GUARDS", () => {
       BUILTIN_GUARDS,
       ctx({
         capabilitiesResolved: false,
-        autonomyMode: "standard",
+        askFirst: true,
         readOnly: false,
         approvalAvailable: false,
       }),
@@ -351,14 +350,14 @@ describe("monotonicity — the central property", () => {
       guardApprovalUnavailable,
     ];
 
-    const modes: GuardContext["autonomyMode"][] = ["standard", "copilot", "yolo"];
+    const asks = [true, false, false];
     const bool = (): boolean => rand() < 0.5;
     const randCtx = (): GuardContext => ({
       toolName: "t" + Math.floor(rand() * 1000),
       networkCapable: bool(),
       localScope: bool(),
       readOnly: bool(),
-      autonomyMode: pick(modes),
+      askFirst: pick(asks),
       hasScope: bool(),
       approvalAvailable: bool(),
       capabilitiesResolved: bool(),

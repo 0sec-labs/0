@@ -101,7 +101,7 @@ import { validateScopedCommand, validateTargetUrl } from "./tools/target-validat
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult, SOURCE_FILE_RE, evaluateDoneCoverageGate } from "./tools/verification.js";
 import { type ProbePrincipal, type ProbeResponse, is2xx, diffAccessResponses, probeEvidence, citedSourceHasKnownMarker, capText, tracebackTail } from "./tools/probe-helpers.js";
 import { SUBAGENT_PEER_PAGE_SIZE, sanitizeSubagentNote, REPORT_STATUS_TOOL, CHILD_LOCAL_DISPATCH, messagingRuntimeOf, mcpHostOf, deferredToolsOf, packToolsOf, buildSendMessageTool, subagentSiblingPrefix, buildSiblingMessagingBatch, CHECK_MESSAGES_TOOL, renderSubagentMessagingPrompt, PERSIST_POLL_MS, PERSIST_IDLE_TTL_MS, PERSIST_MAX_REVIVES, subagentWorkspaceSchema, subagentModelSelectionSchema, validateSpawnPersistentAgentArgs, MONITOR_READY_TIMEOUT_DEFAULT_S, MONITOR_TIMEOUT_MAX_S, MONITOR_POLL_MS, validateMonitorArgs, type SubagentOutcome, type SubagentRunReport, type SubagentLifecycleBase, buildSubagentProgress, buildSubagentMessage, type SubagentDeps } from "./tools/subagents.js";
-import { executionPolicy, legacyAskedFirst, normalizeAccess, DEFAULT_CONSOLE_ACCESS } from "../shared/approvals.js";
+import { executionPolicy } from "../shared/approvals.js";
 
 // ── Tool registry (0#611) ──
 // The per-tool ToolDefinition objects now live in per-domain modules under
@@ -782,7 +782,7 @@ export class ToolExecutor {
     // configured scope (the expansion is still surfaced via the console's
     // scope/local-scope notify path and the per-tool gates listed above still
     // run). It does not touch the OTHER gates listed above.
-    if (executionPolicy(this.ctx.autonomyMode, this.ctx.approvals).liftsAuditAllowList) return null;
+    if (executionPolicy(this.ctx.approvals).liftsAuditAllowList) return null;
 
     // Standard / recon: honour a decision already made this session before
     // prompting again (mirrors the denied-host / denied-path memory pattern in
@@ -977,8 +977,7 @@ export class ToolExecutor {
       networkCapable: gate.networkCapable,
       localScope: gate.localScope,
       readOnly: gate.readOnly,
-      autonomyMode: normalizeAccess(this.ctx.autonomyMode, DEFAULT_CONSOLE_ACCESS),
-      askFirst: this.ctx.approvals === "ask" || legacyAskedFirst(this.ctx.autonomyMode),
+      askFirst: this.ctx.approvals === "ask",
       hasScope:
         !!this.ctx.scope ||
         (typeof this.ctx.scopePath === "string" && this.ctx.scopePath.length > 0),
@@ -3063,7 +3062,7 @@ export class ToolExecutor {
       };
     }
 
-    if (executionPolicy(this.ctx.autonomyMode).publicNetwork && !this.ctx.enforcement) {
+    if (executionPolicy().publicNetwork && !this.ctx.enforcement) {
       if (acquisition && !networkScope?.match(acquisition.url).allowed) {
         if (!repositoryAcquisitionAllowed(acquisition, networkScope)) {
           return { success: false, output: null, error: "Repository source is explicitly excluded by the engagement scope" };
@@ -3547,7 +3546,7 @@ export class ToolExecutor {
     // of silently downgrading a web worker to source-only tools. An explicit
     // read-only source boundary remains authoritative in every mode.
     const inheritConsoleTools = this.ctx.consoleSession && this.ctx.delegationTools !== undefined &&
-      executionPolicy(this.ctx.autonomyMode).inheritsConsoleTools;
+      executionPolicy(this.ctx.approvals).inheritsConsoleTools;
     const scopedSource = !!getLocalSourceBoundary() || (!inheritConsoleTools &&
       !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review"));
     return filterWorkflowAgentTools(inherited.filter(tool =>
@@ -3856,7 +3855,6 @@ export class ToolExecutor {
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
           scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
           workspaceIdentity: this._workspaceIdentity,
-          autonomyMode: this.ctx.autonomyMode,
           approvals: this.ctx.approvals,
           consoleSession: this.ctx.consoleSession,
           workerPolicy,
@@ -4030,7 +4028,6 @@ export class ToolExecutor {
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
         scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
         workspaceIdentity: this._workspaceIdentity,
-        autonomyMode: this.ctx.autonomyMode,
         approvals: this.ctx.approvals,
         consoleSession: this.ctx.consoleSession,
         workerPolicy,
@@ -5887,7 +5884,7 @@ export class ToolExecutor {
   private async runCommand(args: Record<string, unknown>): Promise<ToolResult> {
     // Auto (full-shell policy) uses full shell syntax; other modes tokenize commands and pipes.
     // Executables and package-manager subcommands are unrestricted in both paths.
-    if (executionPolicy(this.ctx.autonomyMode).fullShell) {
+    if (executionPolicy(this.ctx.approvals).fullShell) {
       return this.shellExec(args);
     }
 
