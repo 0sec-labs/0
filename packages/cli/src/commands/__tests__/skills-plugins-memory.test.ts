@@ -106,6 +106,8 @@ describe("memory (embedded)", () => {
   it("rejects a bad --limit with exit 2 and a missing archive with exit 2", async () => {
     await run("memory", "list", "--limit", "0"); expect(code).toBe(2);
     await run("memory", "import", join(work, "missing.json")); expect(code).toBe(2);
+    const wrong = join(work, "wrong.json"); writeFileSync(wrong, JSON.stringify({ bad: 1 }));
+    await run("memory", "import", wrong); expect(code).toBe(2); expect(err.join("")).toContain("is not a 0 memory archive");
   });
 });
 

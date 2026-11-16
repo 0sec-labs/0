@@ -42,6 +42,8 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
     .action((file: string, options: OutputOptions & { preview?: boolean }) => run(options, async client => {
       let archive: unknown;
       try { archive = JSON.parse(readFileSync(resolve(file), "utf8")); } catch { throw new UsageError(`Cannot read ${file} as a JSON memory archive.`); }
+      const shape = archive as { format?: unknown; version?: unknown; knowledge?: unknown } | null;
+      if (!shape || typeof shape !== "object" || shape.format !== "zero-memory" || shape.version !== 1 || !Array.isArray(shape.knowledge)) throw new UsageError(`${file} is not a 0 memory archive. Create one with \`0 memory export -o <file>\`.`);
       const preview = record(record(expectOk(await client.request("POST", "/api/console/learning/import/preview", { archive }))).preview);
       const summary = `${String(preview.importable)} of ${String(preview.total)} memories can be imported (${String(preview.duplicates)} duplicates).`;
       if (options.preview) { emit(io, options, { preview }, () => summary); return; }
