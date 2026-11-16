@@ -72,7 +72,7 @@ describe("0 web --server-mode", () => {
   });
 
   it("answers health probes without credentials and with any Host", async () => {
-    expect(JSON.parse((await call(server.port, "/healthz", { host: "10.0.0.5:1" })).text)).toEqual({ status: "ok" });
+    expect(JSON.parse((await call(server.port, "/healthz", { host: "10.0.0.5:1" })).text)).toEqual({ status: "ok", modelTransport: expect.objectContaining({ consecutiveFailures: 0, failedCalls: 0 }) });
     expect(JSON.parse((await call(server.port, "/readyz")).text)).toEqual({ status: "ready" });
   });
 

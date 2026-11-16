@@ -101,7 +101,7 @@ Open the address and enter the access token. If you left `ZERO_ACCESS_TOKEN` emp
 
 The server refuses to start without a credential, with a too-short access token, or with a network bind and no allowed host. If you publish the port without a trusted TLS proxy it prints a warning: plain HTTP sends the access token and the session cookie in clear text, so do not do that.
 
-`GET /healthz` (the process is up) and `GET /readyz` (the database answers; 503 while starting or stopping) need no sign-in and return only `{"status": ...}`. The image health check uses `/healthz`.
+`GET /healthz` (the process is up) and `GET /readyz` (the database answers; 503 while starting or stopping) need no sign-in. `/readyz` returns only `{"status": ...}`; `/healthz` also returns `modelTransport` counters (consecutive and total model-call connection failures, pool rebuilds, last failure code), which contain no secrets. The image health check uses `/healthz`.
 
 ### Sizing
 
