@@ -38,7 +38,7 @@ export function findingDatabasePaths(dbPath?: string): string[] {
   return [...new Set([
     ...listOsecRunDatabasePaths(),
     resolveOsecDbPath(),
-  ].map((path) => resolve(path)))];
+  ].filter((path): path is string => Boolean(path)).map((path) => resolve(path)))];
 }
 
 export function findingFromRow(
