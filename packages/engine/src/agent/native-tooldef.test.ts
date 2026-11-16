@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toNativeToolDef, toNativeExtensionToolDef } from "./native-tooldef.js";
+import { toNativeToolDef } from "./native-tooldef.js";
 import type { ToolDefinition } from "./types.js";
 
 describe("toNativeToolDef", () => {
@@ -51,19 +51,5 @@ describe("toNativeToolDef", () => {
       parameters: { expected_workspace: expectedWorkspace },
     });
     expect(native.input_schema.properties.expected_workspace).toEqual(expectedWorkspace);
-  });
-});
-
-describe("toNativeExtensionToolDef", () => {
-  it("passes the frozen parameters bag through and copies required", () => {
-    const native = toNativeExtensionToolDef({
-      name: "ext",
-      description: "e",
-      parameters: { x: { type: "string" } },
-      required: ["x"],
-    } as Parameters<typeof toNativeExtensionToolDef>[0]);
-    expect(native.name).toBe("ext");
-    expect(native.input_schema.properties).toEqual({ x: { type: "string" } });
-    expect(native.input_schema.required).toEqual(["x"]);
   });
 });

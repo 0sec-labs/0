@@ -38,7 +38,7 @@ describe("workbench controller boundary", () => {
   it("does not serialize host authentication or executable resources", () => {
     const config = { target: "/operator/repo", workspaceRoot: "/operator/repo", autonomyMode: "standard" as const, askOperator: async () => null };
     expect(serializeWorkbenchConfig(config, "/operator/repo")).toEqual({ target: "/workspace", workspaceRoot: "/workspace", autonomyMode: "standard" });
-    expect(() => serializeWorkbenchConfig({ ...config, pluginHost: {} } as never, "/operator/repo")).toThrow("cannot execute");
+    expect(() => serializeWorkbenchConfig({ ...config, mcpHost: {} } as never, "/operator/repo")).toThrow("cannot execute");
   });
 });
 
