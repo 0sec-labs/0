@@ -564,7 +564,7 @@ Pull requests are only opened for fixes the harness verified (7.4).
 | # | Size | Slice | Notes |
 |---|------|-------|-------|
 | 1 | S | Golden tool-visibility snapshot test; `VerifierResult` type; parse `verify:` frontmatter; "verified" setter that only the harness can call | no behavior change; fake container runner in tests |
-| 2 | M | FIRST SLICE: verifier gate on `scan fix` and `threads start --skill workflow-hardening`. Container runner (OCI), baseline compare, patch-hash staleness, `done(claim)` gate, "Verified by" line in UI and `findings show`, `workflow-hardening` skill file | replaces the host `/bin/sh -lc` for this flow; keep `--test-command` working as a step |
+| 2 | M | SHIPPED (see fix-verification.md, "Status"). FIRST SLICE: verifier gate on `scan fix` and `threads start --skill workflow-hardening`. Container runner (OCI), baseline compare, patch-hash staleness, `done(claim)` gate, "Verified by" line in UI and `findings show`, `workflow-hardening` skill file | replaces the host `/bin/sh -lc` for this flow; keep `--test-command` working as a step |
 | 3 | S | Merge duplicate tools (8.3 rows 1 to 3) | measured by golden snapshot |
 | 4 | S | `--skill` on `threads start` and `scan`; skill `tools:` replaces `IMMEDIATE_TOOL_NAMES` | Threads without a skill unchanged |
 | 5 | M | `dependency-fix` (also `deps fix --verify`) and `ci-repair` skills | container with setup-only network |

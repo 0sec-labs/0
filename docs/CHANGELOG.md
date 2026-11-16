@@ -12,6 +12,12 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- A verifier gate: a skill can declare `verify:` (a digest-pinned container image, network off after setup, a timeout, success as exit 0, a pattern or no worse than before, and an optional canary the check must flag). The harness, not the Agent, runs it after the Agent says it is done and records a typed result. `0 threads start --skill workflow-hardening` uses it with zizmor and actionlint, and a fixed claim without a passing check ends with "Not verified" and the reason.
+- `0 scan fix --verify-image <image@sha256:...>` runs `--test-command` in a container with the network off and records a typed result; without it the command runs on this machine and is never labelled Verified.
+- The independent second-Agent check is now labelled Corroborated; Verified is kept for checks the harness ran.
+
 ### Fixed
 
 - `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`, and `--preview`, `--yes`, `--enable` and `--project` work before or after the source. At a terminal a bare add asks to confirm. `--yes` installs without a terminal (CI, scripts) unless the command runs in an agent session, which still refuses.

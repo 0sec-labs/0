@@ -27,3 +27,16 @@ The product gap: nothing forces the Agent to re-run the detector with the reposi
 8. A fix with any failed or skipped check is labelled "needs review" and cannot be auto-published.
 9. Commands run in the Computer the Thread uses, under the same Scope and access rules; the step adds no new permission.
 10. Measure with this experiment again: the target is that no fix labelled verified is later found not merge-ready for a verification reason.
+
+## Status: first slice shipped
+
+The product now runs a verifier the Agent cannot claim. What exists:
+
+- A skill declares `verify:` (steps, a digest-pinned image, network `none` or `allowed`, timeout, success as exit 0, a regex or a baseline comparison `no-worse` or `improves`, and an optional canary). Code: `packages/engine/src/verifier/`, with a pure spec, result and claim gate behind a `ContainerRunner` port. Adapters: Docker or podman (the snapshot is copied in, never mounted; capabilities dropped; the network is off, or disconnected after an optional setup step) and a host adapter used only for an explicit `--test-command` with no image.
+- Result (stored additively on the fix record and the thread outcome): `status` (pass, fail, not-run, error), `reason`, `command`, `imageDigest`, `isolation`, `durationMs`, a redacted 2 KB `logTail`, `canary` (ok, missing, n/a) and `baseline` `{before, after}`. A missing canary is `fail` with reason `detector-did-not-run`; no container runtime is `not-run`; only a container run that passed is "Verified".
+- Gate: a thread started with `--skill` for a skill that declares `verify` ends with `Verified by: ...` or `Not verified: ...`; a fixed or verified claim without a pass is marked as not backed by a check and `threads start --wait` exits 1.
+- `scan fix --test-command` goes through the same runner (typed result; `--verify-image` selects a container). Without an image it stays on the host, stamped `isolation: host`, and is never Verified.
+- The workflow-hardening skill is the first built-in: actionlint and zizmor (the repository's own configuration) in two pinned images, with a planted unpinned action as the canary, and `baseline: improves`.
+- The second-Agent check is shown as Corroborated.
+
+Not in this slice: retry with the log tail, patch-hash staleness, the `--allow-unverified` block on PR creation, advisory snapshots, and running verifiers declared by community `SKILL.md` files (they parse and show, but only built-in skills run until install-time approval exists). Slice 2 is the dependency and secrets skills (`setup` with network then cut, and a generated canary for gitleaks).

@@ -95,6 +95,21 @@ A finding is a claim. Verification runs it. A fix is accepted only when the patc
 
 In the browser app, open a finding under **Findings**. The detail panel offers **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on its state, plus the equivalent terminal command under **Terminal command**.
 
+### Verified, Not verified and Corroborated
+
+**Verified** means 0 ran a check itself and it passed: the check runs in a container on a copy of your changes, with the network off, after the Agent says it is done. The Agent cannot mark anything Verified. A fix shows one line under it:
+
+```
+Verified by: zizmor passed, 4 findings to 0 (14.2s)
+Not verified: no container runtime is available
+Not verified: zizmor failed (detector did not run)
+```
+
+- Without Docker or podman the result is **Not verified**, never Verified. `0 scan fix --test-command` without `--verify-image` still runs on this machine, and its line says so.
+- `0 scan fix ./my-app --finding finding.json --test-command "npm test" --verify-image ghcr.io/org/image@sha256:<digest>` runs the command in that digest-pinned image.
+- `0 threads start "Harden the workflows" --folder . --skill workflow-hardening --wait` runs zizmor with the repository's own configuration and actionlint after the Agent finishes. A planted unpinned action must be flagged first, so a configuration that turns the detector off reads as Not verified.
+- **Corroborated** is the older independent check, where a second Agent agreed. It is a model judgment, not a run check.
+
 ### How scans verify findings
 
 Scans verify before they report. On `scan web`, each candidate goes to a fresh verifier session that gets the finding's request, response and analysis, replays the attack, tries variations and marks it `confirmed` or `false-positive`. Source review and `scan deep` run skeptic or refutation passes instead. These are model judgments backed by the evidence they collected. They are not deterministic replays. 

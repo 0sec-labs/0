@@ -6,7 +6,7 @@
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { redactContent } from "../telemetry/redaction.js";
+import { redactLog } from "./redact.js";
 import type { ContainerRunner, StepOutcome } from "./port.js";
 import { LOG_TAIL_BYTES, tailOf, type VerifierResult } from "./result.js";
 import { imageDigest, type VerifySpec, type VerifyStep } from "./spec.js";
@@ -23,7 +23,7 @@ export interface RunVerifierInput {
 }
 
 const commandOf = (spec: VerifySpec): string => spec.steps.map((s) => s.run).join(" && ");
-const redactTail = (text: string): string => tailOf(redactContent(tailOf(text, LOG_TAIL_BYTES * 2), { maxChars: LOG_TAIL_BYTES * 4 }));
+const redactTail = (text: string): string => tailOf(redactLog(tailOf(text, LOG_TAIL_BYTES * 2)));
 
 function counted(step: StepOutcome, metric: string | undefined): number {
   if (metric) {

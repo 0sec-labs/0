@@ -67,6 +67,10 @@ Local users and team owners can edit mounted, personal and project skills in pla
 
 Saves check the revision. If someone changes a skill while you edit, your draft stays open and the stale save is rejected. **Reload latest** replaces the draft with the current version.
 
+## Skills that check their own work
+
+A skill can declare a `verify:` block in its `SKILL.md` frontmatter: the command, a digest-pinned container image, whether the network stays off, a timeout, what counts as success (exit 0, a pattern, or no worse than before) and an optional planted marker the check must flag. When a thread runs such a skill, 0 runs the check after the Agent finishes and shows **Verified by** or **Not verified** with the reason. Today only built-in skills run their check; the built-in `workflow-hardening` skill pins GitHub Actions to commit SHAs, narrows permissions and moves untrusted expressions into `env`.
+
 ## Teams
 
 In a team workspace, created and imported skills are shared with the team. Editors can create and edit them. Viewers can browse and export. Only owners can mount host folders. Team workspaces do not pick up the host operator's personal skill folders.
