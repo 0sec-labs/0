@@ -62,3 +62,18 @@ describe("chat schedule editing",()=>{
   expect(f.launch).not.toHaveBeenCalled();
  }));
 });
+describe("scheduler across engine restarts",()=>{
+ it("fires an occurrence once when two engines share it, and never replays it after a restart mid-interval",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"zero-schedule-restart-"));const path=join(dir,"control.db");const workflows=new SecurityWorkflowStore(path);const triggers=new WorkflowTriggerStore(path);const definition=workflows.save(draft);
+  const launch=vi.fn(async()=>({executionId:workflows.createExecution(definition.id,"owner",1).id}));const adapter={launch,validate:vi.fn(async()=>({model:"model",providerId:"provider"}))};
+  const first=new WorkflowTriggerService({dbPath:path,adapter,pollIntervalMs:999999});const second=new WorkflowTriggerService({dbPath:path,adapter,pollIntervalMs:999999});
+  try{
+   const trigger=triggers.create(fields(definition.id),now-1000);
+   await Promise.all([first.tick(now),second.tick(now)]);expect(launch).toHaveBeenCalledTimes(1);
+   const running=triggers.get(trigger.id)!;workflows.updateExecution(running.lastExecutionId!,{status:"completed"});
+   // Restart mid-interval: a fresh service on the same database must wait for the next occurrence.
+   await first.dispose();const restarted=new WorkflowTriggerService({dbPath:path,adapter,pollIntervalMs:999999});
+   try{await restarted.tick(now+10*60_000);expect(launch).toHaveBeenCalledTimes(1);await restarted.tick(now+3600_000+5_000);expect(launch).toHaveBeenCalledTimes(2);}finally{await restarted.dispose();}
+  }finally{await second.dispose();workflows.close();triggers.close();rmSync(dir,{recursive:true,force:true});}
+ });
+});
