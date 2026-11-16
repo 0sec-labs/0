@@ -10,7 +10,7 @@
 //   import <file>  merge a shared config into the global (default) or --project layer
 //
 // SECURITY: import never silently enables a security-sensitive setting. If an
-// imported config would change any Security-group key (allowModelSelfExtension or
+// imported config would change any Security-group key (allowDevSourceUpdates or
 // a subagent-messaging toggle), the import is refused unless --yes is passed, and
 // the specific change is printed. Unknown keys are dropped, never blindly written,
 // and every value is validated via the settings sanitiser/normaliser before it
@@ -46,7 +46,7 @@ const EXIT_USER_ERROR = 1;
  * preferences remain loadable for old files, but are not a CLI configuration API. */
 const CLI_CONFIG_KEYS = [
   "busyInputMode", "autoCompaction", "compactionThreshold", "allowSubagentPeerMessaging",
-  "allowSubagentOperatorMessaging", "allowModelSelfExtension", "allowDevSourceUpdates",
+  "allowSubagentOperatorMessaging", "allowDevSourceUpdates",
   "executionProfile", "approvals", "analyticsLevel", "diagnosticReporting", "updatePolicy",
 ] as const satisfies readonly (keyof TuiSettings)[];
 const PUBLIC_CONFIG_KEYS = new Set<keyof TuiSettings>(CLI_CONFIG_KEYS);

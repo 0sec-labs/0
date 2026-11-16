@@ -25,7 +25,6 @@ export function pendingHomeSnapshot(id: string): ConsoleSessionSnapshot {
     usage: { inputTokens: 0, outputTokens: 0 },
     lastOutcome: null,
     compaction: null,
-    harness: null,
     objective: "",
     todos: null,
     tools: [],

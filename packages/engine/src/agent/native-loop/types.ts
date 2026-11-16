@@ -1,15 +1,13 @@
 import type { WorkerPolicy } from "../../workflow-execution-policy.js";
 import { type WorkspaceIdentity } from "../workspace-identity.js";
 import type { NativeRuntime, NativeMessage, NativeRuntimeResult } from "../../runtime/types.js";
-import type { AuthConfig, HarnessSnapshot } from "../../shared/index.js";
+import type { AuthConfig } from "../../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolContext, AgentRole } from "../types.js";
 import type { ScopePolicy } from "../../scope/scope.js";
 import type { AttributionConfig } from "../../scope/attribution.js";
 import type { EngagementPosture } from "../../scope/engagement-profile.js";
 import type { EnforcementTracker } from "../../scope/enforcement.js";
 import { WafDetector } from "../../scope/waf-detect.js";
-import { type ExecutablePluginConfiguration } from "../executable-plugins.js";
-import type { EvolutionConfig } from "../../improvement/types.js";
 import type { ToolHealthSummary } from "../tool-health.js";
 import type { TodoSnapshot } from "../todos.js";
 import { type TrustGraphConfig } from "../trust-graph-runtime.js";
@@ -178,11 +176,7 @@ export interface NativeAgentConfig {
    * `trust-graph-runtime.ts` for the full contract.
    */
   trustGraph?: TrustGraphConfig;
-  /** Sandboxed TypeScript tools, skills, and agent programs; never enabled for verifier roles. */
-  allowModelSelfExtension?: boolean;
   publicNetwork?: ToolContext["publicNetwork"];
-  executablePlugins?: ExecutablePluginConfiguration;
-  executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   /**
    * Enable codebase learning: recall prior source-grounded notes into context
    * at loop start and expose the `remember_codebase` tool. For scoped source
@@ -192,12 +186,10 @@ export interface NativeAgentConfig {
    * must either omit this or set it to false so tools/context stay cold.
    */
   codebaseLearning?: boolean;
-  /** Captured canonical workspace root for live-harness trust/enablement decisions. */
+  /** Captured canonical workspace root for trust/enablement decisions. */
   workspaceRoot?: string;
   skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
   skillAuthoring?: ToolContext["skillAuthoring"];
-  /** Live harness snapshot change callback. Fired on generation transitions, view updates, and errors. */
-  onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
 }
 
 export interface NativeAgentLoopOptions {

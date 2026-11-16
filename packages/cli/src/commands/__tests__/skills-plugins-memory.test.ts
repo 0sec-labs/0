@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { registerCommandTree } from "../tree.js";
 import { registerSkillsCommand } from "../skills.js";
 import { registerMemoryCommand } from "../memory.js";
-import { registerPluginConnectCommands } from "../plugin-connect.js";
+import { registerPluginMovedCommand } from "../plugin-moved.js";
 import { openConsole } from "../../console-skills-client.js";
 import { registerLocalEngine } from "../../local-engine.js";
 import type { CommandIo } from "../console-output.js";
@@ -29,7 +29,7 @@ afterEach(() => {
 async function run(...args: string[]): Promise<void> {
   const program = new Command().exitOverride();
   registerSkillsCommand(program, io); registerMemoryCommand(program, io);
-  registerPluginConnectCommands(program.command("plugin"), io);
+  registerPluginMovedCommand(program, io);
   out.length = 0; err.length = 0; code = 0;
   await program.parseAsync(["node", "0", ...args, "--db-path", db]);
 }
@@ -41,11 +41,11 @@ function makeSkill(name: string, description = "A test skill"): string {
 }
 
 describe("command tree", () => {
-  it("registers skills, memory and the plugin connector commands", () => {
+  it("registers skills, memory and the moved plugin stubs", () => {
     const program = new Command(); registerCommandTree(program);
     const paths = (command: Command, prefix = ""): string[] => command.commands.flatMap(child => [`${prefix}${child.name()}`, ...paths(child, `${prefix}${child.name()} `)]);
     const all = paths(program);
-    for (const path of ["skills list", "skills catalog", "skills add", "skills link", "memory list", "memory import", "plugin connectors", "plugin connect", "plugin mcp add", "plugin mcp test"]) expect(all).toContain(path);
+    for (const path of ["skills list", "skills catalog", "skills add", "skills link", "memory list", "memory import", "plugin submit", "plugin connect", "plugin mcp add", "plugin mcp test"]) expect(all).toContain(path);
   });
 });
 
@@ -109,25 +109,12 @@ describe("memory (embedded)", () => {
   });
 });
 
-describe("plugin connectors and MCP servers (embedded)", () => {
-  it("lists connectors and refuses connect without --yes or with an unknown field", async () => {
-    await run("plugin", "connectors", "--json"); expect(json().items.length).toBeGreaterThan(0);
-    await run("plugin", "connect", "nope", "--yes"); expect(code).toBe(2);
-    await run("plugin", "connect", "github", "--set", "bogus=1", "--yes"); expect(code).toBe(2); expect(err.join("")).toContain("no field");
-    process.env.SPM_FAKE_KEY = "fake-key-not-real";
-    try { await run("plugin", "connect", "github", "--secret-env", "token=SPM_FAKE_KEY"); expect(code).toBe(2); expect(err.join("") + out.join("")).not.toContain("fake-key-not-real"); }
-    finally { delete process.env.SPM_FAKE_KEY; }
-    await run("plugin", "disconnect", "github"); expect(code).toBe(2);
-  });
-
-  it("reviews an MCP server first, adds it on --yes, lists and removes it with --yes", async () => {
-    await run("plugin", "mcp", "add", "docs", "--", "echo", "hi"); expect(code).toBe(2); expect(out.join("")).toContain("Re-run with --yes");
-    await run("plugin", "mcp", "list", "--json"); expect(json().items).toEqual([]);
-    await run("plugin", "mcp", "add", "docs", "--yes", "--json", "--", "echo", "hi"); expect(code).toBe(0);
-    await run("plugin", "mcp", "list", "--json"); expect(json().items.map((item: { id: string }) => item.id)).toEqual(["custom-docs"]);
-    await run("plugin", "mcp", "remove", "custom-docs"); expect(code).toBe(2);
-    await run("plugin", "mcp", "remove", "custom-docs", "--yes"); expect(code).toBe(0);
-    await run("plugin", "mcp", "add", "x"); expect(code).toBe(2);
+describe("the retired plugin commands", () => {
+  it("say what replaced them and install, run or approve nothing", async () => {
+    await run("plugin", "submit", "./x"); expect(code).toBe(2); expect(err.join("")).toBe("removed: extensions are installed from git: 0 skills add <repo>@<sha>");
+    await run("plugin", "connect", "github", "--yes"); expect(code).toBe(2); expect(err.join("")).toContain("removed:");
+    await run("plugin", "run", "x", "tool"); expect(code).toBe(2); expect(err.join("")).toContain("removed:");
+    await run("plugin", "mcp", "add", "docs", "--", "echo", "hi"); expect(code).toBe(2); expect(err.join("")).toContain("moved: use `0 skills extensions mcp");
   });
 });
 

@@ -1,4 +1,3 @@
-import { loadServicePluginConnections } from "../web/service-plugins.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { stdin } from "node:process";
 
@@ -11,7 +10,7 @@ import {
   loadScope,
   getScopeEnforcementState,
   parseMcpConfig,
-  connectMcpServers, connectServicePlugins,
+  connectMcpServers,
   DEFAULT_MAX_TOOL_ITERATIONS,
   runStartupImport,
 } from "@0/engine";

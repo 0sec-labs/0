@@ -11,7 +11,7 @@ name: "0: Release"
 # Pre-release gate: everything that is not a real release is a DRY RUN (build +
 # smoke every native binary, publish nothing). It runs automatically when a
 # branch push touches anything the standalone binary depends on (CLI version,
-# this workflow, bun-compile, the smoke scripts, the plugin or command tree)
+# this workflow, bun-compile, the smoke scripts, the extension or command tree)
 # and nightly on main, so a broken binary shows up days before tag time.
 
 on:
@@ -23,10 +23,10 @@ on:
       - "packages/cli/package.json"
       - "packages/cli/src/index.ts"
       - "packages/cli/src/commands/index.ts"
-      - "packages/cli/src/commands/plugin*.ts"
+      - "packages/cli/src/commands/skills*.ts"
       - "scripts/bun-compile*"
       - "scripts/smoke-standalone-binary.sh"
-      - "scripts/smoke-plugin-runtime.mjs"
+      - "scripts/smoke-extension-runtime.mjs"
       - "scripts/smoke-web-setup.mjs"
       - "scripts/check-host-console-worker-bun.ts"
       - "scripts/bundle-cli.mjs"
@@ -111,7 +111,7 @@ jobs:
           ZERO_RELEASE_POSTHOG_KEY: ${{ secrets.ZERO_RELEASE_POSTHOG_KEY }}
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
       - name: Smoke the binary
-        # Dashboard embed, host console worker, plugin execution and web setup.
+        # Dashboard embed, host console worker, extension install and web setup.
         # One script shared with `scripts/ci-local.sh --only standalone-smoke`.
         shell: bash
         run: bash scripts/smoke-standalone-binary.sh "dist-bin/${{ matrix.asset }}"

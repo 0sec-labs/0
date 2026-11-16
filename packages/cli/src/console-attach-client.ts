@@ -29,7 +29,7 @@ export interface ConsoleClientDeps { attach?: typeof connectLocalConsole }
 const PREFIX = "/api/console/";
 
 function embedded(options: ConsoleClientOptions): ConsoleClient {
-  const operator = new WebOperatorServices({ allowChatGptPlan: true, isTurnActive: () => false });
+  const operator = new WebOperatorServices({ allowChatGptPlan: true });
   let github: GitHubPublicationAuth | undefined;
   const githubAuth = () => (github ??= new GitHubPublicationAuth());
   let catalog: RepositoryCatalog | undefined;

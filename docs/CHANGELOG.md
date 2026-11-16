@@ -12,6 +12,19 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Removed
+
+The old plugin system is gone; extensions replace it. Installed plugins are kept on disk and imported once as disabled entries marked "could not migrate"; nothing is deleted.
+
+- The executable plugin runtime (`plugin.js` with tools, the loader, the wire protocol, capability manifests and the per-tool approvals for GitHub-installed executable plugins; first shipped in 0.16.3, review UI in 0.34.0). Installed plugins are imported disabled and listed with a note; re-express them as scripts run through bash or as MCP servers. MCP tool pins stay and are stronger (a changed tool blocks its server).
+- `self_extend`, the live harness (agent drivers and plugin views, the workspace harness trust grant) and the `allowModelSelfExtension` setting (0.14.0 to 0.16.3). The model writes a skill or script folder with bash; you install it as a local extension through the install prompt. Model-authored plugins in `~/.0/executable-plugins` are reported by the importer only and left in place. An old `allowModelSelfExtension` value in a settings file is ignored.
+- The plugin registry: `registry-client`, the hackstore index, `ZERO_REGISTRY_URL`, and plugin registry submit (`plugin submit`, `skills add --submit`) (0.14.0). Extensions are installed from git: `0 skills add <repo>@<sha>`.
+- `ZERO_REGISTRY_PUBLIC_KEY_FILE` and Ed25519 verification of registry entries (0.30.0). The 0.34.0 note that it stays no longer holds. Signatures and publisher identity are not offered; the defence is the install prompt, the commit pin, scope and the sandbox.
+- Custom MCP servers added in the browser (the MCP sheets, `custom-mcp`, `mcp-servers.json`; 0.29.0), service plugins (GitHub, Slack, Linear, Cloudflare, Teams, Elastic, Semgrep, Snyk and Jira adapters connected through an in-process MCP server and `service-plugins.json`), and their routes (`/api/console/plugins`, `/api/console/mcp-servers`, `/api/console/service-plugins`). Add an MCP server from the Extensions page (**Add MCP server**) or `0 skills extensions mcp`; token connections are extensions with a `connector`. The importer turns custom MCP servers into local extensions that need approval, and token-only connections into connector extensions without copying the token; Elastic, Semgrep, Snyk and Jira connections are reported and their stored credentials are untouched.
+- The Plugins page, plugin detail page and Explore plugin entries (0.29.0 to 0.32.0). `/plugins` and `/plugins/:id` redirect to `/extensions`.
+- The `0 plugin` commands. The group stays hidden as aliases: `plugin list|search|info|enable|disable|install` and `plugin mcp add|list|remove` run the matching `0 skills extensions` command and print `moved: use ...`; `run`, `init`, `validate`, `connect`, `connectors`, `disconnect` and `mcp test` print `removed: ...`; `submit` prints `removed: extensions are installed from git: 0 skills add <repo>@<sha>`. `0 skills run` is gone with them.
+- Connector brand logo data and its generator script.
+
 ### Security
 
 - Extensions: a connector's stored token now reaches the scripts (through bash) and MCP servers of the extension that declared and was approved for that variable, and is masked in what comes back. The approval prompt for MCP tools shows sanitised plain text with an old-versus-new description and schema diff. Extension server ids are namespaced (`x-`) and cannot shadow your own servers. Tool output fences use a per-call random code and neutralise look-alikes; responses and nested schema descriptions are bounded. A changed tool list, a dead process or a hung call blocks the server, and the pin is re-checked before each call. `npx`, `uvx`, `pip` and similar launchers must pin an exact version. Remote MCP hosts are resolved and refused when they point at private, loopback, link-local or metadata addresses.

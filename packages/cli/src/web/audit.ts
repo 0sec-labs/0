@@ -32,32 +32,16 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   const b = body(input);
   let m: RegExpExecArray | null;
   if ((m = /^sessions\/([^/]+)\/decisions\/([^/]+)$/.exec(path)) && method === "POST") return { action: b.approve === true ? "decision.approved" : "decision.denied", subject: `session ${decodeURIComponent(m[1]!)}`, detail: { sessionId: decodeURIComponent(m[1]!), decisionId: decodeURIComponent(m[2]!), approved: b.approve === true } };
-  if (path === "mcp-servers" && method === "POST") {
-    const config = body(b.config);
-    return { action: "mcp.create", subject: String(config.name ?? "custom MCP server"), detail: { name: config.name, transport: config.transport, fingerprint: hash({ c: config.command, a: config.args, u: config.url, cwd: config.cwd }), envKeys: names(config.env), headerKeys: names(config.headers), enabled: b.enable === true } };
-  }
-  if ((m = /^mcp-servers\/([^/]+)(\/test)?$/.exec(path)) && m[1] !== "preview") {
-    const id = decodeURIComponent(m[1]!);
-    if (m[2]) return { action: "mcp.test", subject: id };
-    if (method === "DELETE") return { action: "mcp.delete", subject: id };
-    const config = body(b.config);
-    const action = typeof b.approvedFingerprint === "string" ? "mcp.approve" : b.enabled === true ? "mcp.enable" : b.enabled === false ? "mcp.disable" : "mcp.update";
-    return { action, subject: id, detail: { enabled: typeof b.enabled === "boolean" ? b.enabled : undefined, envKeys: b.config ? names(config.env) : undefined, fingerprint: b.config ? hash({ c: config.command, a: config.args, u: config.url, cwd: config.cwd }) : undefined } };
-  }
   if (path === "github/webhook/secret" && method === "POST") return { action: "github.webhook.secret.create", subject: "github webhook" };
   if (path === "github/webhook/secret/rotate" && method === "POST") return { action: "github.webhook.secret.rotate", subject: "github webhook" };
   if (path === "skills/catalog/install" && method === "POST") return { action: "skill.install", subject: String(b.id ?? `${b.repo ?? "github"}/${b.path ?? ""}`), detail: { source: typeof b.id === "string" ? "catalog" : "github", id: b.id, repo: b.repo, path: b.path, version: typeof b.sha === "string" ? b.sha.slice(0, 12) : undefined } };
   if (path === "skills/catalog/remove" && method === "POST") return { action: "skill.remove", subject: String(b.name ?? "skill"), detail: { name: b.name } };
-  if (path === "plugins/install-github") return { action: "plugin.github.review", subject: String(b.repo ?? b.url ?? "github plugin"), detail: { repo: b.repo ?? b.url } };
-  if (path === "plugins/install-github/approve") return { action: "plugin.github.approve", subject: "github plugin" };
   if ((m = /^extensions\/connectors\/([a-z0-9._-]+)\/(connect|sign-in|cancel|disconnect)$/.exec(path)) && method === "POST") return { action: `extension.connector.${m[2]!.replace("-", ".")}`, subject: m[1]!, detail: { name: m[1] } };
   if ((m = /^extensions\/(preview|install|update\/preview|update|enable|disable|remove)$/.exec(path)) && method === "POST") {
     const action = { preview: "review", install: "install", "update/preview": "update.review", update: "update", enable: "enable", disable: "disable", remove: "remove" }[m[1]!]!;
     const revision = typeof b.approvedRevision === "string" ? b.approvedRevision.slice(0, 12) : undefined;
     return { action: `extension.${action}`, subject: String(b.name ?? b.source ?? "extension").slice(0, 200), detail: { name: b.name, source: typeof b.source === "string" ? b.source.slice(0, 200) : undefined, version: revision, approved: b.approve === true || b.confirm === true ? true : undefined } };
   }
-  if ((m = /^plugins\/(install|enable|disable|run)$/.exec(path))) return { action: `plugin.${m[1]}`, subject: String(b.id ?? b.name ?? b.plugin ?? "plugin") };
-  if ((m = /^service-plugins\/([a-z0-9-]+)(\/connect)?$/.exec(path))) return { action: m[2] ? "plugin.service.connect" : method === "DELETE" ? "plugin.service.remove" : "plugin.service.update", subject: m[1]! };
   if (path === "connections" && method === "POST") {
     if (b.action === "disconnect" || b.action === "activate") return { action: b.action === "disconnect" ? "connection.remove" : "connection.update", subject: [b.providerId, b.accountId].filter(value => typeof value === "string" && value).join("/") || "connection", detail: { kind: b.providerId } };
     return { action: "connection.add", subject: String(b.providerId ?? b.provider ?? "connection"), detail: { kind: b.providerId ?? b.provider } };

@@ -7,22 +7,14 @@ import { createCostBudgetWarnings } from "../cost-budget-warning.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
-import type { NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult } from "../../runtime/types.js";
-import { join, resolve } from "node:path";
-import type { HarnessUiInput } from "../../shared/index.js";
-import { resolveIdentities, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "../../shared/index.js";
-import { LiveHarnessHost } from "../../plugins/live-harness.js";
-import { getWorkspaceHarnessTrust } from "../../plugins/harness-trust.js";
+import type { NativeMessage, NativeContentBlock, NativeToolDef } from "../../runtime/types.js";
+import { resolve } from "node:path";
+import { resolveIdentities } from "../../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolContext } from "../types.js";
-import { toNativeToolDef, toNativeExtensionToolDef } from "../native-tooldef.js";
+import { toNativeToolDef } from "../native-tooldef.js";
 import { SessionEngine } from "../session.js";
 import { WafDetector } from "../../scope/waf-detect.js";
-import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../tools.js";
-import { SelfExtensionRegistry } from "../../plugins/self-extension.js";
-import { createExecutablePlugins, executableModelResult, parseExecutableModelRequest, resolveExecutableEvolutionProfiles } from "../executable-plugins.js";
-import type { SelfExtensionEvent } from "../../plugins/self-extension.js";
-import { BUILTIN_GUARDS } from "../../plugins/guards.js";
-import { checkInvocationCapabilities, NETWORK_CAPABLE_TOOLS, LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS, type ToolGateFlags } from "../../plugins/capability-classification.js";
+import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS } from "../tools.js";
 import { ToolHealthTracker } from "../tool-health.js";
 import { TodoTracker, buildTodosPayload } from "../todos.js";
 import { features } from "../features.js";
@@ -225,33 +217,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const session =
     config.session ?? (identities.length > 0 ? new SessionEngine(identities) : undefined);
 
-  const selfExtensionEnabled = (config.allowModelSelfExtension ?? DEFAULT_ALLOW_MODEL_SELF_EXTENSION) && config.role !== "verify";
-  const selfExtension = new SelfExtensionRegistry({
-    enabled: selfExtensionEnabled,
-    baseGuards: BUILTIN_GUARDS,
-    reservedToolNames: SELF_EXTENSION_RESERVED_TOOL_NAMES,
-    onEvent: (event: SelfExtensionEvent) => {
-      onEvent?.("self_extension", {
-        kind: event.kind,
-        at: event.at,
-        registrationId: event.registrationId,
-        origin: event.origin,
-        pluginId: event.pluginId,
-        pluginName: event.pluginName,
-        version: event.version,
-        tools: event.tools.map((t) => ({
-          name: t.name,
-          capabilities: [...t.capabilities],
-          gateFlags: { ...t.gateFlags },
-        })),
-        guardCount: event.guardCount,
-        manifestBytes: event.manifestBytes,
-        ...(event.errors ? { errors: [...event.errors] } : {}),
-        role: config.role,
-      });
-    },
-  });
-
   const toolCtx: ToolContext = {
     target: config.target,
     scanId: config.scanId,
@@ -328,15 +293,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }),
   };
 
-  const executablePlugins = selfExtensionEnabled
-    ? createExecutablePlugins(selfExtension, config.executablePlugins)
-    : undefined;
   const workspaceRoot = resolve(config.workspaceRoot ?? process.cwd());
-  const harness = executablePlugins ? new LiveHarnessHost({
-    executablePlugins, root: join(homeStateDir(), "live-harness", randomUUID()), workspaceRoot,
-    allowTrusted: () => getWorkspaceHarnessTrust(workspaceRoot), onChange: config.onHarnessUpdate,
-  }) : undefined;
-  toolCtx.liveHarness = harness;
   toolCtx.workspaceRoot = workspaceRoot;
   toolCtx.skillDiscoveryOptions = config.skillDiscoveryOptions;
   toolCtx.skillAuthoring = config.skillAuthoring;
@@ -344,12 +301,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const executionSignal = opts.signal
     ? AbortSignal.any([opts.signal, executionAbort.signal])
     : executionAbort.signal;
-  toolCtx.selfExtension = selfExtension;
-  toolCtx.executablePlugins = executablePlugins;
-  toolCtx.executablePluginConfiguration = config.executablePlugins;
-  toolCtx.executableEvolutionProfiles = selfExtensionEnabled
-    ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
-    : {};
 
   const disableHuntMemory = process.env["ZERO_DISABLE_HUNT_MEMORY"];
   const huntMemoryEnabled =
@@ -430,44 +381,15 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
   }
 
-  // `self_extend` is never advertised by getToolsForRole; inject it into the
-  // model-facing set ONLY when enabled, and strip it out otherwise (defence in
-  // depth against a caller passing it in `config.tools`).
-  const selfExtendDef = TOOL_DEFINITIONS.self_extend;
   const tools: ToolDefinition[] = (() => {
     let t = baseTools.filter((tool) => tool.name !== "remember_codebase");
     if (codebaseLearningEnabled) t = [...t, TOOL_DEFINITIONS.remember_codebase];
-    if (selfExtensionEnabled) {
-      if (t.some((x) => x.name === "self_extend") || !selfExtendDef) {
-        // already present or def unavailable
-      } else {
-        t = [...t, selfExtendDef];
-      }
-    } else {
-      t = t.filter((x) => x.name !== "self_extend");
-    }
     return filterWorkflowAgentTools(t);
   })();
   toolCtx.delegationTools = tools;
 
-  // Convert ToolDefinitions to native API format. `nativeTools` is a `let` and
-  // the base (built-in) portion is captured separately: after a successful
-  // `self_extend` the model-registered tools are unioned back in each turn so
-  // they become callable on subsequent turns (see `syncExtensionTools`).
-  const baseNativeTools: NativeToolDef[] = tools.map(toNativeToolDef);
-  let nativeTools: NativeToolDef[] = baseNativeTools;
-
-  /**
-   * Rebuild the model-facing tool set as base tools ∪ the registry's currently
-   * live model-registered tools. Idempotent and session-scoped: it only ever
-   * reflects what the model registered THIS session, and a disabled registry
-   * contributes nothing.
-   */
-  const syncExtensionTools = (): void => {
-    if (!selfExtensionEnabled) return;
-    const extTools = selfExtension.tools().map(toNativeExtensionToolDef);
-    nativeTools = filterWorkflowAgentTools(extTools.length > 0 ? [...baseNativeTools, ...extTools] : baseNativeTools);
-  };
+  // Convert ToolDefinitions to native API format.
+  const nativeTools: NativeToolDef[] = tools.map(toNativeToolDef);
 
   // Initialize or restore state
   const sessionId = config.sessionId ?? randomUUID();
@@ -636,172 +558,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   };
   // Restored conversation history is context, not a new completion observation.
   let latestAssistantText = "";
-  let driverDoneSummary: { summary: unknown } | undefined;
-  let pendingValidationNotes: string[] | undefined;
-  let pendingActionLog: ToolCallLogEntry[] | undefined;
-  let directDriver = false;
-  let driverResult: NativeRuntimeResult | undefined;
-  let driverCalls: ToolCall[] | undefined;
-  let driverResults: ToolResult[] | undefined;
   let outputCapContinuations = 0;
-  const harnessInput = (phase: HarnessUiInput["phase"]): HarnessUiInput => ({
-    sessionId: state.sessionId, phase, iterations: state.turnCount,
-    tokensUsed: state.totalUsage.inputTokens + state.totalUsage.outputTokens, tokenBudget: 0,
-  });
-  const invokePluginModel = async (request: unknown, requestSignal?: AbortSignal) => {
-    if (!pendingActionLog) throw new Error("No active parent tool round.");
-    const parsed = parseExecutableModelRequest(request);
-    const signal = requestSignal ? AbortSignal.any([executionSignal, requestSignal]) : executionSignal;
-    signal.throwIfAborted();
-    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
-    if (config.costCeilingUsd && runningCost >= config.costCeilingUsd) {
-      state.costCeilingExceeded = true;
-      throw new Error("Parent scan cost ceiling is exhausted.");
-    }
-    if (config.enforcement?.isKillExpired()) throw new Error("Parent scan wall-clock allowance is exhausted.");
-    let streamedUsage: NativeRuntimeResult["usage"];
-    const result = await runtime.executeNative(
-      parsed.system, parsed.messages, parsed.tools,
-      { onUsage: (usage) => { streamedUsage = usage; } }, signal,
-    );
-    const usage = result.usage ?? streamedUsage;
-    if (config.requirePricedUsage && !usage && !ScanCostLedger.isCostUnknown(pricingModel())) {
-      config.costLedger?.markUnpricedUsage();
-      throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
-    }
-    if (usage) {
-      state.totalUsage.inputTokens += usage.inputTokens;
-      state.totalUsage.outputTokens += usage.outputTokens;
-      state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      if (usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
-      if (!result.usage) result.usage = usage;
-      addRuntimeUsage(config.costLedger, result, pricingModel());
-      state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
-      onEvent?.("usage", {
-        turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
-        outputTokens: state.totalUsage.outputTokens, estimatedCostUsd: state.estimatedCostUsd,
-      });
-      eventBus.emit("cost_update", {
-        cost_usd: state.estimatedCostUsd, turn: state.turnCount,
-        input_tokens: state.totalUsage.inputTokens, output_tokens: state.totalUsage.outputTokens,
-        token_input: state.totalUsage.inputTokens, token_output: state.totalUsage.outputTokens,
-      });
-    }
-    return executableModelResult(result);
-  };
-  const resolveToolGateFlags = (name: string): ToolGateFlags => ({
-    networkCapable: NETWORK_CAPABLE_TOOLS[name] === true,
-    localScope: LOCAL_SCOPE_TOOLS[name] === true,
-    readOnly: READ_ONLY_TOOLS[name] === true,
-  });
-  toolCtx.pluginExecutionContext = () => ({
-    signal: executionSignal,
-    invokeModel: invokePluginModel,
-    invokeTool: async (name, args, signal, capabilities) => {
-      const actionLog = pendingActionLog;
-      const validationNotes = pendingValidationNotes;
-      if (!actionLog || !validationNotes) {
-        return { success: false, output: null, error: "No active parent tool round." };
-      }
-      if (!nativeTools.some((tool) => tool.name === name)) {
-        return { success: false, output: null, error: `Tool "${name}" is not available to the parent agent role.` };
-      }
-      // Both execution surfaces use the same built-in gate classification.
-      if (capabilities) {
-        const gate = resolveToolGateFlags(name);
-        const check = checkInvocationCapabilities(name, capabilities, gate);
-        if (!check.allowed) {
-          return { success: false, output: null, error: check.reason ?? `Tool "${name}" denied by executable capability gate.` };
-        }
-      }
-      const effectiveSignal = signal ? AbortSignal.any([executionSignal, signal]) : executionSignal;
-      effectiveSignal.throwIfAborted();
-      const call: ToolCall = { name, arguments: args };
-      const driverCallId = directDriver ? `harness-${randomUUID()}` : undefined;
-      const authorityResult = driverResult;
-      const assertAuthority = directDriver ? () => harness!.assertDriverAuthority()
-        : authorityResult ? () => harness!.assertDriverAuthority(authorityResult) : undefined;
-      const driverIndex = driverCallId ? driverCalls!.push(call) - 1 : -1;
-      if (driverCallId) onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
-      const correlationId = newCorrelationId();
-      const startedAt = Date.now();
-      toolsUsedSet.add(name);
-      if (name === "save_finding") saveFindingCalled = true;
-      eventBus.emit("tool_call_started", {
-        tool: name, turn: state.turnCount, args_preview: toolCallPreview(call).slice(0, 200), ts: startedAt,
-      });
-      shadowJournal.append({ kind: "tool_call", tool: name, arguments: args, turn: state.turnCount, callId: correlationId });
-      currentRunContribution()?.record("tool_call", { callId: correlationId, tool: name, arguments: args, origin: "executable" });
-      let result: ToolResult;
-      try { result = await executor.execute(call, { correlationId, signal: effectiveSignal, assertAuthority }); }
-      catch (error) { result = { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
-      currentRunContribution()?.record("tool_result", { callId: correlationId, tool: name, result, durationMs: Date.now() - startedAt, origin: "executable" });
-      // Normalize a failed result to a NON-EMPTY, informative reason at the
-      // source, so every downstream consumer (model-facing content below, the
-      // action log, the shadow journal, the bus event, and the TUI card) sees
-      // the real detail instead of an empty/`unknown` placeholder. Folds any
-      // captured exit code / stdout tail (ToolResultMeta) into the string.
-      if (!result.success) result.error = toolFailureText(name, result);
-      if (driverCallId) {
-        const content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
-        state.messages.push(
-          { role: "assistant", content: [{ type: "tool_use", id: driverCallId, name, input: structuredClone(args) }] },
-          { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content, is_error: !result.success }] },
-        );
-        driverResults![driverIndex] = result;
-        if (name === "done" && result.success) {
-          state.done = true;
-          driverDoneSummary = { summary: (result.output as { summary?: string }).summary };
-          state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
-        }
-        onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
-      }
-      actionLog.push(buildToolCallLogEntry({
-        call, correlationId, startedAt, endedAt: Date.now(),
-        result: { success: result.success, error: result.error },
-      }));
-      shadowJournal.append({
-        kind: "tool_result", tool: name, ok: result.success, turn: state.turnCount, callId: correlationId,
-        ...(result.success ? { output: result.output } : { error: result.error }),
-      });
-      eventBus.emit("tool_call_completed", {
-        tool: name, turn: state.turnCount, duration_ms: Date.now() - startedAt,
-        status: result.success ? "ok" : "error", ts: Date.now(),
-        // `result.error` is normalized non-empty on failure above; this `??`
-        // is now purely defensive and says something honest, never "unknown".
-        ...(result.success ? {} : { error: result.error ?? `${name} failed without an error message` }),
-      });
-      // Analytics (commands tier): the pipeline gates on consent + redacts;
-      // fire-and-forget so telemetry can never break or slow an audit. Raw
-      // args/output are handed straight to the choke point, never the bus.
-      try {
-        analyticsPipeline.recordCommand({
-          tool: name,
-          args,
-          output: result.success ? result.output : result.error,
-          status: result.success ? "ok" : "error",
-          durationMs: Date.now() - startedAt,
-          turn: state.turnCount,
-        });
-      } catch {
-        /* telemetry never breaks the tool path */
-      }
-      await publishSavedFinding(call, result, validationNotes);
-      return result;
-    },
-  });
-  toolCtx.evolveExecutablePlugin = async (pluginId, profileName, evolveSignal) => {
-    const profiles = toolCtx.executableEvolutionProfiles;
-    if (!profiles || !Object.hasOwn(profiles, profileName) || !config.costModel || !executablePlugins) {
-      return { success: false, output: null, error: "Evolution requires a named operator evaluation profile and the active provider model ID." };
-    }
-    const signal = evolveSignal ? AbortSignal.any([executionSignal, evolveSignal]) : executionSignal;
-    return executablePlugins.evolve(pluginId, { ...profiles[profileName], model: config.costModel }, {
-      signal,
-      model: (system, messages, tools, signal) => invokePluginModel({ system, messages, tools }, signal),
-    }, { ...toolCtx.pluginExecutionContext?.(), signal });
-  };
-
   // Early-stop tracking: has the agent called save_finding at least once?
   let saveFindingCalled = false;
   // Collect tool names used for the attempt summary (deduped)
@@ -913,10 +670,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       const failures: unknown[] = [];
       try {
         for (const close of [
-          () => harness?.close(),
           () => executor.cleanup(),
           () => runtime.finishInvocation?.(),
-          () => executablePlugins?.close(),
           () => { try { ownedLearningStore?.close(); } catch { /* Learning remains best-effort. */ } },
         ]) {
           try { await close(); } catch (error) { failures.push(error); }
@@ -1457,8 +1212,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     return true;
   };
   try {
-  await executablePlugins?.ready;
-  syncExtensionTools();
   while (!state.done && !turnLimitReached()) {
     if (executionSignal.aborted) {
       state.summary = "Error: Agent execution cancelled.";
@@ -1539,14 +1292,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
 
     try {
-    if (harness) {
-      pendingActionLog = [];
-      pendingValidationNotes = [];
-      driverCalls = [];
-      driverResults = [];
-      driverDoneSummary = undefined;
-    }
-
     // ── Inject user messages queued from the TUI ──
     injectPendingUserMessages?.();
 
@@ -1721,23 +1466,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       role: config.role,
     });
 
-    let supplied: NativeRuntimeResult | undefined;
-    let driven = false;
-    driverResult = undefined;
-    try {
-      await harness?.checkpoint(harnessInput("working"));
-      directDriver = true;
-      supplied = await harness?.drive({ system: config.systemPrompt, messages: state.messages, tools: nativeTools }, toolCtx.pluginExecutionContext?.());
-      if (supplied !== undefined) {
-        harness!.assertDriverAuthority(supplied);
-        driverResult = supplied;
-      }
-      driven = supplied !== undefined;
-    } catch (error) {
-      driven = true;
-      supplied = { content: [], stopReason: "error", durationMs: 0, error: error instanceof Error ? error.message : String(error) };
-    } finally { directDriver = false; }
-    const result = supplied ?? await runtime.executeNative(
+    const result = await runtime.executeNative(
       config.systemPrompt,
       state.messages,
       nativeTools,
@@ -1820,7 +1549,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (!result.error && result.stopReason !== "error") localAdmissionRecoveries = 0;
     // The transport measured this exact request locally: no provider call or
     // usage occurred. Compact a new request, never replay an unknown outcome.
-    if (!driven && isLocalAdmissionLimit(result.error) && !executionSignal.aborted && localAdmissionRecoveries < 2) {
+    if (isLocalAdmissionLimit(result.error) && !executionSignal.aborted && localAdmissionRecoveries < 2) {
       localAdmissionRecoveries++;
       const beforeCount = state.messages.length;
       const beforeBytes = Buffer.byteLength(JSON.stringify(state.messages), "utf8");
@@ -1857,7 +1586,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // outcome of one in-flight request stays within the ledger's documented
     // one-in-flight-turn overshoot tolerance. Terminal failures (retries
     // exhausted, or non-transient) mark unpriced in the error handler below.
-    const transientUsagelessError = !driven && typeof result.error === "string" && isTransientLlmError(result.error);
+    const transientUsagelessError = typeof result.error === "string" && isTransientLlmError(result.error);
     const costUnknownModel = ScanCostLedger.isCostUnknown(pricingModel());
     if (config.requirePricedUsage && !result.usage && costUnknownModel) config.costLedger?.markUnpricedUsage(pricingModel());
     if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error) && !transientUsagelessError && !(costUnknownModel && !result.error)) {
@@ -1880,7 +1609,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         break;
       }
       if (
-        !driven &&
         result.error
         && isContextWindowError(errorMsg)
         && contextOverflowRecoveries < 2
@@ -1910,7 +1638,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // Transient provider overload / rate-limit / 5xx → back off and retry the
       // SAME turn rather than killing the run. Doesn't consume a turn (the LLM
       // call failed before any tool ran), capped by MAX_TRANSIENT_RETRIES.
-      const transient = !driven && isTransientLlmError(errorMsg);
+      const transient = isTransientLlmError(errorMsg);
       if (transient && transientRetries < MAX_TRANSIENT_RETRIES) {
         transientRetries++;
         const backoffMs = Math.min(20_000, 500 * 2 ** transientRetries);
@@ -1942,8 +1670,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // bailout from a clean completion.
       state.done = false;
       state.summary = `Error: ${errorMsg}`;
-      state.errorExit = { error: errorMsg, turn: state.turnCount, source: driven ? "harness" : "provider" };
-      if (driverCalls?.length) onTurn?.(state.turnCount, driverCalls, driverResults!, state.summary, { usage: { ...state.totalUsage } });
+      state.errorExit = { error: errorMsg, turn: state.turnCount, source: "provider" };
       if (db) {
         db.logEvent({
           scanId: config.scanId,
@@ -1973,9 +1700,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
     if (isInformativeDoneText(textContent)) latestAssistantText = textContent.trim();
-    // A direct driver can finish before its accepted result is appended above.
-    // Resolve its generic signal again now that current-turn prose is available.
-    if (state.done && driverDoneSummary) state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2011,7 +1735,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       /* heuristic failure must never abort the scan */
     }
     const turnTelemetry = (onTurn || onToolUpdate) ? {
-      ...((result.usage || driven) ? { usage: { ...state.totalUsage } } : {}),
+      ...((result.usage) ? { usage: { ...state.totalUsage } } : {}),
       ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
       ...(reasoningSummary ? { reasoning_summary: reasoningSummary } : {}),
     } : undefined;
@@ -2028,7 +1752,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // If no tool calls, the model responded with text only
     if (toolUseBlocks.length === 0) {
       // Text-only turns used to bypass observers, losing the worker's final answer.
-      onTurn?.(state.turnCount, driverCalls ?? [], driverResults ?? [], textContent, turnTelemetry);
+      onTurn?.(state.turnCount, [], [], textContent, turnTelemetry);
       if (executionSignal.aborted) {
         state.summary = "Error: Agent execution cancelled.";
         break;
@@ -2094,8 +1818,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
 
     // Execute each tool call and collect results
-    const toolCalls: ToolCall[] = driverCalls ?? [];
-    const toolResults: ToolResult[] = driverResults ?? [];
+    const toolCalls: ToolCall[] = [];
+    const toolResults: ToolResult[] = [];
     const toolResultBlocks: NativeContentBlock[] = [];
     // JIT rules matched by this turn's tool actions (see rules.ts); injected with
     // the tool-results message below.
@@ -2103,25 +1827,15 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Action-level durable log for this turn (one entry per tool invocation,
     // each with its own wall clock + the correlation id that joins it to the
     // `tool_artifact` row). Persisted below as the `tool_calls` payload.
-    const actionLog: ToolCallLogEntry[] = pendingActionLog ?? [];
-    pendingActionLog = actionLog;
+    const actionLog: ToolCallLogEntry[] = [];
     // Inline-validation context notes accumulated this turn (#554). Appended as
     // text blocks to the tool-results user message below so the agent sees the
     // confirmed/unconfirmed verdict on its NEXT turn.
-    const inlineValidationNotes: string[] = pendingValidationNotes ?? [];
-    pendingValidationNotes = inlineValidationNotes;
-    let authorityFailure: string | undefined;
-    const assertAuthority = driven ? () => {
-      try { harness!.assertDriverAuthority(result); }
-      catch (error) {
-        authorityFailure = error instanceof Error ? error.message : String(error);
-        throw error;
-      }
-    } : undefined;
+    const inlineValidationNotes: string[] = [];
 
     // Only independent local reads overlap. Stateful tools remain ordered barriers,
     // and driver authority is checked serially. Receipts retain model call order.
-    for (const batch of nativeToolBatches(toolUseBlocks, !driven)) {
+    for (const batch of nativeToolBatches(toolUseBlocks, true)) {
       const pending = batch.map((block) => {
         const call: ToolCall = { name: block.name, arguments: block.input };
         toolCalls.push(call);
@@ -2191,7 +1905,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         });
 
         currentRunContribution()?.record("tool_call", { callId: block.id, correlationId, tool: call.name, arguments: call.arguments });
-        const execution = executor.execute(call, { correlationId, signal: executionSignal, assertAuthority })
+        const execution = executor.execute(call, { correlationId, signal: executionSignal })
           .then((toolResult) => ({ toolResult, toolEndedAt: Date.now() }));
         return { block, call, correlationId, toolStartedAt, execution };
       });
@@ -2369,21 +2083,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
 
     // Append tool results as user message
     state.messages.push({ role: "user", content: toolResultBlocks });
-    try { assertAuthority?.(); } catch { /* Keep all completed receipts before terminating the turn. */ }
-    if (authorityFailure) {
-      state.done = false;
-      state.summary = `Error: ${authorityFailure}`;
-      state.errorExit = { error: authorityFailure, turn: state.turnCount, source: "harness" };
-      onEvent?.("agent_error", { turn: state.turnCount, error: authorityFailure });
-      onTurn?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
-      break;
-    }
-
-    // If the model registered new tools this turn via `self_extend`, union them
-    // into the model-facing tool set so they are callable on the NEXT turn.
-    // Idempotent: a no-op unless self-extension is enabled and something new was
-    // registered.
-    syncExtensionTools();
 
     // ── Collect tool result text for playbook detection + skill triggers ──
     // Feed the shared recentToolResultTexts buffer whenever dynamic
@@ -2696,12 +2395,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.done = false;
     }
     } finally {
-      pendingActionLog = undefined;
-      pendingValidationNotes = undefined;
-      driverCalls = undefined;
-      driverResults = undefined;
-      try { await harness?.refreshViews(harnessInput("idle")); }
-      catch (error) { onEvent?.("harness_error", { error: error instanceof Error ? error.message : String(error) }); }
       // Bus event: agent turn boundary end. Exit reason is inferred from
       // state flags set by the various break paths inside the body. If the
       // loop will iterate again (done=false and no early/error flag),

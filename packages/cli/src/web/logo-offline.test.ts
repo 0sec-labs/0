@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildContentSecurityPolicy } from "./dashboard-csp.js";
-import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
 
 // raw.githubusercontent.com serves install.sh in update commands, never an image.
 const REMOTE_AVATAR = /(?<!raw\.)githubusercontent|github\.com\/[A-Za-z0-9_-]+\.png|gravatar|simpleicons\.org|cdn\.simpleicons/i;
@@ -14,9 +13,6 @@ describe("logos and avatars stay on this origin", () => {
   it("keeps the CSP's img-src strict (self, data:, blob: only)", () => {
     const directive = /img-src ([^;]+)/.exec(buildContentSecurityPolicy("<html></html>"))?.[1];
     expect(directive).toBe("'self' data: blob:");
-  });
-  it("bundles brand marks as local path data, never as URLs", () => {
-    expect(JSON.stringify(BRAND_LOGOS)).not.toMatch(/https?:|url\(/i);
   });
   it("has no reference to a remote avatar or logo host in the web sources or in a built bundle", () => {
     const files = walk(join(webRoot, "src")).filter(path => /\.(ts|tsx)$/.test(path) && !/\.test\.tsx?$/.test(path));

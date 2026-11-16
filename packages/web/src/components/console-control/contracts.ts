@@ -1,4 +1,4 @@
-import type { Finding, HarnessSnapshot, ScanPlan, ScanAttemptOutcome, ConsoleExecutionSnapshot } from "@0/engine/shared";
+import type { Finding, ScanPlan, ScanAttemptOutcome, ConsoleExecutionSnapshot } from "@0/engine/shared";
 
 export interface RuntimeInfo {
   providerId: string;
@@ -42,7 +42,7 @@ export interface CheckItem { id: string; name: string; prompt: string; revision:
 export interface ChecksResponse { project: string; checks: CheckItem[] }
 export interface ProjectResponse { path: string; name: string; git: { branch: string | null; dirty: boolean; root: string | null; error: string | null } }
 export interface SessionSummary { id: string; title?: string; parentSessionId?: string; skillAllowList?: string[]; titleSource?: "default" | "auto" | "user"; target: string; role: string; status: string; runtime?: RuntimeInfo; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown }
-export interface SessionSnapshot { session: SessionSummary; runtime?: RuntimeInfo | null; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown; harness?: HarnessSnapshot | null; scope: { in_scope?: string[]; out_of_scope?: string[] } | null; scopeEnforcement: { enabled: boolean; message: string }; localScopePath?: string; tools: { name: string; description: string; inputSchema: unknown }[] }
+export interface SessionSnapshot { session: SessionSummary; runtime?: RuntimeInfo | null; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown; scope: { in_scope?: string[]; out_of_scope?: string[] } | null; scopeEnforcement: { enabled: boolean; message: string }; localScopePath?: string; tools: { name: string; description: string; inputSchema: unknown }[] }
 export interface Workflow {
   id: string; sessionId: string; kind: string; status: string; createdAt: string; updatedAt: string;
   request: { target?: string; plan?: ScanPlan; resolved?: { kind: string; target: string; targetType: string; label: string; ecosystem?: string }; [key: string]: unknown }; runtime: { providerId: string; model: string; agentModels?: Record<string, string>; singleModel?: boolean; autoRoute?: boolean };

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { LearningStore, learningProjectId } from "../storage/index.js";
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
 import { LearningService } from "../learning-service.js";
-import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import { createConsoleSession } from "./turn-engine.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 
@@ -41,7 +40,7 @@ describe("console source lessons", () => {
   const inspect = (root: string) => tool("read_file", { path: join(root, "routes.ts") });
   const save = () => tool("remember_codebase", { title: "Tenant checks", summary: "Investigate ownership checks in routes.ts before testing tenant access.", paths: ["routes.ts"] });
   const session = (runtime: Runtime, extra: Record<string, unknown> = {}) => createConsoleSession({
-    runtime, workspaceRoot: root, autonomyMode: "yolo", allowSelfExtension: false,
+    runtime, workspaceRoot: root, autonomyMode: "yolo",
     codebaseLearning: true, huntMemoryStore: memory, learningStore: learning, ...extra,
   });
 
@@ -202,29 +201,6 @@ describe("console source lessons", () => {
         expect(JSON.parse(json)).toEqual([short]);
       }
       expect(JSON.stringify(current.exportCheckpoint())).not.toContain(short.summary);
-    } finally { await current.cleanup(); }
-  });
-
-  it.each(["forwarded", "omitted", "no-model"])("records actual driver model context when source hints are %s", async mode => {
-    memory.rememberCodebase({ root, paths: ["routes.ts"], title: "Ownership", summary: "Inspect tenant ownership", source: "test" });
-    const runtime = new Runtime([done()]);
-    const current = session(runtime, { allowModelSelfExtension: true, refineObjective: false });
-    await current.ready;
-    current.configureWorkspace(root);
-    try {
-      setWorkspaceHarnessTrust(root, true);
-      await current.harness!.control({ action: "submit", generation: { label: "source-context", providers: [{
-        id: "driver", services: ["agent.driver"], source: { kind: "trusted", entry: "main.mjs", files: {
-          "main.mjs": `export function activate() { return { async driver(request, execution) {
-            ${mode === "forwarded" ? "await execution.invokeModel(request);" : mode === "omitted" ? "await execution.invokeModel({...request,messages:[{role:'user',content:[{type:'text',text:'Review source'}]}]});" : ""}
-            return {content:[{type:'text',text:'Done'}],stopReason:'end_turn',durationMs:0};
-          } }; }`,
-        } },
-      }] } });
-      await current.send("Review source");
-      expect(runtime.calls).toHaveLength(mode === "no-model" ? 0 : 1);
-      expect(current.sourceContext?.status).toBe(mode === "forwarded" ? "supplied" : mode === "omitted" ? "none" : "not_requested");
-      expect(current.sourceContext?.lessons).toHaveLength(mode === "forwarded" ? 1 : 0);
     } finally { await current.cleanup(); }
   });
 

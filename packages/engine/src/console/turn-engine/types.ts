@@ -1,15 +1,11 @@
 import { type WorkerPolicy } from "../../workflow-execution-policy.js";
 import { type ApprovalsChoice, type LegacyAutonomyMode } from "../../shared/approvals.js";
-import { type HarnessSnapshot, type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
+import { type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } from "../../runtime/types.js";
-import { type ExecutablePluginConfiguration } from "../../agent/executable-plugins.js";
-import { LiveHarnessHost } from "../../plugins/live-harness.js";
-import type { EvolutionConfig } from "../../improvement/types.js";
 import type { McpToolHost } from "../../agent/mcp-host.js";
 import type { ExtensionRunPort } from "../../agent/types.js";
 import { LearningStore, type osecDB } from "../../storage/index.js";
 import { HuntMemoryStore } from "../../memory/hunt-memory.js";
-import type { PluginHost } from "../../plugins/loader.js";
 import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
 import { ScopePolicy } from "../../scope/scope.js";
 import type { ScopeEnforcementState } from "../../scope/activation.js";
@@ -50,7 +46,6 @@ export interface ConsoleCompactionEvent {
 
 /** Streaming + activity callbacks a renderer (CLI REPL, product UI) hooks into. */
 export interface ConsoleRenderCallbacks {
-  onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
   /** Incremental visible assistant text (SSE delta fragments, not cumulative). */
   onAssistantDelta?: (text: string) => void;
   /** Incremental hidden reasoning-summary text. */
@@ -502,9 +497,9 @@ export interface ConsoleSessionConfig {
    * `false` to keep the heuristic only (e.g. to avoid any extra model spend).
    */
   refineObjective?: boolean;
-  /** Enable sandboxed TypeScript tools, skills, and agent programs for this session. */
-  allowModelSelfExtension?: boolean;
-  /** Captured once; model-authored source cannot change the workspace trust root. */
+  /** Actual provider model id, recorded with a contribution. */
+  costModel?: string;
+  /** Captured once for the session. */
   workspaceRoot?: string;
   /** Operator-owned global/workspace instructions, resolved once at session start. Never read from the target repository. */
   operatorInstructions?: { global?: string; workspace?: string };
@@ -513,27 +508,6 @@ export interface ConsoleSessionConfig {
   skillAuthoring?: ToolContext["skillAuthoring"];
   /** Current host-owned skill editing context, refreshed on every model request. */
   skillEditor?: { read(): { id: string; name: string; revision: string; writable: boolean } | undefined | Promise<{ id: string; name: string; revision: string; writable: boolean } | undefined> };
-  onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
-  executablePlugins?: ExecutablePluginConfiguration;
-  /** Evaluation contracts owned by the operator, not editable by generated code. */
-  executableEvolutionProfiles?: Record<string, EvolutionConfig>;
-  /** Actual provider model ID, used for evolution cost accounting. */
-  costModel?: string;
-  /**
-   * Live plugin host for THIS session (0 plugin system). Optional; absent =
-   * today's behaviour exactly (no plugin tools are exposed or dispatched). When
-   * provided, the tools of ENABLED/loaded plugins are unioned into the
-   * model-facing tool set at each turn boundary and their calls are dispatched
-   * through the host — but ONLY tools the host actually owns (the loader already
-   * enforces enablement; this console never bypasses it). Every existing
-   * per-call console gate (recon capability, scope, local-scope, standard
-   * approval, and the deny-only guard floor) still applies to a plugin tool,
-   * using the host's own resolved gate flags so a plugin tool lands in the SAME
-   * gate maps as the built-ins. The host's lifecycle (load/reload/unload) is the
-   * caller's responsibility; the console only reads its registry at turn
-   * boundaries, which is the loader's turn-boundary safety contract.
-   */
-  pluginHost?: PluginHost;
   /**
    * A connected MCP client host (external tool servers). The CALLER constructs
    * it and connects its servers (async) before building the session; the console
@@ -621,9 +595,8 @@ export interface ConsoleSourceContext {
 /** A live console session: persistent history + a `send()` per operator line. */
 export interface ConsoleSession {
   readonly scanId: string;
-  /** Restored executable tools and harness providers are usable after this resolves. */
+  /** The session is usable after this resolves. */
   readonly ready: Promise<void>;
-  readonly harness?: LiveHarnessHost;
   readonly contribution?: RunCapture;
   readonly systemPrompt: string;
   readonly tools: ToolDefinition[];

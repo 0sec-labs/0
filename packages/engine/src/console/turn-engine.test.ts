@@ -29,7 +29,6 @@ import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 
 import { estimateCost, DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "../shared/index.js";
-import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import { ExtensionMcpHost, type McpConnector } from "../plugins/extensions/index.js";
 import { MemoryObserved, MemoryPins, allow, stdioExtension } from "../plugins/extensions/__tests__/mcp-fixtures.js";
 
@@ -72,7 +71,7 @@ describe("Console bookkeeping progress", () => {
 
   it("stops changing todo-only loops without losing history and allows a new turn", async () => {
     const runtime = new ScriptedRuntime([...Array.from({ length: 12 }, (_, index) => plan(index)), endTurn("Resumed without replay.")]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, refineObjective: false });
     try {
       const outcome = await session.send("Inspect the existing evidence.");
       expect(outcome.stopReason).toBe("no_progress");
@@ -94,7 +93,7 @@ describe("Console bookkeeping progress", () => {
       ...Array.from({ length: 11 }, (_, index) => plan(index + 11)),
       endTurn("Evidence gathered."),
     ]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, refineObjective: false });
     try {
       const outcome = await session.send("Review evidence and maintain the plan.");
       expect(outcome.stopReason).toBe("end_turn");
@@ -152,7 +151,7 @@ describe("Auto finding verification workflow", () => {
     const approveTool = vi.fn(async () => { throw new Error("Routine Auto verification must not request approval"); });
     const askOperator = vi.fn(async () => { throw new Error("Routine Auto verification must not ask whether to test"); });
     const session = createConsoleSession({ runtime, autonomyMode: "yolo", approveTool, askOperator,
-      allowModelSelfExtension: false, refineObjective: false });
+      refineObjective: false });
     try {
       const outcome = await session.send(`Investigate and verify the local parser in ${root}`);
       expect(outcome.stopReason).toBe("end_turn");
@@ -333,7 +332,7 @@ describe("createConsoleSession", () => {
     const pending = new Promise<NativeRuntimeResult>((resolve) => { release = resolve; });
     const runtime = new ScriptedRuntime([endTurn("second response")]);
     vi.spyOn(runtime, "executeNative").mockImplementationOnce(() => pending);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime });
     const first = session.send("first request");
     try {
       await expect(session.send("overlapping request")).rejects.toThrow(/active turn/);
@@ -366,7 +365,7 @@ describe("createConsoleSession", () => {
       stopReason: "tool_use", durationMs: 1,
     }));
     const runtime = new ScriptedRuntime([...tools, endTurn("Review completed")]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime });
     try {
       const notices: string[] = [];
       const outcome = await session.send("Finish the review", { onNotice: notice => notices.push(notice) });
@@ -475,7 +474,7 @@ describe("Responses output-cap continuation", () => {
     }));
     const model = runtime();
     vi.spyOn(model, "forkForSubagent").mockResolvedValue(child);
-    const session = createConsoleSession({ runtime: model, refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime: model, refineObjective: false });
     const deltas: string[] = [];
     const usage: ConsoleUsageReport[] = [];
     try {
@@ -515,7 +514,7 @@ describe("Responses output-cap continuation", () => {
         usage: { input_tokens: 10, output_tokens: 3 } } },
     ]));
     vi.stubGlobal("fetch", fetchMock);
-    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false });
     try {
       const outcome = await session.send("Finish the review");
       expect(outcome.stopReason).toBe("end_turn");
@@ -531,7 +530,7 @@ describe("Responses output-cap continuation", () => {
     const controller = new AbortController();
     const fetchMock = vi.fn(async () => cap("Saved observation.", mode === "budget" ? 30_000 : 10));
     vi.stubGlobal("fetch", fetchMock);
-    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false,
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false,
       maxTurnTokens: mode === "budget" ? 50_000 : undefined });
     try {
       const outcome = await session.send("continue", { onNotice: () => { if (mode === "abort") controller.abort(); } }, { signal: controller.signal });
@@ -549,7 +548,7 @@ describe("Responses output-cap continuation", () => {
       { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } },
     ]));
     vi.stubGlobal("fetch", fetchMock);
-    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false, maxTurnTokens: 100_000 });
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, maxTurnTokens: 100_000 });
     const samples: ConsoleUsageReport[] = [];
     try {
       const outcome = await session.send("continue", { onUsage: sample => samples.push(sample) });
@@ -568,7 +567,7 @@ describe("Responses output-cap continuation", () => {
       { type: "response.completed", response: { status: "completed", output: [] } },
     ]));
     vi.stubGlobal("fetch", fetchMock);
-    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false });
     try {
       const outcome = await session.send("continue");
       expect(outcome.stopReason).toBe("error");
@@ -1057,7 +1056,7 @@ describe("Console autonomy — yolo still enforces scope", () => {
     const fetch = vi.spyOn(http, "fetchScoped").mockImplementation(async () => new Response("<html>fixture</html>", { status: 200 }));
     const requests: ConsoleScopeRequest[] = [];
     const session = createConsoleSession({
-      runtime, target, autonomyMode: "yolo", allowModelSelfExtension: false, refineObjective: false,
+      runtime, target, autonomyMode: "yolo", refineObjective: false,
       requestScope: async request => {
         requests.push(request);
         expect(session.target).toBe(target);
@@ -2366,7 +2365,7 @@ describe("Console operator target selection", () => {
 
   function openSession(runtime: NativeRuntime, options: Partial<Parameters<typeof createConsoleSession>[0]> = {}) {
     const session = createConsoleSession({
-      runtime, autonomyMode: "yolo", allowModelSelfExtension: false, refineObjective: false, ...options,
+      runtime, autonomyMode: "yolo", refineObjective: false, ...options,
     });
     sessions.push(session);
     return session;
@@ -3173,161 +3172,7 @@ describe("Console turn cancellation — AbortSignal", () => {
   });
 });
 
-// ── Session-registered tools: self-extension + plugin host (0 lab console) ──────
-//
-// The interactive console turn loop wires the SAME two kinds of session-
-// registered tools the scan `runNativeAgentLoop` supports: (1) model self-
-// extension (the gated `self_extend` + the tools it registers) and (2) plugin-
-// host tools. Both unions refresh at the TURN BOUNDARY and both are subject to
-// every existing per-call gate. Absent config = today's behaviour exactly.
-describe("console executable self-extension permissions", () => {
-  const roots: string[] = [];
-  const sessions: ReturnType<typeof createConsoleSession>[] = [];
-  afterEach(async () => {
-    for (const session of sessions) await session.cleanup();
-    sessions.length = 0;
-    for (const root of roots) rmSync(root, { recursive: true, force: true });
-    roots.length = 0;
-  });
-
-  function session(runtime: NativeRuntime, enabled: boolean) {
-    const root = mkdtempSync(join(tmpdir(), "0-console-executables-"));
-    roots.push(root);
-    const created = createConsoleSession({
-      runtime, allowModelSelfExtension: enabled,
-      executablePlugins: { root }, executableEvolutionProfiles: {},
-    });
-    sessions.push(created);
-    return created;
-  }
-
-  const manifest = {
-    id: "test.console-probe", name: "Console probe", version: "1.0.0",
-    tools: [{ name: "console_probe", description: "Probe", parameters: {}, capabilities: ["compute"] }],
-  };
-
-  it("honors explicit enablement and opt-out in the model-facing API", async () => {
-    const on = new ScriptedRuntime([endTurn("ready")]);
-    const outcome = await session(on, true).send("go");
-    expect(outcome.stopReason).toBe("end_turn");
-    expect(on.calls[0]!.tools.map((tool) => tool.name)).toContain("self_extend");
-    const off = new ScriptedRuntime([endTurn("ready")]);
-    await session(off, false).send("go");
-    expect(off.calls[0]!.tools.map((tool) => tool.name)).not.toContain("self_extend");
-  });
-
-  it("does not advertise ghost tools after a metadata-only submission", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [{ type: "tool_use", id: "submit", name: "self_extend", input: { manifest } }],
-        stopReason: "tool_use", durationMs: 0,
-      },
-      endTurn("finished"),
-    ]);
-    const result = await session(runtime, true).send("Create the tool");
-    expect(result.toolCalls[0]!.result.success).toBe(false);
-    expect(runtime.calls[1]!.tools.map((tool) => tool.name)).not.toContain("console_probe");
-  });
-
-  it("rejects an unadvertised self-extension call when explicitly disabled", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [{
-          type: "tool_use", id: "submit", name: "self_extend",
-          input: { manifest, files: { "main.ts": "export function run() { return 1; }" }, entry: "main.ts" },
-        }],
-        stopReason: "tool_use", durationMs: 0,
-      },
-      endTurn("finished"),
-    ]);
-    const result = await session(runtime, false).send("Attempt a disabled operation");
-    expect(result.toolCalls[0]!.result.success).toBe(false);
-    expect(runtime.calls[1]!.tools.map((tool) => tool.name)).not.toContain("console_probe");
-  });
-});
-
 describe("createConsoleSession — MCP deferred tool loading", () => {
-  function stubPluginHost(count: number, readOnly = true) {
-    let enabled = true;
-    const definitions: ToolDefinition[] = Array.from({ length: count }, (_, index) => ({
-      name: `connected_plugin_tool_${index + 1}`,
-      description: `Connected specialist ${index + 1}`,
-      parameters: {}, required: [],
-    }));
-    const call = vi.fn(async () => ({ ok: true, content: "plugin result" }));
-    const host = {
-      toolDefinitions: () => enabled ? definitions : [],
-      ownsTool: (name: string) => enabled && definitions.some(tool => tool.name === name),
-      gateMaps: () => ({
-        networkCapable: {}, localScope: {},
-        readOnly: enabled && readOnly ? Object.fromEntries(definitions.map(tool => [tool.name, true])) : {},
-      }),
-      call,
-    };
-    return { host: host as unknown as NonNullable<Parameters<typeof createConsoleSession>[0]["pluginHost"]>, call,
-      setEnabled(value: boolean) { enabled = value; } };
-  }
-
-  it("discovers plugin schemas without advertising them until loaded, then dispatches the selected tool", async () => {
-    const plugin = stubPluginHost(20);
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "plugin-catalog", name: "list_tools", input: { query: "connected_plugin" } }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "plugin-load", name: "load_tool", input: { names: ["connected_plugin_tool_3"] } }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "plugin-call", name: "connected_plugin_tool_3", input: {} }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("finished"),
-    ]);
-    const session = createConsoleSession({ runtime, tools: [], pluginHost: plugin.host, allowModelSelfExtension: false, refineObjective: false });
-    try {
-      expect(session.tools.filter(tool => tool.name.startsWith("connected_plugin"))).toHaveLength(20);
-      const outcome = await session.send("Use the connected specialist");
-      expect(runtime.calls[0].tools.map(tool => tool.name)).toEqual(["list_tools", "load_tool"]);
-      expect(String(outcome.toolCalls[0].result.output)).toContain("connected_plugin_tool_3");
-      expect(runtime.calls[2].tools.filter(tool => tool.name.startsWith("connected_plugin")).map(tool => tool.name)).toEqual(["connected_plugin_tool_3"]);
-      expect(plugin.call).toHaveBeenCalledExactlyOnceWith("connected_plugin_tool_3", {});
-      expect(outcome.toolCalls[2].result).toMatchObject({ success: true, output: "plugin result" });
-    } finally { await session.cleanup(); }
-  });
-
-  it("keeps plugin action approval gates after a schema is loaded", async () => {
-    const plugin = stubPluginHost(1, false);
-    const approveTool = vi.fn(async () => false);
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "plugin-load", name: "load_tool", input: { names: ["connected_plugin_tool_1"] } }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "plugin-call", name: "connected_plugin_tool_1", input: {} }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("action refused"),
-    ]);
-    const session = createConsoleSession({ runtime, tools: [], pluginHost: plugin.host, allowModelSelfExtension: false, autonomyMode: "standard", approveTool, refineObjective: false });
-    try {
-      const outcome = await session.send("Try the plugin action");
-      expect(runtime.calls[1].tools.map(tool => tool.name)).toContain("connected_plugin_tool_1");
-      expect(approveTool).toHaveBeenCalledOnce();
-      expect(plugin.call).not.toHaveBeenCalled();
-      expect(outcome.toolCalls[1].result.success).toBe(false);
-    } finally { await session.cleanup(); }
-  });
-
-  it("removes disabled plugin definitions and forgets their loaded state before re-enabling", async () => {
-    const plugin = stubPluginHost(1);
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "plugin-load", name: "load_tool", input: { names: ["connected_plugin_tool_1"] } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("loaded"), endTurn("disabled"), endTurn("enabled again"),
-    ]);
-    const session = createConsoleSession({ runtime, tools: [], pluginHost: plugin.host, allowModelSelfExtension: false, refineObjective: false });
-    try {
-      await session.send("Load the plugin");
-      expect(runtime.calls[1].tools.map(tool => tool.name)).toContain("connected_plugin_tool_1");
-      plugin.setEnabled(false);
-      await session.send("Plugin disabled");
-      expect(runtime.calls[2].tools).toEqual([]);
-      expect(session.tools.some(tool => tool.name === "connected_plugin_tool_1")).toBe(false);
-      expect(session.exportCheckpoint().loadedMcpTools).not.toContain("connected_plugin_tool_1");
-      plugin.setEnabled(true);
-      await session.send("Plugin enabled again");
-      expect(runtime.calls[3].tools.map(tool => tool.name)).toEqual(["list_tools", "load_tool"]);
-      expect(session.tools.some(tool => tool.name === "connected_plugin_tool_1")).toBe(true);
-    } finally { await session.cleanup(); }
-  });
-
   it("keeps specialist built-ins discoverable and loads a batch on the next round", async () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "load-specialists", name: "load_tool", input: { names: ["crawl", "submit_form"] } }], stopReason: "tool_use", durationMs: 1 },
@@ -3470,63 +3315,13 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
 });
 
 describe("console live driver authority", () => {
-  it.each(["tool-start", "approval", "sdk-approval"])("blocks revoked effects at %s without replay or lost usage", async point => {
-    const root = mkdtempSync(join(tmpdir(), "0-console-authority-"));
-    vi.stubEnv("HOME", root);
-    const marker = join(root, "effect");
-    const runtime = new ScriptedRuntime([{ ...endTurn("model receipt"), usage: { inputTokens: 10, outputTokens: 3 } }]);
-    const session = createConsoleSession({
-      runtime, workspaceRoot: root, allowModelSelfExtension: true, refineObjective: false,
-      autonomyMode: point === "tool-start" ? "yolo" : "standard",
-      approveTool: async () => { await Promise.resolve(); setWorkspaceHarnessTrust(root, false); return true; },
-    });
-    const usageSamples: ConsoleUsageReport[] = [];
-    try {
-      setWorkspaceHarnessTrust(root, true);
-      const args = { command: `printf x > ${JSON.stringify(marker)}` };
-      await session.harness!.control({ action: "submit", generation: { label: "revocation", providers: [{
-        id: "driver", services: ["agent.driver"], source: { kind: "trusted", entry: "main.mjs", files: {
-          "main.mjs": `export function activate() { return { async driver(request, execution) {
-            await execution.invokeModel(request);
-            ${point === "sdk-approval" ? `await execution.invokeTool('bash', ${JSON.stringify(args)});
-              return {content:[],stopReason:'end_turn',durationMs:0};` :
-              `return {content:[{type:'tool_use',id:'effect',name:'bash',input:${JSON.stringify(args)}}],stopReason:'tool_use',durationMs:0};`}
-          } }; }`,
-        } },
-      }] } });
-      const result = await session.send("continue", {
-        onUsage: (usage) => usageSamples.push(usage),
-        onToolStart: () => { if (point === "tool-start") setWorkspaceHarnessTrust(root, false); },
-      });
-      expect(result.stopReason).toBe("error");
-      expect(result.error).toMatch(/trust.*revoked/i);
-      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 3 });
-      expect(usageSamples.filter((usage) => usage.inputTokens > 0).map((usage) => usage.kind)).toEqual(["plugin"]);
-      expect(runtime.calls).toHaveLength(1);
-      expect(existsSync(marker)).toBe(false);
-      expect(result.toolCalls).toHaveLength(1);
-      expect(result.toolCalls[0]!.result.success).toBe(false);
-      const history = session.messages.flatMap(message => message.content);
-      expect(history.filter(block => block.type === "tool_use")).toHaveLength(1);
-      expect(history.filter(block => block.type === "tool_result")).toHaveLength(1);
-    } finally {
-      await session.cleanup();
-      vi.unstubAllEnvs();
-      const unlock = (directory: string): void => {
-        chmodSync(directory, 0o700);
-        for (const entry of readdirSync(directory, { withFileTypes: true })) if (entry.isDirectory()) unlock(join(directory, entry.name));
-      };
-      unlock(root); rmSync(root, { recursive: true, force: true });
-    }
-  });
-
   it("does not reauthorize a declined hostname through its dotted DNS alias", async () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "denied", name: "bash", input: { command: "printf https://denied.test/" } }], stopReason: "tool_use", durationMs: 0 },
       endTurn("denied"), endTurn("unchanged"),
     ]);
     const requestScope = vi.fn(async () => null);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false,
+    const session = createConsoleSession({ runtime, refineObjective: false,
       autonomyMode: "standard", approveTool: async () => true, requestScope });
     try {
       await session.send("inspect");
@@ -3548,7 +3343,7 @@ describe("console engagement configuration", () => {
       endTurn("Still denied."),
     ]);
     const requestScope = vi.fn(async () => null);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false, autonomyMode: "standard", approveTool: async () => true, requestScope });
+    const session = createConsoleSession({ runtime, refineObjective: false, autonomyMode: "standard", approveTool: async () => true, requestScope });
     try {
       const first = await session.send("Inspect the requested endpoint.");
       expect(first.toolCalls[0]!.result.success).toBe(false);
@@ -3570,7 +3365,7 @@ describe("console engagement configuration", () => {
     const release = Promise.withResolvers<void>();
     const runtime = new ScriptedRuntime([]);
     runtime.executeNative = async () => { started.resolve(); await release.promise; return endTurn("Done."); };
-    const session = createConsoleSession({ runtime, target: "https://original.test/", allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, target: "https://original.test/", refineObjective: false });
     try {
       await session.ready;
       const sending = session.send("Inspect.");
@@ -3855,7 +3650,7 @@ describe("operator-approved workspace configuration", () => {
       { content: [{ type: "tool_use", id: "workspace-pwd", name: "bash", input: { command: "pwd" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("Done"),
     ]);
-    const session = createConsoleSession({ runtime, role: "discovery", autonomyMode: "standard", refineObjective: false, allowModelSelfExtension: false, approveTool, requestLocalScope });
+    const session = createConsoleSession({ runtime, role: "discovery", autonomyMode: "standard", refineObjective: false, approveTool, requestLocalScope });
     try {
       await session.ready;
       expect(() => session.configureWorkspace("/")).toThrow("unprotected");
@@ -4002,7 +3797,7 @@ describe("caller-owned workflow lifecycle tools", () => {
       { content: [{ type: "tool_use", id: "launch-1", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("The workflow is queued for launch approval after this turn."),
     ]);
-    const session = createConsoleSession({ runtime, refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
+    const session = createConsoleSession({ runtime, refineObjective: false, workflowLifecycle: { invoke } });
     try {
       await session.send("Run the repository review workflow");
       expect(invoke).toHaveBeenCalledWith("list_templates", {});

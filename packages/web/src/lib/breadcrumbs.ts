@@ -12,7 +12,7 @@ const SETTINGS_PREFIXES = new Set(["settings", ...Object.keys(SETTINGS_LEAVES)])
 
 /**
  * Route -> crumbs. Returns `null` when the route has no top bar (conversations own their header).
- * `dynamicLabel` is the page-supplied name of the current record (a plugin, finding, automation...); it becomes the last crumb.
+ * `dynamicLabel` is the page-supplied name of the current record (an extension, finding, automation...); it becomes the last crumb.
  * Pure so it can be table-tested.
  */
 export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: string): Crumb[] | null {
@@ -76,7 +76,7 @@ export function useBreadcrumbState(): BreadcrumbState {
   return useContext(StateContext);
 }
 
-/** Name the current record in the top bar (`Plugins > Cloudflare`). Clears itself on unmount or when `undefined`. No-op outside the shell. */
+/** Name the current record in the top bar (`Extensions > Cloudflare`). Clears itself on unmount or when `undefined`. No-op outside the shell. */
 export function useBreadcrumbLabel(label: string | undefined): void {
   const setters = useContext(SettersContext);
   const setLabel = setters?.setLabel;

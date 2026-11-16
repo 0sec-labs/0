@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeSkillAuthoring, type SkillAuthoringAdapter } from "./skill-authoring.js";
 import { getToolsForRole, ToolExecutor, TOOL_DEFINITIONS } from "../tools.js";
-import { LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../../plugins/capability-classification.js";
+import { LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../tool-classification.js";
 
 const content = "---\nname: binary-review\ndescription: Review binary evidence.\n---\nInspect headers before drawing conclusions.";
 const revision = "a".repeat(64);

@@ -76,7 +76,6 @@ interface NewFormStub { readonly name: string; readonly args: string; readonly d
 /** Visible subcommands that have no implementation command of their own: `command-compat.ts` rewrites them before parsing, so the action only runs on incomplete input. */
 const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
   findings: [{ name: "update", args: "<id>", description: "Change a finding's status", options: [["--status <status>", "accepted | suppressed | open | false-positive"]] }],
-  skills: [{ name: "run", args: "<name> [tool] [pairs...]", description: "Run a skill or a plugin tool" }],
   memory: [{ name: "set", args: "[id] [on|off]", description: "Turn a memory on or off, load memories with --import, or manage triage memories with --add and --remove <id>", options: [["--import <file>", "Import memories from a file"], ["--add", "Add a triage memory (see findings triage)"], ["--remove", "Remove a triage memory"]] }],
   models: [
     { name: "set", args: "[model]", description: "Show or choose the default model", options: [["--provider <provider>", "Provider of the model"]] },
@@ -94,8 +93,8 @@ const NEW_FORM_HELP: Readonly<Record<string, string>> = {
   "agents list": "With an id: show that Agent. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
   "agents run": "--history lists past activations. --automation runs a saved automation or template.",
   "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --budget, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|triggers|versions|rollback> ...` manages saved automations.",
-  "skills list": "With a name: show that skill. Then --info, --enable or --disable act on a plugin, --mcp-test and --mcp-remove on an MCP server. Also: --catalog browses the catalog, --connectors lists connectors, --mcp lists MCP servers.",
-  "skills add": "<src> may be a catalog id, a repository, a folder or a bundle. Also: --plugin or --local installs a plugin, --new <name> scaffolds one, --validate and --submit check or package a folder, --mcp <url> adds an MCP server, --connect <service>, --disconnect <service>, --remove <name>.",
+  "skills list": "With a name: show that skill. --catalog browses the catalog. Extensions: `0 skills extensions list|info|enable|disable|update|remove`; --info, --enable, --disable and --mcp-remove on a name reach them.",
+  "skills add": "<src> may be a catalog id, a repository, a folder of skills or a bundle. An extension is <repo>@<full sha>: you see one prompt first. Also: --mcp <url> adds an MCP server as a local extension, --preview checks a folder, --remove <name> removes a skill.",
   "memory list": "--triage lists the triage memories that suppress repeat findings.",
   "models list": "Also: --usage shows tokens and cost, --recommended the suggested models.",
   "computers list": "--hosts lists SSH hosts you could add.",

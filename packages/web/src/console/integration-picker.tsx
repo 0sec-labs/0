@@ -227,7 +227,7 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
       <div
         id={picker.id}
         role="listbox"
-        aria-label="Plugins, findings and threads"
+        aria-label="Findings and threads"
         className="max-h-[232px] overflow-y-auto overscroll-contain scroll-fade-y"
       >
         {picker.items.map((item, index) => {

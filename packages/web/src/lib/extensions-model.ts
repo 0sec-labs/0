@@ -29,7 +29,7 @@ export const shortRevision = (revision: string | null): string => !revision ? ""
 /** `owner/repo@abc1234`, a folder name marked local, or "Built in". */
 export function sourceLine(row: Pick<ExtensionRowDto, "builtin" | "kind" | "sourceLabel" | "revision">): string {
   if (row.builtin) return "Built in";
-  if (row.kind === "unmigrated") return "Earlier plugin";
+  if (row.kind === "unmigrated") return "Earlier extension";
   const at = shortRevision(row.revision);
   if (row.kind === "local") return `${row.sourceLabel ?? "folder"} (local folder)${at ? ` @ ${at}` : ""}`;
   return `${row.sourceLabel ?? "unknown source"}${at ? `@${at}` : ""}`;
@@ -41,7 +41,7 @@ export interface StatusView { label: string; tone: StatusTone; detail: string }
 export function statusView(row: ExtensionRowDto): StatusView {
   switch (row.status) {
     case "refused": return { label: "Refused", tone: "danger", detail: row.refusal?.reason ?? "It will not run." };
-    case "unmigrated": return { label: "Could not migrate", tone: "warning", detail: row.note || "It used the old plugin format and cannot run." };
+    case "unmigrated": return { label: "Could not migrate", tone: "warning", detail: row.note || "It used the old executable format and cannot run." };
     case "needs-approval": return { label: "Needs approval", tone: "warning", detail: "Review what it can do before turning it on." };
     case "enabled": {
       const review = row.mcp?.find(server => server.state === "needs-approval");

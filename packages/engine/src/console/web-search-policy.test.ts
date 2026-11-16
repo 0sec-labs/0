@@ -21,8 +21,8 @@ describe("per-chat built-in web search", () => {
   it("defaults new chats and role tools to search on while preserving an explicit chat opt-out", async () => {
     vi.stubEnv("ZERO_FEATURE_WEB_SEARCH", undefined);
     expect(getToolsForRole("audit").some(tool => tool.name === "web_search")).toBe(true);
-    const enabled = createConsoleSession({ runtime: runtime([]), refineObjective: false, allowModelSelfExtension: false });
-    const disabled = createConsoleSession({ runtime: runtime([]), webSearchEnabled: false, refineObjective: false, allowModelSelfExtension: false });
+    const enabled = createConsoleSession({ runtime: runtime([]), refineObjective: false });
+    const disabled = createConsoleSession({ runtime: runtime([]), webSearchEnabled: false, refineObjective: false });
     try {
       await Promise.all([enabled.ready, disabled.ready]);
       expect(enabled.webSearchEnabled).toBe(true);
@@ -33,7 +33,7 @@ describe("per-chat built-in web search", () => {
   });
   it.each([false, true])("preserves the existing host default when omitted (%s)", async enabled => {
     vi.stubEnv("ZERO_FEATURE_WEB_SEARCH", enabled ? "1" : "0");
-    const session = createConsoleSession({ runtime: runtime([]), refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime: runtime([]), refineObjective: false });
     try { await session.ready; expect(session.webSearchEnabled).toBe(enabled); }
     finally { await session.cleanup(); }
   });
@@ -78,7 +78,7 @@ describe("per-chat built-in web search", () => {
   });
   it("hides search, rejects a guessed planner call, and supports idle reconfiguration/checkpoints", async () => {
     const model = runtime([{ content: [{ type: "tool_use", id: "guess", name: "web_search", input: { query: "documentation" } }], stopReason: "tool_use", durationMs: 0 }, end()]);
-    const session = createConsoleSession({ runtime: model, webSearchEnabled: false, refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime: model, webSearchEnabled: false, refineObjective: false });
     await session.ready;
     try {
       expect(session.tools.some(tool => tool.name === "web_search")).toBe(false);

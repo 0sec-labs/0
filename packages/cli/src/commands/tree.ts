@@ -2,7 +2,7 @@
  * The one place that decides where every command lives.
  *
  * Top-level commands are the workflows people reach for first. Everything else is
- * nested under a noun group (`research`, `runs`, `findings`, `plugin`, `improve`).
+ * nested under a noun group (`research`, `runs`, `findings`, `improve`).
  * A registrar is `(parent, name?) => void`, so moving a command is a one-line change
  * here; command modules never know their own path.
  *
@@ -70,8 +70,7 @@ import { registerXnuFuzzCommand } from "./xnu-fuzz.js";
 import { registerWorkerCommand } from "./worker.js";
 import { registerAgentAssureCommand } from "./agent-assure.js";
 import { registerBinaryCommand } from "./binary.js";
-import { registerPluginCommand } from "./plugin.js";
-import { registerPluginAuthorCommands } from "./plugin-author.js";
+import { registerPluginMovedCommand } from "./plugin-moved.js";
 import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
@@ -83,7 +82,6 @@ import { registerSentinelsCommand } from "./sentinels.js";
 import { registerAutomationManageCommands } from "./automation-manage.js";
 import { registerSkillsCommand } from "./skills.js";
 import { registerMemoryCommand } from "./memory.js";
-import { registerPluginConnectCommands } from "./plugin-connect.js";
 import { registerConnectionsCommand } from "./connections.js";
 import { registerModelsCommand } from "./models.js";
 import { registerGithubCommand } from "./github.js";
@@ -162,9 +160,8 @@ export function registerCommandTree(program: Command): void {
   registerWorkbenchCommand(program);
   registerReviewChecksCommand(program);
 
-  // Plugins: install/run and author live together under `plugin`.
-  registerPluginCommand(program);
-  nest(program, "plugin", [registerPluginAuthorCommands, registerPluginConnectCommands]);
+  // The retired `plugin` group: hidden aliases that point at `0 skills extensions`.
+  registerPluginMovedCommand(program);
 
   // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
   registerSkillsCommand(program);

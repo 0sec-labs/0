@@ -95,8 +95,7 @@ import { TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, CLOUD_TOOL_NAMES, OAST_TOOL_NAMES
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
 import { z } from "zod";
-import type { GuardContext } from "../plugins/guards.js";
-import { rememberCodebaseArgsSchema, validateSelfExtendArgs, selfExtensionRegistryOf, nonEmptyString, buildOperatorQuestionRequest, toolExecutorCheckpointSchema, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
+import { rememberCodebaseArgsSchema, nonEmptyString, buildOperatorQuestionRequest, toolExecutorCheckpointSchema, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { SUBAGENT_MODEL_TIMEOUT_MS, resolveBashWallclockCeilingMs, runBashWithWallclock, SCANNER_INSTALL_HINTS, executePipeline, buildEditCardMeta, buildStrReplaceMeta } from "./tools/exec-helpers.js";
 import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool, containsUnquotedShellChars, splitOnTopLevelPipes, detectHttpEgressSegments, injectAuthIntoBashCommand, tokenizeCommand, resolveDependencyAuditCommand } from "./tools/shell-commands.js";
 import { validateScopedCommand, validateTargetUrl } from "./tools/target-validation.js";
@@ -134,21 +133,15 @@ export {
 // off the instance by this name, replacing the hand-written switch so adding a
 // tool no longer edits a shared dispatch chokepoint.
 
-// Model self-extension (session-scoped, additive-only registry). The registry
-// itself lives in ../plugins/self-extension.ts (validation + policy + limits);
-// `self_extend` is a thin, Zod-validated front door to its `register`, and the
-// dispatcher routes calls to model-registered tools through the same registry so
-// they are guard-evaluated under their DECLARED capability gate flags.
-
 export { sanitizedEnv } from "./sanitized-env.js";
 
 // ── Public API moved to ./tools/*.ts (re-exported unchanged) ──
-export { validateSelfExtendArgs, selfExtensionRegistryOf, MIN_OPERATOR_QUESTIONS, MAX_OPERATOR_QUESTIONS, MIN_OPERATOR_OPTIONS, MAX_OPERATOR_OPTIONS, buildOperatorQuestionRequest, toolExecutorCheckpointSchema } from "./tools/agent-args.js";
+export { MIN_OPERATOR_QUESTIONS, MAX_OPERATOR_QUESTIONS, MIN_OPERATOR_OPTIONS, MAX_OPERATOR_OPTIONS, buildOperatorQuestionRequest, toolExecutorCheckpointSchema } from "./tools/agent-args.js";
 export { containsUnquotedShellChars, splitOnTopLevelPipes, detectHttpEgressSegments, injectAuthIntoBashCommand, detectPackageManager, resolveDependencyAuditCommand } from "./tools/shell-commands.js";
 export { parseVerificationSpecArg, autoVerificationSpec, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult, evaluateDoneCoverageGate } from "./tools/verification.js";
 export { bodySimilarity, diffAccessResponses } from "./tools/probe-helpers.js";
-export { sanitizeSubagentNote, SELF_EXTENSION_RESERVED_TOOL_NAMES, buildSendMessageTool, buildSiblingMessagingBatch, validateSpawnPersistentAgentArgs, validateMonitorArgs, buildSubagentProgress, buildSubagentMessage } from "./tools/subagents.js";
-export type { SelfExtendArgs, OperatorQuestionBuildResult, ToolExecutorCheckpoint } from "./tools/agent-args.js";
+export { sanitizeSubagentNote, buildSendMessageTool, buildSiblingMessagingBatch, validateSpawnPersistentAgentArgs, validateMonitorArgs, buildSubagentProgress, buildSubagentMessage } from "./tools/subagents.js";
+export type { OperatorQuestionBuildResult, ToolExecutorCheckpoint } from "./tools/agent-args.js";
 export type { AuthInjectResult, DetectedPackageManager, DependencyAuditResolution } from "./tools/shell-commands.js";
 export type { CoverageGateInput, CoverageGateDecision } from "./tools/verification.js";
 export type { ProbeResponse, AccessDiffResult } from "./tools/probe-helpers.js";
@@ -688,8 +681,7 @@ export class ToolExecutor {
       if (call.name === "http_request" && !isWorkflowHttpMethodAllowed(call.arguments.method ?? "POST")) return { success: false, output: null, error: `HTTP method "${String(call.arguments.method ?? "POST")}" is not allowed in this workflow phase` };
       if (!isWorkflowAgentToolAllowed(call.name)) return { success: false, output: null, error: `Tool "${call.name}" is not allowed in this workflow phase` };
       if (this.ctx.workerTree && this.ctx.delegationTools &&
-          !this.ctx.delegationTools.some(tool => tool.name === call.name) &&
-          !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
+          !this.ctx.delegationTools.some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
       const safeLocal = isCheckoutReadOnlyTool(call.name);
@@ -860,12 +852,6 @@ export class ToolExecutor {
         // load_tool — progressive disclosure over a high-cardinality catalog).
         const deferred = this._dispatchDeferredControl(call);
         if (deferred) return deferred;
-        // Or a tool the model registered THIS session via `self_extend`. Route
-        // it through the registry so it is guard-evaluated under its DECLARED
-        // capability gate flags (a self-authored tool can never reach capability
-        // its declared+approved guards deny).
-        const ext = await this._dispatchExtensionTool(call);
-        if (ext) return ext;
         // Or a tool from a connected MCP server. The `mcp__<server>__<tool>`
         // host connects and forwards the result without rewriting its content.
         if (call.name.startsWith(MCP_TOOL_PREFIX)) {
@@ -890,54 +876,6 @@ export class ToolExecutor {
       return { success: false, output: null, error: parsed.error.issues[0]?.message ?? "Invalid codebase note" };
     }
     return { success: true, output: this.ctx.rememberCodebase(parsed.data) };
-  }
-
-  /** Validate model input before passing source to the isolated plugin lifecycle. */
-  private async selfExtend(args: Record<string, unknown>): Promise<ToolResult> {
-    const registry = selfExtensionRegistryOf(this.ctx);
-    if (!registry?.isEnabled()) {
-      return { success: false, output: null, error: "Model self-extension is disabled for this session." };
-    }
-    const parsed = validateSelfExtendArgs(args);
-    if (!parsed.ok) return { success: false, output: null, error: parsed.error };
-    const request = parsed.args;
-    if (request.action === "harness_submit" || request.action === "harness_list" ||
-      request.action === "harness_rollback" || request.action === "harness_disable") {
-      const harness = this.ctx.liveHarness;
-      if (!harness) return { success: false, output: null, error: "Live harness services are unavailable in this session." };
-      try {
-        const snapshot = await harness.control(
-          request.action === "harness_submit" ? { action: "submit", generation: request.generation } :
-          request.action === "harness_rollback" ? { action: "rollback", generationId: request.generation_id } :
-          request.action === "harness_disable" ? { action: "disable" } : { action: "list" },
-        );
-        return { success: true, output: snapshot };
-      } catch (error) {
-        return { success: false, output: null, error: error instanceof Error ? error.message : String(error) };
-      }
-    }
-    const manager = this.ctx.executablePlugins;
-    if (!manager) {
-      return {
-        success: false, output: null,
-        error: "Executable plugins require a configured Docker or smolvm backend; source is never run on the host.",
-      };
-    }
-    await manager.ready;
-    const context = this._executableContext("self_extend");
-    if (request.action === "list") {
-      return { success: true, output: { plugins: manager.list(), evolutionProfiles: Object.keys(this.ctx.executableEvolutionProfiles ?? {}) } };
-    }
-    if (request.action === "rollback") {
-      return manager.rollback(request.plugin_id, request.version_id, context);
-    }
-    if (request.action === "evolve") {
-      if (!this.ctx.evolveExecutablePlugin) {
-        return { success: false, output: null, error: "No controller-owned evolution profiles are configured." };
-      }
-      return this.ctx.evolveExecutablePlugin(request.plugin_id, request.profile, context.signal);
-    }
-    return manager.submit(request, context);
   }
 
   /**
@@ -968,63 +906,6 @@ export class ToolExecutor {
       };
     }
     return { success: true, output: formatLoadResult(registry.load(names)) };
-  }
-
-  private _executableContext(toolName: string) {
-    const bound = this.ctx.pluginExecutionContext?.() ?? {};
-    const execution = this._executionContext.getStore();
-    return {
-      ...bound,
-      signal: execution?.signal ?? bound.signal,
-      ...(bound.invokeTool ? { invokeTool: (...args: Parameters<NonNullable<typeof bound.invokeTool>>) =>
-        this._executionContext.run(execution ?? {}, () => bound.invokeTool!(...args)),
-      } : {}),
-      onEvent: (event: unknown) => {
-        this._executionContext.run(execution ?? {}, () => {
-          this.persistToolArtifact(toolName, { executable: event });
-        });
-        bound.onEvent?.(event);
-      },
-    };
-  }
-
-  private async _dispatchExtensionTool(call: ToolCall): Promise<ToolResult | null> {
-    const registry = selfExtensionRegistryOf(this.ctx);
-    if (!registry || !registry.isEnabled()) return null;
-    const tool = registry.tool(call.name);
-    if (!tool) return null;
-
-    const gate = tool.gateFlags;
-    const guardCtx: GuardContext = {
-      toolName: tool.name,
-      networkCapable: gate.networkCapable,
-      localScope: gate.localScope,
-      readOnly: gate.readOnly,
-      askFirst: this.ctx.approvals === "ask",
-      hasScope:
-        !!this.ctx.scope ||
-        (typeof this.ctx.scopePath === "string" && this.ctx.scopePath.length > 0),
-      approvalAvailable:
-        typeof this.ctx.escalateScopedAudit === "function" ||
-        typeof this.ctx.askOperator === "function",
-      // Resolved from a validated manifest — a known source, not danger-by-omission.
-      capabilitiesResolved: true,
-    };
-
-    const verdict = registry.evaluate(guardCtx);
-    if (!verdict.allowed) {
-      return {
-        success: false,
-        output: null,
-        error: `Tool "${call.name}" was denied by the guard floor: ${verdict.reasons.join("; ")}`,
-      };
-    }
-
-    const manager = this.ctx.executablePlugins;
-    if (!manager) {
-      return { success: false, output: null, error: `Executable backend is unavailable for "${call.name}".` };
-    }
-    return manager.execute(call.name, call.arguments ?? {}, this._executableContext(call.name));
   }
 
   /** Exact fixture matching keeps model-supplied ownership claims out of verification. */
@@ -3878,12 +3759,9 @@ export class ToolExecutor {
           attribution: this.ctx.attribution,
           engagement: this.ctx.engagement,
           codebaseLearning: false,
-          allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
-          executablePlugins: this.ctx.executablePluginConfiguration,
           workspaceRoot: this.ctx.workspaceRoot,
           skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
           skillAuthoring: this.ctx.skillAuthoring,
-          executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
           enforcement: this.ctx.enforcement,
           rateLimiter: this.ctx.rateLimiter,
           // `native-loop.ts` copies this straight onto the child's ToolContext,
@@ -4051,12 +3929,9 @@ export class ToolExecutor {
         attribution: this.ctx.attribution,
         engagement: this.ctx.engagement,
         codebaseLearning: false,
-        allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
-        executablePlugins: this.ctx.executablePluginConfiguration,
         workspaceRoot: this.ctx.workspaceRoot,
         skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
         skillAuthoring: this.ctx.skillAuthoring,
-        executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
         enforcement: this.ctx.enforcement,
         rateLimiter: this.ctx.rateLimiter,
         ...(childMessaging ? { agentMessaging: childMessaging } : {}),
@@ -7570,11 +7445,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // `write_todos` is a dispatchable ALIAS of `update_todos` — keep it out of
     // the audit/review "everything" set so only one plan tool is advertised.
     && name !== "write_todos"
-    // `self_extend` is registered + dispatchable, but is NEVER advertised by
-    // role. It is a runtime-gated capability (`allowModelSelfExtension`, default
-    // OFF), not a feature flag, so native-loop injects it into the model-facing
-    // tool set explicitly when enabled — it must never leak in by omission here.
-    && name !== "self_extend" && name !== "remember_codebase"
+    && name !== "remember_codebase"
     // burp-network-20260913 — the intercepting `proxy` tool is registered +
     // dispatchable + unit-tested, but NOT YET advertised by any role. It is a
     // powerful effectful capability (a local MITM proxy + a generated CA); like

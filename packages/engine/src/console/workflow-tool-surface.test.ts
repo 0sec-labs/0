@@ -6,7 +6,7 @@ describe("workflow tool surface", () => {
   it("offers one draft API when both authoring and lifecycle storage are attached", async () => {
     const session = createConsoleSession({
       runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() },
-      allowModelSelfExtension: false,
+     
       tools: [],
       workflowAuthoring: { list: () => [], save: vi.fn() },
       workflowLifecycle: { invoke: vi.fn() },
@@ -34,7 +34,7 @@ describe("workflow tool surface", () => {
         ? { content: [{ type: "tool_use", id: "legacy", name: "list_workflows", input: {} }], stopReason: "tool_use", durationMs: 1 }
         : { content: [{ type: "text", text: "Done." }], stopReason: "end_turn", durationMs: 1 },
     };
-    const session = createConsoleSession({ runtime, refineObjective: false, tools: [], allowModelSelfExtension: false,
+    const session = createConsoleSession({ runtime, refineObjective: false, tools: [],
       workflowAuthoring: { list: () => [], save: vi.fn() }, workflowLifecycle: { invoke } });
     try {
       await session.send("List the workflows.");

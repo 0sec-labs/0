@@ -46,7 +46,6 @@ export const EXECUTING_TOOLS: Readonly<Record<string, (args: Args) => HookTarget
   npm_dynamic_discovery: a => ({ kind: "process", command: json(a), paths: [] }),
   weaponize_kernel: a => ({ kind: "process", command: json(a), paths: [] }),
   cve_adapt: a => ({ kind: "process", command: json(a), paths: [] }),
-  self_extend: a => ({ kind: "process", command: json(a), paths: [] }),
   str_replace: a => ({ kind: "file-write", command: "str_replace", paths: pathArg(a) }),
   apply_patch: a => ({ kind: "file-write", command: "apply_patch", paths: patchTargets(str(a["patch"]) || str(a["input"]) || json(a)) }),
   create_skill: a => ({ kind: "file-write", command: "create_skill", paths: pathArg(a) }),

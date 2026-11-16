@@ -94,7 +94,7 @@ describe("workflow phase agent policy", () => {
       return { content: ++turn === 1 ? [{ type: "tool_use", id: "bad", name: "run_command", input: { command: `touch ${join(home, "unexpected")}` } }] : [{ type: "tool_use", id: "finish", name: "done", input: { summary: "Complete" } }], stopReason: "tool_use", durationMs: 0 };
     } };
     const state = await withWorkflowAuditExecutionPolicy({ instructions: "Inspect authorization boundaries", allowedAgentTools: ["done"] }, () => runNativeAgentLoop({
-      runtime, db: null, config: { role: "discovery", target: "https://example.test", scanId: "phase-native", maxTurns: 2, tools: [TOOL_DEFINITIONS.run_command, TOOL_DEFINITIONS.done], systemPrompt: "Existing security policy", allowModelSelfExtension: false, codebaseLearning: false },
+      runtime, db: null, config: { role: "discovery", target: "https://example.test", scanId: "phase-native", maxTurns: 2, tools: [TOOL_DEFINITIONS.run_command, TOOL_DEFINITIONS.done], systemPrompt: "Existing security policy", codebaseLearning: false },
     }));
     expect(observed[0].system).toContain("Inspect authorization boundaries");
     expect(observed[0].tools.map(tool => tool.name)).toEqual(["done"]);
@@ -112,7 +112,7 @@ describe("workflow phase agent policy", () => {
       } };
     };
     const state = await withWorkflowAuditExecutionPolicy({ instructions: "No command execution", allowedAgentTools: ["spawn_agent", "done"] }, () => runNativeAgentLoop({
-      runtime: atDepth(0), db: null, config: { role: "discovery", target: "https://example.test", scanId: "phase-parent", maxTurns: 2, tools: [TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.done], systemPrompt: "Parent policy", allowModelSelfExtension: false, codebaseLearning: false },
+      runtime: atDepth(0), db: null, config: { role: "discovery", target: "https://example.test", scanId: "phase-parent", maxTurns: 2, tools: [TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.done], systemPrompt: "Parent policy", codebaseLearning: false },
     }));
     expect(systems.length).toBeGreaterThan(2);
     expect(systems.every(system => system.includes("No command execution"))).toBe(true);

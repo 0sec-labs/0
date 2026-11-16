@@ -83,7 +83,7 @@ A redirect or a linked third-party host does not become in scope because the sta
 | `--rate-limit` | Request pacing. |
 | `--cost-ceiling` | Estimated model spend for the run. |
 
-With the plugin on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped scans. `--allow-scanners` shows them without widening the host list.
+With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped scans. `--allow-scanners` shows them without widening the host list.
 
 <span id="requirements-differ-by-command"></span>
 ### What each command enforces
@@ -171,7 +171,7 @@ Set the same controls in the scope file. The scope file beats environment variab
 
 Environment variables: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`, `ZERO_ENGAGEMENT_RATE_RPS` and `ZERO_ENGAGEMENT_JITTER_MS`. A bad profile name or value stops the scan with exit code 2.
 
-When a profile is active, the report carries an `engagementPosture` record with the posture as applied, and the run emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or plugin traffic.
+When a profile is active, the report carries an `engagementPosture` record with the posture as applied, and the run emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or extension traffic.
 
 ## Forensic timeline
 

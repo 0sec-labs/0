@@ -10,7 +10,7 @@ import { FixesView } from "./views/fixes";
 import { OverviewView } from "./views/overview";
 import { VisualsView } from "./views/visuals";
 import { PreviewView } from "./views/preview";
-import { HarnessActionsProvider, ToolsView, type HarnessActions } from "./views/tools";
+import { PanelActionsProvider, ToolsView, type PanelActions } from "./views/tools";
 import type { PanelViewComponent } from "./types";
 import type { PanelViewComponents } from "./panel-view-host";
 
@@ -23,7 +23,7 @@ export type PanelScope = {
   bind: (node: ReactNode) => ReactNode;
   findingActions: FindingActions;
   agentActions: AgentViewActions;
-  harnessActions: HarnessActions;
+  panelActions: PanelActions;
 };
 const PanelScopeContext = createContext<PanelScope | undefined>(undefined);
 export function PanelScopeProvider({ scope, children }: { scope: PanelScope | undefined; children: ReactNode }) {
@@ -35,7 +35,7 @@ function scoped(View: PanelViewComponent): PanelViewComponent {
     const scope = useContext(PanelScopeContext);
     const node = <FindingActionsProvider value={scope?.findingActions ?? {}}>
       <AgentViewActionsProvider value={scope?.agentActions ?? {}}>
-        <HarnessActionsProvider value={scope?.harnessActions ?? {}}><View {...props} /></HarnessActionsProvider>
+        <PanelActionsProvider value={scope?.panelActions ?? {}}><View {...props} /></PanelActionsProvider>
       </AgentViewActionsProvider>
     </FindingActionsProvider>;
     return <>{scope ? scope.bind(node) : node}</>;

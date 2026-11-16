@@ -1,5 +1,5 @@
 /**
- * Prefill bus: "put this text in the composer". Callers (setup cards, plugin pages, suggestion chips) cannot know which
+ * Prefill bus: "put this text in the composer". Callers (setup cards, extension pages, suggestion chips) cannot know which
  * mission the composer will land on (Home reuses a blank mission with a real id), so they queue the text here and the
  * mounted composer workspace applies it to whichever draft it owns. The pending text survives a reload via sessionStorage.
  */

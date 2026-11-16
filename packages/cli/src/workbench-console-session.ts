@@ -8,10 +8,8 @@ import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, Co
 import { findingSchema, legacyAskedFirst, type ApprovalsChoice, type Finding } from "@0/engine/shared";
 import type { TuiSettings } from "./state/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
-import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugins.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame, WorkbenchSourceContextArtifact, WorkbenchSourceLesson } from "./workbench-console-protocol.js";
-import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
 const sourceContextSchema = z.object({
   status: z.enum(["not_requested", "supplied", "none"]),
@@ -87,7 +85,6 @@ class Controller {
   private started = false;
   private guestReady = false;
   private startupStderr = "";
-  private redact = (value: string) => value;
   receive: (frame: WorkbenchFrame) => void = () => {};
   decision: (name: string, args: unknown[]) => Promise<unknown> = async () => null;
   constructor(readonly options: WorkbenchControllerOptions, readonly init: Record<string, unknown>, readonly cli: boolean) {
@@ -101,37 +98,31 @@ class Controller {
   touch(): void { clearTimeout(this.idle); this.idle = setTimeout(() => { this.abort.abort(new Error("Workbench idle deadline expired")); }, this.options.idleMs ?? 5 * 60_000); this.idle.unref(); }
   async start(): Promise<void> {
     if (this.started) return this.ready; this.started = true; this.status("pending", "Preparing workspace");
-    let stagedPlugins: Awaited<ReturnType<typeof prepareWorkbenchPlugins>> | undefined;
     this.lifetime = setTimeout(() => this.abort.abort(new Error("Workbench lifetime expired")), this.options.lifetimeMs ?? 30 * 60_000); this.lifetime.unref();
     try {
       const root = join(this.options.workbench.stateRoot, "controller-results"); await mkdir(root, { recursive: true, mode: 0o700 });
       const artifacts = this.options.artifactDirectory ?? await realpath(await mkdtemp(join(root, "run-")));
       const reader = new WorkbenchFrameReader(); const launch = guestCommand(this.options, this.cli);
-      const connections = this.cli ? [] : (await import("./web/service-plugins.js")).loadServicePluginConnections(this.options.pluginHomeDir).filter(item => item.enabled);
-      const servicePluginConnections = validateGuestServicePluginConnections(connections, this.options.network);
-      this.redact = servicePluginSecretRedactor(servicePluginConnections);
-      const plugins = stagedPlugins = await prepareWorkbenchPlugins(this.workspace, this.options.pluginHomeDir);
       this.done = runSmolvmWorkbench({ image: this.options.workbench.image, stateRoot: this.options.workbench.stateRoot, workspaceRoot: this.workspace,
         onStartupProgress: message => this.status("pending", message),
         command: launch.command, environment: { ZERO_PROVIDER: "chatgpt-codex", ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1" }, network: this.options.network,
         tty: false, cpus: this.options.workbench.cpus, memoryMb: this.options.workbench.memoryMb, storageGb: this.options.workbench.storageGb,
         approvedImages: this.options.workbench.approvedImages, signal: this.abort.signal, workspaceMode: "snapshot", artifactDirectory: artifacts,
-        readOnlyMounts: [...(launch.mounts ?? []), ...(plugins.directory ? [{ source: plugins.directory, target: GUEST_PLUGIN_ASSETS }] : [])], transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, servicePluginConnections, servicePluginNetworkGranted: this.options.network, pluginApprovals: plugins.approvals, guestSettings: this.options.guestSettings, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: data => { this.startupStderr = this.redact(this.startupStderr + data).slice(-4096); } },
+        readOnlyMounts: [...(launch.mounts ?? [])], transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, guestSettings: this.options.guestSettings, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: data => { this.startupStderr = (this.startupStderr + data).slice(-4096); } },
       });
-      this.done = this.done.finally(() => plugins.cleanup());
       void this.done.then(async result => {
-        const error = new Error(this.redact(result.error ?? "Workbench VM exited") + (!this.guestReady && this.startupStderr.trim() ? `: ${this.startupStderr.trim()}` : ""));
+        const error = new Error((result.error ?? "Workbench VM exited") + (!this.guestReady && this.startupStderr.trim() ? `: ${this.startupStderr.trim()}` : ""));
         if (!this.guestReady) this.rejectReady(error);
         for (const pending of this.pending.values()) pending.reject(error); this.pending.clear();
         clearTimeout(this.idle); clearTimeout(this.lifetime);
         for (const pending of this.providers.values()) pending.abort(); this.providers.clear();
         await this.options.provider.close?.();
-        this.status(result.cleanupFailed || (result.exitCode !== 0 && !this.abort.signal.aborted) ? "failed" : "stopped", result.error ? this.redact(result.error) : undefined);
+        this.status(result.cleanupFailed || (result.exitCode !== 0 && !this.abort.signal.aborted) ? "failed" : "stopped", result.error ? result.error : undefined);
       });
       this.touch(); await this.ready;
     } catch (error) {
-      if (!this.done) { await stagedPlugins?.cleanup(); await this.options.provider.close?.(); }
-      clearTimeout(this.idle); clearTimeout(this.lifetime); this.abort.abort(); this.rejectReady(new Error(this.redact(error instanceof Error ? error.message : "Workbench startup failed"))); this.status("failed", this.redact(error instanceof Error ? error.message : "Workbench startup failed")); throw new Error(this.redact(error instanceof Error ? error.message : "Workbench startup failed")); }
+      if (!this.done) { await this.options.provider.close?.(); }
+      clearTimeout(this.idle); clearTimeout(this.lifetime); this.abort.abort(); this.rejectReady(new Error((error instanceof Error ? error.message : "Workbench startup failed"))); this.status("failed", (error instanceof Error ? error.message : "Workbench startup failed")); throw new Error((error instanceof Error ? error.message : "Workbench startup failed")); }
   }
   private dispatch(frame: WorkbenchFrame): void {
     if (frame.type === "ready") { if (this.guestReady || frame.platform !== "linux" || frame.workspace !== "/workspace") throw new Error("Invalid workbench guest readiness"); this.guestReady = true; this.status("ready"); this.resolveReady(); return; }
@@ -143,7 +134,7 @@ class Controller {
     }
     if (frame.type === "result" || frame.type === "error") {
       const pending = this.pending.get(frame.id!); this.pending.delete(frame.id!);
-      if (frame.type === "error") { const error = new Error(typeof frame.error === "string" ? this.redact(frame.error) : "Guest operation failed"); if (!this.guestReady) this.rejectReady(error); pending?.reject(error); }
+      if (frame.type === "error") { const error = new Error(typeof frame.error === "string" ? frame.error : "Guest operation failed"); if (!this.guestReady) this.rejectReady(error); pending?.reject(error); }
       else pending?.resolve(frame.value); return;
     }
     this.receive(frame);

@@ -44,7 +44,7 @@ describe("There is one mode: the shell runs, and an older access value changes n
       const approveTool = vi.fn(async () => true);
       const session = createConsoleSession({
         runtime: new ScriptedRuntime([use("bash", { command: `touch ${mark}` }), end("done")]),
-        autonomyMode: legacy, ...(asks ? { approveTool } : {}), allowModelSelfExtension: false, refineObjective: false,
+        autonomyMode: legacy, ...(asks ? { approveTool } : {}), refineObjective: false,
       });
       try {
         const result = (await session.send("create the marker")).toolCalls[0]!.result;
@@ -55,7 +55,7 @@ describe("There is one mode: the shell runs, and an older access value changes n
     });
   }
   it("the session no longer exposes an access state", async () => {
-    const session = createConsoleSession({ runtime: new ScriptedRuntime([]), autonomyMode: "read-only", allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime: new ScriptedRuntime([]), autonomyMode: "read-only", refineObjective: false });
     try { expect(session).not.toHaveProperty("autonomyMode"); } finally { await session.cleanup(); }
   });
 });
@@ -65,7 +65,7 @@ describe("Ask before running commands puts every shell command to the operator",
     const approveTool = vi.fn(async () => false);
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([use("bash", { command: `touch ${mark}` }), end("declined")]),
-      approvals: "ask", approveTool, allowModelSelfExtension: false, refineObjective: false,
+      approvals: "ask", approveTool, refineObjective: false,
     });
     try {
       const result = (await session.send("create the marker")).toolCalls[0]!.result;
@@ -77,7 +77,7 @@ describe("Ask before running commands puts every shell command to the operator",
     const approve = vi.fn(async () => true);
     const approved = createConsoleSession({
       runtime: new ScriptedRuntime([use("bash", { command: `touch ${mark}` }), end("done")]),
-      approvals: "ask", approveTool: approve, allowModelSelfExtension: false, refineObjective: false,
+      approvals: "ask", approveTool: approve, refineObjective: false,
     });
     try {
       await approved.send("create the marker");
@@ -102,7 +102,7 @@ describe("Target scope holds for commands that name a host", () => {
       runtime: new ScriptedRuntime(foreign.flatMap(command => [use("bash", { command }), end("refused")])),
       target: "https://target.test",
       scope: ScopePolicy.fromJson({ in_scope: ["target.test"] }),
-      requestScope, allowModelSelfExtension: false, refineObjective: false, ...(legacy ? { autonomyMode: legacy } : {}),
+      requestScope, refineObjective: false, ...(legacy ? { autonomyMode: legacy } : {}),
     });
     try {
       for (const command of foreign) {

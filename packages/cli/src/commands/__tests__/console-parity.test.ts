@@ -258,7 +258,7 @@ describe("config get/set/reset through the embedded operator transport", () => {
       expect(last(h.codes)).toBe(2);
       await runConfigSet("nope", "1", {}, h.deps);
       expect(last(h.codes)).toBe(2);
-      await runConfigSet("allowModelSelfExtension", "on", {}, h.deps);
+      await runConfigSet("allowSubagentOperatorMessaging", "on", {}, h.deps);
       expect(last(h.codes)).toBe(2);
       expect(h.err.join("\n")).toContain("--yes");
 
@@ -276,7 +276,7 @@ describe("config get/set/reset through the embedded operator transport", () => {
     const home = mkdtempSync(join(tmpdir(), "config-audit-")); temp.push(home);
     const h = await embeddedDeps(home);
     try {
-      await runConfigSet("allowModelSelfExtension", "off", { yes: true }, h.deps);
+      await runConfigSet("allowSubagentOperatorMessaging", "on", { yes: true }, h.deps);
       expect(last(h.codes)).toBe(0);
     } finally { await h.client.dispose(); }
   });

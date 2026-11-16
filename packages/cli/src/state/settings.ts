@@ -26,7 +26,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/engine/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 type SettingKind = "boolean" | "enum" | "number" | "text";
 
@@ -96,7 +96,6 @@ export interface TuiSettings {
    */
   compactionThreshold: "70%" | "75%" | "80%" | "85%";
   /** Let the model add tools to its own session (off by default). */
-  allowModelSelfExtension: boolean;
   /**
    * Dev-only: rebuild the engine from own source and hand off the live console
    * session. Separate from sandboxed tool extension; requires trusted host code.
@@ -313,14 +312,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Context",
   },
   {
-    key: "allowModelSelfExtension",
-    label: "Model self-extension",
-    description: "Let new threads add sandboxed tools. Threads started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
-    kind: "boolean",
-    default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
-    group: "Security",
-  },
-  {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
     description: "0dev only. Reload changed engine code between turns. Runs with full access to this computer, including your credentials; separate from sandboxed tools.",
@@ -479,7 +470,6 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   transcriptDetail: "collapsed",
   autoCompaction: true,
   compactionThreshold: "80%",
-  allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
   allowDevSourceUpdates: false,
   showTokenUsage: true,
   showCost: true,
@@ -768,7 +758,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     transcriptDetail: enumAt(raw, "transcriptDetail"),
     autoCompaction: booleanAt(raw, "autoCompaction"),
     compactionThreshold: enumAt(raw, "compactionThreshold"),
-    allowModelSelfExtension: booleanAt(raw, "allowModelSelfExtension"),
     allowDevSourceUpdates: booleanAt(raw, "allowDevSourceUpdates"),
     showTokenUsage: booleanAt(raw, "showTokenUsage"),
     showCost: booleanAt(raw, "showCost"),

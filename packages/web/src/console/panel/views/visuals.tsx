@@ -4,12 +4,12 @@ import { CapyChevronRightIcon as ChevronRight } from "@/ui/icons/capy";
 import { cn } from "@/lib/utils";
 import { VisualBlock } from "../../visual-block";
 import { visualsFromSnapshot } from "../../visuals";
-import { HarnessActionsContext } from "./tools";
+import { PanelActionsContext } from "./tools";
 import type { PanelViewComponent } from "../types";
 
 /** Every visual in the mission, newest last as in the transcript; each row expands to the full renderer. */
 export const VisualsView: PanelViewComponent = ({ snapshot }) => {
-  const { appendPrompt } = useContext(HarnessActionsContext);
+  const { appendPrompt } = useContext(PanelActionsContext);
   const visuals = useMemo(() => (snapshot ? visualsFromSnapshot(snapshot) : []), [snapshot]);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   if (!snapshot)

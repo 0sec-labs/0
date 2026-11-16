@@ -79,11 +79,11 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 - **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
 - **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
 - **Verify and fix**: reproduce findings, generate patches and validate each one
-- **Build persistent security agents**: Agents with a scope, budget and memory that run on a schedule or on every pull request, with skills, plugins and automations
+- **Build persistent security agents**: Agents with a scope, budget and memory that run on a schedule or on every pull request, with skills, extensions and automations
 - **Disclose**: assemble GHSA-ready advisory drafts from saved findings
 - **Test AI agents** with prompt-injection campaigns
 - **Automate** scans in [CI/CD](https://docs.0.security/ci/github-action/) with JSON and SARIF output
-- **Extend** it with [plugins and skills](https://docs.0.security/plugins/), or drive it from coding agents over MCP
+- **Extend** it with [extensions and skills](https://docs.0.security/extensions/), or drive it from coding agents over MCP
 
 <p align="center">
   <a href="assets/readme-findings.mp4">
@@ -110,7 +110,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 0 lab mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
-See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and MCP](https://docs.0.security/plugins/) and the [command reference](https://docs.0.security/commands/).
+See the [CI/CD guide](https://docs.0.security/ci/github-action/), [extensions and MCP](https://docs.0.security/extensions/) and the [command reference](https://docs.0.security/commands/).
 
 ## Learn more
 
@@ -118,7 +118,7 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 - [Scan modules](https://docs.0.security/scan-code/)
 - [Models and providers](https://docs.0.security/models/)
 - [CI/CD guide](https://docs.0.security/ci/github-action/)
-- [Plugins and MCP](https://docs.0.security/mcp/)
+- [Extensions and MCP](https://docs.0.security/mcp/)
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
 - [Enterprise](https://0.security/enterprise/)
@@ -129,7 +129,7 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 
 - **Report bugs** in [issues](https://github.com/0sec-labs/0security/issues)
 - **Improve the docs**
-- **Write a plugin** or scan module
+- **Write an extension** or scan module
 - **Found a vulnerability in 0?** See [SECURITY.md](.github/SECURITY.md)
 
 Start with the [contributing guide](.github/CONTRIBUTING.md). Run `pnpm install` and `pnpm dev` to work on the engine. Open an issue before large changes.

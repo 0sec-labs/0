@@ -1,15 +1,12 @@
 import { createReadStream, createWriteStream, writeSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { ScopePolicy, withScopeEnforcement, eventBus, connectServicePlugins, TOOL_DEFINITIONS, observeExecutionResources,
+import { ScopePolicy, withScopeEnforcement, eventBus, TOOL_DEFINITIONS, observeExecutionResources,
   type ConsoleSession, type ConsoleSessionConfig, type McpToolHost } from "@0/engine";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
 import { connectExtensionMcp, connectExtensionRuns } from "./console-extension-mcp.js";
-import { loadServicePluginConnections } from "./web/service-plugins.js";
-import { connectCustomMcpServers } from "./web/custom-mcp.js";
-import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, HOST_CONSOLE_CALLBACKS, type HostConsoleFrame, type HostConsoleBootstrap } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } from "./web/operator-services.js";
 
@@ -45,11 +42,9 @@ export async function runHostConsoleWorker(): Promise<void> {
   let turn: AbortController | undefined;
   let bootstrap: HostConsoleBootstrap;
   let mcpHost: McpToolHost | undefined;
-  let plugins: Awaited<ReturnType<typeof createSessionPluginHostManager>> | undefined;
   let learningStore: LearningStore | undefined;
   let active = false;
   let runtime: ReturnType<typeof createWebConsoleRuntimeFromBootstrap>["runtime"];
-  let releasePlugins: (() => void) | undefined;
   let lastMessageCount = -1;
   let lastBinding = "";
   const binding = () => {
@@ -89,7 +84,7 @@ export async function runHostConsoleWorker(): Promise<void> {
     for (const pending of callbacks.values()) pending.reject(new Error("Host session worker closing"));
     callbacks.clear();
     const failures: unknown[] = [];
-    for (const close of [() => session?.cleanup(), () => mcpHost?.closeAll(), () => releasePlugins?.(), () => plugins?.dispose(), () => learningStore?.close()]) {
+    for (const close of [() => session?.cleanup(), () => mcpHost?.closeAll(), () => learningStore?.close()]) {
       try { await close(); } catch (error) { failures.push(error); }
     }
     unsubscribe(); clearInterval(tick);
@@ -139,11 +134,8 @@ export async function runHostConsoleWorker(): Promise<void> {
           ...(typeof bootstrap.config.workflowEditorId === "string" ? { editor: { id: bootstrap.config.workflowEditorId, read: () => invoke("workflowEditorRead", []) } } : {}),
         } as ConsoleSessionConfig["workflowAuthoring"];
         if (bootstrap.callbacks.includes("workflowInvoke")) config.workflowLifecycle = { invoke: (...args: unknown[]) => invoke("workflowInvoke", args) };
-        plugins = await createSessionPluginHostManager({ projectPath: config.workspaceRoot, reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
-        mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd())), config.workspaceRoot ?? process.cwd()), config.workspaceRoot ?? process.cwd());
-        const lease = plugins.acquire(); releasePlugins = lease.release;
-        config.pluginHost = lease.host; config.mcpHost = mcpHost; config.extensionRuns = connectExtensionRuns(config.workspaceRoot ?? process.cwd());
-        config.onHarnessUpdate = value => { emit({ type: "harness", value }); snapshot(); };
+        mcpHost = connectExtensionMcp(await connectConsoleMcp(config.workspaceRoot ?? process.cwd()), config.workspaceRoot ?? process.cwd());
+        config.mcpHost = mcpHost; config.extensionRuns = connectExtensionRuns(config.workspaceRoot ?? process.cwd());
         session = withScopeEnforcement(bootstrap.scopeEnforcement, () => createHostLocalConsoleSession(config, bootstrap.dbPath));
         await session.ready; snapshot(); emit({ type: "ready" }); return;
       }
@@ -166,10 +158,6 @@ export async function runHostConsoleWorker(): Promise<void> {
         case "stopWorker": value = await session.stopPersistentAgent(String(frame.agentId)); break;
         case "stopWorkers": await session.stopPersistentAgents(); break;
         case "checkpoint": value = session.exportCheckpoint(); break;
-        case "harness": {
-          if (active || !session.harness) throw new Error("Host session has no idle harness");
-          value = await session.harness.interact(frame.value as Parameters<NonNullable<ConsoleSession["harness"]>["interact"]>[0]); break;
-        }
         case "handoff": value = await session.prepareHandoff(); break;
         case "autonomy": {
           // frame.value is the retired access value: accepted and ignored.

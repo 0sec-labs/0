@@ -63,6 +63,6 @@ mv node_modules.release-build node_modules
 trap 'rm -rf "$smoke_dir"' EXIT
 
 bun scripts/check-host-console-worker-bun.ts "$BIN"
-node scripts/smoke-plugin-runtime.mjs "$BIN"
+node scripts/smoke-extension-runtime.mjs "$BIN"
 node scripts/smoke-web-setup.mjs "$BIN"
 echo "standalone smoke passed: $BIN"

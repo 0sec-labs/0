@@ -4,7 +4,7 @@
  * 1. Engine bearer (the credential held by attached engines, host workers and the remote proxy).
  *    It is DEFAULT-DENY for every mutating /api/console route: only the allowlist below is
  *    reachable with it. Anything that can run code as the operator, change provider credentials or
- *    base URLs, change operator consent/execution settings, install or enable plugins/MCP servers,
+ *    base URLs, change operator consent/execution settings, install or enable extensions and MCP servers,
  *    self-edit, or create automations that launch runs requires the browser control token and
  *    returns 403 `browser_only`. A new mutating route is therefore browser-only until it is added
  *    to ENGINE_ALLOWED_MUTATIONS with a justification (see privileged-routes.test.ts).
@@ -91,16 +91,13 @@ export function isBrowserOnlyRoute(pathname: string, method: string): boolean {
 }
 
 /**
- * Owner-gated routes in team mode: code execution as the operator (custom stdio MCP servers, GitHub
- * plugins), credential routing and operator-global settings.
+ * Owner-gated routes in team mode: code execution as the operator (installing or enabling an extension or
+ * an MCP server), credential routing and operator-global settings.
  */
 export function isPrivilegedOperatorRoute(pathname: string, method: string): boolean {
   if (!pathname.startsWith("/api/console/")) return false;
   const path = pathname.slice("/api/console/".length);
-  if (/^mcp-servers(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
-  if (/^plugins\/(?:install|install-github|enable|disable|run)(?:\/|$)/.test(path)) return method !== "GET";
   if (/^extensions(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
-  if (/^service-plugins(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (/^github(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (path === "connections") return method === "POST";
   if (/^connections\/(?:order|spread)$/.test(path)) return method !== "GET";

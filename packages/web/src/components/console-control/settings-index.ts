@@ -48,11 +48,11 @@ const categoryKeywords: Record<SettingsPageId, string> = {
   appearance: "theme light dark mode colors browser density compact spacing profile",
   threads: "thread threads chat chats summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
   usage: "usage spend cost tokens model chats billing credits activity",
-  helpers: "helpers helper agents subagents where agents run computer sandbox plugins",
+  helpers: "helpers helper agents subagents where agents run computer sandbox extensions",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
   instructions: "instructions agents.md global folder guidance rules markdown",
   git: "git github pull requests prs branch publish fixes connection sign in device code gh cli permissions token repository repositories repos commit visibility default branch agents",
-  "audit-log": "audit log security history approvals denials settings changes mcp plugins connections agents export json actor action subject",
+  "audit-log": "audit log security history approvals denials settings changes mcp extensions connections agents export json actor action subject",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
 };
 const labelOf = (id: string) => settingsPages.find(page => page.id === id)!.label;

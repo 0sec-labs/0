@@ -17,8 +17,6 @@ const isolated = vi.hoisted(() => ({
   runtimeFactory: vi.fn(),
   applyRuntime: vi.fn(),
   reloadConnection: vi.fn(),
-  pluginManager: vi.fn(),
-  flushPlugins: vi.fn(),
 }));
 vi.mock("@0/engine", async (importOriginal) => ({ ...await importOriginal<typeof import("@0/engine")>(), peekInbox: () => isolated.inbox }));
 vi.mock("../console-mcp.js", () => ({ connectConsoleMcp: async () => undefined }));
@@ -29,15 +27,13 @@ vi.mock("./operator-services.js", async (importOriginal) => ({
   createWebConsoleRuntime: (...args: unknown[]) => isolated.runtimeFactory(...args),
   applyWebConsoleRuntimeSelection: (...args: unknown[]) => isolated.applyRuntime(...args),
   reloadWebConsoleRuntimeConnection: (...args: unknown[]) => isolated.reloadConnection(...args),
-  getWebConsolePluginHostManager: (...args: unknown[]) => isolated.pluginManager(...args),
-  flushWebConsolePlugins: (...args: unknown[]) => isolated.flushPlugins(...args),
 }));
 beforeEach(() => {
   isolated.inbox = [];
   isolated.profile = "local";
   isolated.localFactory.mockReset(); isolated.runtimeFactory.mockReset();
-  isolated.applyRuntime.mockReset(); isolated.reloadConnection.mockReset(); isolated.pluginManager.mockReset();
-  isolated.flushPlugins.mockReset().mockResolvedValue([]);
+  isolated.applyRuntime.mockReset(); isolated.reloadConnection.mockReset();
+
 });
 
 const gateways: ConsoleGateway[] = [];
@@ -1205,9 +1201,7 @@ describe("ConsoleGateway isolated execution boundaries", () => {
       const config = isolated.localFactory.mock.calls[0]?.[0];
       expect(config.codebaseLearning).toBe(true);
       expect(config.learningStore).toBe(store);
-      expect(config.pluginHost).toBeUndefined();
       expect(config.mcpHost).toBeUndefined();
-      expect(isolated.pluginManager).not.toHaveBeenCalled();
       await instance.closeAll();
       expect(store.listKnowledge()).toEqual([]);
     } finally { store.close(); }
@@ -1226,7 +1220,6 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     expect(after.pendingConfiguration).toBeUndefined();
     expect(isolated.applyRuntime).not.toHaveBeenCalled();
     expect(reconfigure).not.toHaveBeenCalled(); expect(cleanup).not.toHaveBeenCalled();
-    expect(isolated.flushPlugins).not.toHaveBeenCalled();
   });
 
   it("rejects changing an admitted VM workspace before mutating chat metadata", async () => {
@@ -1244,7 +1237,6 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     await expect(instance.getExecutionContext(created.id)).rejects.toThrow(/direct engine execution is refused/);
     expect(isolated.runtimeFactory).not.toHaveBeenCalled();
     expect(isolated.localFactory).not.toHaveBeenCalled();
-    expect(isolated.pluginManager).not.toHaveBeenCalled();
     expect(instance.get(created.id).execution).toMatchObject({ backend: "smolvm", status: "pending" });
   });
 
@@ -1254,7 +1246,6 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     const created = instance.create();
     await expect(instance.send(created.id, "Inspect the approved workspace.")).rejects.toThrow(/host fallback is refused/);
     expect(isolated.localFactory).toHaveBeenCalledOnce();
-    expect(isolated.pluginManager).not.toHaveBeenCalled();
     const snapshot = instance.get(created.id);
     expect(snapshot.execution).toMatchObject({ backend: "smolvm", status: "failed" });
     expect(snapshot.session.status).toBe("failed");
@@ -1269,14 +1260,11 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     await expect(instance.send(created.id, "Run after changing the profile.")).rejects.toThrow(/execution profile/i);
     expect(instance.get(created.id).messages).toEqual(before);
     expect(isolated.localFactory).toHaveBeenCalledOnce();
-    expect(isolated.pluginManager).not.toHaveBeenCalled();
   });
 
   it("refuses a retained local session after selecting VM execution", async () => {
     const { instance } = isolatedGateway();
     isolated.profile = "local";
-    const refresh = vi.fn(async () => undefined); const release = vi.fn();
-    isolated.pluginManager.mockResolvedValue({ refresh, acquire: () => ({ host: undefined, release }) });
     isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
     const created = instance.create();
     await instance.send(created.id, "Initial local turn."); await idle(instance, created.id);
@@ -1286,9 +1274,6 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     await expect(instance.send(created.id, "Continue inside the selected VM.")).rejects.toThrow(/execution profile/i);
     expect(instance.get(created.id).messages).toEqual(before.messages);
     expect(isolated.localFactory).toHaveBeenCalledOnce();
-    expect(isolated.pluginManager).toHaveBeenCalledOnce();
-    expect(release).not.toHaveBeenCalled();
-    expect(isolated.flushPlugins).toHaveBeenCalledOnce();
   });
 
   it("refuses VM worker delivery through the host mailbox without retaining an operator message", async () => {
@@ -1539,7 +1524,6 @@ describe("explicit connection reload", () => {
     const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
     const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model: "gpt-6.1-sol", configured: true, connectionIdentity: "account-a", diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: { effort: "high", options: ["high"] }, contextWindowTokens: 100_000 };
     isolated.runtimeFactory.mockResolvedValue({ runtime, info });
-    isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
     const reconfigure = vi.fn(); const cleanup = vi.fn(async () => undefined);
     isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => { const session = engine(config); session.reconfigureRuntime = reconfigure; session.cleanup = cleanup; return session; });
     const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", allowChatGptPlan }); gateways.push(instance);
@@ -1731,7 +1715,6 @@ it("privately binds saved program resume and requires explicit clear or reselect
   });
   isolated.applyRuntime.mockImplementation(async (_runtime, selection) => ({ ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } }));
   isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
-  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
   const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
   const created = first.create({ runtime: { providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" } });
   await first.send(created.id, "Keep history"); await idle(first, created.id); await first.close(created.id);
@@ -1835,7 +1818,6 @@ it("merges failed-resume startup quarantine into original private program bindin
   const home = mkdtempSync(join(tmpdir(), "0-startup-quarantine-resume-")); homes.push(home);
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_WIRE_API: "responses", OPENAI_BASE_URL: "https://api.openai.com/v1", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
   isolated.runtimeFactory.mockResolvedValue({ runtime, info: describeWebConsoleRuntime(runtime) });
-  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
   isolated.localFactory.mockImplementation(input => engine(input));
   const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
   const chat = first.create({ runtime: { providerId: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" } });
@@ -1958,7 +1940,7 @@ it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and 
   let activeSend: Promise<ConsoleTurnOutcome> | undefined;
   const instance = gateway(input => {
     if (input.target !== "https://batch.fixture") return engine(input);
-    const real = createConsoleSession({ runtime, scanId: input.scanId, target: input.target, initialMessages: input.initialMessages, refineObjective: false, allowModelSelfExtension: false, autonomyMode: "yolo" });
+    const real = createConsoleSession({ runtime, scanId: input.scanId, target: input.target, initialMessages: input.initialMessages, refineObjective: false, autonomyMode: "yolo" });
     return { ...real,
       send: (...args) => activeSend = real.send(...args),
       // This fixture's supervisor confirms drain only after the actual worker
@@ -2004,7 +1986,7 @@ describe("confirmed mode changes and pending tool actions", () => {
     };
     let real!: ConsoleSession;
     const instance = gateway(async input => {
-      real = createConsoleSession({ ...input, runtime, role: "attack", workspaceRoot: root, refineObjective: false, allowModelSelfExtension: false });
+      real = createConsoleSession({ ...input, runtime, role: "attack", workspaceRoot: root, refineObjective: false });
       await real.ready; real.configureWorkspace(root); return real;
     });
     const chat = instance.create({ autonomyMode: asking(), role: "attack" });
@@ -2338,7 +2320,6 @@ describe("ConsoleGateway automatic titles", () => {
     };
     const info = { providerId: "openai", providerLabel: "OpenAI", model: "gpt-4o", configured: true, connectionIdentity: "fixture-account", diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, contextWindowTokens: 100_000 };
     isolated.runtimeFactory.mockResolvedValue({ runtime, info });
-    isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: undefined, release: () => undefined }) });
     isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
     const home = mkdtempSync(join(tmpdir(), "0-web-title-test-")); homes.push(home);
     let id = 0;

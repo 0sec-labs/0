@@ -33,7 +33,7 @@ export function runAuditLog(options: AuditLogOptions, deps: ConsoleCommandDeps =
 }
 
 export function registerAuditLogCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
-  program.command("audit-log").description("Show the local log of privileged actions (connections, settings, plugins)")
+  program.command("audit-log").description("Show the local log of privileged actions (connections, settings, extensions)")
     .option("--q <text>", "Only events whose action, subject or actor contains this text")
     .option("--limit <n>", "Maximum events to show")
     .option("--before <id>", "Only events older than this id (pagination)")

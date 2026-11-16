@@ -12,8 +12,8 @@ interface Mirror {
   localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
 const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "sourceLessonHints"] as const;
-const UNSUPPORTED = ["pluginHost", "mcpHost", "extensionRuns", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
-const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", "onHarnessUpdate", ...DIRECT_CALLBACKS]);
+const UNSUPPORTED = ["mcpHost", "extensionRuns", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
+const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", ...DIRECT_CALLBACKS]);
 
 function executionEnvironment(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined &&
@@ -105,7 +105,6 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   let turnText = "";
   let lastUsage: ConsoleUsageReport | undefined;
   let completedTools: ConsoleTurnOutcome["toolCalls"] = [];
-  let harnessSnapshot: ReturnType<NonNullable<ConsoleSession["harness"]>["snapshot"]> | undefined;
   let fenced = false;
   let handoff = false;
   let synchronizingRuntime = false;
@@ -172,7 +171,6 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       if (fenced) return;
       if (frame.type === "runtime-binding") { if (synchronizingRuntime) return; applyWebConsoleRuntimeBootstrap(config.runtime, frame.value as WebConsoleRuntimeBootstrap); return; }
       if (frame.type === "bus" && typeof frame.name === "string" && ["subagent_lifecycle", "subagent_progress", "subagent_message"].includes(frame.name)) { options.onBus?.(frame.name, frame.value); return; }
-      if (frame.type === "harness") { harnessSnapshot = frame.value as typeof harnessSnapshot; config.onHarnessUpdate?.(frame.value as Parameters<NonNullable<Config["onHarnessUpdate"]>>[0]); return; }
       if (frame.type === "event" && typeof frame.name === "string" && ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"].includes(frame.name) && Array.isArray(frame.args)) {
         if (frame.name === "onAssistantDelta" && typeof frame.args[0] === "string") turnText += frame.args[0];
         if (frame.name === "onUsage") {
@@ -210,15 +208,6 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       return result;
     });
   };
-  // Only renderer-facing harness operations cross the boundary; execution and
-  // harness resource ownership remain in the dedicated process.
-  const harnessProxy = {
-    snapshot: () => structuredClone(harnessSnapshot!),
-    interact: async (value: Parameters<NonNullable<ConsoleSession["harness"]>["interact"]>[0]) => {
-      await ready; await mutations; ensure();
-      return controller.request("harness", { value });
-    },
-  } as unknown as NonNullable<ConsoleSession["harness"]>;
   return {
     get executionProcess() { return controller; },
     get scanId() { return mirror.scanId; }, ready,
@@ -226,7 +215,6 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     get approvals() { return mirror.approvals; }, get target() { return target; }, get scope() { return scope; },
     get scopeEnforcement() { return policy; }, get localScopePath() { return localScopePath ?? undefined; },
     get sourceContext() { return mirror.sourceContext; }, get webSearchEnabled() { return mirror.webSearchEnabled; },
-    get harness() { return harnessSnapshot ? harnessProxy : undefined; },
     setApprovals(approvals) {
       queue("autonomy", "changes", { approvals });
       autonomyControlled = true;

@@ -21,7 +21,7 @@ export type SlashGroup =
   | "Models"
   | "Skills"
   | "Memory"
-  | "Plugins"
+  | "Extensions"
   | "Settings"
   | "Chat";
 
@@ -139,7 +139,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["cost", "tokens"],
   }),
 
-  // Skills, memory, plugins
+  // Skills, memory, extensions
   cmd("skills list", "Skills", "Browse your skills", {
     cli: "skills list",
     destination: "/plugins/skills",
@@ -150,13 +150,13 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     destination: "/memory",
     legacy: ["memory"],
   }),
-  cmd("plugin list", "Plugins", "Browse and enable plugins", {
-    cli: "skills list",
-    destination: "/plugins",
+  cmd("plugin list", "Extensions", "Browse and turn on extensions", {
+    cli: "skills extensions list",
+    destination: "/extensions",
     aliases: ["plugins"],
     legacy: ["plugin", "hackstore", "store", "market", "marketplace"],
   }),
-  cmd("plugin browse", "Plugins", "Browse extensions to add", {
+  cmd("plugin browse", "Extensions", "Browse extensions to add", {
     cli: "skills list --catalog",
     destination: "/extensions",
   }),

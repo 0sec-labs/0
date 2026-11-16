@@ -87,7 +87,7 @@ describe("alias table: every 0.34 command still resolves", () => {
     for (const row of LEGACY) expect(node(row.old.split(" ")), row.old).toBeDefined();
   });
 
-  it("every row points at 0 ..., a plugin or the docs", () => {
+  it("every row points at 0 ..., the extension flow or the docs", () => {
     for (const row of LEGACY) expect(row.use, row.old).toMatch(/^(0( |$)|the |git |docs)/);
   });
 });
@@ -151,24 +151,24 @@ describe("the new grammar reaches the implementation commands", () => {
     ["agents set a1 --files get notes.md", "agents files get a1 notes.md"],
     ["skills list s1", "skills show s1"],
     ["skills list --catalog", "skills catalog"],
-    ["skills list --connectors", "plugin connectors"],
-    ["skills list --mcp", "plugin mcp list"],
-    ["skills list p1 --enable", "plugin enable p1"],
-    ["skills list p1 --disable", "plugin disable p1"],
-    ["skills list p1 --info", "plugin info p1"],
+    ["skills list --connectors", "skills extensions list"],
+    ["skills list --mcp", "skills extensions list"],
+    ["skills list p1 --enable", "skills extensions enable p1"],
+    ["skills list p1 --disable", "skills extensions disable p1"],
+    ["skills list p1 --info", "skills extensions info p1"],
     ["skills list m1 --mcp-test", "plugin mcp test m1"],
-    ["skills list m1 --mcp-remove --yes", "plugin mcp remove m1 --yes"],
+    ["skills list m1 --mcp-remove --yes", "skills extensions remove m1 --yes"],
     ["config get github repos", "config github repos"],
     ["config get team list", "config team list"],
     ["skills run x tool a=b", "plugin run x tool a=b"],
-    ["skills add --mcp https://docs.example.com/mcp --yes", "plugin mcp add docs-example-com --url https://docs.example.com/mcp --yes"],
-    ["skills add --mcp docs -- npx some-server", "plugin mcp add docs -- npx some-server"],
+    ["skills add --mcp https://docs.example.com/mcp --yes", "skills extensions mcp docs-example-com --url https://docs.example.com/mcp --yes"],
+    ["skills add --mcp docs -- npx some-server", "skills extensions mcp docs -- npx some-server"],
     ["skills add --connect github", "plugin connect github"],
     ["skills add --new my-plugin", "plugin init my-plugin"],
-    ["skills add ./p --validate", "plugin validate ./p"],
+    ["skills add ./p --validate", "skills extensions add ./p --preview"],
     ["skills add ./p --submit --out o", "plugin submit ./p --out o"],
-    ["skills add foxguard.scanner --plugin --yes", "plugin install foxguard.scanner --yes"],
-    ["skills add ./p --local", "plugin install ./p --local"],
+    ["skills add foxguard.scanner --plugin --yes", "skills extensions add foxguard.scanner --yes"],
+    ["skills add ./p --local", "skills extensions add ./p"],
     ["skills list s1 --export -o x.json", "skills export s1 -o x.json"],
     ["skills list s1 --delete --yes", "skills delete s1 --yes"],
     ["skills add --remove s1", "skills remove s1"],

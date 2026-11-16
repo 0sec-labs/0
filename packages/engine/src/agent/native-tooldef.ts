@@ -1,6 +1,5 @@
 import type { NativeToolDef } from "../runtime/types.js";
 import type { ToolDefinition } from "./types.js";
-import type { RegisteredExtensionTool } from "../plugins/self-extension.js";
 
 /**
  * Convert a registry `ToolDefinition` to the runtime's native tool schema.
@@ -26,23 +25,5 @@ export function toNativeToolDef(tool: ToolDefinition): NativeToolDef {
     name: tool.name,
     description: tool.description,
     input_schema: { type: "object", properties, required: tool.required ?? [] },
-  };
-}
-
-/**
- * Convert a model-REGISTERED extension tool (self-extension) into the runtime's
- * native tool schema. Unlike a registry `ToolDefinition`, a registered tool
- * already carries a validated, frozen JSON-schema `parameters` properties bag,
- * so it is passed through directly as `input_schema.properties`.
- */
-export function toNativeExtensionToolDef(tool: RegisteredExtensionTool): NativeToolDef {
-  return {
-    name: tool.name,
-    description: tool.description,
-    input_schema: {
-      type: "object",
-      properties: { ...tool.parameters },
-      required: tool.required ? [...tool.required] : [],
-    },
   };
 }

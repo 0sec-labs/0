@@ -272,7 +272,7 @@ Keys saved under **Providers** on the Models page live in `~/.0/credentials.json
 
 - `0 lab mcp-server` uses stdio transport only.
 - `0 config doctor upgrade` does not support Windows.
-- Plugin catalog contents depend on the configured registry. Installing a plugin and enabling it are separate steps. See [Plugins](/plugins/).
+- Installing an extension and enabling it are separate steps, and nothing installs without the review prompt. See [Extensions](/extensions/).
 
 ## Still stuck
 

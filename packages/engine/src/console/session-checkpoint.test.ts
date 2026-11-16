@@ -8,7 +8,7 @@ const idle: NativeRuntime = { type: "api", isAvailable: async () => true, execut
 
 describe("console checkpoint access value", () => {
   it("new checkpoints write the constant older readers accept", async () => {
-    const session = createConsoleSession({ runtime: idle, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime: idle, refineObjective: false });
     try {
       await session.ready;
       expect(session.exportCheckpoint().autonomyMode).toBe("changes");
@@ -16,7 +16,7 @@ describe("console checkpoint access value", () => {
   });
 
   it("every stored legacy value loads without error and is ignored", async () => {
-    const session = createConsoleSession({ runtime: idle, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime: idle, refineObjective: false });
     try {
       await session.ready;
       const base = JSON.parse(JSON.stringify(session.exportCheckpoint())) as Record<string, unknown>;

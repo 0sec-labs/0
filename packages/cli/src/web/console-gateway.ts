@@ -2,8 +2,6 @@ import { loadOperatorInstructions } from "./operator-instructions.js";
 import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { connectConsoleMcp } from "../console-mcp.js";
 import { connectExtensionMcp, connectExtensionRuns } from "../console-extension-mcp.js";
-import { loadServicePluginConnections } from "./service-plugins.js";
-import { connectCustomMcpServers } from "./custom-mcp.js";
 import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -16,7 +14,7 @@ import { blockedAtThreadStart, folderChecks } from "./workspace-folder-check.js"
 import { resolveWorkspaceInput, verifyWorkspaceReadable, isUsableWorkspace, WorkspaceInputError } from "./workspace-input.js";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
+  features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
@@ -31,7 +29,7 @@ import {
   type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
-  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type Visualization, type HarnessSnapshot, type HarnessUiEvent,
+  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type Visualization,
   turnEndingKind,
 } from "@0/engine/shared";
 import { createLocalConsoleSession } from "../console-session.js";
@@ -45,7 +43,7 @@ import type { TuiSettings } from "../state/settings.js";
 import { summarizeConsoleWorker, pageMessages, type MessagesPage, type SnapshotWindowOptions, type WindowedConsoleSnapshot } from "./console-snapshot-window.js";
 import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, listSessionsAsync, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../state/session-store.js";
 import { isRemovedProviderId, isRemovedProviderModel } from "../state/provider-status.js";
-import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
+import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
 const MAX_MESSAGE_LENGTH = 1_000_000;
@@ -151,7 +149,7 @@ type ManagedSession = {
   pendingConfiguration?: ConsoleSessionConfiguration; configuration: Promise<void> | null;
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   costCeilingUsd?: number; costCeilingExceeded?: boolean;
-  lastOutcome: ConsoleTurnOutcome | null; /** The last turn made a successful tool call: a silent finish is then completed work, not a missing reply. Unknown after a restore. */ lastTurnSilentWork?: boolean; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
+  lastOutcome: ConsoleTurnOutcome | null; /** The last turn made a successful tool call: a silent finish is then completed work, not a missing reply. Unknown after a restore. */ lastTurnSilentWork?: boolean; compaction: ConsoleJsonValue | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
   workflowRequests: Map<string, QueuedWorkflowRequest>; workflowDraining: boolean;
   executionEpoch: number; execution: ConsoleExecutionSnapshot; workspacePath?: string; workspaceError?: { path: string; message: string; at: string };
@@ -495,7 +493,7 @@ export class ConsoleGateway {
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
       abort: null, turn: null, turnOwner: null, initialMessages: [], userAttributions: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
-      queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, harness: null, objective: "", todos: null,
+      queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, objective: "", todos: null,
       workflowRequests: new Map(), workflowDraining: false,
       executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
       ...(raw.costCeilingUsd !== undefined ? { costCeilingUsd: z.number().positive().max(1000).parse(raw.costCeilingUsd) } : {}),
@@ -538,7 +536,7 @@ export class ConsoleGateway {
       ...(session?.localScopePath ? { localScopePath: session.localScopePath } : {}), usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       ...(managed.info?.contextWindowTokens != null ? { contextWindowTokens: managed.info.contextWindowTokens } : {}),
-      lastOutcome: structuredClone(managed.lastOutcome), compaction: structuredClone(managed.compaction), harness: session?.harness?.snapshot() ?? structuredClone(managed.harness),
+      lastOutcome: structuredClone(managed.lastOutcome), compaction: structuredClone(managed.compaction),
       objective: managed.objective, todos: structuredClone(managed.todos),
       ...(session?.sourceContext ? { sourceContext: structuredClone(session.sourceContext) } : {}),
       tools: options ? [] : this.#toolCatalog(session),
@@ -680,13 +678,13 @@ export class ConsoleGateway {
           finally { db.close(); }
         }
         managed.executionEpoch++;
-        managed.session = null; managed.harness = null;
+        managed.session = null;
         managed.execution = { ...managed.execution, status: "stopped", message: "Owned execution and registered resources were confirmed stopped." };
         managed.forceStopBlocked = undefined;
         this.#clearCancellation(managed);
         managed.status = "ready";
         managed.usage.costUnavailable = true;
-        this.#emit(managed, { type: "notice", text: "Owned execution stopped and its resources were confirmed closed. Conversation and queued messages are retained. Live tool/harness state was retired; an in-flight inference charge may be unknown." });
+        this.#emit(managed, { type: "notice", text: "Owned execution stopped and its resources were confirmed closed. Conversation and queued messages are retained. Live tool state was retired; an in-flight inference charge may be unknown." });
         this.#save(managed); this.#refreshStatus(managed);
         return this.#summary(managed);
       } catch (error) {
@@ -758,30 +756,6 @@ export class ConsoleGateway {
       ? "Continue the remaining task from the retained observations and plan. Do not replay completed tool calls or incomplete function calls. Keep the next answer concise."
       : text(raw.text, "Remaining task", MAX_MESSAGE_LENGTH);
     return this.send(id, remaining, author);
-  }
-  async harness(id: string, value: unknown): Promise<{ snapshot: HarnessSnapshot; requestedPrompt?: string }> {
-    const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    const raw = object(value, "Harness interaction"); allowedKeys(raw, ["generationId", "providerId", "event"]);
-    const event = object(raw.event, "Harness event");
-    const eventId = text(event.id, "Harness event ID", 200);
-    let input: HarnessUiEvent;
-    if (event.kind === "command") { allowedKeys(event, ["kind", "id"]); input = { kind: "command", id: eventId }; }
-    else if (event.kind === "setting") {
-      allowedKeys(event, ["kind", "id", "value"]);
-      if (typeof event.value !== "boolean" && typeof event.value !== "string") throw new ConsoleGatewayError("Harness setting must be a boolean or string.", 400);
-      input = { kind: "setting", id: eventId, value: typeof event.value === "string" ? text(event.value, "Harness setting value", 8_000, true) : event.value };
-    } else throw new ConsoleGatewayError("Unsupported harness event.", 400);
-    const session = await this.#ensureSession(managed);
-    if (!session.harness) throw new ConsoleGatewayError("This thread has no active harness.", 409);
-    this.#assertIdle(managed);
-    const operation = session.harness.interact({ generationId: text(raw.generationId, "Harness generation ID", 200), providerId: text(raw.providerId, "Harness provider ID", 200), event: input });
-    managed.configuration = operation.then(() => undefined);
-    try {
-      const response = await operation;
-      managed.harness = response.snapshot; this.#emit(managed, { type: "harness", harness: response.snapshot });
-      return response;
-    } catch (error) { throw new ConsoleGatewayError(errorMessage(error), 409); }
-    finally { managed.configuration = null; }
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
@@ -1266,8 +1240,8 @@ export class ConsoleGateway {
             scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
-            allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-            onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
+            compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
+            ...callbacks,
           }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: managed.workspacePath ?? this.#projectPath,
             onExecution: (execution) => { managed.execution = structuredClone(execution); this.#emitSession(managed); },
           });
@@ -1281,10 +1255,10 @@ export class ConsoleGateway {
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
-            allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath,
+            workspaceRoot: managed.workspacePath ?? this.#projectPath,
             operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
-            onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
+            ...callbacks,
           };
           const boundary = { learningDbPath: this.#sourceLearningDbPath, scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
           const support = hostConsoleSessionSupport(localConfig, boundary);
@@ -1295,15 +1269,12 @@ export class ConsoleGateway {
               onSnapshot: () => this.#emitSession(managed),
             });
           } else {
-            const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
             let mcpHost: McpToolHost | undefined;
             try {
-              mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath)), managed.workspacePath ?? this.#projectPath), managed.workspacePath ?? this.#projectPath);
+              mcpHost = connectExtensionMcp(await connectConsoleMcp(managed.workspacePath ?? this.#projectPath), managed.workspacePath ?? this.#projectPath);
               const extensionRuns = connectExtensionRuns(managed.workspacePath ?? this.#projectPath);
-              session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}), ...(extensionRuns ? { extensionRuns } : {}) }, this.#options.dbPath);
-            } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
-            const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
-            session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
+              session = createLocalConsoleSession({ ...localConfig, ...(mcpHost ? { mcpHost } : {}), ...(extensionRuns ? { extensionRuns } : {}) }, this.#options.dbPath);
+            } catch (error) { await mcpHost?.closeAll(); throw error; }
           }
         }
         if (this.#options.createSession) managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
@@ -1492,7 +1463,6 @@ export class ConsoleGateway {
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
           onRetry: (notice) => this.#emit(managed, { type: "retry", retry: { reason: notice.reason, status: notice.status, delayMs: notice.delayMs, attempt: notice.attempt, maxAttempts: notice.maxAttempts } }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
-          onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); },
         }, { signal: abort.signal, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));
         if (outcome.stopReason === "end_turn" && !abort.signal.aborted && managed.titleSource === "default") void this.#autoTitle(managed, firstUserText, outcome.assistantText);
         managed.lastTurnSilentWork = outcome.toolCalls.some(item => item.result.success);
@@ -1517,7 +1487,7 @@ export class ConsoleGateway {
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {
           if (managed.status !== "failed") managed.status = "ready";
-          try { if (!managed.forceStopBlocked) { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); if (!this.#options.createSession && managed.execution.backend === "local") await flushWebConsolePlugins(); } }
+          try { if (!managed.forceStopBlocked) { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); } }
           catch (error) { this.#emit(managed, { type: "error", message: errorMessage(error) }); }
           this.#save(managed); this.#refreshStatus(managed);
           await this.#processIdleWork(managed);

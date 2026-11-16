@@ -42,7 +42,6 @@ import type {
   ConsoleSessionSnapshot,
   ConsolePublicExport,
   DesktopConsoleSession,
-  HarnessSnapshot,
   ConsoleCreateSessionInput,
 } from "@0/engine/shared";
 import { Download, Menu, Trash2, Pencil, Eraser } from "lucide-react";
@@ -1348,11 +1347,6 @@ function ConsolePageContent({
       </QueryClientProvider>
     </BackendApiContext>
   );
-  const stagePrompt = (text: string) => {
-    workspace.setRootDraft(text);
-    if (snapshot && !embedded && !savedMode) navigate(`/chats/${snapshot.session.id}`);
-    setNotice("Added a draft message. Review it, then send.");
-  };
   const appendPrompt = (text: string) => {
     const current = workspace.readDraft(true);
     workspace.setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text);
@@ -1391,29 +1385,7 @@ function ConsolePageContent({
               ) : null
           : undefined,
       },
-      harnessActions: {
-        stagePrompt,
-        appendPrompt,
-        onHarness: snapshot
-          ? (providerId, event) => {
-              const generationId = snapshot.harness?.generationId;
-              if (!generationId) {
-                setNotice("Tools aren't ready yet.");
-                return;
-              }
-              void workspace
-                .perform(() =>
-                  webFetchJson<{ snapshot: HarnessSnapshot; requestedPrompt?: string }>(
-                    `/api/console/sessions/${encodeURIComponent(snapshot.session.id)}/harness`,
-                    { method: "POST", body: JSON.stringify({ generationId, providerId, event }) },
-                  ),
-                )
-                .then((result) => {
-                  if (result?.requestedPrompt) stagePrompt(result.requestedPrompt);
-                });
-            }
-          : undefined,
-      },
+      panelActions: { appendPrompt },
     },
   };
   useEffect(() => {

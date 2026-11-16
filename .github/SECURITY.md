@@ -30,28 +30,30 @@ This policy is for flaws in this repository's software. Findings produced while
 assessing another system should go to that system's authorized disclosure
 channel; using 0 does not grant permission to test it or publish its data.
 
-## Plugin and MCP execution trust
+## Extension and MCP execution trust
 
-Custom MCP servers (stdio) and plugins installed from a GitHub repository run
-code as the user on the engine host. They are not sandboxed. The guardrails are
-approval and pinning, not isolation:
+Extensions and custom MCP servers run code as the user on the engine host. They
+are not sandboxed. The guardrails are review and pinning, not isolation:
 
-- nothing runs on create or install; create, edit and enable require approving
-  a fingerprint of the exact command, arguments, working directory, variable
-  names, URL and header names;
-- GitHub plugins are fetched without executing anything, pinned to a commit SHA
-  and a permission hash, installed disabled, and never auto-update;
+- nothing runs on install; you read one prompt (repository at the full commit,
+  files, what it can run, connect to or call) and approve the exact revision, from
+  your own terminal or the browser, never from an agent session;
+- git extensions are fetched without executing anything, pinned to a full commit
+  SHA, installed disabled, and never auto-update; any change re-prompts;
+- an MCP server's tools are hashed per tool and a changed, new or removed tool
+  blocks the whole server until you approve again;
 - these routes are browser-only (agent/engine-bearer callers are refused) and
-  owner-only in team mode; env and header values are write-only;
+  owner-only in team mode; a process gets a scrubbed environment plus only the
+  variable names you approved;
 - the one exception is the engine operation endpoint, which lets an attached
   engine or MCP client call `save_workflow` (validated, revision-guarded) so
-  workflows can be authored remotely; it cannot install plugins or MCP servers;
-- an approved server can still read files, use the network and prompt-inject
-  the agent through tool names, descriptions and output.
+  workflows can be authored remotely; it cannot install extensions or MCP servers;
+- an approved extension or server can still read files, use the network and
+  prompt-inject the agent through tool names, descriptions and output.
 
-Reports that bypass the approval, pinning, caller or secret-handling rules are
-in scope. Behaviour of an approved third-party server is not a flaw in 0. See
-the [trust model](https://docs.0.security/plugin-trust/).
+Reports that bypass the review, pinning, caller or secret-handling rules are in
+scope. Behaviour of an approved third-party extension is not a flaw in 0. See
+the [security model](https://docs.0.security/security-model/).
 
 ## Self-edit preview
 

@@ -68,7 +68,7 @@ describe("embedded workflow transport uses the browser engine host", () => {
     const model: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async () => ({ content: [{ type: "text", text: "Existing evidence retained." }], stopReason: "end_turn", durationMs: 0 }) };
     let current!: ReturnType<typeof createConsoleSession>;
     const { runtime, gateway, workspace } = await fixture(undefined, {}, input => {
-      current = createConsoleSession({ runtime: model, scanId: input.scanId, target: input.target, autonomyMode: input.autonomyMode, refineObjective: false, allowModelSelfExtension: false });
+      current = createConsoleSession({ runtime: model, scanId: input.scanId, target: input.target, autonomyMode: input.autonomyMode, refineObjective: false });
       return current;
     });
     const old = gateway.create({ target: workspace });

@@ -7,7 +7,6 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { eventBus } from "@0/engine";
 import type { ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
-import type { HarnessSnapshot } from "@0/engine/shared";
 import { getSettings } from "./state/settings-store.js";
 
 const execute = promisify(execFile);
@@ -15,20 +14,10 @@ type EngineModule = { createConsoleSession(config: ConsoleSessionConfig): Consol
 type Notice = (message: string) => void;
 const ignoredSourceNames: Record<string, true> = { node_modules: true, __tests__: true, __fixtures__: true };
 
+/** Fields written by releases that had model-authored plugins and a live harness; they are ignored, never compared. */
 function comparableCheckpoint(checkpoint: ConsoleSessionCheckpoint) {
-  const extension = checkpoint.selfExtensionSnapshot;
-  const harness = checkpoint.harness;
-  return {
-    ...checkpoint,
-    // Disk-backed executable manifests are re-registered, not given new authority.
-    selfExtensionSnapshot: extension ? {
-      enabled: extension.enabled,
-      registrations: extension.registrations.map(({ pluginId, manifest, origin, guardCount, digest }) =>
-        ({ pluginId, manifest, origin, guardCount, digest })),
-    } : null,
-    // Provider activation may deliberately transform its supplied state.
-    harness: harness ? { ...harness, providerStates: Object.keys(harness.providerStates).sort() } : null,
-  };
+  const { selfExtensionEnabled: _a, selfExtensionSnapshot: _b, harnessRoot: _c, harness: _d, ...rest } = checkpoint;
+  return rest;
 }
 
 function assertSessionContract(session: ConsoleSession): void {
@@ -93,7 +82,6 @@ export function withDevEngineUpdates(
     let detach: (() => void) | undefined;
     let directory: string | undefined;
     let committed = false;
-    let pendingHarnessSnapshot: HarnessSnapshot | undefined;
     try {
       const source = join(root, "packages/engine/src");
       const digest = sourceDigest(source);
@@ -120,10 +108,6 @@ export function withDevEngineUpdates(
         ...config,
         developmentSourceRoot: root,
         initialCheckpoint: checkpoint,
-        onHarnessUpdate: config.onHarnessUpdate ? snapshot => {
-          if (committed) config.onHarnessUpdate?.(snapshot);
-          else pendingHarnessSnapshot = snapshot;
-        } : undefined,
       });
       assertSessionContract(candidate);
       handoffCandidate = candidate;
@@ -152,10 +136,6 @@ export function withDevEngineUpdates(
       directory = undefined;
       try { previousEvents?.(); }
       catch (error) { warnings.push(`Previous event bridge: ${String(error)}`); }
-      if (pendingHarnessSnapshot) {
-        try { config.onHarnessUpdate?.(pendingHarnessSnapshot); }
-        catch (error) { warnings.push(`Harness renderer: ${String(error)}`); }
-      }
       notify(`Development engine ${digest.slice(0, 12)} is active. Conversation, scope decisions and task state were retained; engine-owned resources were drained. The terminal/UI shell, injected provider/MCP clients and shared package dependencies were not reloaded.`);
       if (warnings.length) notify(`Engine handoff cleanup warnings: ${warnings.join("; ")}`);
     } catch (error) {

@@ -215,7 +215,7 @@ describe("permissioned run contributions", () => {
         { type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Finish the owned synthetic child", max_turns: 1 } }],
       stopReason: "tool_use", durationMs: 1,
     } : { content: [{ type: "text", text: "Complete" }], stopReason: "end_turn", durationMs: 1 } };
-    const session = createConsoleSession({ runtime, contribution: capture, autonomyMode: "yolo", refineObjective: false, allowModelSelfExtension: false });
+    const session = createConsoleSession({ runtime, contribution: capture, autonomyMode: "yolo", refineObjective: false });
     try {
       const outcome = await session.send("Exercise owned tools");
       expect(outcome.toolCalls.find(entry => entry.call.name === "payload_lookup")?.result.success).toBe(true);
@@ -227,7 +227,7 @@ describe("permissioned run contributions", () => {
     expect(loaded.transitions.some(t => t.kind === "model_input" && t.parentAgentId === parent.agentId)).toBe(true);
     expect(loaded.transitions.some(t => t.kind === "tool_result" && t.agentId === parent.agentId)).toBe(true);
     expect(loaded.manifest.execution).toBe("completed");
-    const ordinary = createConsoleSession({ runtime: child, refineObjective: false, allowModelSelfExtension: false });
+    const ordinary = createConsoleSession({ runtime: child, refineObjective: false });
     try { expect(ordinary.contribution).toBeUndefined(); } finally { await ordinary.cleanup(); }
   });
 
@@ -238,7 +238,7 @@ describe("permissioned run contributions", () => {
       const f = fixture();
       const capture = f.client.begin(begin)!;
       await runNativeAgentLoop({ contribution: capture, db: null,
-        config: { role: "attack", scanId: begin.runId, target: "https://owned.example", systemPrompt: "owned", tools: [], maxTurns: 1, allowModelSelfExtension: false,
+        config: { role: "attack", scanId: begin.runId, target: "https://owned.example", systemPrompt: "owned", tools: [], maxTurns: 1,
           scope: new ScopePolicy({ in_scope: ["owned.example"], out_of_scope: [excluded] }),
           enforcement: new EnforcementTracker({ pathPolicy: new PathPolicy(["/owned/"]), killAfterSec: 60 }) },
         runtime: { type: "api", isAvailable: async () => true, executeNative: async () => ({ content: [{ type: "tool_use", id: "done", name: "done", input: { summary: "done" } }], stopReason: "tool_use", durationMs: 1 }) },
@@ -255,7 +255,7 @@ describe("permissioned run contributions", () => {
     const f = fixture();
     const capture = f.client.begin(begin)!;
     await runNativeAgentLoop({ contribution: capture, db: null,
-      config: { role: "attack", scanId: begin.runId, target: "https://t", systemPrompt: "owned", tools: [], maxTurns: 1, allowModelSelfExtension: false },
+      config: { role: "attack", scanId: begin.runId, target: "https://t", systemPrompt: "owned", tools: [], maxTurns: 1 },
       runtime: { type: "api", isAvailable: async () => true, executeNative: async () => ({
         content: [{ type: "tool_use", id: "save", name: "save_finding", input: { title: "Owned SQLi", severity: "high", category: "sql-injection", evidence_request: "GET /search?q=foo' HTTP/1.1\\nHost: t\\n\\n", evidence_response: "SQL syntax error near foo" } },
           { type: "tool_use", id: "done", name: "done", input: { summary: "done" } }], stopReason: "tool_use", durationMs: 1,

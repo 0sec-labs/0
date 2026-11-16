@@ -3,7 +3,7 @@ title: Skills
 description: Give the agent reusable instructions with standard skill folders.
 ---
 
-A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Plugins](/plugins/) add tools, and a plugin can bundle skills. [Automations](/automations/) define the steps of a task, and you can use a skill in a thread or alongside an automation.
+A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Extensions](/extensions/) add scripts, MCP servers and connections, and an extension can bundle skills. [Automations](/automations/) define the steps of a task, and you can use a skill in a thread or alongside an automation.
 
 ## Add a skill
 
@@ -77,9 +77,9 @@ Folder mounting works with local thread execution. Mounted skills are not copied
 
 ## Next steps
 
-- [Plugin security](/plugin-trust/#adding-skills-from-github): what to check before adding a skill from GitHub.
+- [Security model](/security-model/#adding-skills-from-github): what to check before adding a skill from GitHub.
 - [Agents](/agents/): give a standing agent the skills it should load.
-- [Plugins](/plugins/): add tools, not instructions.
+- [Extensions](/extensions/): add tools, not only instructions.
 
 ## Extensions
 
@@ -122,6 +122,6 @@ Third-party extensions never update by themselves. `update` fetches the newer co
 - A repository's own `.0/` or `.claude/` folder can suggest extensions but never installs or enables one. Only approvals in `~/.0` count.
 - An extension's scripts get a scrubbed environment plus only the names it declared and you approved. Model provider keys are never passed unless the prompt listed them.
 
-### Moving from plugins
+### Moving from earlier plugins
 
 The first time you use the commands above, 0 imports what you already have and prints what it could not migrate. It never deletes anything. Skills you added from GitHub keep their pinned commit and approval. Custom MCP servers become local extensions that you re-approve before first use (secret values stay where they are). Plugins with executable tools and model-written plugins cannot run in the new system: they are listed, kept, and need to be rewritten as scripts or an MCP server. Run `0 skills extensions import` to see the report again.

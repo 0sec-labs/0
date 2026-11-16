@@ -41,7 +41,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 - `0 scan <target> --module deep|repair|campaign|deps|deps-fix` runs the module that has no target-detecting form. Targets are still detected for URLs, folders and packages.
 - `0 agents list|run|set ... --automation` works on saved automations, with the arguments `automation` always had. `0 agents set --create`, `--state active|paused|acknowledged|archived|deleted`, `--budget`, `--trigger <sub>` and `--files <sub>` replace the old `agents` verbs.
 - `0 threads list <id>` shows one thread; add `--events`, `--export`, `--rename <title>`, `--set`, `--clear`, `--close`, `--archive` or `--delete` to act on it. `0 threads send new <prompt>` starts a thread; `0 threads send <id> --retry|--resume|--decide <decision-id>` replaces the old verbs.
-- `0 skills add <source>` takes a catalog id, a repository, a folder or a bundle. `--plugin` or `--local` installs a plugin, `--new <name>`, `--validate` and `--submit` author one, `--mcp <url>` adds an MCP server and `--connect <service>` connects a service. `0 skills list <name> --info|--enable|--disable` acts on a plugin.
+- `0 skills add <source>` takes a catalog id, a repository, a folder or a bundle. `--mcp <url>` adds an MCP server as a local extension. Extensions are installed with `0 skills add <repo>@<sha>` and managed with `0 skills extensions`; the plugin flags (`--plugin`, `--local`, `--new`, `--validate`, `--submit`, `--connect`) were folded into those or removed, see the plugin table below.
 - `0 config get|set` take the namespaces `audit`, `team`, `db`, `github` and `api.key`; `--all`, `--export`, `--from-file` and `--reset` replace `list`, `export`, `import` and `reset`.
 - `automation versions` and `automation rollback` are removed after this release; use git history for versions.
 - `scan eval` and `scan agent-assure` move into plugins after this release. `lab research` and `lab improve` stay hidden until their destinations exist (the private package and the benchmark plugin); they are not removed in 0.35.
@@ -177,30 +177,32 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 skills delete` | `0 skills list <name> --delete` |
 | `0 skills remove` | `0 skills add --remove <name>` |
 
-### plugin (now `skills`)
+### plugin (now `skills extensions`)
+
+The `plugin` group is hidden and kept as aliases. The executable plugin runtime, the registry and `self_extend` were removed; see the changelog.
 
 | Old | New |
 | --- | --- |
-| `0 plugin list` | `0 skills list` |
-| `0 plugin search` | `0 skills list` |
+| `0 plugin list` | `0 skills extensions list` |
+| `0 plugin search` | `0 skills extensions list` |
 | `0 plugin browse` | `0 skills list --catalog` |
-| `0 plugin info` | `0 skills list <id> --info` |
-| `0 plugin enable` | `0 skills list <id> --enable` |
-| `0 plugin disable` | `0 skills list <id> --disable` |
-| `0 plugin install` | `0 skills add <id> --plugin` |
-| `0 plugin run` | `0 skills run <name>` |
-| `0 plugin init` | `0 skills add --new <name>` |
-| `0 plugin validate` | `0 skills add <dir> --validate` |
-| `0 plugin submit` | `0 skills add <dir> --submit` |
-| `0 plugin connectors` | `0 skills list --connectors` |
-| `0 plugin connect` | `0 skills add --connect <service>` |
-| `0 plugin disconnect` | `0 skills add --disconnect <service>` |
-| `0 plugin mcp add` | `0 skills add --mcp <url>` |
-| `0 plugin mcp list` | `0 skills list --mcp` |
-| `0 plugin mcp test` | `0 skills list <id> --mcp-test` |
-| `0 plugin mcp remove` | `0 skills list <id> --mcp-remove` |
-| `0 plugin mcp` | `0 skills add --mcp <url>` |
-| `0 plugin` | `0 skills` |
+| `0 plugin info` | `0 skills extensions info <name>` |
+| `0 plugin enable` | `0 skills extensions enable <name>` |
+| `0 plugin disable` | `0 skills extensions disable <name>` |
+| `0 plugin install` | `0 skills add <repo>@<sha>` |
+| `0 plugin run` | the extension's scripts, run through bash |
+| `0 plugin init` | the folder flow: extension.json or SKILL.md, then 0 skills add <folder> --preview |
+| `0 plugin validate` | `0 skills add <folder> --preview` |
+| `0 plugin submit` | the extension flow: 0 skills add <repo>@<sha> (registry submission was removed) |
+| `0 plugin connectors` | `0 skills extensions list` |
+| `0 plugin connect` | the Extensions page in the web app |
+| `0 plugin disconnect` | the Extensions page in the web app |
+| `0 plugin mcp add` | `0 skills extensions mcp <name> --url <url>` |
+| `0 plugin mcp list` | `0 skills extensions list` |
+| `0 plugin mcp test` | `0 skills extensions info <name>` |
+| `0 plugin mcp remove` | `0 skills extensions remove <name>` |
+| `0 plugin mcp` | `0 skills extensions mcp <name> --url <url>` |
+| `0 plugin` | `0 skills extensions` |
 
 ### memory
 

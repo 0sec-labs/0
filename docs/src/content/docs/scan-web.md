@@ -13,7 +13,7 @@ Test only systems you own or are authorized to assess. You need a connected mode
 
 ## Authorize the target
 
-Scope enforcement is a built-in plugin, off by default. Turn it on per project so every live scan must name its allowed hosts:
+Scope enforcement is a built-in extension, off by default. Turn it on per project so every live scan must name its allowed hosts:
 
 ```bash
 0 skills extensions enable scope
@@ -23,7 +23,7 @@ EOF
 0 scan https://staging.example.com --scope ./scope.json
 ```
 
-With the plugin on, HTTP, HTTPS and MCP targets (including localhost) are refused without a scope file, and a target outside it is refused before any request. Rules match hostnames, not paths or ports. `out_of_scope` always wins. See [Scope and authorization](/scope/).
+With scope on, HTTP, HTTPS and MCP targets (including localhost) are refused without a scope file, and a target outside it is refused before any request. Rules match hostnames, not paths or ports. `out_of_scope` always wins. See [Scope and authorization](/scope/).
 
 Scope is an application policy. It is not a network sandbox.
 
@@ -148,7 +148,7 @@ docker run --rm \
   --scope /work/scope.json --runtime api --depth quick --cost-ceiling 2 --format json'
 ```
 
-The image runs as user `ubuntu` (UID 1000) in `/work`. `ZERO_RUN_DIR` puts `state.db` and `report.json` in the mounted directory. Plugin approval on the host does not carry into the container, so enable scope inside it. See [Docker](/docker/).
+The image runs as user `ubuntu` (UID 1000) in `/work`. `ZERO_RUN_DIR` puts `state.db` and `report.json` in the mounted directory. Extension approval on the host does not carry into the container, so enable scope inside it. See [Docker](/docker/).
 
 ## Limits
 

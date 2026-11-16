@@ -1,7 +1,7 @@
 import { categoryFor, settingChoiceLabel, settingLabel, settingToggle, sharedSettingKeys } from "./web-settings";
 
 /** Settings whose defaults can be more permissive than a deliberate choice. Never reset together with display settings. */
-export const protectedSettingKeys = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "approvals", "allowModelSelfExtension"] as const;
+export const protectedSettingKeys = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "approvals"] as const;
 /** Agent and privacy settings belong with Safety and privacy, never with display and behavior. */
 export const isProtectedSetting = (key: string): boolean => (protectedSettingKeys as readonly string[]).includes(key) || ["agents", "privacy"].includes(categoryFor({ key }));
 

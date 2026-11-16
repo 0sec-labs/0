@@ -47,7 +47,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add skills and plugins.</p>
     <p><a href="#config">config</a> · <a href="#config-doctor">config doctor</a> · <a href="#models">models</a> · <a href="#models-connect">models connect</a> · <a href="#skills">skills</a> · <a href="#computers">computers</a> · <a href="#web">0 (web console)</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/extensions/">Extensions</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
 
@@ -111,20 +111,6 @@ Change a finding's status. `--status accepted` runs `findings accept`, `suppress
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--status <status>` | — | accepted \| suppressed \| open \| false-positive |
-
-### skills run
-
-Run a skill or a plugin tool. It takes the arguments of `plugin run`.
-
-```text
-0 skills run <name> [tool] [pairs...]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `name` | Yes |  |
-| `tool` | No |  |
-| `pairs` | No |  |
 
 ### memory set
 
@@ -3571,21 +3557,17 @@ Guide: [Read the workflow](/mcp/).
 
 ### plugin
 
-Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the only installable unit in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/plugins/).
+Hidden. The old `0 plugin` group is kept as aliases that print where each command went. The executable plugin runtime, the registry and `self_extend` were removed; extensions replace them (see [Extensions](/extensions/)).
 
 ```text
 0 plugin
 ```
 
-Installation, project enablement, and invocation are separate steps. Treat plugin code as untrusted and provide OS isolation separately from capability declarations.
-
-Guide: [Read the workflow](/plugins/).
-
 Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
 
 #### plugin list
 
-List installed plugins and their per-project enabled/stale state
+Moved: `0 skills extensions list`.
 
 ```text
 0 plugin list
@@ -3593,306 +3575,149 @@ List installed plugins and their per-project enabled/stale state
 
 #### plugin search
 
-Search the configured registry for plugins
+Moved: `0 skills extensions list`.
 
 ```text
-0 plugin search [options] <query>
+0 plugin search
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `query` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--registry <url>` | — | plugin registry index URL (https) |
 
 #### plugin browse
 
-List everything in the configured registry
+Moved: `0 skills list --catalog`.
 
 ```text
-0 plugin browse [options]
+0 plugin browse
 ```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--registry <url>` | — | plugin registry index URL (https) |
 
 #### plugin install
 
-Download, validate, and write plugin files. Installation leaves the plugin disabled and executes no code.
+Moved: `0 skills add <repo>@<sha>` (or `0 skills extensions add <folder>`).
 
 ```text
-0 plugin install [options] <id-or-path>
+0 plugin install
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id-or-path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--registry <url>` | — | plugin registry index URL (https) |
-| `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
-| `--ref <ref>` | — | Branch, tag or commit for github:owner/repo |
-| `--replace` | — | Replace an installed plugin when installing from GitHub |
-| `--yes` | — | Install the reviewed GitHub commit |
-| `--json` | — | Print machine-readable JSON for github:owner/repo |
-| `--db-path <path>` | — | Engine database for github:owner/repo |
 
 #### plugin enable
 
-Enable an installed plugin for this project and grant its capabilities.
+Moved: `0 skills extensions enable <name>`.
 
 ```text
-0 plugin enable <id>
+0 plugin enable
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
 
 #### plugin disable
 
-Disable a plugin for this project (files stay installed)
+Moved: `0 skills extensions disable <name>`.
 
 ```text
-0 plugin disable <id>
+0 plugin disable
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
 
 #### plugin info
 
-Show an installed plugin's manifest, capabilities, and enablement state
+Moved: `0 skills extensions info <name>`.
 
 ```text
-0 plugin info <id>
+0 plugin info
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
 
 #### plugin run
 
-Spawn an enabled plugin and invoke its tool. Effectful tools require `--yes`. Pass arguments as `key=value` pairs, `--json '<obj>'`, or both.
+Removed: an extension's scripts run through bash; there is no plugin runner.
 
 ```text
-0 plugin run [options] <id> [tool] [pairs...]
+0 plugin run
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-| `tool` | No |  |
-| `pairs` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json <json>` | — | JSON object of tool arguments |
-| `--yes` | — | Authorize an effectful (non read-only) tool to run |
-| `--timeout <ms>` | — | Per-call timeout in milliseconds |
 
 #### plugin init
 
-Scaffold a new plugin directory ready to edit, validate, and submit
+Removed: write a folder with `extension.json` or a `SKILL.md`, then review it with `0 skills add <folder> --preview`.
 
 ```text
-0 plugin init [options] <name>
+0 plugin init
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `name` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--dir <path>` | — | Parent directory to create the plugin in (default: cwd) |
-| `--force` | — | Write into a non-empty target directory |
 
 #### plugin validate
 
-Validate a manifest.json (or a directory containing one) against the plugin manifest contract
+Moved: `0 skills add <folder> --preview`.
 
 ```text
-0 plugin validate [options] <path>
+0 plugin validate
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
 
 #### plugin submit
 
-Prepare the files to submit a plugin to the plugin registry; does not publish (you open the pull request yourself)
+Removed: extensions are installed from git, `0 skills add <repo>@<sha>`. Registry submission no longer exists.
 
 ```text
-0 plugin submit [options] <path>
+0 plugin submit
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
 #### plugin connectors
 
-List service connectors (Linear, Slack and others) and whether they are connected
+Removed: connect services on the Extensions page.
 
 ```text
-0 plugin connectors [options]
+0 plugin connectors
 ```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin connect
 
-Connect a service connector; secrets come from environment variables, never argv
+Removed: connect services on the Extensions page.
 
 ```text
-0 plugin connect [options] <service>
+0 plugin connect
 ```
-
-```bash
-0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `service` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--set <key=value>` | — | A non-secret field (repeatable) |
-| `--secret-env <key=ENVVAR>` | — | Read a secret field from this environment variable (repeatable) |
-| `--yes` | — | Approve connecting this service |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin disconnect
 
-Forget a connector's credentials
+Removed: disconnect services on the Extensions page.
 
 ```text
-0 plugin disconnect [options] <service>
+0 plugin disconnect
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `service` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--yes` | — | Confirm |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin mcp
 
-Manage custom MCP servers that threads can use
+Moved: `0 skills extensions mcp <name> --url <url>`.
 
 ```text
 0 plugin mcp
 ```
 
-```bash
-0 plugin mcp add docs -- npx some-mcp-server
-0 plugin mcp add docs --yes -- npx some-mcp-server
-```
-
-Guide: [Read the workflow](/mcp/).
-
 Subcommands: [list](#plugin-mcp-list) · [add](#plugin-mcp-add) · [test](#plugin-mcp-test) · [remove](#plugin-mcp-remove).
 
 #### plugin mcp list
 
-List custom MCP servers
+Moved: `0 skills extensions list`.
 
 ```text
-0 plugin mcp list [options]
+0 plugin mcp list
 ```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin mcp add
 
-Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for a remote one; shows a review first
+Moved: `0 skills extensions mcp <name> --url <url>`.
 
 ```text
-0 plugin mcp add [options] <name> [command...]
+0 plugin mcp add
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `name` | Yes |  |
-| `command` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--url <url>` | — | Remote server URL (https) instead of a local command |
-| `--transport <kind>` | — | stdio, http or sse (default: stdio, or http with --url) |
-| `--cwd <path>` | — | Relative directory inside the workspace to run in |
-| `--env <KEY=VALUE>` | — | Environment variable for a local server (repeatable) |
-| `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
-| `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
-| `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
-| `--enable` | — | Enable it for threads once added |
-| `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
-| `--yes` | — | Approve the reviewed command and settings |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin mcp test
 
-Start the server and list its tools
+Removed: MCP tools are pinned per tool; see `0 skills extensions info <name>`.
 
 ```text
-0 plugin mcp test [options] <id>
+0 plugin mcp test
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 #### plugin mcp remove
 
-Remove a custom MCP server
+Moved: `0 skills extensions remove <name>`.
 
 ```text
-0 plugin mcp remove [options] <id>
+0 plugin mcp remove
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--yes` | — | Confirm the removal |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
 
 ### lab research h1
 
@@ -4002,7 +3827,7 @@ Every command works with the app running or on its own, and takes `--json`. Addi
 
 Guide: [Read the workflow](/skills/).
 
-Subcommands: [list](#skills-list) · [add](#skills-add) · [run](#skills-run) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [extensions](#skills-extensions) · [remove](#skills-remove).
+Subcommands: [list](#skills-list) · [add](#skills-add) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [extensions](#skills-extensions) · [remove](#skills-remove).
 
 #### skills list
 
@@ -4217,7 +4042,7 @@ Installed extensions: list, info, enable, disable, update, remove (install with 
 0 skills extensions
 ```
 
-Subcommands: [add](#skills-extensions-add) · [list](#skills-extensions-list) · [info](#skills-extensions-info) · [enable](#skills-extensions-enable) · [disable](#skills-extensions-disable) · [remove](#skills-extensions-remove) · [update](#skills-extensions-update) · [import](#skills-extensions-import).
+Subcommands: [add](#skills-extensions-add) · [mcp](#skills-extensions-mcp) · [list](#skills-extensions-list) · [info](#skills-extensions-info) · [enable](#skills-extensions-enable) · [disable](#skills-extensions-disable) · [remove](#skills-extensions-remove) · [update](#skills-extensions-update) · [import](#skills-extensions-import).
 
 #### skills extensions add
 
@@ -4237,6 +4062,29 @@ Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
 | `--yes` | — | Install the exact revision shown |
 | `--enable` | — | Also enable it |
 | `--project <dir>` | — | With --enable: enable for this project only |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions mcp
+
+Add one MCP server as a local extension
+
+```text
+0 skills extensions mcp [options] <name> [command...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+| `command` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--url <https-url>` | — | A remote server instead of a command |
+| `--preview` | — | Only show the install prompt |
+| `--yes` | — | Install the exact revision shown |
+| `--enable` | — | Also enable it |
+| `--project <dir>` | — | With --enable, enable for this project only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 

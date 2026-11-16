@@ -58,7 +58,7 @@ describe("core toolset registry", () => {
 describe("core toolset in the console", () => {
   it("advertises only the core list by default and keeps the schema order stable", async () => {
     const runtime = new ScriptedRuntime([end("a"), end("b")]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, refineObjective: false });
     try {
       await session.send("hello");
       await session.send("again");
@@ -71,8 +71,8 @@ describe("core toolset in the console", () => {
   it("only tells the model to delegate when spawn_agent is offered", async () => {
     const coreRuntime = new ScriptedRuntime([end("a")]);
     const fullRuntime = new ScriptedRuntime([end("a")]);
-    const core = createConsoleSession({ runtime: coreRuntime, allowModelSelfExtension: false, refineObjective: false });
-    const full = createConsoleSession({ runtime: fullRuntime, toolset: "full", allowModelSelfExtension: false, refineObjective: false });
+    const core = createConsoleSession({ runtime: coreRuntime, refineObjective: false });
+    const full = createConsoleSession({ runtime: fullRuntime, toolset: "full", refineObjective: false });
     try {
       await core.send("hi");
       await full.send("hi");
@@ -83,7 +83,7 @@ describe("core toolset in the console", () => {
 
   it("keeps the full list when asked", async () => {
     const runtime = new ScriptedRuntime([end("a")]);
-    const session = createConsoleSession({ runtime, toolset: "full", allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, toolset: "full", refineObjective: false });
     try {
       await session.send("hello");
       const advertised = names(runtime.calls[0]!.tools);
@@ -94,7 +94,7 @@ describe("core toolset in the console", () => {
 
   it("adds a pack on the turn after a skill that declares it loads", async () => {
     const runtime = new ScriptedRuntime([call("load_skill", { skill_id: "ad-attack-paths" }), end("done")]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, refineObjective: false });
     try {
       const outcome = await session.send("map AD paths");
       expect(outcome.toolCalls[0]!.result.success).toBe(true);
@@ -106,7 +106,7 @@ describe("core toolset in the console", () => {
 
   it("keeps pack tools out of list_tools and load_tool even when other deferred tools exist", async () => {
     const runtime = new ScriptedRuntime([call("list_tools", {}), call("load_tool", { names: ["crawl", "start_run"] }), end("done")]);
-    const session = createConsoleSession({ runtime, workflowLifecycle: { invoke: async () => ({}) } as never, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, workflowLifecycle: { invoke: async () => ({}) } as never, refineObjective: false });
     try {
       const outcome = await session.send("what else can I load");
       const listed = JSON.stringify(outcome.toolCalls[0]!.result.output);
@@ -119,7 +119,7 @@ describe("core toolset in the console", () => {
 
   it("lists skills when load_skill gets no id", async () => {
     const runtime = new ScriptedRuntime([call("load_skill", {}), end("done")]);
-    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    const session = createConsoleSession({ runtime, refineObjective: false });
     try {
       const outcome = await session.send("what skills exist");
       expect(outcome.toolCalls[0]!.result.success).toBe(true);

@@ -3,9 +3,8 @@ import { realpathSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createNativeApiRuntime, isApiRuntime, runtimeFromPrivateWorkerBinding, type ConsoleRuntime, 
-  createConsoleRuntime, CodexCatalogRefreshError, DEFAULT_REGISTRY_URL,
-  TOOL_DEFINITIONS, getToolsForRole, aggregateCapabilities, disable, readEnablement, writeEnablement,
-  listInstalledPluginIds, pluginsRootDir, readInstalledPlugin, isSafePluginId,
+  createConsoleRuntime, CodexCatalogRefreshError,
+  TOOL_DEFINITIONS, getToolsForRole,
   listProjectReviewChecks, updateProjectReviewChecks,
   recommendModels, type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation } from "@0/engine";
 import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot } from "@0/engine/shared";
@@ -34,20 +33,13 @@ import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from ".
 import { accessUpgradeNotice as readAccessUpgradeNotice, dismissAccessUpgrade } from "../state/access-upgrade.js";
 import { getSettings, getSettingSources, updateSetting, resetSettings, defaultWriteLayer } from "../state/settings-store.js";
 import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, type TuiSettings } from "../state/settings.js";
-import { createPluginService, type PluginRunResult } from "../state/plugin-service.js";
-import { buildMarketItems, type MarketItem } from "../state/market-layout.js";
-import { createSessionPluginHostManager, type SessionPluginHostManager } from "../state/session-plugin-host.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { getRuntimeMetadata } from "../state/runtime.js";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-controller.js";
 import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, signOutChatGptPlan } from "../state/chatgpt-plan-store.js";
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
 import { connectionBaseUrlVar, connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
-import { ServicePluginServices } from "./service-plugins.js";
-import { CustomMcpServices } from "./custom-mcp.js";
-import { GithubPluginInstaller, readPluginSource } from "./github-plugin-install.js";
 import { ConnectionExtras, applySpread, connectionLabel, pruneConnectionMeta, disabledModelsFor, isModelDisabled, loadConnectionMeta, orderedAccountIds } from "./connection-meta.js";
-import { IconCache, connectorLogo } from "./connector-logos.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type DiagnosticFrame, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 import { deletePendingReport, handleDiagnosticReport, isPendingReportId, listPendingReports, readPendingReport } from "../state/pending-diagnostics.js";
 import { z } from "zod";
@@ -58,47 +50,12 @@ import { UpdateError, type UpdateManager } from "./update-manager.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
-const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<ConsoleRuntime, Record<string, string>>();
 interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
 function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
   if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
 }
 const runtimeContextLimits = new WeakMap<ConsoleRuntime, number>();
-let pluginManager: SessionPluginHostManager | undefined;
-let pluginManagerPromise: Promise<SessionPluginHostManager> | undefined;
-let isTurnActive: () => boolean = () => false;
-const deferredPlugins = new Set<string>();
-
-/** One approved marketplace host lineage. Sessions lease it, never hot-swap it. */
-export async function getWebConsolePluginHostManager(): Promise<SessionPluginHostManager> {
-  if (!pluginManagerPromise) {
-    pluginManagerPromise = createSessionPluginHostManager({ reservedToolNames, coreVersion: VERSION })
-      .then((manager) => { pluginManager = manager; return manager; })
-      .catch((error) => { pluginManagerPromise = undefined; throw error; });
-  }
-  const manager = await pluginManagerPromise;
-  await manager.refresh();
-  return manager;
-}
-
-const pluginService = createPluginService({
-  registryUrl: (process.env.ZERO_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).trim(),
-  reservedToolNames, coreVersion: VERSION, isTurnActive: () => isTurnActive(),
-  pluginHostManager: {
-    refresh: async () => { await (await getWebConsolePluginHostManager()).refresh(); },
-    runPlugin: async (id) => (await getWebConsolePluginHostManager()).runPlugin(id),
-  },
-});
-
-/** The gateway calls this only after its last active turn reaches a safe boundary. */
-export async function flushWebConsolePlugins(): Promise<PluginRunResult[]> {
-  if (consoleExecutionProfile() === "smolvm" || isTurnActive()) return [];
-  const results = await pluginService.flushDeferred();
-  deferredPlugins.clear();
-  return results;
-}
-
 /** `rotate` is true only for NEW runtime creation so read-only views never advance spread rotation. */
 function webRuntimeEnv(rotate = false): Record<string, string> {
   // Re-read only file-derived bootstrap credentials before copying the env.
@@ -406,7 +363,7 @@ function settingsView() {
   };
 }
 
-interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean; updates?: UpdateManager }
+interface WebOperatorServicesOptions { allowChatGptPlan?: boolean; updates?: UpdateManager }
 /**
  * Safety and privacy settings never loosen through Reset. Ordered strictest first; the default is only
  * applied when it is at least as strict as the current value. "Reset all" (no explicit keys) leaves them
@@ -418,7 +375,6 @@ const GUARDED_SETTING_ORDER: Partial<Record<keyof TuiSettings, readonly unknown[
   updatePolicy: ["off", "notify", "automatic"],
   executionProfile: ["smolvm", "local"],
   approvals: ["ask", "auto"],
-  allowModelSelfExtension: [false, true],
   allowDevSourceUpdates: [false, true],
 };
 export function planSettingsReset(requested: readonly (keyof TuiSettings)[], explicit: boolean, current: TuiSettings): { keys: Array<keyof TuiSettings>; preserved: Array<{ key: string; reason: string }> } {
@@ -435,23 +391,17 @@ export function planSettingsReset(requested: readonly (keyof TuiSettings)[], exp
 }
 
 export class WebOperatorServices {
-  readonly #servicePlugins = new ServicePluginServices();
-  readonly #customMcp = new CustomMcpServices();
-  readonly #githubPlugins = new GithubPluginInstaller();
   readonly #connectionExtras = new ConnectionExtras({ knownProvider: id => PROVIDERS.some(info => info.id === id) });
-  readonly #icons = new IconCache();
   readonly #codex = new CodexAuthController();
   readonly #plan = new ChatGptPlanAuthController();
   readonly #allowChatGptPlan: boolean;
   readonly #updates: UpdateManager | undefined;
   readonly #auth = new Map<string, { status: WebAuthStatus; session: DeviceAuthSession | null; env: NodeJS.ProcessEnv }>();
   #catalogRefresh: Promise<unknown> | undefined;
-  #registryItems = new Map<string, MarketItem>();
-  #registryError: string | null = null;
   #feedback: { id: string; payload: FeedbackPayload; preview: SubmitPreview; pendingId?: string } | null = null;
   readonly #browserReports = { seen: new Map<string, number>(), total: 0 };
 
-  constructor(options: WebOperatorServicesOptions = {}) { this.#updates = options.updates; isTurnActive = options.isTurnActive ?? (() => false); this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
+  constructor(options: WebOperatorServicesOptions = {}) { this.#updates = options.updates; this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
 
   #publicAuth(status: WebAuthStatus): WebAuthStatus {
     return {
@@ -763,104 +713,6 @@ export class WebOperatorServices {
     return { status: flow.status };
   }
 
-  async #plugins() {
-    const registryUrl = (process.env.ZERO_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).trim();
-    let publicRegistryUrl = "";
-    if (registryUrl) {
-      try {
-        const url = new URL(registryUrl);
-        url.username = ""; url.password = ""; url.search = ""; url.hash = "";
-        publicRegistryUrl = url.href;
-      } catch { publicRegistryUrl = "Invalid configured registry URL"; }
-    }
-    const fetched = await pluginService.fetchRegistry();
-    this.#registryError = fetched.ok ? null : publicMessage(registryUrl ? fetched.error.split(registryUrl).join(publicRegistryUrl) : fetched.error);
-    this.#registryItems = fetched.ok ? new Map(buildMarketItems(fetched.result).map((item) => [`${item.kind}:${item.id}`, item])) : new Map();
-    const installed = await pluginService.list();
-    const items = new Map(this.#registryItems);
-    const errors = new Map<string, string>();
-    for (const id of listInstalledPluginIds(pluginsRootDir())) {
-      const discovered = readInstalledPlugin(pluginsRootDir(), id, { reservedToolNames });
-      if (!discovered.ok) { errors.set(id, discovered.errors.join("; ")); continue; }
-      const manifest = discovered.plugin.manifest;
-      items.set(`plugin:${id}`, {
-        id, kind: "plugin", name: manifest.name ?? id, version: manifest.version,
-        description: manifest.tools.map((tool) => tool.name).join(", "),
-        capabilities: aggregateCapabilities(manifest), signature: "unverified",
-        raw: { local: true, toolCount: manifest.tools.length, source: readPluginSource(join(pluginsRootDir(), id)) },
-      });
-    }
-    const host = pluginManager?.current();
-    const hostStates = host?.status() ?? [];
-    const loadedPluginIds = hostStates.filter((entry) => entry.state === "ready").map((entry) => entry.pluginId);
-    const result = [...items.values()].map(({ raw, ...item }) => ({
-      ...item, ...this.#metadata(item, raw), state: installed.plugins.get(item.id) ?? "available",
-      loaded: loadedPluginIds.includes(item.id),
-      error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current engine." : null),
-    }));
-    for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", toolCount: 0, skillCount: 0, logo: connectorLogo(id, id), source: "local" as const, description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
-    return {
-      registry: { url: publicRegistryUrl, available: fetched.ok, error: this.#registryError },
-      items: result.map(item => ({ ...item, version: item.version || null, status: item.error ? "error" as const : item.state })), deferred: [...deferredPlugins], executionProfile: consoleExecutionProfile(),
-      host: { loadedPluginIds, tools: host?.toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] },
-    };
-  }
-
-  /** Uniform list metadata: tool/skill counts, status, source and a same-origin logo (never a remote URL). */
-  #metadata(item: { kind: string; id: string; name: string; version: string }, raw: unknown) {
-    const row = (raw && typeof raw === "object" ? raw : {}) as { local?: boolean; toolCount?: number; source?: { repo: string; ref: string | null; sha: string } | null; manifest?: { tools?: unknown[]; icon?: unknown }; icon?: unknown };
-    const github = row.source ?? null;
-    const iconUrl = row.icon ?? row.manifest?.icon;
-    return {
-      toolCount: row.toolCount ?? (Array.isArray(row.manifest?.tools) ? row.manifest!.tools!.length : 0),
-      skillCount: 0, version: item.version || null,
-      logo: iconUrl ? this.#icons.logoFor(item.id, item.name, iconUrl) : connectorLogo(item.id, item.name),
-      source: github ? "github" as const : row.local ? "local" as const : "registry" as const,
-      ...(github ? { repo: github.repo, sha: github.sha } : {}),
-    };
-  }
-
-  async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM threads. Start a new thread to use an approved plugin.");
-    const body = object(input);
-    const id = text(body.id, "plugin ID", 64);
-    if (action === "install") {
-      // Always re-fetch validated install bytes; input never supplies executable content.
-      await this.#plugins();
-      if (this.#registryError) throw new OperatorError(503, "registry_unavailable", this.#registryError);
-      const item = this.#registryItems.get(`plugin:${id}`);
-      if (!item) throw new OperatorError(404, "unknown_artifact", "The configured registry has no installable artifact with that ID.");
-      const result = await pluginService.install(item);
-      if (!result.ok) throw new OperatorError(409, "install_failed", result.message);
-      return result;
-    }
-    if (!isSafePluginId(id)) throw new OperatorError(400, "invalid_plugin", "Invalid plugin ID.");
-    if (action === "disable") {
-      if (!writeEnablement(process.cwd(), disable(readEnablement(process.cwd()), id))) throw new OperatorError(500, "persistence_failed", "Could not save plugin approval removal.");
-      deferredPlugins.delete(id);
-      // Approval removal is durable now; host reconciliation happens at the
-      // next explicit session/run boundary, never by interrupting a leased host.
-      return { ok: true, message: "Disabled for future threads. Already leased threads keep their approved engine until cleanup.", state: "installed" };
-    }
-    const discovered = readInstalledPlugin(pluginsRootDir(), id, { reservedToolNames });
-    if (!discovered.ok) throw new OperatorError(409, "invalid_plugin", discovered.errors.join("; "));
-    const manifest = discovered.plugin.manifest;
-    const capabilities = aggregateCapabilities(manifest);
-    const item: MarketItem = { id, kind: "plugin", name: manifest.name ?? id, version: manifest.version, description: "", capabilities, signature: "unverified", raw: undefined };
-    if (action === "enable") {
-      if (body.approved !== true || body.version !== manifest.version || !Array.isArray(body.capabilities) || body.capabilities.some((entry) => typeof entry !== "string") ||
-        JSON.stringify([...new Set(body.capabilities)].sort()) !== JSON.stringify([...capabilities].sort())) throw new OperatorError(409, "approval_required", "Inspect and explicitly approve this installed version and its exact capabilities before enabling.");
-      const result = await pluginService.enable(item);
-      if (!result.ok) throw new OperatorError(409, "enable_failed", result.message);
-      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM threads. Plugin files are copied and loaded automatically inside each new VM." } : result;
-    }
-    if (action !== "run") throw new OperatorError(404, "unknown_action", "Unsupported plugin action.");
-    const result = await pluginService.run(item);
-    if (result.deferred) deferredPlugins.add(id);
-    else if (!result.ok) throw new OperatorError(409, "run_failed", result.message);
-    return result;
-  }
-
   /**
    * Browser-side errors. Only closed categories and bundle-asset locations are
    * accepted; anything else is a 400. The same intake and consent model as a
@@ -920,15 +772,9 @@ export class WebOperatorServices {
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
     if (!pathname.startsWith("/api/console/")) return null;
     const path = pathname.slice("/api/console/".length);
-    const servicePluginResult = await this.#servicePlugins.handle(path, method, input);
-    if (servicePluginResult) return servicePluginResult;
-    const mcpResult = await this.#customMcp.handle(path, method, input);
-    if (mcpResult) return mcpResult;
-    const githubResult = await this.#githubPlugins.handle(path, method, input);
-    if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|update\/apply|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|doctor|update-status|update\/apply|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -981,9 +827,7 @@ export class WebOperatorServices {
         const persisted = plan.keys.length ? resetSettings(DEFAULT_SETTINGS, plan.keys) : true;
         data = { ...settingsView(), persisted, preserved: plan.preserved, ...(!persisted ? { error: "Settings reset in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
         if (!persisted) status = 507;
-      } else if (path === "plugins" && method === "GET") data = await this.#plugins();
-      else if (path.startsWith("plugins/") && method === "POST") data = await this.#pluginAction(path.split("/")[1]!, input);
-      else if (path === "doctor" && method === "GET") {
+      } else if (path === "doctor" && method === "GET") {
         const providers = this.#providers();
         const availability = await getRuntimeAvailability();
         const ready = providers.find((entry) => entry.diagnostics.valid);
@@ -1004,7 +848,7 @@ export class WebOperatorServices {
       }
       else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
-        data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
+        data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })) };
       } else if (path === "project/directories" && method === "POST") {
         data = await listWorkspaceDirectories(object(input).path);
       } else if (path === "project" && method === "GET") {
@@ -1069,6 +913,5 @@ export class WebOperatorServices {
     this.#plan.cancel();
     this.#codex.cancel();
     for (const flow of this.#auth.values()) flow.session?.cancel();
-    pluginManager?.dispose();
   }
 }

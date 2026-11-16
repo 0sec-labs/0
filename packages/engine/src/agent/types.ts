@@ -16,10 +16,6 @@ import type { WafDetector } from "../scope/waf-detect.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
 import type { ToolHealthTracker } from "./tool-health.js";
 import type { TodoTracker } from "./todos.js";
-import type { SelfExtensionRegistry } from "../plugins/self-extension.js";
-import type { ExecutablePluginManager, ExecutablePluginContext } from "../plugins/executable.js";
-import type { ExecutablePluginConfiguration } from "./executable-plugins.js";
-import type { EvolutionConfig } from "../improvement/types.js";
 
 // ── Agent Roles ──
 
@@ -538,15 +534,6 @@ export interface ToolContext {
   scopePath?: string;
   /** Immutable parent-observed Git identity for delegated source reviews. */
   workspaceIdentity?: WorkspaceIdentity;
-  /** Session policy registry and durable, isolated executable implementation. */
-  selfExtension?: SelfExtensionRegistry;
-  executablePlugins?: ExecutablePluginManager;
-  executablePluginConfiguration?: ExecutablePluginConfiguration;
-  /** Bound to the current turn's authorization, cancellation, and accounting. */
-  pluginExecutionContext?: () => ExecutablePluginContext;
-  /** Named evaluation profiles are controller-owned, never supplied as model code. */
-  executableEvolutionProfiles?: Record<string, EvolutionConfig>;
-  evolveExecutablePlugin?: (pluginId: string, profile: string, signal?: AbortSignal) => Promise<ToolResult>;
   /** Host-bound source-note writer; absent during verification or when memory is disabled. */
   rememberCodebase?: (note: {
     title: string;
@@ -725,13 +712,6 @@ export interface ToolContext {
    * a graceful "not deployed" result.
    */
   oast?: OastCollaborator;
-  /**
-   * Live harness host for this session. When set, the engine may replace
-   * root-model rounds with a plugin-provided agent.driver provider. Created
-   * alongside the executable plugin manager when self-extension is enabled.
-   * Absent — no harness is wired and the normal model dispatch runs unchanged.
-   */
-  liveHarness?: import("../plugins/live-harness.js").LiveHarnessHost;
   /**
    * Captured canonical workspace root for trust/enablement decisions. Used
    * by root-model and child-agent loops to evaluate workspace trust

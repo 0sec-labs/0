@@ -157,9 +157,6 @@ export function applyEvents(
       case "state":
         next = { ...next, objective: event.objective, todos: event.todos };
         break;
-      case "harness":
-        next = { ...next, harness: event.harness };
-        break;
       case "compaction":
         next = { ...next, compaction: event.compaction };
         break;

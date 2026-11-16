@@ -741,8 +741,7 @@ export async function executeProxy(
 //
 // 5. ROLE SURFACING (packages/engine/src/agent/tools.ts `getToolsForRole` — EDITED
 //    by this task): `proxy` is registered + dispatchable + tested but is
-//    deliberately gated OUT of every advertised role set (by name, next to
-//    `self_extend`), so it does not inflate the audit/review "everything" set or
+//    deliberately gated OUT of every advertised role set (by name), so it does not inflate the audit/review "everything" set or
 //    leak to the model before the backend exists. To surface it: add a
 //    `featureFlags.proxy` flag and, when on, push `"proxy"` into `networkTools`
 //    (and drop the `name !== "proxy"` exclusion from the allEnabledTools

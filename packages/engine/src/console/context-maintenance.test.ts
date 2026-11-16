@@ -26,7 +26,7 @@ function runtime(executeNative: NativeRuntime["executeNative"]): NativeRuntime {
   return { type: "api", isAvailable: async () => true, executeNative };
 }
 function session(rt: NativeRuntime, extra: Partial<ConsoleSessionConfig> = {}) {
-  return createConsoleSession({ runtime: rt, refineObjective: false, allowModelSelfExtension: false,
+  return createConsoleSession({ runtime: rt, refineObjective: false,
     systemPrompt: "system", tools: [{ name: "payload_lookup", description: "fake tool", parameters: {} }],
     contextWindowTokens: 20_000, compaction: { enabled: true, thresholdFraction: 0.8 }, ...extra });
 }

@@ -2,18 +2,15 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { TOOL_DEFINITIONS, HuntMemoryStore, connectServicePlugins, type McpHost, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/engine";
+import { HuntMemoryStore, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/engine";
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/engine";
 import { osecDB } from "@0/engine/storage";
 import { findingFromRow } from "./state/findings-data.js";
 import { normalizeSettings } from "./state/settings.js";
-import { installWorkbenchPlugins } from "./workbench-plugins.js";
-import { createSessionPluginHostManager, type SessionPluginHostManager } from "./state/session-plugin-host.js";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
-import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
 const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
 const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"] as const;
@@ -39,13 +36,10 @@ export class WorkbenchGuestRequestQueue {
  */
 async function runGuest(cli: boolean): Promise<number> {
   if (!isAdmittedSmolvmWorkbench()) throw new Error("Workbench controller requires admitted Linux VM execution");
-  let redact = (value: string) => value;
-  const scrub = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "string" ? redact(item) : item));
+  const scrub = (value: unknown) => JSON.parse(JSON.stringify(value));
   const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(scrub(frame)))) process.stdin.pause(); };
   process.stdout.on("drain", () => process.stdin.resume());
   let session: ConsoleSession | undefined;
-  let pluginManager: SessionPluginHostManager | undefined;
-  let servicePluginHost: McpHost | undefined;
   const exportedSourceReferences = new Set<string>();
   const exportedSourceLessons = new Set<string>();
   let sourceLearningEnabled = false;
@@ -117,8 +111,7 @@ async function runGuest(cli: boolean): Promise<number> {
     try {
       if (session) { await session.stopPersistentAgents(); await state(); await session.cleanup(); }
     } finally {
-      pluginManager?.dispose();
-      try { await servicePluginHost?.closeAll(); } finally { server.close(); if (!holdTransport) process.stdin.destroy(); }
+      try { server.close(); } finally { if (!holdTransport) process.stdin.destroy(); }
     }
   };
   const requests = new WorkbenchGuestRequestQueue();
@@ -134,16 +127,11 @@ async function runGuest(cli: boolean): Promise<number> {
       try {
         if (frame.type === "init") {
           if (initialized) throw new Error("Workbench already initialized"); initialized = true;
-          const servicePluginConnections = validateGuestServicePluginConnections(frame.servicePluginConnections, frame.servicePluginNetworkGranted);
-          redact = servicePluginSecretRedactor(servicePluginConnections);
-          delete frame.servicePluginConnections;
-          if (cli && servicePluginConnections.length) throw new Error("Service plugin grants are supported by the isolated chat guest only");
           if (frame.guestSettings) { const settings = normalizeSettings(frame.guestSettings);
             if (settings.executionProfile !== "local" || settings.updatePolicy !== "off") throw new Error("Invalid guest preferences");
             await mkdir("/home/zero/.0", { recursive: true, mode: 0o700 });
             await writeFile("/home/zero/.0/tui-settings.json", JSON.stringify(settings), { mode: 0o600, flag: "wx" });
           }
-          if (frame.pluginApprovals) await installWorkbenchPlugins(frame.pluginApprovals as EnablementRecord);
           const selection = frame.selection as Record<string, unknown>;
           if (!selection || selection.provider !== "chatgpt-codex" || typeof selection.model !== "string") throw new Error("Unsupported workbench provider");
           process.env.ZERO_PROVIDER = "chatgpt-codex"; process.env.ZERO_WORKBENCH_PROVIDER_MODEL = selection.model;
@@ -191,11 +179,7 @@ async function runGuest(cli: boolean): Promise<number> {
             invoke: (name: string, args: Record<string, unknown>) => callback("workflowInvoke", [name, args]),
           };
           if ((frame.callbacks as string[]).includes("historyList")) callbacks.conversationHistory = { list: (...args: unknown[]) => callback("historyList", args), read: (...args: unknown[]) => callback("historyRead", args) };
-          pluginManager = await createSessionPluginHostManager({ projectPath: "/workspace", reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
-          const unavailable = pluginManager.current().status().filter(entry => entry.state !== "ready");
-          if (unavailable.length) throw new Error(`Guest plugins failed to load: ${unavailable.map(entry => entry.pluginId).join(", ")}`);
-          if (servicePluginConnections.length) servicePluginHost = await connectServicePlugins(servicePluginConnections);
-          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, pluginHost: pluginManager!.current(), mcpHost: servicePluginHost,
+          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, 
             ...(config.scope ? { scope: new ScopePolicy(config.scope as ConstructorParameters<typeof ScopePolicy>[0]) } : {}),
             runtime: createConsoleRuntime({ ...selection, env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)) }), workspaceRoot: "/workspace",
           } as unknown as Omit<ConsoleSessionConfig, "db">, "/home/zero/.0/controller.sqlite"));
@@ -226,7 +210,7 @@ async function runGuest(cli: boolean): Promise<number> {
           default: throw new Error("Unsupported controller operation");
         }
         await state(); emit({ type: "result", id: frame.id, value });
-      } catch (error) { if (!session) { await servicePluginHost?.closeAll(); servicePluginHost = undefined; } emit({ type: "error", id: frame.id, error: error instanceof Error ? error.message : "Guest operation failed" }); }
+      } catch (error) { emit({ type: "error", id: frame.id, error: error instanceof Error ? error.message : "Guest operation failed" }); }
     });
   };
   const reader = new WorkbenchFrameReader();

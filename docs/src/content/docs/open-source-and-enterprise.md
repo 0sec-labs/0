@@ -27,7 +27,7 @@ Nothing is uploaded with your findings, source code or model keys. The one autom
 - **Findings, evidence and reports** stay in the local database under `~/.0/` and in files you export. Sharing a report is something you do.
 - **Model calls** go to your configured provider.
 - **Anonymous usage counts and crash reports** are sent automatically by official release builds. They hold finite counters and categories only, never targets, findings, code, prompts or error messages. Set `ZERO_NO_TELEMETRY=1` (or `DO_NOT_TRACK` or `ZERO_OFFLINE`) to turn both off, or use `0 config set analyticsLevel off` and `0 config set diagnosticReporting off`. Source and pull-request builds contain no destination and send nothing. See [Telemetry](/configuration/#telemetry) for the exact fields.
-- **Updates and plugins** are fetched from GitHub when you install, upgrade or add a registry plugin.
+- **Updates and extensions** are fetched from GitHub when you install, upgrade or add an extension.
 
 ## What the team workspace does not do
 

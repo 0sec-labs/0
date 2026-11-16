@@ -5,24 +5,19 @@ import { resolve } from "node:path";
 import { resolveCompactionThresholds, isRecoverableOutputCap, OUTPUT_CAP_CONTINUATION_PROMPT } from "../../agent/native-loop.js";
 import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "../context-maintenance.js";
 import { diag } from "../../diagnostics/channel.js";
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, buildOperatorInstructionsBlock, homeStateDir, parseSecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
+import { buildOperatorInstructionsBlock, parseSecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
 import type { NativeContentBlock, NativeMessage, NativeRuntime, NativeRuntimeResult, NativeStreamCallbacks, NativeToolDef } from "../../runtime/types.js";
-import { createExecutablePlugins, executableModelResult, parseExecutableModelRequest, resolveExecutableEvolutionProfiles } from "../../agent/executable-plugins.js";
-import { LiveHarnessHost } from "../../plugins/live-harness.js";
-import { getWorkspaceHarnessTrust } from "../../plugins/harness-trust.js";
-import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../../agent/tools.js";
+import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS } from "../../agent/tools.js";
 import type { McpToolHost } from "../../agent/mcp-host.js";
-import { toNativeToolDef, toNativeExtensionToolDef } from "../../agent/native-tooldef.js";
+import { toNativeToolDef } from "../../agent/native-tooldef.js";
 import { partitionForToolset, resolveToolset } from "../../agent/toolset.js";
 import { DeferredToolRegistry, partitionToolDefinitions, DEFERRED_TOOLS_MIN, DEFERRED_CONTROL_TOOL_NAMES, LIST_TOOLS_NAME, LOAD_TOOL_NAME, listToolsDef, loadToolDef } from "../../agent/deferred-tools.js";
 import { LearningStore, learningProjectId } from "../../storage/index.js";
 import { HuntMemoryStore } from "../../memory/hunt-memory.js";
 import { LearningService } from "../../learning-service.js";
 import { TOOL_DISPATCH } from "../../agent/tools/dispatch.js";
-import { BUILTIN_GUARDS, evaluateGuards, guardApprovalUnavailable, guardUnresolvedCapabilities, type GuardContext, type ToolGuard } from "../../plugins/guards.js";
-import { SelfExtensionRegistry } from "../../plugins/self-extension.js";
-import { checkInvocationCapabilities, NETWORK_CAPABLE_TOOLS, LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../../plugins/capability-classification.js";
-import type { SelfExtensionEvent } from "../../plugins/self-extension.js";
+import { evaluateGuards, guardApprovalUnavailable, guardUnresolvedCapabilities, type GuardContext, type ToolGuard } from "../../agent/guards.js";
+import { NETWORK_CAPABLE_TOOLS, LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../../agent/tool-classification.js";
 import type { AgentRole, ToolCall, ToolContext, ToolDefinition, ToolResult } from "../../agent/types.js";
 import { classifyToolRisk } from "../../agent/destructive-classifier.js";
 import { ScopePolicy } from "../../scope/scope.js";
@@ -41,7 +36,7 @@ import { captureNativeRuntime, currentContributionAgent, currentRunContribution,
 import { registerSignalCleanup } from "../../agent/signal-cleanup.js";
 import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleScopeResolution, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
-import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
+import { stringifyToolResult, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
 import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
 import { runBeforeCommand } from "../../agent/before-command.js";
 import { loadMcpServers, mcpLoadResult } from "./mcp-load.js";
@@ -226,63 +221,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     agentMessaging: config.agentMessaging,
   };
 
-  // Audit notifications are routed to the active turn's renderer.
-  let activeNotify: ((message: string) => void) | undefined;
 
-  const selfExtensionEnabled = cp?.selfExtensionEnabled ??
-    ((config.allowModelSelfExtension ?? DEFAULT_ALLOW_MODEL_SELF_EXTENSION) && role !== "verify");
-  const selfExtension = selfExtensionEnabled
-    ? new SelfExtensionRegistry({
-        enabled: true,
-        baseGuards: BUILTIN_GUARDS,
-        reservedToolNames: [
-          ...SELF_EXTENSION_RESERVED_TOOL_NAMES,
-          ...Object.keys(NETWORK_CAPABLE_TOOLS),
-          ...Object.keys(READ_ONLY_TOOLS),
-          ...Object.keys(LOCAL_SCOPE_TOOLS),
-        ],
-        onEvent: (event: SelfExtensionEvent) => {
-          const names = event.tools.map((t) => t.name).join(", ");
-          const line =
-            event.kind === "registered"
-              ? `self-extension: registered ${event.tools.length} tool(s)` +
-                (names ? ` (${names})` : "") +
-                (event.pluginName ? ` from "${event.pluginName}"` : "")
-              : event.kind === "revoked"
-                ? `self-extension: revoked registration ${event.registrationId ?? ""}`.trim()
-                : `self-extension: registration rejected${
-                    event.errors && event.errors.length > 0
-                      ? `: ${event.errors.join("; ")}`
-                      : ""
-                  }`;
-          activeNotify?.(line);
-        },
-      })
-    : undefined;
-  if (cp?.selfExtensionSnapshot && selfExtension) {
-    selfExtension.restore(cp.selfExtensionSnapshot);
-  }
-  const executablePlugins = selfExtension
-    ? createExecutablePlugins(selfExtension, config.executablePlugins)
-    : undefined;
-  const harnessRoot = selfExtensionEnabled
-    ? cp?.harnessRoot ?? resolve(homeStateDir(), "live-harness", randomUUID())
-    : undefined;
-  const harness = executablePlugins && harnessRoot ? new LiveHarnessHost({
-    executablePlugins, root: harnessRoot, workspaceRoot,
-    allowTrusted: () => getWorkspaceHarnessTrust(workspaceRoot), onChange: config.onHarnessUpdate,
-  }) : undefined;
-  toolContext.liveHarness = harness;
   toolContext.workspaceRoot = workspaceRoot;
   toolContext.skillDiscoveryOptions = config.skillDiscoveryOptions;
   toolContext.skillAuthoring = config.skillAuthoring;
-  toolContext.selfExtension = selfExtension;
-  toolContext.executablePlugins = executablePlugins;
-  toolContext.executablePluginConfiguration = config.executablePlugins;
-  toolContext.executableEvolutionProfiles = selfExtensionEnabled
-    ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
-    : {};
-
 
   /** Guard against export/operations during teardown or handoff. */
   let sourceContext: ConsoleSourceContext = { status: "not_requested", lessons: [] };
@@ -362,15 +304,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       : { immediate: tools, deferred: [] as ToolDefinition[] };
   const baseNativeTools = basePartition.immediate.map(toNativeToolDef);
 
-  // `self_extend` is never advertised by getToolsForRole; inject it into the
-  // model-facing set ONLY when enabled (and only if not already present), so the
-  // disabled sessions never advertise the extension entry point.
-  const selfExtendDef = TOOL_DEFINITIONS.self_extend;
-  const selfExtendNativeDef =
-    selfExtensionEnabled && selfExtendDef && !tools.some((t) => t.name === "self_extend")
-      ? toNativeToolDef(selfExtendDef)
-      : undefined;
-
   // The deferred-loading control tools (list_tools/load_tool) are always
   // advertised when a deferrable catalog is in play. Both are read-only and
   // side-effect-free at the executor level, so they need no gate-map entries.
@@ -424,39 +357,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       parameters: tool.input_schema.properties as ToolDefinition["parameters"],
       ...(tool.input_schema.required ? { required: tool.input_schema.required } : {}),
     });
-    if (selfExtendNativeDef) extras.push(selfExtendNativeDef);
     if (listConvsNativeDef && readConvNativeDef) {
       extras.push(listConvsNativeDef, readConvNativeDef);
       ro[LIST_CONVERSATIONS_NAME] = true;
       ro[READ_CONVERSATION_NAME] = true;
-    }
-
-    if (selfExtension) {
-      for (const t of selfExtension.tools()) {
-        extras.push(toNativeExtensionToolDef(t));
-        // Gate flags come from the tool's DECLARED capabilities (via the
-        // registry's manifest translation) — never a lighter class.
-        if (t.gateFlags.networkCapable) net[t.name] = true;
-        if (t.gateFlags.localScope) loc[t.name] = true;
-        if (t.gateFlags.readOnly) ro[t.name] = true;
-      }
-    }
-
-    if (config.pluginHost) {
-      // ONLY tools the host actually owns (enabled/loaded plugins). The loader
-      // is the single source of truth for what a plugin contributed and for its
-      // resolved gate flags; the console never re-derives or bypasses that.
-      // Connected plugins share the specialist catalog: enabling a plugin
-      // makes its tools discoverable, without adding every schema to every
-      // model request. Loading changes exposure only; the host's current gate
-      // maps and ownership checks below still govern execution.
-      const pluginDefinitions = config.pluginHost.toolDefinitions();
-      catalog.push(...pluginDefinitions);
-      for (const definition of pluginDefinitions) provenance.set(definition.name, "plugin");
-      const gm = config.pluginHost.gateMaps();
-      Object.assign(net, gm.networkCapable);
-      Object.assign(loc, gm.localScope);
-      Object.assign(ro, gm.readOnly);
     }
 
     if (config.mcpHost) {
@@ -514,7 +418,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   };
 
   // Refresh whenever a deferred catalog or an injected source is present.
-  const injectableToolsPresent = basePartition.deferred.length > 0 || (corePartition?.packOnly.length ?? 0) > 0 || selfExtensionEnabled || config.pluginHost !== undefined || config.mcpHost !== undefined || config.conversationHistory !== undefined || config.workflowAuthoring !== undefined || config.workflowLifecycle !== undefined;
+  const injectableToolsPresent = basePartition.deferred.length > 0 || (corePartition?.packOnly.length ?? 0) > 0 || config.mcpHost !== undefined || config.conversationHistory !== undefined || config.workflowAuthoring !== undefined || config.workflowLifecycle !== undefined;
 
   // `nativeTools` is a `let`: the base (built-in) portion is captured in
   // `baseNativeTools`, and the union of injected tools is refreshed at each turn
@@ -578,12 +482,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   if (cp) objectiveService.seed(cp.objective.value, cp.objective.refined);
 
-  let initialized = !executablePlugins;
   const ready = (async () => {
-    await executablePlugins?.ready;
-    if (cp?.harness) await harness!.restoreCheckpoint(cp.harness);
     if (injectableToolsPresent) refreshInjectedTools();
-    initialized = true;
   })();
   // Consumers observe the original rejecting promise through send() or the loader.
   void ready.catch(() => {});
@@ -1147,9 +1047,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         (DEFERRED_CONTROL_TOOL_NAMES as readonly string[]).includes(call.name) ||
         (config.conversationHistory !== undefined &&
           (call.name === LIST_CONVERSATIONS_NAME || call.name === READ_CONVERSATION_NAME)) ||
-        config.pluginHost?.ownsTool(call.name) === true ||
-        (config.mcpHost?.registeredTools().some(tool => tool.name === call.name) === true && nativeTools.some(tool => tool.name === call.name)) ||
-        selfExtension?.tool(call.name) !== undefined,
+        (config.mcpHost?.registeredTools().some(tool => tool.name === call.name) === true && nativeTools.some(tool => tool.name === call.name)),
     };
   }
 
@@ -1266,7 +1164,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       (call.name === LIST_CONVERSATIONS_NAME || call.name === READ_CONVERSATION_NAME)) {
       return dispatchConversationHistoryTool(call, config.conversationHistory);
     }
-    if (config.pluginHost?.ownsTool(call.name)) return dispatchPluginTool(config.pluginHost, call);
     const mcpLoad = await loadMcpServers(config.mcpHost, call);
     if (mcpLoad) {
       const other = mcpLoad.rest.length ? await executor.execute({ ...call, arguments: { ...call.arguments, names: mcpLoad.rest } }, { signal, assertAuthority }) : null;
@@ -1416,8 +1313,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     if (closing || turnInProgress) throw new Error("This console session already has an active turn or is closing.");
     turnInProgress = true;
     let turnActive = true;
-    let directDriver = false;
-    let unsubscribeHarness: (() => void) | undefined;
     const runCalls: Array<{ call: ToolCall; result: ToolResult }> = [];
     const usage = { inputTokens: 0, outputTokens: 0 };
     let detachedUsageTokens = 0;
@@ -1459,7 +1354,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let maintenanceCancelled = false;
     try {
     await ready;
-    if (callbacks?.onHarnessUpdate) unsubscribeHarness = harness?.subscribe(callbacks.onHarnessUpdate);
     // Only the direct operator input can authorize a target. Keep this after
     // admission/abort checks and before any model, peer, or tool content.
     await selectOperatorTarget(userText, callbacks?.onNotice, signal);
@@ -1564,103 +1458,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         }
       },
     };
-    const invokePluginModel = async (request: unknown, requestSignal?: AbortSignal) => {
-      if (!turnActive) throw new Error("The parent console turn has ended.");
-      const parsed = parseExecutableModelRequest(request);
-      const tokensUsed = usage.inputTokens + usage.outputTokens;
-      // Generated agents share the parent turn's allowance; repeated SDK calls
-      // do not create a fresh budget or another provider identity.
-      if (tokensUsed >= maxTurnTokens || tokensUsed + lastCallInputTokens > maxTurnTokens) {
-        throw new Error("Parent turn token budget is exhausted.");
-      }
-      const effectiveSignal = signal && requestSignal ? AbortSignal.any([signal, requestSignal]) : signal ?? requestSignal;
-      effectiveSignal?.throwIfAborted();
-      let delta: TokenUsageForPricing | undefined;
-      if (directDriver) {
-        // A driver may build its own prompt. Report only complete source blocks
-        // it actually forwards to the broker, never a preview handed to drive().
-        const lessons: ConsoleSourceLesson[] = [];
-        for (const message of parsed.messages) for (const block of message.content) {
-          if (block.type !== "text" || !block.text.startsWith(sourcePrefix)) continue;
-          try {
-            const values: unknown = JSON.parse(block.text.slice(sourcePrefix.length));
-            if (Array.isArray(values)) for (const value of values) {
-              if (value && typeof value === "object" && typeof value.title === "string" && typeof value.summary === "string" &&
-                Array.isArray(value.sourceLinks) && value.sourceLinks.every((link: unknown) => link && typeof link === "object" &&
-                  "path" in link && typeof link.path === "string" && "hash" in link && typeof link.hash === "string")) {
-                lessons.push({ title: value.title, summary: value.summary, sourceLinks: value.sourceLinks.map((link: { path: string; hash: string }) => ({ path: link.path, hash: link.hash })) });
-              }
-            }
-          } catch { /* Incomplete or transformed text is not a complete supplied lesson. */ }
-        }
-        recordSourceContext(lessons);
-      }
-      const response = await runtime.executeNative(
-        parsed.system, parsed.messages, parsed.tools,
-        { onUsage: (value) => { delta = value; } }, effectiveSignal,
-      );
-      recordModelUsage("plugin", response.usage ?? delta);
-      return executableModelResult(response);
-    };
-    let driverResult: NativeRuntimeResult | undefined;
-    toolContext.pluginExecutionContext = () => ({
-      signal,
-      invokeModel: invokePluginModel,
-      invokeTool: async (name, args, requestSignal, capabilities) => {
-        if (!turnActive) return { success: false, output: null, error: "The parent console turn has ended." };
-        // Enforce declared capabilities when the call originates from an
-        // executable tool's SDK broker.  Derive gate flags from the session's
-        // live gate maps (built-in ∪ injected tools).
-        if (capabilities) {
-          const check = checkInvocationCapabilities(name, capabilities, {
-            networkCapable: networkCapableTools[name] === true,
-            localScope: localScopeTools[name] === true,
-            readOnly: readOnlyTools[name] === true,
-          });
-          if (!check.allowed) {
-            return { success: false, output: null, error: check.reason ?? `Tool "${name}" denied by executable capability gate.` };
-          }
-        }
-        const call: ToolCall = { name, arguments: args };
-        const effectiveSignal = signal && requestSignal ? AbortSignal.any([signal, requestSignal]) : signal ?? requestSignal;
-        const driverCallId = directDriver ? `harness-${randomUUID()}` : undefined;
-        const authorityResult = driverResult;
-        const assertAuthority = directDriver
-          ? () => harness!.assertDriverAuthority()
-          : authorityResult ? () => harness!.assertDriverAuthority(authorityResult) : undefined;
-        callbacks?.onToolStart?.(call);
-        const startedAt = Date.now();
-        const findingsBefore = toolContext.findings.length;
-        let result: ToolResult;
-        try {
-          result = nativeTools.some((tool) => tool.name === name)
-            ? await dispatchAuthorized(call, callbacks?.onNotice, effectiveSignal, false, assertAuthority)
-            : { success: false, output: null, error: `Tool "${name}" is not available to the parent session.` };
-        } catch (error) {
-          result = { success: false, output: null, error: error instanceof Error ? error.message : String(error) };
-        }
-        if (driverCallId) messages.push(
-          { role: "assistant", content: [{ type: "tool_use", id: driverCallId, name, input: structuredClone(args) }] },
-          { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content: stringifyToolResult(result), is_error: !result.success }] },
-        );
-        runCalls.push({ call, result });
-        recordToolResult(call, result, startedAt, findingsBefore);
-        callbacks?.onToolResult?.(call, result);
-        return result;
-      },
-    });
-    toolContext.evolveExecutablePlugin = async (pluginId, profileName, evolveSignal) => {
-      const profiles = toolContext.executableEvolutionProfiles;
-      if (!profiles || !Object.hasOwn(profiles, profileName) || !config.costModel || !executablePlugins) {
-        return { success: false, output: null, error: "Evolution requires a named operator evaluation profile and the active provider model ID." };
-      }
-      const effectiveSignal = signal && evolveSignal ? AbortSignal.any([signal, evolveSignal]) : signal ?? evolveSignal;
-      return executablePlugins.evolve(pluginId, { ...profiles[profileName], model: config.costModel }, {
-        signal: effectiveSignal,
-        model: (system, messages, tools, modelSignal) => invokePluginModel({ system, messages, tools }, modelSignal),
-      }, { ...toolContext.pluginExecutionContext?.(), signal: effectiveSignal });
-    };
-
     const promptEstimate = () => estimatePromptTokens(requestSystemPrompt(), requestMessages(), requestTools());
     const occupancy = () => {
       const estimate = promptEstimate();
@@ -1762,7 +1559,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // refinement's deferred model call never runs concurrently with this turn.
     objectiveService.turnStarted();
     // Route self-extension audit lines to THIS turn's operator notify hook.
-    activeNotify = callbacks?.onNotice;
     let plannerReconnects = 0;
     for (;;) {
       // Close the previous round before stopping, but do not spend another
@@ -1819,25 +1615,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       const requestEstimate = promptEstimate();
       let result: NativeRuntimeResult;
       let recoverableOverflow: boolean | undefined;
-      let driven = false;
       let directPlannerAttempted = false;
-      driverResult = undefined;
       try {
-        await harness?.checkpoint({ sessionId: scanId, phase: "working", iterations,
-          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: hasTurnTokenCap ? maxTurnTokens : 0 });
-        directDriver = true;
-        const callsBeforeDrive = runCalls.length;
-        const supplied = await harness?.drive({ system: requestSystemPrompt(), messages: requestMessages(), tools: requestTools() }, toolContext.pluginExecutionContext?.());
-        directDriver = false;
-        if (supplied !== undefined) {
-          harness!.assertDriverAuthority(supplied);
-          driven = true;
-          result = supplied;
-          driverResult = supplied;
-          // Actual SDK model calls already recorded their usage through invokePluginModel.
-        } else {
+        {
           try {
-            if (runCalls.length !== callsBeforeDrive) preparedSourceLessons = undefined;
             const request = requestSourceContext();
             recordSourceContext(request.lessons);
             directPlannerAttempted = true;
@@ -1861,11 +1642,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         result = { content: [], stopReason: "error", durationMs: 0,
           error: describeCaughtError(error), cancelled: signal?.aborted };
         // Structured SDK errors can carry their context code outside message.
-        // A harness driver may already have performed SDK tool effects before
-        // throwing. Never replay that driver as an overflow recovery.
-        recoverableOverflow = !directDriver && contextOverflow(error);
+        recoverableOverflow = contextOverflow(error);
         if (recoverableOverflow) result.error = `context_length_exceeded: ${result.error}`;
-      } finally { directDriver = false; }
+      }
 
       if (signal?.aborted && !isRecoverableOutputCap(result)) return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
 
@@ -1887,7 +1666,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         const plannerTransportFailure = directPlannerAttempted
           && /^(?:Error:\s*)?(?:(?:OpenRouter API error:\s*)?OpenRouter transport failure \[(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)\]:|(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)(?:\b|:)|(?:The )?socket connection was closed unexpectedly\b)/i.test(result.error ?? "")
           && !/(?:tool|harness|budget|allowance|permission|approval|denied)/i.test(result.error ?? "");
-        if (plannerTransportFailure && !directDriver) {
+        if (plannerTransportFailure) {
           const receipt = result.usage ?? streamedUsage;
           // Unknown billing cannot be charged as zero against an explicit cap.
           if (hasTurnTokenCap && !receipt) {
@@ -1906,7 +1685,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             continue;
           }
         }
-        if (!driven && (recoverableOverflow ?? contextOverflow(result.error)) && contextOverflowRecoveries < 3) {
+        if ((recoverableOverflow ?? contextOverflow(result.error)) && contextOverflowRecoveries < 3) {
           const recovered = await maintenance(true);
           const stopped = boundaryStop();
           if (stopped) return stopped;
@@ -1932,7 +1711,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         .map((b) => b.text)
         .join("");
       if (turnText) assistantText += turnText;
-      if (driven && turnText) callbacks?.onAssistantDelta?.(turnText);
 
       if (isRecoverableOutputCap(result)) {
         const checkpoint = result.checkpoint!;
@@ -1972,14 +1750,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // So once cancelled we keep iterating, but instead of dispatching we
       // append a synthetic "cancelled" tool_result for each outstanding block.
       let cancelledMidRound = false;
-      let authorityFailure: string | undefined;
-      const assertAuthority = driven ? () => {
-        try { harness!.assertDriverAuthority(result); }
-        catch (error) {
-          authorityFailure = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-      } : undefined;
       for (const block of toolUseBlocks) {
         if (titleMetadataEnabled() && block.name === titleTool.name) {
           const proposed = typeof block.input.title === "string" ? block.input.title.replace(/\s+/g, " ").trim().slice(0, 80) : "";
@@ -2021,11 +1791,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         const startedAt = Date.now();
         const findingsBefore = toolContext.findings.length;
         let toolResult: ToolResult;
-        try { toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal, true, assertAuthority); }
-        catch (error) {
-          if (!authorityFailure) throw error;
-          toolResult = { success: false, output: null, error: authorityFailure };
-        }
+        toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal, true);
         // A successful save is a workflow handoff, never proof of runtime
         // reproduction. Build the receipt from the host's finding ledger, not
         // the model's submitted evidence prose. All subsequent verification
@@ -2057,14 +1823,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       messages.push({ role: "user", content: toolResultBlocks });
 
       iterations += 1;
-      try { assertAuthority?.(); } catch { /* Preserve completed tool receipts before reporting lost authority. */ }
-      if (authorityFailure) {
-        return {
-          assistantText, toolCalls: runCalls, usage,
-          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
-          budget: budgetSnapshot(), stopReason: "error", error: authorityFailure,
-        };
-      }
 
       // A mid-round abort stops here — AFTER the tool_result message for this
       // round is pushed, so every tool_use in it is matched and the history is
@@ -2119,22 +1877,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       }
     }
     } finally {
-      try {
-        await harness?.refreshViews({ sessionId: scanId, phase: "idle", iterations,
-          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: hasTurnTokenCap ? maxTurnTokens : 0 });
-      } catch (error) {
-        callbacks?.onNotice?.(`Live harness view: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-      unsubscribeHarness?.();
+      {
       turnActive = false;
       turnInProgress = false;
       // Turn over. Once no turn is active this lets the one-shot objective
       // refinement fire — deferred and rescheduled while any turn runs, so its
       // model call never races the turn's own. Fire-and-forget, fully fail-soft.
       objectiveService.turnEnded();
-      activeNotify = undefined;
-      toolContext.pluginExecutionContext = undefined;
-      toolContext.evolveExecutablePlugin = undefined;
       }
     }
   }
@@ -2177,17 +1926,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // their original ORDER (stop workers → close plugins → cleanup) because
     // they touch the same executor; the whole ordered chain shares one
     // deadline so a wedge anywhere in it cannot outlast the budget.
-    const harnessTrack = settleWithin("Harness close", harness?.close());
     const executorTrack = settleWithin("Executor drain", (async () => {
       try { await executor.stopPersistentAgents(); }
       catch (error) { warnings.push(`Worker drain: ${String(error)}`); }
-      try { await executablePlugins?.close(); }
-      catch (error) { warnings.push(`Executable plugins close: ${String(error)}`); }
       await executor.cleanup();
     })());
     const modelTrack = contribution ? settleWithin("Contribution model drain", Promise.allSettled([...pendingModelCalls])) : Promise.resolve();
     retirement = (async () => {
-      await Promise.all([harnessTrack, executorTrack, modelTrack]);
+      await Promise.all([executorTrack, modelTrack]);
       if (contribution) {
         withRunContribution(contribution, contributionAgentId, contributionParentId, () => {
           if (contributionParentId) contribution!.record("termination", { source: "console", execution: contributionExecution, termination: contributionStop });
@@ -2206,7 +1952,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   return {
     scanId,
     ready,
-    harness,
     get contribution(): RunCapture | undefined { return contribution; },
     get systemPrompt(): string { return systemPrompt; },
     get sourceContext(): ConsoleSourceContext { return structuredClone(sourceContext); },
@@ -2221,7 +1966,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         parameters: tool.input_schema.properties as ToolDefinition["parameters"],
         ...(tool.input_schema.required ? { required: tool.input_schema.required } : {}),
       });
-      for (const tool of config.pluginHost?.toolDefinitions() ?? []) catalog.set(tool.name, tool);
       for (const tool of config.mcpHost?.registeredTools() ?? []) catalog.set(tool.name, tool);
       const definitions = [...catalog.values()].filter(tool => webSearchEnabled || tool.name !== "web_search");
       const signature = JSON.stringify(definitions);
@@ -2260,7 +2004,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       }
     },
     configureWorkspace: (path) => {
-      if (!initialized || turnInProgress || closing) throw new Error("Workspace configuration requires an initialized idle console session.");
+      if (turnInProgress || closing) throw new Error("Workspace configuration requires an initialized idle console session.");
       const directory = realpathSync(path);
       if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new Error("Workspace must be an existing unprotected local directory.");
       workspaceRoot = directory;
@@ -2270,7 +2014,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       executor.configureWorkspace(directory);
     },
     configureEngagement: (selection) => {
-      if (!initialized || turnInProgress || closing) throw new Error("Scope configuration requires an initialized idle console mission.");
+      if (turnInProgress || closing) throw new Error("Scope configuration requires an initialized idle console mission.");
       if (selection.scope !== undefined && selection.scope !== null) {
         applySessionScope(selection.target ?? sessionTarget, selection.scope, true);
         return;
@@ -2316,7 +2060,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     stopPersistentAgent: (agentId) => executor.stopPersistentAgent(agentId),
     stopPersistentAgents: () => executor.stopPersistentAgents(),
     exportCheckpoint: () => {
-      if (!initialized || turnInProgress || closing) {
+      if (turnInProgress || closing) {
         throw new Error("Cannot export checkpoint before readiness, during a turn, or after retirement.");
       }
       contribution?.record("checkpoint", { source: "console_export_checkpoint", scanId, messageCount: messages.length, effectiveScope: effectiveContributionScope(), durable: false }, contributionAgentId, contributionParentId);
@@ -2347,10 +2091,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         },
         executor: executor.exportCheckpoint(),
         loadedMcpTools: [...(deferredTools?.loadedDefinitions().map(tool => tool.name) ?? []), ...(corePartition ? packTools.loadedDefinitions().map(tool => tool.name) : [])],
-        selfExtensionEnabled,
-        selfExtensionSnapshot: selfExtension?.snapshot() ?? null,
-        harnessRoot: harnessRoot ?? null,
-        harness: harness?.exportCheckpoint() ?? null,
       });
     },
     prepareHandoff: () => {

@@ -3,8 +3,6 @@ import { z } from "zod";
 import { toolExecutorCheckpointSchema } from "../agent/tools.js";
 import type { ToolContext } from "../agent/types.js";
 import type { NativeMessage } from "../runtime/types.js";
-import type { SelfExtensionSnapshot } from "../plugins/self-extension.js";
-import type { LiveHarnessCheckpoint } from "../plugins/live-harness.js";
 import type { ScopeJson } from "../scope/scope.js";
 import { isAbsolute } from "node:path";
 
@@ -60,17 +58,12 @@ export const consoleSessionCheckpointSchema = z.object({
   executor: toolExecutorCheckpointSchema,
   // Legacy field name retained for v1 compatibility; includes deferred built-ins.
   loadedMcpTools: z.array(z.string()),
-  selfExtensionEnabled: z.boolean(),
-  // The registry and harness validate their own versioned provenance on restore.
-  selfExtensionSnapshot: z.custom<SelfExtensionSnapshot>(record).nullable(),
-  harnessRoot: absolutePath.nullable(),
-  harness: z.custom<LiveHarnessCheckpoint>(record).nullable(),
-}).strict().superRefine((checkpoint, context) => {
-  const hasExtensionState = checkpoint.selfExtensionSnapshot !== null && checkpoint.harnessRoot !== null && checkpoint.harness !== null;
-  const hasNoExtensionState = checkpoint.selfExtensionSnapshot === null && checkpoint.harnessRoot === null && checkpoint.harness === null;
-  if (checkpoint.selfExtensionEnabled ? !hasExtensionState || checkpoint.role === "verify" : !hasNoExtensionState) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "Inconsistent self-extension handoff state" });
-  }
-});
+  // Written by releases that had model-authored executable plugins and a live harness. Both are gone: the fields are
+  // accepted so an old checkpoint still restores, and ignored.
+  selfExtensionEnabled: z.unknown().optional(),
+  selfExtensionSnapshot: z.unknown().optional(),
+  harnessRoot: z.unknown().optional(),
+  harness: z.unknown().optional(),
+}).strict();
 
 export type ConsoleSessionCheckpoint = z.infer<typeof consoleSessionCheckpointSchema>;

@@ -3,22 +3,17 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, w
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/engine";
+import { LlmApiRuntime } from "@0/engine";
 import { saveSession, loadSession, type StoredSession } from "../state/session-store.js";
 import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import * as nativePlanStore from "../state/chatgpt-plan-store.js";
 import { createWebConsoleRuntime } from "./operator-services.js";
 import { PROVIDERS } from "../state/provider-status.js";
-import { planSettingsReset, applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
+import { planSettingsReset, applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, WebOperatorServices } from "./operator-services.js";
 
 
-const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm", flush: vi.fn(async () => []) }));
+const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm" }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => execution.profile }));
-vi.mock("../state/plugin-service.js", async (original) => {
-  const module = await original<typeof import("../state/plugin-service.js")>();
-  return { ...module, createPluginService: (...args: Parameters<typeof module.createPluginService>) => ({ ...module.createPluginService(...args), flushDeferred: execution.flush }) };
-});
-
 vi.mock("../state/credential-store.js", async (original) => ({
   ...await original<typeof import("../state/credential-store.js")>(),
   loadCredentials: () => ({}), credentialEnvPatch: () => ({}),
@@ -41,7 +36,7 @@ vi.mock("../state/model-catalog-sync.js", async (original) => ({
 
 let testHome: string;
 beforeEach(() => {
-  execution.profile = "local"; execution.flush.mockClear();
+  execution.profile = "local";
   vi.mocked(syncModelCatalog).mockReset().mockResolvedValue(null);
   testHome = realpathSync(mkdtempSync(join(tmpdir(), "zero-operator-reasoning-")));
   vi.stubEnv("HOME", testHome);
@@ -323,45 +318,6 @@ describe("provider switch inside a mission", () => {
     expect(runtime.modelSelection().agentModels).toEqual({ audit: "gpt-6.1-sol" });
   });
 });
-
-describe("web isolated plugin boundaries", () => {
-  it("rejects host plugin runs before reading installed plugin bytes while VM execution is selected", async () => {
-    execution.profile = "smolvm";
-    const result = await new WebOperatorServices().handle("/api/console/plugins/run", "POST", { id: "not-installed-fixture" }, new URLSearchParams());
-    expect(result).toMatchObject({ status: 409, data: { code: "isolated_execution_required" } });
-    expect(execution.flush).not.toHaveBeenCalled();
-  });
-
-  it("saves an approved VM plugin for automatic guest loading without loading it on the host", async () => {
-    execution.profile = "smolvm";
-    const directory = join(pluginsRootDir(testHome), "fixture.scanner");
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    writeFileSync(join(directory, "plugin.json"), JSON.stringify({ id: "fixture.scanner", name: "Fixture", version: "1.0.0", tools: [{ name: "fixture_scan", description: "test", parameters: {}, capabilities: ["filesystem-read"] }] }));
-    writeFileSync(join(directory, "plugin.js"), 'throw new Error("host execution forbidden");');
-    const result = await new WebOperatorServices().handle("/api/console/plugins/enable", "POST", { id: "fixture.scanner", approved: true, version: "1.0.0", capabilities: ["filesystem-read"] }, new URLSearchParams());
-    expect(result).toMatchObject({ status: 200, data: { ok: true, state: "enabled", message: expect.stringContaining("new SmolVM threads") } });
-    expect(readEnablement(process.cwd(), testHome).enabled["fixture.scanner"]).toMatchObject({ version: "1.0.0", capabilities: ["filesystem-read"] });
-    expect(execution.flush).not.toHaveBeenCalled();
-  });
-
-  it("allows VM approvals to reach installed-plugin validation without attempting host loading", async () => {
-    execution.profile = "smolvm";
-    const result = await new WebOperatorServices().handle("/api/console/plugins/enable", "POST", { id: "not-installed-fixture" }, new URLSearchParams());
-    expect(result).toMatchObject({ status: 409, data: { code: "invalid_plugin" } });
-    expect(execution.flush).not.toHaveBeenCalled();
-  });
-
-  it("retains deferred host plugin work while VM execution is selected and flushes only in local mode", async () => {
-    new WebOperatorServices();
-    execution.profile = "smolvm";
-    expect(await flushWebConsolePlugins()).toEqual([]);
-    expect(execution.flush).not.toHaveBeenCalled();
-    execution.profile = "local";
-    expect(await flushWebConsolePlugins()).toEqual([]);
-    expect(execution.flush).toHaveBeenCalledOnce();
-  });
-});
-
 
 it("refuses an explicit selection of a removed provider but never touches its stored credential", async () => {
   vi.stubEnv("CLINE_API_KEY", "synthetic-cline-key");
@@ -658,9 +614,9 @@ it.each(["openai", "chatgpt-codex"] as const)("preserves explicit Daybreak in pr
 });
 
 describe("settings reset never loosens safety and privacy settings", () => {
-  const strict = { analyticsLevel: "off", diagnosticReporting: "off", updatePolicy: "off", executionProfile: "smolvm", allowModelSelfExtension: false, allowDevSourceUpdates: false, density: "compact" } as never;
-  const loose = { analyticsLevel: "usage", diagnosticReporting: "automatic", updatePolicy: "automatic", executionProfile: "local", allowModelSelfExtension: true, allowDevSourceUpdates: true } as never;
-  const guarded = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "allowModelSelfExtension", "allowDevSourceUpdates"] as never[];
+  const strict = { analyticsLevel: "off", diagnosticReporting: "off", updatePolicy: "off", executionProfile: "smolvm", allowDevSourceUpdates: false, density: "compact" } as never;
+  const loose = { analyticsLevel: "usage", diagnosticReporting: "automatic", updatePolicy: "automatic", executionProfile: "local", allowDevSourceUpdates: true } as never;
+  const guarded = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "allowDevSourceUpdates"] as never[];
   it("Reset all leaves every guarded key alone and reports it", () => {
     const plan = planSettingsReset([...guarded, "density"] as never[], false, strict);
     expect(plan.keys).toEqual(["density"]);
@@ -669,7 +625,7 @@ describe("settings reset never loosens safety and privacy settings", () => {
   it("explicit reset keeps stricter current values and only tightens looser ones", () => {
     const kept = planSettingsReset(guarded, true, strict);
     expect(kept.keys).toEqual(["allowDevSourceUpdates"]); // equal to its default, so a no-op
-    expect(kept.preserved.map(entry => entry.key).sort()).toEqual(["allowModelSelfExtension", "analyticsLevel", "diagnosticReporting", "executionProfile", "updatePolicy"].sort());
+    expect(kept.preserved.map(entry => entry.key).sort()).toEqual(["analyticsLevel", "diagnosticReporting", "executionProfile", "updatePolicy"].sort());
     const tightened = planSettingsReset(guarded, true, loose);
     expect(tightened.keys.sort()).toEqual([...guarded].sort()); // defaults are never stricter than these values
     expect(tightened.preserved).toEqual([]);

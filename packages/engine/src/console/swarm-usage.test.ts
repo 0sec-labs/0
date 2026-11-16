@@ -37,7 +37,7 @@ it("includes recursive child usage once with actual model and cache breakdowns",
       },
     };
   };
-  const session = createConsoleSession({ runtime: atDepth(0), role: "audit", toolset: "full", allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: atDepth(0), role: "audit", toolset: "full" });
   try {
     const outcome = await session.send("Investigate in a small coordinated team.", { onUsage: report => reports.push(report) });
     expect(outcome.usage).toEqual({ inputTokens: 90, outputTokens: 9 });
@@ -87,7 +87,7 @@ it("allows a three-worker batch without approval", async () => {
         : { content: [{ type: "text", text: "Evidence review finished." }], stopReason: "end_turn", durationMs: 0 };
     },
   };
-  const session = createConsoleSession({ runtime, approveTool, allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime, approveTool });
   try {
     const allowed = await session.send("Review existing evidence with three workers.");
     expect(allowed.toolCalls[0].call.name).toBe("spawn_agent");
@@ -104,7 +104,7 @@ it("counts streamed child usage once when the request subsequently fails", async
     callbacks?.onUsage?.({ inputTokens: 7, outputTokens: 2, cachedInputTokens: 3 });
     throw new Error("OpenAI API error 401: invalid_api_key");
   } };
-  const session = createConsoleSession({ runtime: parentWithChild(child), allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: parentWithChild(child) });
   try {
     const outcome = await session.send("Delegate one check.", { onUsage: usage => reports.push(usage) });
     expect(outcome.usage).toEqual({ inputTokens: 27, outputTokens: 4 });
@@ -118,7 +118,7 @@ it("marks missing worker usage unknown instead of fabricating a free request", a
   const child: NativeRuntime = { type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4.1", executeNative: async () => {
     const result = done(); delete result.usage; return result;
   } };
-  const session = createConsoleSession({ runtime: parentWithChild(child), allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: parentWithChild(child) });
   try {
     await session.send("Delegate one check.", { onUsage: usage => reports.push(usage) });
     expect(reports.filter(report => report.kind === "worker")).toMatchObject([{ model: "gpt-4.1", inputTokens: 0, outputTokens: 0, usageUnavailable: true }]);
@@ -132,7 +132,7 @@ it("stops admitting child requests after the active parent token allowance is sp
     childCalls++;
     return { content: [{ type: "tool_use", id: "status", name: "report_status", input: { note: "Examining bounded evidence" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 200_000, outputTokens: 1 } };
   } };
-  const session = createConsoleSession({ runtime: parentWithChild(child), maxTurnTokens: 200_000, allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: parentWithChild(child), maxTurnTokens: 200_000 });
   try {
     const outcome = await session.send("Delegate one check.");
     expect(outcome.stopReason).toBe("max_turn_tokens");
@@ -154,7 +154,7 @@ it("reports a late persistent worker to the latest turn without calling the old 
   } };
   const session = createConsoleSession({ runtime: parentWithChild(child, true, async call => {
     if (call === 3) { secondStarted.resolve(); await releaseParent.promise; }
-  }), allowModelSelfExtension: false });
+  }) });
   try {
     await session.send("Start an ongoing worker.", { onUsage: usage => first.push(usage) });
     await started.promise;
@@ -176,7 +176,7 @@ it("does not notify retired renderers when an in-flight worker finishes during d
     started.resolve(); await release.promise;
     return done({ inputTokens: 30, outputTokens: 3 });
   } };
-  const session = createConsoleSession({ runtime: parentWithChild(child, true), allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: parentWithChild(child, true) });
   await session.send("Start a worker.", { onUsage: usage => reports.push(usage) });
   await started.promise;
   const count = reports.length;
@@ -193,7 +193,7 @@ it("reports post-turn worker usage without mutating the completed turn outcome",
   const child: NativeRuntime = { type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4.1", executeNative: async () => {
     started.resolve(); await release.promise; return done({ inputTokens: 30, outputTokens: 3 });
   } };
-  const session = createConsoleSession({ runtime: parentWithChild(child, true), allowModelSelfExtension: false });
+  const session = createConsoleSession({ runtime: parentWithChild(child, true) });
   try {
     const outcome = await session.send("Start a worker.", { onUsage: usage => { reports.push(usage); if (usage.kind === "worker") reported.resolve(); } });
     await started.promise; release.resolve(); await reported.promise;

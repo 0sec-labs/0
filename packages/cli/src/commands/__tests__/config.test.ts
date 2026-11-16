@@ -137,11 +137,11 @@ describe("config import", () => {
 
   it("REFUSES to flip a security setting without --yes", () => {
     const home = makeDir("cfg-home-");
-    const initialSettings = { ...DEFAULT_SETTINGS, allowModelSelfExtension: false };
+    const initialSettings = { ...DEFAULT_SETTINGS, allowSubagentOperatorMessaging: false };
     saveSettings(initialSettings, home);
     const project = makeDir("cfg-proj-");
     const file = join(makeDir("cfg-in-"), "danger.json");
-    writeFileSync(file, JSON.stringify({ allowModelSelfExtension: true, autoCompaction: false }));
+    writeFileSync(file, JSON.stringify({ allowSubagentOperatorMessaging: true, autoCompaction: false }));
     const cap = capture();
 
     runConfigImport(file, cap.deps({ homeDir: home, projectDir: project, scope: "global", yes: false }));
@@ -166,14 +166,14 @@ describe("config import", () => {
 
   it("applies a security flip only when --yes is passed", () => {
     const home = makeDir("cfg-home-");
-    saveSettings({ ...DEFAULT_SETTINGS, allowModelSelfExtension: false }, home);
+    saveSettings({ ...DEFAULT_SETTINGS, allowSubagentOperatorMessaging: false }, home);
     const file = join(makeDir("cfg-in-"), "danger.json");
-    writeFileSync(file, JSON.stringify({ allowModelSelfExtension: true }));
+    writeFileSync(file, JSON.stringify({ allowSubagentOperatorMessaging: true }));
     const cap = capture();
 
     runConfigImport(file, cap.deps({ homeDir: home, projectDir: makeDir("cfg-proj-"), scope: "global", yes: true }));
     expect(process.exitCode).toBe(0);
-    expect(loadGlobalSettings(home).allowModelSelfExtension).toBe(true);
+    expect(loadGlobalSettings(home).allowSubagentOperatorMessaging).toBe(true);
   });
 
   it("requires explicit global approval to change the execution boundary and ignores project attempts", () => {

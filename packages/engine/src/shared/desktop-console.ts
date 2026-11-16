@@ -1,4 +1,3 @@
-import type { HarnessSnapshot } from "./live-harness.js";
 import type { Finding } from "./types.js";
 import type { Visualization } from "./visualization.js";
 
@@ -15,8 +14,6 @@ export type DesktopConsoleAutonomyMode = "changes";
 /** The constant value of the deprecated wire field. */
 export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "changes";
 
-/** Product default for allowModelSelfExtension in non-verify sessions. */
-export const DEFAULT_ALLOW_MODEL_SELF_EXTENSION = true;
 export type DesktopConsoleRole = "discovery" | "attack" | "verify" | "report" | "audit" | "review";
 export type DesktopConsoleSessionStatus = "ready" | "working" | "waiting" | "cancelling" | "closed" | "failed";
 
@@ -219,7 +216,6 @@ export type DesktopConsoleEventPayload =
   | { type: "worker"; worker: ConsoleWorker; incremental?: boolean }
   | { type: "queued"; messages: ConsoleQueuedMessage[] }
   | { type: "state"; objective: string; todos: ConsoleTodos | null }
-  | { type: "harness"; harness: HarnessSnapshot }
   | { type: "compaction"; compaction: ConsoleJsonValue };
 
 export type DesktopConsoleEvent = DesktopConsoleEventBase & DesktopConsoleEventPayload;
@@ -437,7 +433,6 @@ export interface ConsoleSessionSnapshot {
   contextWindowTokens?: number;
   lastOutcome: ConsoleTurnOutcome | null;
   compaction: ConsoleJsonValue | null;
-  harness: HarnessSnapshot | null;
   objective: string;
   todos: ConsoleTodos | null;
   tools: Array<{ name: string; description: string; inputSchema: ConsoleJsonValue }>;

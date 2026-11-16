@@ -130,7 +130,7 @@ export function partitionForToolset(defs: readonly ToolDefinition[], toolset: To
   for (const def of defs) {
     if (core.has(def.name)) advertised.push(def);
     else if (packed.has(def.name)) packOnly.push(def);
-    // Anything else (aliases, self_extend, injected tools) is not part of the core list.
+    // Anything else (aliases, injected tools) is not part of the core list.
   }
   return { advertised, packOnly };
 }

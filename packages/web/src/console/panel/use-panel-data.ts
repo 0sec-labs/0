@@ -9,7 +9,6 @@ import { buildEvidence, evidenceArtifactCount } from "./views/evidence-model";
 import { FIXES_WORKFLOWS_PATH, fixesFromWorkflows } from "./views/fixes-model";
 import { selfEditApi } from "@/lib/self-edit-api";
 import { visualsFromSnapshot } from "../visuals";
-import { hasHarnessContent } from "./views/tools";
 import type { Workflow } from "@/components/console-control/contracts";
 import type { PanelAgentSummary } from "./types";
 import type { PanelViewCounts } from "./view-menu-model";
@@ -44,8 +43,8 @@ export function usePanelData(snapshot: ConsoleSessionSnapshot | undefined, sessi
     browser: captures,
     visuals: visualCount,
     ...(previewEnabled ? { preview: "enabled" } : {}),
-    tools: hasHarnessContent(snapshot?.harness) || toolCount ? toolCount : undefined,
-  }), [findings, fixes.length, captures, visualCount, toolCount, snapshot?.harness, previewEnabled]);
+    tools: toolCount ? toolCount : undefined,
+  }), [findings, fixes.length, captures, visualCount, toolCount, previewEnabled]);
   const agents = useMemo<PanelAgentSummary[]>(() => (snapshot?.workers ?? []).map(({ id, name, task, status }) => ({ id, name, task, status })), [snapshot?.workers]);
   return { counts, fixes, agents };
 }

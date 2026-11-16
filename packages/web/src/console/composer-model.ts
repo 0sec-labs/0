@@ -55,7 +55,7 @@ export interface MentionItem {
   token: string;
 }
 export const MENTION_GROUP_LABELS: Record<MentionKind, string> = {
-  plugin: "Plugins",
+  plugin: "Extensions",
   finding: "Findings",
   mission: "Threads",
 };

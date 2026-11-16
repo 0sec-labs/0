@@ -29,7 +29,7 @@ The sidebar holds:
 - **Skills**: **Installed** skills, and **Browse** for the GitHub skills directory and **Add from GitHub**.
 - **Memory**.
 - **Computers**: the machines threads run on. Always listed; it is no longer under Settings.
-- **Explore**: the catalog of **Plugins** and **Themes**.
+- **Extensions**: installed extensions, connections and **Add MCP server**.
 - Your **Agents**, when this computer supports them.
 
 Two cards can appear above the account row, for local users and team owners:
@@ -91,7 +91,7 @@ Type `/` in the composer for a menu grouped by command. Each entry shows the CLI
 | `/models usage`, `/usage` | `0 models list --usage` | Shows tokens, cost and context |
 | `/skills list` | `0 skills list` | Opens Skills |
 | `/memory list` | `0 memory list` | Opens Memory |
-| `/plugin list`, `/plugin browse` | `0 skills list`, `0 skills list --catalog` | Opens Plugins or the plugin explorer |
+| `/plugin list`, `/plugin browse` | `0 skills extensions list`, `0 skills list --catalog` | Opens Extensions or the catalog |
 | `/config list`, `/config get`, `/config set` | `0 config get --all`, `0 config get`, `0 config set` | Opens Settings; changes are made there |
 | `/doctor` | `0 config doctor` | Checks your setup |
 
@@ -177,10 +177,10 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | | **Shortcuts** | The searchable shortcut list. |
 | Agent | **Instructions** | Your own `AGENTS.md` text for every thread, plus one file per folder. |
 | | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. |
-| | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
+| | **Agents** | Agent collaboration and messages, where tools run. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
 | Activity | **Usage** | Estimated spend and tokens by model and by thread. |
-| | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |
+| | **Audit log** | Approvals, denials, settings, extension and provider changes. Searchable, with JSON export. |
 | | **Members** | Team mode only. |
 
 The folder and permissions page opens at `/project`. Checks that the computer, provider and tools work open from **General → Status → Details** (`/doctor`).

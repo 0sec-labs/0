@@ -34,28 +34,14 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "POST", path: "github/connect", engine: false, owner: true, why: "GitHub credential" },
   { method: "POST", path: "github/device-auth", engine: false, owner: true, why: "GitHub credential flow" },
   { method: "DELETE", path: "github/device-auth", engine: false, owner: true, why: "GitHub credential flow" },
-  { method: "POST", path: "service-plugins/slack/connect", engine: false, owner: true, why: "stores service credentials" },
-  { method: "PATCH", path: "service-plugins/slack", engine: false, owner: true, why: "enables service plugin" },
-  { method: "DELETE", path: "service-plugins/slack", engine: false, owner: true, why: "forgets credentials" },
   // Operator-global settings
   { method: "PATCH", path: "settings", engine: false, owner: true, why: "executionProfile, consent, privacy and update policy" },
   { method: "POST", path: "settings/reset", engine: false, owner: true, why: "resets operator settings" },
   { method: "POST", path: "update/apply", engine: false, owner: true, why: "replaces the running program and restarts the server" },
   // Code execution
-  { method: "POST", path: "mcp-servers", engine: false, owner: true, why: "custom MCP runs a command" },
-  { method: "POST", path: "mcp-servers/preview", engine: false, owner: true, why: "MCP" },
-  { method: "PATCH", path: "mcp-servers/a", engine: false, owner: true, why: "MCP" },
-  { method: "DELETE", path: "mcp-servers/a", engine: false, owner: true, why: "MCP" },
-  { method: "POST", path: "mcp-servers/a/test", engine: false, owner: true, why: "spawns the server" },
-  { method: "POST", path: "plugins/install-github", engine: false, owner: true, why: "installs code" },
-  { method: "POST", path: "plugins/install-github/approve", engine: false, owner: true, why: "installs code" },
   { method: "POST", path: "skills/catalog/preview", engine: false, why: "makes the server fetch third-party text from GitHub with the operator's gh login" },
   { method: "POST", path: "skills/catalog/install", engine: false, why: "adds third-party instructions that enter the model context with operator trust; only after an explicit browser click" },
   { method: "POST", path: "skills/catalog/remove", engine: false, why: "removes an added skill from the workspace library" },
-  { method: "POST", path: "plugins/install", engine: false, owner: true, why: "installs code" },
-  { method: "POST", path: "plugins/enable", engine: false, owner: true, why: "enables code" },
-  { method: "POST", path: "plugins/disable", engine: false, owner: true, why: "plugin state" },
-  { method: "POST", path: "plugins/run", engine: false, owner: true, why: "runs plugin code" },
   { method: "POST", path: "self-edit/start", engine: false, why: "self-edit worktree (owner checked by the route)" },
   { method: "POST", path: "self-edit/stop", engine: false, why: "self-edit" },
   { method: "POST", path: "self-edit/gates", engine: false, why: "runs commands" },
@@ -99,7 +85,7 @@ describe("privileged operator routes", () => {
     }
   });
   it("lets the engine bearer read everything and nothing else is silently allowed", () => {
-    for (const path of ["connections", "settings", "mcp-servers", "sentinels", "workflow-definitions", "plugins"]) expect(privilegedRouteDenial(`/api/console/${path}`, "GET", engine)).toBeNull();
+    for (const path of ["connections", "settings", "sentinels", "workflow-definitions"]) expect(privilegedRouteDenial(`/api/console/${path}`, "GET", engine)).toBeNull();
     // Every allowlist entry is exercised by the table and carries a justification.
     for (const entry of ENGINE_ALLOWED_MUTATIONS) {
       expect(entry.why.length).toBeGreaterThan(10);
@@ -108,7 +94,7 @@ describe("privileged operator routes", () => {
   });
   it("fails when a handler adds a top-level mutating route segment that is not classified", () => {
     const known = new Set(TABLE.map(row => row.path.split("/")[0]!));
-    const sources = ["dashboard-api.ts", "workflows.ts", "workflow-triggers.ts", "sentinels.ts", "operator-services.ts", "custom-mcp.ts", "github-plugin-install.ts", "connection-meta.ts", "service-plugins.ts", "self-edit-routes.ts", "learning.ts"];
+    const sources = ["dashboard-api.ts", "workflows.ts", "workflow-triggers.ts", "sentinels.ts", "operator-services.ts", "connection-meta.ts", "self-edit-routes.ts", "learning.ts"];
     const found = new Set<string>();
     for (const file of sources) {
       const text = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
@@ -121,7 +107,7 @@ describe("privileged operator routes", () => {
     expect(unclassified.filter(name => /^(?:workflow|sentinel|plugin|connection|mcp|fix|check|project|feedback|learning|self|service|remote|provider|setting|session)/.test(name))).toEqual([]);
   });
   it("denies engine bearer callers and non-owners in team mode", () => {
-    const url = "/api/console/mcp-servers";
+    const url = "/api/console/extensions/install";
     expect(privilegedRouteDenial(url, "POST", engine)).toMatchObject({ status: 403, data: { code: "browser_only" } });
     expect(privilegedRouteDenial(url, "POST", { engineRequest: false, teamEnabled: true, role: "member" })).toMatchObject({ status: 403, data: { code: "owner_required" } });
     expect(privilegedRouteDenial(url, "POST", { engineRequest: false, teamEnabled: true })).toMatchObject({ status: 403 });

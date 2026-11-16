@@ -142,13 +142,13 @@ function skills(a: Args): string[] | undefined {
     const catalog = pull(tail, "--catalog", false);
     if (catalog.found) return ["skills", "catalog", ...catalog.rest];
     const connectors = pull(tail, "--connectors", false);
-    if (connectors.found) return ["plugin", "connectors", ...connectors.rest];
+    if (connectors.found) return ["skills", "extensions", "list", ...connectors.rest];
     const mcp = pull(tail, "--mcp", false);
-    if (mcp.found) return ["plugin", "mcp", "list", ...mcp.rest];
+    if (mcp.found) return ["skills", "extensions", "list", ...mcp.rest];
     if (isWord(a[2])) {
       const id = a[2];
       const more = a.slice(3);
-      for (const [flag, command] of [["--enable", ["plugin", "enable"]], ["--disable", ["plugin", "disable"]], ["--info", ["plugin", "info"]], ["--mcp-test", ["plugin", "mcp", "test"]], ["--mcp-remove", ["plugin", "mcp", "remove"]], ["--edit", ["skills", "edit"]], ["--export", ["skills", "export"]], ["--copy", ["skills", "copy"]], ["--delete", ["skills", "delete"]], ["--unlink", ["skills", "unlink"]]] as const) {
+      for (const [flag, command] of [["--enable", ["skills", "extensions", "enable"]], ["--disable", ["skills", "extensions", "disable"]], ["--info", ["skills", "extensions", "info"]], ["--mcp-test", ["plugin", "mcp", "test"]], ["--mcp-remove", ["skills", "extensions", "remove"]], ["--edit", ["skills", "edit"]], ["--export", ["skills", "export"]], ["--copy", ["skills", "copy"]], ["--delete", ["skills", "delete"]], ["--unlink", ["skills", "unlink"]]] as const) {
         const hit = pull(more, flag, false);
         if (hit.found) return [...command, id, ...hit.rest];
       }
@@ -163,19 +163,20 @@ function skills(a: Args): string[] | undefined {
         const name = pull(mcp.rest, "--name", true);
         let host = "mcp";
         try { host = new URL(mcp.value).hostname.replace(/[^a-z0-9-]/gi, "-"); } catch { /* keep default */ }
-        return ["plugin", "mcp", "add", name.value ?? host, "--url", mcp.value, ...name.rest];
+        return ["skills", "extensions", "mcp", name.value ?? host, "--url", mcp.value, ...name.rest];
       }
-      return ["plugin", "mcp", "add", ...(mcp.value ? [mcp.value] : []), ...mcp.rest];
+      return ["skills", "extensions", "mcp", ...(mcp.value ? [mcp.value] : []), ...mcp.rest];
     }
     const created = pull(tail, "--new", true);
     if (created.value) return ["plugin", "init", created.value, ...created.rest];
     const validate = pull(tail, "--validate", false);
-    if (validate.found && isWord(validate.rest[0])) return ["plugin", "validate", ...validate.rest];
+    if (validate.found && isWord(validate.rest[0])) return ["skills", "extensions", "add", ...validate.rest, "--preview"];
     const submit = pull(tail, "--submit", false);
     if (submit.found && isWord(submit.rest[0])) return ["plugin", "submit", ...submit.rest];
     const plugin = pull(tail, "--plugin", false);
-    if (plugin.found) return ["plugin", "install", ...plugin.rest];
-    if (tail.includes("--local") && isWord(tail[0])) return ["plugin", "install", ...tail];
+    if (plugin.found) return ["skills", "extensions", "add", ...plugin.rest];
+    const local = pull(tail, "--local", false);
+    if (local.found && isWord(local.rest[0])) return ["skills", "extensions", "add", ...local.rest];
     const connect = pull(tail, "--connect", true);
     if (connect.value) return ["plugin", "connect", connect.value, ...connect.rest];
     const disconnect = pull(tail, "--disconnect", true);
@@ -300,6 +301,26 @@ function scan(a: Args): string[] | undefined {
   return undefined;
 }
 
+/**
+ * The retired `plugin` group: verbs that still have an equivalent run it under `0 skills extensions`; the rest reach a
+ * stub in commands/plugin-moved.ts that says what replaced them. `--help` is left alone so it describes the stub.
+ */
+function plugin(a: Args): string[] | undefined {
+  const tail = a.slice(2);
+  switch (a[1]) {
+    case "list": case "search": return ["skills", "extensions", "list", ...tail];
+    case "browse": return ["skills", "catalog", ...tail];
+    case "info": case "enable": case "disable": return ["skills", "extensions", a[1], ...tail];
+    case "install": return ["skills", "extensions", "add", ...pull(tail, "--local", false).rest];
+    case "mcp":
+      if (a[2] === "list") return ["skills", "extensions", "list", ...a.slice(3)];
+      if (a[2] === "add") return ["skills", "extensions", "mcp", ...a.slice(3)];
+      if (a[2] === "remove") return ["skills", "extensions", "remove", ...a.slice(3)];
+      return undefined;
+    default: return undefined;
+  }
+}
+
 const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, memory, models, computers, config, scan };
 
 /** The implementation argv for a new-grammar invocation, or undefined when `args` is not one. */
@@ -363,11 +384,11 @@ export const LEGACY: readonly LegacyRow[] = rows([
   ["skills show", "0 skills list <name>"], ["skills catalog", "0 skills list --catalog"],
   ["skills new", "0 skills add <file>"], ["skills edit", "0 skills list <name> --edit"], ["skills copy", "0 skills list <name> --copy"], ["skills import", "0 skills add <bundle>"],
   ["skills export", "0 skills list <name> --export"], ["skills link", "0 skills add <dir>"], ["skills unlink", "0 skills list <name> --unlink"], ["skills delete", "0 skills list <name> --delete"], ["skills remove", "0 skills add --remove <name>"],
-  ["plugin list", "0 skills list"], ["plugin search", "0 skills list"], ["plugin browse", "0 skills list --catalog"], ["plugin info", "0 skills list <id> --info"],
-  ["plugin enable", "0 skills list <id> --enable"], ["plugin disable", "0 skills list <id> --disable"], ["plugin install", "0 skills add <id> --plugin"], ["plugin run", "0 skills run <name>"],
-  ["plugin init", "0 skills add --new <name>"], ["plugin validate", "0 skills add <dir> --validate"], ["plugin submit", "0 skills add <dir> --submit"],
-  ["plugin connectors", "0 skills list --connectors"], ["plugin connect", "0 skills add --connect <service>"], ["plugin disconnect", "0 skills add --disconnect <service>"],
-  ["plugin mcp add", "0 skills add --mcp <url>"], ["plugin mcp list", "0 skills list --mcp"], ["plugin mcp test", "0 skills list <id> --mcp-test"], ["plugin mcp remove", "0 skills list <id> --mcp-remove"], ["plugin mcp", "0 skills add --mcp <url>"], ["plugin", "0 skills"],
+  ["plugin list", "0 skills extensions list"], ["plugin search", "0 skills extensions list"], ["plugin browse", "0 skills list --catalog"], ["plugin info", "0 skills extensions info <name>"],
+  ["plugin enable", "0 skills extensions enable <name>"], ["plugin disable", "0 skills extensions disable <name>"], ["plugin install", "0 skills add <repo>@<sha>"], ["plugin run", "the extension's scripts, run through bash"],
+  ["plugin init", "the folder flow: extension.json or SKILL.md, then 0 skills add <folder> --preview"], ["plugin validate", "0 skills add <folder> --preview"], ["plugin submit", "the extension flow: 0 skills add <repo>@<sha> (registry submission was removed)"],
+  ["plugin connectors", "0 skills extensions list"], ["plugin connect", "the Extensions page in the web app"], ["plugin disconnect", "the Extensions page in the web app"],
+  ["plugin mcp add", "0 skills extensions mcp <name> --url <url>"], ["plugin mcp list", "0 skills extensions list"], ["plugin mcp test", "0 skills extensions info <name>"], ["plugin mcp remove", "0 skills extensions remove <name>"], ["plugin mcp", "0 skills extensions mcp <name> --url <url>"], ["plugin", "0 skills extensions"],
   // memory, config, doctor, web
   ["memory enable", "0 memory set <id> on"], ["memory disable", "0 memory set <id> off"], ["memory import", "0 memory set --import <file>"],
   ["config show", "0 config get"], ["config list", "0 config get --all"], ["config reset", "0 config set --reset"], ["config export", "0 config get --export"],
@@ -413,6 +434,10 @@ export function resolveInvocation(args: Args): { args: string[]; notice: string 
   const staged = moved ? moved.args : [...args];
   const compat = rewriteNewForms(staged);
   if (compat) return { args: compat, notice: "" };
+  if (staged[0] === "plugin" && !staged.includes("--help") && !staged.includes("-h")) {
+    const resolved = plugin(staged);
+    if (resolved) return { args: resolved, notice: legacyNotice(staged) || moved?.notice || "" };
+  }
   return { args: staged, notice: legacyNotice(staged) || moved?.notice || "" };
 }
 

@@ -141,9 +141,7 @@ const SECTIONS: Readonly<Record<string, Build>> = {
   },
 
   async plugin(root) {
-    const [plugin, author, connect] = await Promise.all([import("./plugin.js"), import("./plugin-author.js"), import("./plugin-connect.js")]);
-    plugin.registerPluginCommand(root);
-    nest(root, "plugin", [author.registerPluginAuthorCommands, connect.registerPluginConnectCommands]);
+    (await import("./plugin-moved.js")).registerPluginMovedCommand(root);
   },
 
   async skills(root) {

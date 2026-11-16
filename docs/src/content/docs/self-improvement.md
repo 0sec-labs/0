@@ -17,7 +17,7 @@ Internal contracts (artifact schemas, registry events, worker protocol) live in 
 | Use an evolved finder in a review | `0 scan ./repo --module deep --evolution-config evolution.json` | Opt in per review. |
 | Check task routing offline | `0 lab improve routing-qualify` | Fixture mode makes no API calls. |
 | Evolve finder prompts from curated misses | `0 lab research lens-synth` | Needs a curated corpus. Promotion needs approval. |
-| Let the agent write its own tools | `self_extend` tool | See [Plugins](/plugins/) and [Plugin security](/plugin-trust/). |
+| Let the agent write its own skills and scripts | The agent writes a skill or script folder with bash | You review and install it as a local extension, see [Extensions](/extensions/). |
 
 Model credentials pay for proposal generation. Guest images pay for execution. Neither replaces the other.
 
@@ -179,9 +179,7 @@ Other options: `--registry <path>`, `--max-register <n>`, `-m <model>`, `--watch
 | Source evolution | `evolve run --watch --auto-promote` selects a new accepted snapshot for later `evolve exec` runs. | Existing run IDs keep their snapshot and config. |
 | Evolved finder | `scan deep --evolution-config` picks the active snapshot for each new review. | Verification and host policy. |
 | Skills and router | Training installs exact authorized artifact bytes. | A model already loaded in another process. |
-| Executable plugin | An enabled agent submits or evolves code. Later calls use the active retained version. | An invocation pins its version and declared capabilities. Admission is not measured improvement. |
 | Development source | A development console with `allowDevSourceUpdates` loads changed source between turns. | The UI shell, injected clients and shared dependencies. A failed build or checkpoint keeps the current computer. |
-| Live harness generation | A session replaces its `agent.driver` and `ui.view` at a checkpoint. | History and accounting survive. This is not durable campaign recovery. |
 
 Two of these run host code. The development source path needs a console started with `ZERO_DEV_SOURCE_ROOT` and the global `allowDevSourceUpdates` setting. It defaults off and a project cannot grant it. Workspace-trusted ESM for self-extension is a separate acknowledged grant. Neither grant gives sandboxed model-written code host access, and `allowModelSelfExtension` does not enable either one. See [Configuration](/configuration/#development-source-updates).
 
@@ -198,5 +196,5 @@ Lifecycle checks measure orchestration. Provider behavior, sandbox execution and
 
 - [Benchmarks](/benchmark/) for scores and method
 - [Architecture](/architecture/)
-- [Plugins](/plugins/) and [Plugin security](/plugin-trust/) for self-extension
+- [Extensions](/extensions/) and [Security model](/security-model/) for what the agent can add
 - [Configuration](/configuration/#development-source-updates)

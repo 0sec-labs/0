@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { approvalFor, approvalRefusal, createExtensionService, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
+import { approvalFor, approvalRefusal, createExtensionService, McpDraftSource, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
 import { EXIT_FAILURE, EXIT_USAGE, UsageError, consoleOptions, emit, renderTable, type CommandIo, type OutputOptions } from "./console-output.js";
 
 type Options = OutputOptions & { yes?: boolean; preview?: boolean; enable?: boolean; project?: string; to?: string; force?: boolean };
@@ -44,21 +44,25 @@ function showPrompt(io: CommandIo, options: Options, prepared: PreparedInstall, 
   emit(io, options, { prompt: prepared.prompt, installed: false }, () => `${renderInstallPrompt(prepared.prompt)}\n${tail}`.trimEnd());
 }
 
+/** One prompt, then (with --yes, from a terminal) install the exact revision shown. Shared by git/folder sources and typed MCP servers. */
+function reviewAndCommit(svc: ExtensionService, io: CommandIo, options: Options, p: PreparedInstall, source: string): void {
+  const pinnedInput = /@[0-9a-f]{40}$/.test(source);
+  if (options.preview) return showPrompt(io, options, p, "");
+  if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
+  if (!operatorOnly(io, options, "install an extension")) return;
+  if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
+  const done = svc.installer.commit(p, approvalFor(p, options.enable ? (options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const }) : undefined));
+  if (!done.ok) return fail(io, options, done.error.message);
+  emit(io, options, { installed: true, name: done.value.name, revision: done.value.revision, enabled: options.enable === true }, () => `Installed extension ${done.value.name} at ${done.value.revision.slice(0, 12)}.${options.enable ? "" : ` Not enabled: \`0 skills extensions enable ${done.value.name}\`.`}`);
+}
+
 /** Returns "not-extension" (and prints nothing) when a bare owner/repo has no extension or skill layout, so the caller can try the catalog flow. */
 export async function addExtension(io: CommandIo, source: string, options: Options): Promise<"done" | "not-extension"> {
   let outcome: "done" | "not-extension" = "done";
   await guarded(io, options, async svc => {
     const prepared = await svc.installer.prepare(source);
     if (!prepared.ok) { if (isBareRepo(source) && prepared.error.code === "invalid_manifest") { outcome = "not-extension"; return; } return fail(io, options, prepared.error.message); }
-    const p = prepared.value;
-    const pinnedInput = /@[0-9a-f]{40}$/.test(source);
-    if (options.preview) return showPrompt(io, options, p, "");
-    if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
-    if (!operatorOnly(io, options, "install an extension")) return;
-    if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
-    const done = svc.installer.commit(p, approvalFor(p, options.enable ? (options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const }) : undefined));
-    if (!done.ok) return fail(io, options, done.error.message);
-    emit(io, options, { installed: true, name: done.value.name, revision: done.value.revision, enabled: options.enable === true }, () => `Installed extension ${done.value.name} at ${done.value.revision.slice(0, 12)}.${options.enable ? "" : ` Not enabled: \`0 skills extensions enable ${done.value.name}\`.`}`);
+    reviewAndCommit(svc, io, options, prepared.value, source);
   });
   return outcome;
 }
@@ -68,6 +72,15 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
 
   consoleOptions(ext.command("add <source>").description("Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this project only"))
     .action(async (source: string, options: Options) => { await addExtension(io, source, options); });
+
+  consoleOptions(ext.command("mcp <name> [command...]").description("Add one MCP server as a local extension: `mcp docs --url https://host/mcp` or `mcp docs -- npx -y some-mcp`; shows the same prompt first").option("--url <https-url>", "A remote server instead of a command").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable, enable for this project only"))
+    .action((name: string, command: string[], options: Options & { url?: string }) => guarded(io, options, async svc => {
+      const [program, ...args] = command ?? [];
+      if (Boolean(options.url) === Boolean(program)) throw new UsageError("Give either --url <https-url> or a command after `--`.");
+      const prepared = await svc.installer.prepareSource(new McpDraftSource(options.url ? { name, url: options.url } : { name, command: program!, args }));
+      if (!prepared.ok) return fail(io, options, prepared.error.message);
+      reviewAndCommit(svc, io, options, prepared.value, name);
+    }));
 
   consoleOptions(ext.command("list").description("List installed extensions and built-ins").option("--project <dir>", "Show enablement for this project"))
     .action((options: Options) => guarded(io, options, svc => {

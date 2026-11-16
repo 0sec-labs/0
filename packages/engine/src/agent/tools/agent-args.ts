@@ -1,13 +1,10 @@
-// Argument schemas and validators for self_extend, ask_operator, executor checkpoints and impact assessments.
+// Argument schemas and validators for ask_operator, executor checkpoints and impact assessments.
 // Extracted verbatim from ../tools.ts; the public API is re-exported there.
 import { randomUUID } from "node:crypto";
 import { ImpactAssessmentSchema } from "../../shared/index.js";
-import type { ToolContext } from "../types.js";
 import type { OperatorQuestion, OperatorQuestionOption, OperatorQuestionRequest } from "../types.js";
 import { todoInputSchema, MAX_TODOS } from "../todos.js";
 import { z } from "zod";
-import type { SelfExtensionRegistry } from "../../plugins/self-extension.js";
-import { parseHarnessGenerationSpec } from "../../plugins/live-harness.js";
 
 export const rememberCodebaseArgsSchema = z.object({
   title: z.string().trim().min(1).max(2000),
@@ -15,71 +12,6 @@ export const rememberCodebaseArgsSchema = z.object({
   paths: z.array(z.string().min(1).max(1024)).min(1).max(16),
   tags: z.array(z.string().max(100)).max(16).optional(),
 }).strip();
-
-// The model supplies executable source and metadata, never host configuration,
-// guards, provider credentials, or an evaluation oracle.
-export const selfExtendArgsSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("submit"),
-    manifest: z.record(z.string(), z.unknown()),
-    files: z.record(z.string(), z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
-    entry: z.string().min(1).max(1024),
-    kind: z.enum(["tool", "skill", "agent"]).optional(),
-  }).strip(),
-  z.object({ action: z.literal("list") }).strip(),
-  z.object({
-    action: z.literal("rollback"), plugin_id: z.string().min(1),
-    version_id: z.string().min(1),
-  }).strip(),
-  z.object({
-    action: z.literal("evolve"), plugin_id: z.string().min(1),
-    profile: z.string().min(1),
-  }).strip(),
-  z.object({
-    action: z.literal("harness_submit"),
-    generation: z.unknown().transform((value, context) => {
-      try { return parseHarnessGenerationSpec(value); }
-      catch (error) {
-        context.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : String(error) });
-        return z.NEVER;
-      }
-    }),
-  }).strip(),
-  z.object({ action: z.literal("harness_list") }).strip(),
-  z.object({
-    action: z.literal("harness_rollback"),
-    generation_id: z.string().min(1).max(128).optional(),
-  }).strip(),
-  z.object({ action: z.literal("harness_disable") }).strip(),
-]);
-
-export type SelfExtendArgs = z.infer<typeof selfExtendArgsSchema>;
-
-/**
- * Validate a raw `self_extend` tool-call argument bag. Discriminated union so the
- * handler branches without losing the rejection reason (kernel_run discipline).
- * A rejection here has NO side effect — the registry is never touched.
- */
-export function validateSelfExtendArgs(
-  raw: unknown,
-): { ok: true; args: SelfExtendArgs } | { ok: false; error: string } {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ok: false, error: "self_extend: arguments must be an object with a lifecycle action" };
-  }
-  const parsed = selfExtendArgsSchema.safeParse({
-    ...raw, action: (raw as Record<string, unknown>).action ?? "submit",
-  });
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return { ok: false, error: first?.message ?? "self_extend: invalid arguments" };
-  }
-  return { ok: true, args: parsed.data };
-}
-
-/** The same session registry supplies policy and the model-facing tool set. */
-export function selfExtensionRegistryOf(ctx: ToolContext): SelfExtensionRegistry | undefined {
-  return ctx.selfExtension;
-}
 
 // ── Operator question tool (`ask_operator`) ─────────────────────────────────
 //

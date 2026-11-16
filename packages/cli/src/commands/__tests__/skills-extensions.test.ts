@@ -90,4 +90,14 @@ describe("approvals are the operator's", () => {
       operatorAtTerminal(true); delete process.env.ZERO_AGENT_SESSION;
     }
   });
+
+  it("adds one MCP server as a local extension through the same prompt: no --yes installs nothing", async () => {
+    const prompt = await run("extensions", "mcp", "docs", "--", "echo", "hi");
+    expect(code).toBe(2); expect(prompt).toContain("Re-run with --yes");
+    expect(existsSync(join(home, ".0", "extensions", "docs"))).toBe(false);
+    expect(await run("extensions", "mcp", "docs", "--yes", "--", "echo", "hi")).toContain("Installed extension docs");
+    expect(await run("extensions", "list")).toMatch(/docs\s+/);
+    await run("extensions", "mcp", "x"); expect(code).toBe(2);
+    await run("extensions", "mcp", "x", "--url", "http://insecure.example", "--yes"); expect(code).toBe(1);
+  });
 });

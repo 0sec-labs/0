@@ -1,7 +1,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { NETWORK_CAPABLE_TOOLS } from "../../plugins/capability-classification.js";
+import { NETWORK_CAPABLE_TOOLS } from "../../agent/tool-classification.js";
 import type { ToolCall } from "../../agent/types.js";
 import { normalizeScopeHostname, ScopePolicy } from "../../scope/scope.js";
 import { shellTokens } from "../../agent/shell-tokens.js";

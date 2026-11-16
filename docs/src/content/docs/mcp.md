@@ -64,7 +64,7 @@ Host-local execution is required for local-target stdio. The SmolVM CLI bridge c
   --target https://target.example.com
 ```
 
-`--workspace` authorizes local source targets inside that root, with canonical path checks. Live workflow targets need `--scope` and the enabled `scope` plugin, and `--target` can pin the only accepted target. Live flags do not authorize local source access, and `--workspace` does not authorize live targets.
+`--workspace` authorizes local source targets inside that root, with canonical path checks. Live workflow targets need `--scope` and the enabled `scope` extension, and `--target` can pin the only accepted target. Live flags do not authorize local source access, and `--workspace` does not authorize live targets.
 
 | Tool | Purpose |
 | --- | --- |
@@ -184,21 +184,19 @@ There is no interactive approval in this server. Limit the tool list, pass `--sc
 
 ### From the browser app
 
-Open **Plugins**, press **Add** and choose **MCP server** (stdio, HTTP or SSE), or **From marketplace** or **From GitHub repository** for plugins. Nothing runs until you review the exact command and settings and approve them. New servers are saved disabled. Press **Test** to see its tools. Read [Plugin security](/plugin-trust/) first.
+Open **Extensions** and press **Add MCP server**. Type the command that starts it or an https URL. It becomes a local extension that goes through the same review as any other: nothing runs until you read the exact command and approve it, and it is saved turned off. When you turn it on it starts only when a thread first uses it, and its tools are pinned. Read the [Security model](/security-model/#extensions-and-mcp) first.
 
 ### From the command line
 
 ```sh
-0 skills add --mcp docs -- npx some-mcp-server        # shows the review; add --yes to approve it
-0 skills list custom-docs --mcp-test
-0 skills list --mcp
-0 skills list custom-docs --mcp-remove --yes
-0 skills list --connectors
-0 skills add --connect linear --secret-env token=LINEAR_API_KEY --yes
-0 skills add --disconnect linear --yes
+0 skills extensions mcp docs --url https://example.com/mcp
+0 skills extensions mcp docs -- npx some-mcp-server@1.2.3        # shows the review; add --yes to approve it
+0 skills extensions info docs
+0 skills extensions enable docs
+0 skills extensions remove docs --yes
 ```
 
-Secrets come from environment variables (`--secret-env`, `--env-from`, `--header-from`), never from the command line. Every command takes `--json`.
+Secrets are not typed on the command line: an extension declares the variable names it needs and the review lists them. Every command takes `--json`.
 
 ### From the environment
 
@@ -234,7 +232,7 @@ export ZERO_MCP="$(node --input-type=module -e '
 0
 ```
 
-A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the tools from your deployment. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys). You can also connect Elastic from **Plugins**.
+A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the tools from your deployment. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys).
 
 ## MCP servers in extensions
 
@@ -253,32 +251,14 @@ An extension can bundle MCP servers, so installing one is a single, reviewed ste
 
 `0 skills extensions info <name>` lists the extension's servers and, for each tool, the approved hash and the hash last seen.
 
-Servers you added yourself on the MCP page keep working. The importer turns them into local extensions that need approval; once such an extension is approved and enabled, it is the extension that starts the server.
+Servers you added before this version (`~/.0/mcp-servers.json`) are imported once as local extensions that need approval; the old file is kept and no longer read.
 
 ## Service connections
 
-In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new threads. Leaving a saved secret field blank keeps it.
-
-| Service | Tools |
-| --- | --- |
-| GitHub | Repositories, code scanning and Dependabot alerts, issues, pull requests. |
-| Elastic | Whatever the deployment's Agent Builder endpoint offers. |
-| Semgrep | Projects and existing findings in a deployment. |
-| Snyk | Projects and existing issues in an organization. |
-| Linear | Teams, issues, creating remediation issues. |
-| Jira | Projects, JQL search, creating remediation issues. |
-| Cloudflare | Zones, DNS records, rulesets. |
-| Slack | Channels, recent messages, posting summaries. |
-| Microsoft Teams | Joined teams, channels, posting channel messages. |
-
-Setup uses vendor API tokens. Jira Cloud also needs an account email and site URL, Elastic its Kibana URL, Semgrep a deployment ID and Snyk an organization ID. Teams needs a delegated Microsoft Graph token with the right permissions, and you reconnect when it expires. There is no browser OAuth or token refresh. Semgrep and Snyk read their own findings and do not start a local scan.
-
-Credentials are stored for the operator in `~/.0/service-plugins.json` (mode `0600`, directory `0700`) and are never part of portable automation JSON. The API returns only non-secret settings and tool metadata. Connecting a service does not widen the token's vendor permissions.
-
-Local threads connect enabled accounts directly. SmolVM threads get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing threads keep their original tools.
+Connecting GitHub, Slack, Linear and other services is done on the **Extensions** page, where each connection belongs to an extension. See [Connect a service](/connect-a-service/).
 
 ## Next steps
 
 - [Automations](/automations/): the runs these tools start.
-- [Plugin security](/plugin-trust/): what an MCP server can do on your computer.
+- [Security model](/security-model/#extensions-and-mcp): what an MCP server can do on your computer.
 - [Scope](/scope/): authorize targets before a live run.

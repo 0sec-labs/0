@@ -30,7 +30,7 @@ export async function createWorkspaceServices(options: Options) {
   // Opt-in sweep (archiveIdleDays; 0 = off). Deferred so it never delays startup; failures are ignored.
   setTimeout(() => { try { archiveIdleSessions(getSettings().archiveIdleDays, options.stateDir); } catch { /* best effort */ } }, 0).unref();
   const engagements = new EngagementStore({ workspace: options.workspace ?? process.cwd(), dbPath: options.dbPath, ...(options.stateDir ? { stateDir: options.stateDir } : {}) });
-  const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, isTurnActive: () => gateway.hasActiveTurns(), updates: options.updates });
+  const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, updates: options.updates });
   let workflows: WebWorkflowService | undefined;
   let engine: WorkflowEngineService | undefined;
   let triggers: WorkflowTriggerService | undefined;

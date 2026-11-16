@@ -35,7 +35,6 @@ vi.mock("@0/engine", () => ({
   },
 }));
 vi.mock("./workbench-plugins.js", () => ({ GUEST_PLUGIN_ASSETS: "/opt/0-approved-plugins", prepareWorkbenchPlugins: async () => ({ directory: mock.pluginDirectory, approvals: { schema: 1, project: "/workspace", enabled: {} }, cleanup: mock.pluginCleanup }) }));
-vi.mock("./web/service-plugins.js", () => ({ loadServicePluginConnections: () => mock.serviceConnections }));
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
@@ -173,50 +172,6 @@ describe("host console VM controller", () => {
     expect(mock.launches[0]).toMatchObject({ workspaceMode: "snapshot", environment: { ZERO_PROVIDER: "chatgpt-codex" }, tty: false, network: false });
     expect(mock.requests.filter(frame => frame.op === "send").map(frame => frame.text)).toEqual(["message mentioning /private/host", "second"]);
     await session.cleanup(); expect(session.execution.status).toBe("stopped");
-  });
-  it("mounts prepared plugin copies read-only and removes them after native cleanup", async () => {
-    const input = await options(); mock.pluginDirectory = join(input.config.workspaceRoot, "plugin-assets");
-    const session = createWorkbenchConsoleSession(input); await session.send("hello");
-    const launch = mock.launches[0] as { readOnlyMounts: unknown; transport: { initialInput: string } };
-    expect(launch.readOnlyMounts).toContainEqual({ source: mock.pluginDirectory, target: "/opt/0-approved-plugins" });
-    expect(JSON.parse(launch.transport.initialInput).pluginApprovals).toEqual({ schema: 1, project: "/workspace", enabled: {} });
-    expect(mock.pluginCleanup).not.toHaveBeenCalled();
-    await session.cleanup(); expect(mock.pluginCleanup).toHaveBeenCalledOnce();
-  });
-  it("sends only explicitly enabled service credentials through stdin, outside mounts and execution snapshots", async () => {
-    const input = await options(); input.network = true;
-    mock.serviceConnections = [{ id: "github", enabled: true, fields: { token: "private-github-account-token" } }, { id: "slack", enabled: false, fields: { token: "disabled-slack-token" } }];
-    const session = createWorkbenchConsoleSession(input); await session.send("hello");
-    const launch = mock.launches[0] as Record<string, unknown> & { transport: { initialInput: string } };
-    const init = JSON.parse(launch.transport.initialInput);
-    expect(init.servicePluginConnections).toEqual([mock.serviceConnections[0]]);
-    expect(init.servicePluginNetworkGranted).toBe(true);
-    expect(JSON.stringify(init.config)).not.toContain("private-github-account-token");
-    const { transport: _transport, ...publicLaunch } = launch;
-    expect(JSON.stringify(publicLaunch)).not.toContain("private-github-account-token");
-    expect(JSON.stringify(session.execution)).not.toContain("private-github-account-token");
-    const resultRoot = join(input.workbench.stateRoot, "controller-results");
-    for (const directory of await readdir(resultRoot)) expect(await readdir(join(resultRoot, directory))).toEqual([]);
-    await session.cleanup();
-  });
-  it("refuses configured service plugins without networking before any guest launch", async () => {
-    const input = await options(); mock.serviceConnections = [{ id: "github", enabled: true, fields: { token: "private-token" } }];
-    const close = vi.fn(async () => {});
-    const session = createWorkbenchConsoleSession({ ...input, provider: { ...input.provider, close } });
-    await expect(session.send("hello")).rejects.toThrow("network grant");
-    expect(close).toHaveBeenCalledOnce();
-    expect(mock.launches).toHaveLength(0);
-    expect(session.execution.status).toBe("failed");
-    expect(JSON.stringify(session.execution)).not.toContain("private-token");
-  });
-  it("redacts service credentials from guest errors before exposing them to the operator", async () => {
-    const input = await options(); input.network = true;
-    mock.serviceConnections = [{ id: "github", enabled: true, fields: { token: "private-account-token" } }];
-    const session = createWorkbenchConsoleSession(input); await session.send("hello");
-    mock.sendError = "Failed token private-account-token";
-    await expect(session.send("second")).rejects.toThrow("Failed token [redacted]");
-    expect(JSON.stringify(session.execution)).not.toContain("private-account-token");
-    await session.cleanup();
   });
   it("forwards serialized provider bodies through the exact model grant", async () => {
     const input = await options(); input.provider.request.mockResolvedValue(new Response("data: done\n\n", { headers: { "content-type": "text/event-stream" } }));

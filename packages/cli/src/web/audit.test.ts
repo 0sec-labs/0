@@ -14,16 +14,12 @@ const events = () => listAudit({}, { dbPath }).events;
 const finish = (status: number) => { const res = Object.assign(new EventEmitter(), { statusCode: status }) as unknown as ServerResponse; return { res, done: () => res.emit("finish") }; };
 
 describe("console audit wiring", () => {
-  it("records MCP create with a fingerprint hash and env names but no values", () => {
+  it("records an extension install with the revision and the source but no secrets", () => {
     const { res, done } = finish(201);
-    const secret = "sk-supersecretvalue1234567890";
-    auditConsoleRequest(res, "mcp-servers", "POST", { config: { name: "files", transport: "stdio", command: "npx", args: ["-y", "srv"], env: { API_KEY: secret, MODE: "x" } }, enable: true }, { engineRequest: false });
+    auditConsoleRequest(res, "extensions/install", "POST", { source: "acme/demo", approvedRevision: "a".repeat(40), confirm: true }, { engineRequest: false });
     done();
     const [event] = events();
-    expect(event).toMatchObject({ actor: "operator (browser)", action: "mcp.create", subject: "files", outcome: "ok" });
-    expect(event!.detail).toMatchObject({ name: "files", transport: "stdio", envKeys: ["API_KEY", "MODE"], enabled: true });
-    expect(String(event!.detail.fingerprint)).toMatch(/^[0-9a-f]{16}$/);
-    expect(JSON.stringify(event)).not.toContain(secret);
+    expect(event).toMatchObject({ actor: "operator (browser)", action: "extension.install", subject: "acme/demo", outcome: "ok" });
   });
   it("skips no-op settings writes, names partial resets and records disconnects and check changes", () => {
     expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme", "density"] })).toMatchObject({ action: "settings.reset", subject: "2 settings", detail: { keys: ["theme", "density"] } });
@@ -46,7 +42,7 @@ describe("console audit wiring", () => {
   it("records approve/deny decisions, denials and skips failed validation", () => {
     for (const approve of [true, false]) { const { res, done } = finish(200); auditConsoleRequest(res, "sessions/s1/decisions/d1", "POST", { approve }, { engineRequest: false }); done(); }
     expect(events().map(e => e.action)).toEqual(["decision.denied", "decision.approved"]);
-    const bad = finish(400); auditConsoleRequest(bad.res, "mcp-servers", "POST", {}, { engineRequest: false }); bad.done();
+    const bad = finish(400); auditConsoleRequest(bad.res, "extensions/install", "POST", {}, { engineRequest: false }); bad.done();
     const denied = finish(403); auditConsoleRequest(denied.res, "sentinels/a/run", "POST", {}, { engineRequest: false }); denied.done();
     expect(events()[0]).toMatchObject({ action: "sentinel.run", outcome: "denied" });
     expect(events()).toHaveLength(3);
@@ -55,8 +51,8 @@ describe("console audit wiring", () => {
     expect(describeConsoleAudit("settings", "GET", undefined)).toBeNull();
     expect(auditActor({ engineRequest: true })).toBe("engine");
     expect(auditActor({ engineRequest: false, teamEnabled: true, displayName: "Ada" })).toBe("operator Ada (browser)");
-    auditDenial({ method: "POST" }, "/api/console/mcp-servers", "browser_only", "engine");
-    expect(events()[0]).toMatchObject({ actor: "engine", action: "access.browser_only", outcome: "denied", detail: { callerKind: "engine", route: "/api/console/mcp-servers", method: "POST" } });
+    auditDenial({ method: "POST" }, "/api/console/extensions/install", "browser_only", "engine");
+    expect(events()[0]).toMatchObject({ actor: "engine", action: "access.browser_only", outcome: "denied", detail: { callerKind: "engine", route: "/api/console/extensions/install", method: "POST" } });
   });
   it("writes nothing until configured", () => {
     configureAudit(null); audit({ actor: "system", action: "x" });

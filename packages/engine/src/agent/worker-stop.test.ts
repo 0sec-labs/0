@@ -255,7 +255,7 @@ describe("owned worker stop and drain", () => {
         endTurn("Worker started."),
         endTurn("The conversation continues."),
       ]),
-      allowModelSelfExtension: false,
+     
     });
     try {
       await session.send("Start a worker.");

@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { osecDB } from "../storage/index.js";
 import { getToolsForRole } from "./tools.js";
-import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import { runNativeAgentLoop } from "./native-loop.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeContentBlock } from "../runtime/types.js";
 
@@ -67,35 +66,6 @@ it("does not promote old paused-session prose when this invocation has no observ
   try {
     expect((await run([finish()], { db, scanId, sessionId })).summary).toBe("Task completed");
   } finally { db.close(); }
-});
-it.each([undefined, "Task completed", "Final result from the driver."])
-("preserves accepted current-turn prose through the actual executable driver done path: %j", async summary => {
-  const args = summary === undefined ? {} : { summary };
-  const generation = { label: "done-summary", providers: [{ id: "driver", services: ["agent.driver"], source: {
-    kind: "trusted", entry: "main.mjs", files: { "main.mjs": `export function activate() { return { async driver(request, execution) {
-      const result = await execution.invokeModel(request);
-      await execution.invokeTool('done',${JSON.stringify(args)});
-      return result;
-    } }; }` },
-  } }] };
-  let calls = 0;
-  const runtime: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async () => {
-    calls++;
-    if (calls > 2) throw new Error("Unexpected extra invocation");
-    return { content: calls === 1 ? [
-      { type: "text", text: "Initial inspection is incomplete." },
-      { type: "tool_use", id: "install", name: "self_extend", input: { action: "harness_submit", generation } },
-    ] : [{ type: "text", text: observation }], stopReason: calls === 1 ? "tool_use" : "end_turn", durationMs: 0,
-      usage: { inputTokens: 10, outputTokens: 2 } };
-  } };
-  setWorkspaceHarnessTrust(home, true);
-  const state = await runNativeAgentLoop({ config: { role: "discovery", systemPrompt: "Synthetic driver fixture", tools: getToolsForRole("discovery"),
-    target: "https://example.test", maxTurns: 3, scanId: randomUUID(), workspaceRoot: home, autonomyMode: "yolo", codebaseLearning: false,
-    allowModelSelfExtension: true, executablePlugins: { backend: "docker", root: join(home, "plugins") }, executableEvolutionProfiles: {} }, runtime, db: null });
-  expect(calls).toBe(2);
-  expect(state.done).toBe(true);
-  expect(state.errorExit).toBeUndefined();
-  expect(state.summary).toBe(summary?.startsWith("Final") ? summary : observation);
 });
 it("never promotes streamed reasoning to completion observations", async () => {
   const runtime: NativeRuntime = { type: "api", isAvailable: async () => true,

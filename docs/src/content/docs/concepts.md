@@ -16,7 +16,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 | **Limits** | There is one mode: a thread or Agent has shell access. It is limited by its scope, its budget (cost ceiling and time cap), the optional sandbox and the one global setting **Ask before running commands**, off by default. Older stored access values still load and mean the same mode. |
 | **Helper** | A helper agent a thread starts for a part of its work (a subagent). Limits live under Settings, Helpers. |
 | **Scope** | What a scan or Agent may target: the target list or URL on an automation or Agent, with its exclusions. It is optional and enforced by the scope extension. Your chosen folder is always allowed. See [Scope and authorization](/scope/). |
-| **Plugin** | Installable code that extends 0: a tool plugin or an MCP server plugin. A plugin can bundle skills. See [Plugins](/plugins/). |
+| **Extension** | An installable git folder, pinned by commit, that can bundle skills, scripts, MCP servers and a connection. See [Extensions](/extensions/). |
 | **Skill** | A folder of instructions the agent loads when a task needs it. A skill is not code. See [Skills](/skills/). |
 | **Theme** | A light and dark color palette for the browser app. Themes live in the browser only. See [Browser app](/app/#themes). |
 | **Memory** | Source-backed notes the agent saved and can recall. See [Browser app](/app/#memory). |
@@ -29,7 +29,7 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 - Agents run threads on their own and file reports.
 - Scope decides which targets may be tested live.
 - You verify a finding, then fix it.
-- Plugins add tools and MCP servers, skills add instructions, themes change only how the app looks.
+- Extensions add scripts, MCP servers and connections, skills add instructions, themes change only how the app looks.
 - A computer runs all of it. The browser app, the CLI, CI and MCP are different ways to drive the same computer.
 
 ## Pick an entry point by target

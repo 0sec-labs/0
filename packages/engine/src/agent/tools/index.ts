@@ -142,11 +142,6 @@ const TOOL_REGISTRY_ORDER = [
   "update_todos",
   "write_todos",
   "visualize",
-  // Model self-extension front door (0 self-extension). In the registry so it
-  // is a first-class, dispatchable, tested tool — but deliberately kept OUT of
-  // every getToolsForRole set; native-loop injects it into the model-facing tool
-  // set only when the operator enabled `allowModelSelfExtension` (default OFF).
-  "self_extend",
   "remember_codebase",
   // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
   // lazy ProxyDriver seam; scope-gated like http_request/browser.

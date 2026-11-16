@@ -1,35 +1,12 @@
 import type { NativeToolDef } from "../../runtime/types.js";
 import { TOOL_DEFINITIONS } from "../../agent/tools.js";
 import { LEGACY_DELEGATION_TOOL_NAMES } from "../../agent/tools/system.js";
-import type { PluginHost } from "../../plugins/loader.js";
 import type { ToolCall, ToolDefinition, ToolResult } from "../../agent/types.js";
 
 /** Serialize a tool result into the string content of a `tool_result` block. */
 export function stringifyToolResult(result: ToolResult): string {
   if (!result.success) return result.error ?? "tool execution failed";
   return typeof result.output === "string" ? result.output : JSON.stringify(result.output);
-}
-
-/**
- * Dispatch one plugin-owned tool call through the {@link PluginHost} and adapt
- * its {@link import("../../plugins/loader.js").PluginCallResult} to the engine's
- * {@link ToolResult}. The host NEVER throws and never bypasses the gates (the
- * caller has already run them); a dead/hung/unavailable plugin resolves to a
- * `{ ok: false }` transport error, and a plugin that ran but reported failure
- * comes back as `{ ok: true, failed: true }`. Both surface as `success: false`
- * with the reason as the tool result, so the turn continues with a tool error
- * rather than a crash — the framed/sanitized content is safe for model context.
- */
-export async function dispatchPluginTool(host: PluginHost, call: ToolCall): Promise<ToolResult> {
-  const res = await host.call(call.name, call.arguments ?? {});
-  if (!res.ok) {
-    return { success: false, output: null, error: res.error };
-  }
-  return {
-    success: !res.failed,
-    output: res.content,
-    ...(res.failed ? { error: res.content } : {}),
-  };
 }
 
 // ── Console autonomy helpers ──

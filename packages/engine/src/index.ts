@@ -825,96 +825,15 @@ export {
 // Persistent cross-session hunt memory: a redacted, crash-safe findings/pattern
 // store so one target's learnings inform the next.
 export * from "./memory/index.js";
-// Plugin manifest + capability model. Capabilities translate into the SAME
-// gate maps the built-in tools use, so a plugin tool cannot acquire a
-// second, weaker authorization path. Fail-closed: an undeclared or unknown
-// capability set yields the most restrictive treatment, never read-only.
-export {
-  validatePluginManifest,
-  gateFlagsFor,
-  PLUGIN_CAPABILITIES,
-  type PluginCapability,
-  type PluginManifest,
-  type ValidationResult,
-} from "./plugins/manifest.js";
-// Monotonic, deny-only guard layer beneath the name-keyed gates. Guards can
-// only ever narrow what is permitted: there is no value a guard can return
-// that means "allow", so composing more guards cannot loosen policy and a
-// plugin cannot suppress the authorization chain.
-export {
-  BUILTIN_GUARDS,
-} from "./plugins/guards.js";
-// Model-authored session extensions. A contribution carries tool
-// definitions and DENY-ONLY guards and nothing else — no hook, interceptor
-// or listener is expressible, so it cannot suppress the authorization chain
-// the way dsh's pre-execute waterfall can. Off by default.
-export {
-  SelfExtensionRegistry,
-  MAX_MANIFEST_BYTES,
-} from "./plugins/self-extension.js";
-export { ExecutablePluginManager } from "./plugins/executable.js";
-export {
-  LiveHarnessHost,
-} from "./plugins/live-harness.js";
-// ── Third-party plugin lifecycle (install → enable → run → hot-swap) ──────────
-// These are the primitives the `0 plugin` CLI surface drives. They are the
-// SAME modules the console loads plugins through, so the CLI never duplicates
-// loader/registry/enablement logic — it imports it. Every security invariant
-// (install ≠ enablement, the single capability→gate translation, the re-approval
-// rule on a widened capability set, the subprocess boundary) lives in these
-// modules and is not re-implemented at the CLI layer.
-//
-// Per-project enablement store. `enable`/`disable` write ONE json record and
-// spawn nothing; `reconcile` + `loadableIds` enforce the re-approval rule so a
-// plugin whose on-disk capabilities widened past what the operator approved is
-// never handed to the loader.
+// Per-project view of first-party built-in enablement (today: scope). The one store is extensions/state.json.
 export {
   emptyEnablement,
-  aggregateCapabilities,
-  isEnabled,
   enable,
   disable,
-  reconcile,
-  loadableIds,
   readEnablement,
   writeEnablement,
 } from "./plugins/enablement.js";
-export type {
-  EnablementRecord,
-  InstalledPluginView,
-} from "./plugins/enablement.js";
-// Loader / host. `PluginHost` is the ONLY module that spawns a plugin; it runs
-// every contributed tool through `gateFlagsFor` and refuses any id absent from
-// the caller-supplied `enabled` set. `reload()` is a genuine kill+respawn that
-// is refused while a call is in flight — hot-swap without dropping a turn.
-export {
-  PLUGIN_MANIFEST_FILE,
-  PLUGIN_ENTRY_FILE,
-  PLUGIN_DIR_MODE,
-  PLUGIN_FILE_MODE,
-  isSafePluginId,
-  pluginsRootDir,
-  ensurePluginsRoot,
-  listInstalledPluginIds,
-  readInstalledPlugin,
-  PluginHost,
-} from "./plugins/loader.js";
-// Marketplace registry client. Fetches + validates an index (HTTPS only) and
-// applies the signature policy; the index is DATA, never code — nothing here
-// executes anything. The community plugin registry index ships as the default
-// (`DEFAULT_REGISTRY_URL`); an operator can override or disable it.
-export {
-  DEFAULT_REGISTRY_URL,
-  unconfiguredVerifier,
-  createEd25519SignatureVerifier,
-  configuredRegistryVerifier,
-  fetchRegistryIndex,
-  searchInstallable,
-  findInstallable,
-} from "./plugins/registry-client.js";
-export type {
-  RegistryResult,
-} from "./plugins/registry-client.js";
+export type { EnablementRecord } from "./plugins/enablement.js";
 // Extensions: the one installable unit (store, installer, install prompt, importer). See plugins/extensions/index.ts.
 export {
   createExtensionService, parseManifest as parseExtensionManifest, renderInstallPrompt, extensionEnv, readRepoSuggestions, extensionSkillRoots, runStartupImport,
@@ -928,11 +847,6 @@ export type {
 // Connector contract (extension manifest `connector`): declaration, auth port, token adapter, secret store.
 export { listConnectors, defaultAdapter, TokenConnector, FsConnectionSecrets, GITHUB_CONNECTOR, hostAllowed } from "./plugins/extensions/index.js";
 export type { ConnectorDecl, ConnectorStatus, ConnectorState, ConnectorAuthPort, ConnectionSecrets, ConnectorEntry } from "./plugins/extensions/index.js";
-// Plugin wire protocol (pure). Message shapes + total decoders shared by the
-// host, tests, and any third-party plugin SDK.
-export {
-  PROTOCOL_VERSION,
-} from "./plugins/protocol.js";
 export type {
   CostBreakdownEntry,
   SubagentLifecyclePayload,
@@ -1243,7 +1157,6 @@ export type {
   WorkbenchProviderGrant,
 } from "./runtime/workbench-provider-broker.js";
 
-export { connectServicePlugins, testServicePluginConnection } from "./agent/service-plugins.js";
 
 // Transport-independent workflow execution and owned lifecycle.
 export * from "./workflow-runner.js";

@@ -60,13 +60,6 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("retains a persisted self-extension opt-out when new sessions default on", () => {
-    const home = makeHome();
-    expect(loadSettings(home).allowModelSelfExtension).toBe(true);
-    saveSettings({ ...loadSettings(home), allowModelSelfExtension: false }, home);
-    expect(loadSettings(home).allowModelSelfExtension).toBe(false);
-  });
-
   it("defaults allowDevSourceUpdates off and round-trips a global toggle", () => {
     const home = makeHome();
     expect(loadSettings(home).allowDevSourceUpdates).toBe(false);

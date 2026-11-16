@@ -1,4 +1,3 @@
-import type { PluginCapability } from "./manifest.js";
 
 /** Shared built-in gate tables. Session contributions extend copies, never these defaults. */
 export const NETWORK_CAPABLE_TOOLS: Readonly<Record<string, true>> = Object.freeze({
@@ -70,23 +69,3 @@ export const LOCAL_SCOPE_TOOLS: Readonly<Record<string, true>> = Object.freeze({
 });
 
 export interface ToolGateFlags { networkCapable: boolean; localScope: boolean; readOnly: boolean }
-export interface CapabilityCheck { allowed: boolean; reason?: string }
-
-/** Capability limits supplement, never replace, the parent's ordinary authorization. */
-export function checkInvocationCapabilities(
-  toolName: string,
-  capabilities: readonly PluginCapability[],
-  gate: ToolGateFlags,
-): CapabilityCheck {
-  const findingsMutation = toolName === "save_finding" || toolName === "update_finding";
-  const deny = (requirement: string): CapabilityCheck => ({ allowed: false, reason: `Tool "${toolName}" requires ${requirement}; not granted by the calling executable` });
-  if (findingsMutation && !capabilities.includes("findings-write")) return deny("findings-write");
-  if (gate.networkCapable && !capabilities.includes("network") && !capabilities.includes("process-exec")) return deny("network or process-exec");
-  if (gate.localScope) {
-    if (gate.readOnly) {
-      if (!capabilities.includes("filesystem-read") && !capabilities.includes("filesystem-write")) return deny("filesystem-read or filesystem-write");
-    } else if (!capabilities.includes("filesystem-write")) return deny("filesystem-write");
-  }
-  if (!gate.networkCapable && !gate.localScope && !gate.readOnly && !findingsMutation) return deny("an explicit tool classification");
-  return { allowed: true };
-}

@@ -8,6 +8,4 @@ export const BRAND = Object.freeze({
   foxguardRepo: "0sec-labs/foxguard",
   foxguardUrl: "https://github.com/0sec-labs/foxguard",
   /** Community plugin registry repository and its default index. */
-  registryRepo: "0sec-labs/hackstore",
-  registryIndexUrl: "https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json",
 });

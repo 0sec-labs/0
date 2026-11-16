@@ -29,7 +29,6 @@ const sharedSettings = {
   subagentFanOut: { category: "conversation", label: "Subagents per call", description: "Subagents one step can start." },
   allowSubagentPeerMessaging: { category: "agents", label: "Helpers share findings", description: "Helpers can share findings with one another." },
   allowSubagentOperatorMessaging: { category: "agents", label: "Helpers message you", description: "Helpers can send you updates and questions." },
-  allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: v("Let new {missions} write their own sandboxed plugins.") },
   approvals: { category: "agents", label: "Ask before running commands", description: v("New turns ask you before each command or change instead of running automatically. Applies to this computer."), toggle: { on: "ask", off: "auto" } },
   executionProfile: { category: "agents", label: "Where helpers run", description: v("Changes apply to new {missions}.") },
   analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Anonymous counts, timing, costs and error types. Never targets, findings, code or tool content.", toggle: { on: "usage", off: "off" } },

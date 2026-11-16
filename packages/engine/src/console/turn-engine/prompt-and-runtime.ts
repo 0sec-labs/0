@@ -177,9 +177,8 @@ export function buildConsoleSystemPrompt(opts: {
           "DEVELOPER MODE — the core engine source at",
           `${opts.developmentSourceRoot}/packages/engine/src/ can be edited with authorized file tools;`,
           "source build and engine handoff happen after the current user turn,",
-          "preserving conversation, scope, and refusals. Sandboxed self_extend is",
-          "independent. CLI/UI shell and shared dependencies are not reloaded.",
-          "Active executable tools survive reload.",
+          "preserving conversation, scope, and refusals. CLI/UI shell and shared",
+          "dependencies are not reloaded.",
         ]
       : []),
   ].join("\n");
