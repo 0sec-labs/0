@@ -8,6 +8,8 @@ export interface ExtensionRowDto {
   status: "built-in" | "enabled" | "disabled" | "needs-approval" | "unmigrated" | "refused";
   enabled: boolean; revision: string | null; sourceLabel: string | null; canDo: string[]; skills: string[];
   refusal: { code: string; reason: string } | null; note: string;
+  /** The connector contract it declares, when it is a connector (its card is on the Connections section). */
+  connector?: import("./connector-model").ConnectorDto | null;
 }
 export interface ImportReportDto { importedAt: string; migrated: Array<{ kind: string; name: string; detail: string }>; notMigrated: Array<{ kind: string; name: string; detail: string }>; notes: string[] }
 export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string }

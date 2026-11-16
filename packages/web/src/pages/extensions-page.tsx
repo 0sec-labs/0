@@ -4,6 +4,7 @@ import { PageContent, PageHeader } from "@/components/page-header";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { CapyPlusIcon } from "@/ui/icons/capy";
 import { AddExtensionDialog } from "@/components/extensions/add-extension-dialog";
+import { ConnectionsSection } from "@/components/extensions/connections-section";
 import { ExtensionRow } from "@/components/extensions/extension-row";
 import { ReviewSheet } from "@/components/extensions/review-sheet";
 import { useExtensions } from "@/components/extensions/use-extensions";
@@ -47,6 +48,7 @@ export function ExtensionsPage() {
     <PageHeader title="Extensions" summary="Add-ons that give 0 skills, commands and connections. Each is pinned to a commit and never updates on its own."
       actions={<Button size="sm" variant="inverse" disabled={!api.canChange || busy} onClick={flow.openAdd}><CapyPlusIcon className="size-4" />Add extension</Button>} />
     {!api.canChange && <p className="text-sm text-muted-foreground-1">Only owners can add or change extensions.</p>}
+    <ConnectionsSection canChange={api.canChange} />
     {note && <p role="status" className="text-sm text-muted-foreground-1">{note}</p>}
     {flow.notice && <p role="status" className="text-sm text-muted-foreground-1">{flow.notice}</p>}
     {(actionError || (flow.error && flow.step === "closed")) && <p role="alert" className="text-sm text-destructive">{actionError || flow.error}</p>}
