@@ -15,6 +15,7 @@ on the GitHub Release tag.
 ### Removed
 
 - The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
+- The long data-collection paragraph is gone from Settings. The two switches stay, and `ZERO_NO_TELEMETRY=1` still turns both off.
 
 ## [0.38.0] - 2026-11-16
 
