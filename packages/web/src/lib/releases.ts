@@ -8,6 +8,18 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.37.0",
+    date: "2026-11-16",
+    title: "Verified means checked",
+    summary: "A fix is only called Verified when 0 ran a check for it, the Findings board is back, and the sidebar, Skills page and docs are simpler.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ShieldCheck", title: "Verified means checked", text: "A skill can declare a check that 0 runs in a container before anything is called Verified. Fixes and threads end with Verified by or Not verified, and the second-Agent check is now called Corroborated." },
+      { icon: "ListChecks", title: "Findings board", text: "Switch Findings between List and Board and drag a finding between columns. The Agents list is back in the sidebar, next to a Threads toggle." },
+      { icon: "Wrench", title: "Simpler and steadier", text: "The Skills page is a flat list with search, the docs are 12 pages, and many small errors are fixed, from raw reconnect messages to threads that kept the title New thread." },
+    ],
+  },
+  {
     version: "0.36.0",
     date: "2026-11-15",
     title: "Extensions",

@@ -12,45 +12,59 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-16
+
+This release adds a verifier gate so a fix is only called Verified when the harness checked it, brings back the Findings board and the Agents list, and simplifies the sidebar, the Skills page, the docs and CI.
+
 ### Added
 
-- A verifier gate: a skill can declare `verify:` (a digest-pinned container image, network off after setup, a timeout, success as exit 0, a pattern or no worse than before, and an optional canary the check must flag). The harness, not the Agent, runs it after the Agent says it is done and records a typed result. `0 threads start --skill workflow-hardening` uses it with zizmor and actionlint, and a fixed claim without a passing check ends with "Not verified" and the reason.
-- `0 scan fix --verify-image <image@sha256:...>` runs `--test-command` in a container with the network off and records a typed result; without it the command runs on this machine and is never labelled Verified.
-- The independent second-Agent check is now labelled Corroborated; Verified is kept for checks the harness ran.
-
-### Fixed
-
-- A thread can run a script that lives in an installed extension (and so receives that connector's approved token); naming any file inside an extension folder was refused as protected state. State files, writes and removals under `~/.0/extensions` are still refused.
-- A thread can no longer install or approve an extension by wrapping the command (`env -u ZERO_AGENT_SESSION node ... skills extensions add --yes`); the approval-command check now sees through `env` and `sudo` options and a `node <script>` prefix.
-- An extension's own MCP server now starts: loading it was refused with "touches ~/.0/extensions" because the server runs in the extension's folder. Other paths under the 0 state folder are still protected.
-- A changed or first-seen MCP tool list is no longer approved automatically when commands run without asking; the thread waits for you, as documented.
-- Server mode with an explicit port now stops with a clear error when the port is busy instead of silently listening on a random one that a container port mapping or proxy cannot reach.
-- A pull request or scheduled Agent run that fails because the model call failed now says why on the activation (for example an invalid API key) instead of "Stopped: error."
-- Agents no longer show the old word "Sentinel" in an Agent's thread title, its starter files and error messages (for example "Agent changed. Reload before saving.").
-- A new thread now gets an automatic title after its first answer; it stayed "New thread" because the title generator did not recognise that placeholder.
-- `0 findings list --all` and `--format sarif|json|md` work as documented: `--all` typed after `list` was rejected, and `--format` exported nothing without IDs. With no IDs the export covers every finding and honours `--severity`, `--category`, `--status` and `--triage`; `findings list` rejects an unknown severity, status or triage value instead of printing an empty list.
-- `0 threads list --format text` prints a table (ID, status, title, folder) instead of every field; Agent and scan threads are titled `Agent: ...` and `Scan: ...`.
-- Messages that told you to start `0 dashboard` now say `0 --headless`; a console that belongs to another folder says which folder; `0 threads send new --help` shows the start flags (`--folder`, `--wait`, `--cost-ceiling`); the `moved:` line for `0 web --headless` keeps its flags.
-- `0 findings update --help` lists `--note` and `--reason`, an invalid `--status` names the accepted values, and `0 agents set <id> --state` with an unknown state lists the valid ones.
-- `0 skills extensions list` shows an enabled extension that no longer matches its pinned revision as `refused`, with the reason.
-- `0 memory set --import` on a file that is not a memory archive says so instead of printing validation JSON; `0 scan . --module bogus` gives a plain message; `0 config doctor bogus` is refused; `0 ... | head` no longer ends with an EPIPE stack trace.
-- `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`, and `--preview`, `--yes`, `--enable` and `--project` work before or after the source. At a terminal a bare add asks to confirm. `--yes` installs without a terminal (CI, scripts) unless the command runs in an agent session, which still refuses.
-- The Extensions page no longer shows two sign-in controls on the GitHub card (the method selector appears only when methods need different input, and the button reads Connect), uses squared chips instead of pills, and has shorter intro copy. GitHub shows "Built in" and scope shows "On" without an on/off switch while a scope is defined.
-- The slash menu lists `/extensions list` (the old `/plugin list` and `/plugins` still work), and links to Skills no longer bounce through a retired address.
-- The audit log reads "Agent create" and "Automation create" instead of "Sentinel create", and a built-in extension says "Built in" once instead of three times.
-- Opening a page while the server is down shows "Couldn't load this page. It will retry when the connection returns." instead of a raw `reading 'SentinelsPage'` error.
-- The "Finish setting up" card no longer asks you to start your first thread after a restart when you already have saved threads.
-- A saved-thread link whose thread was deleted returns Home with a note, like a stale live-thread link, instead of a "Couldn't open this thread" retry loop; the fix page's button says "New thread" instead of "New session"; the link on a failing connection says "Show connection".
+- A skill can declare a check that the harness runs in a container before anything is called Verified. The Agent does not run it. The check uses a pinned image with the network off after setup, a timeout, and success as exit 0, a pattern or no worse than before.
+- Fixes and threads now end with "Verified by ..." when the check passed or "Not verified: ..." with the reason when it did not.
+- A built-in `workflow-hardening` skill checks GitHub workflows with zizmor and actionlint. Run it with `0 threads start --skill workflow-hardening`.
+- `0 scan fix --verify-image <image@sha256:...>` runs `--test-command` in a container with the network off. Without it the command runs on this machine and is never labelled Verified.
+- The second-Agent check is now called Corroborated. Verified is kept for checks the harness ran itself.
+- The Findings board is back, with a List | Board toggle and drag and drop between columns.
 
 ### Changed
 
-- Automations are created and edited inside Agents. The sidebar lists New thread, Findings, Agents, Skills, Memory, Computers and Extensions; the Agents page has New automation, and an Agent's Automations view holds its templates, triggers and runs. `/automations` and its old aliases open Agents.
+- The sidebar has an Agents | Threads toggle with Agent and thread rows, a shared header with Sort by and Density, and the Agents list is back on the left.
+- The Skills page is a flat two-column list with a tile for each skill and search at the top right.
+- Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. The pages and help text now say so.
+- Scope shows On, with no switch, while a scope is set. GitHub shows Built in.
+- Automations are created and edited inside Agents. `/automations` and its old addresses open Agents.
+- `0 skills add` flags work before or after the source, and `--yes` installs without a terminal (CI, scripts). An Agent session still refuses.
+- The docs went from 49 pages to 12.
+- CI went from 14 workflows to 5, with one shared build and a release that waits for a green Main on the tag's commit.
 - Skills now live at `/skills`; `/plugins/skills` redirects there.
 
 ### Removed
 
-- The Reports page (`/runs/:id`), the scans list and the Engagements page (`/scope`). Findings and Threads carry the same findings, evidence and exports; the old addresses open Findings. The scan, report and engagement APIs are unchanged.
-- The Automations page and its list, the Agents group in the sidebar, and unused web code (dead API client functions, imports and components).
+- The Reports, Scans and Engagements pages. Findings and Threads carry the same findings, evidence and exports, and the old addresses open Findings. The scan, report and engagement APIs are unchanged.
+- The Automations page. Automations live inside Agents.
+- Unused web code: dead API client functions, imports and components. A few old scripts and checks are gone too.
+
+### Fixed
+
+- Opening a page while the server is down shows "Couldn't load this page. It will retry when the connection returns." instead of a raw error.
+- A new thread gets its title after the first answer. It stayed "New thread" before.
+- A pull request or scheduled Agent run that fails now says why on the activation, for example an invalid API key.
+- Server mode with an explicit port stops with a clear error when the port is busy, instead of silently listening on a random one.
+- An extension's own MCP server now starts. It was refused because it runs in the extension's folder.
+- A changed or new MCP tool list is no longer approved automatically when commands run without asking.
+- A thread can no longer install or approve an extension by clearing the agent-session variable or wrapping the command in `env`, `sudo` or `node <script>`.
+- A thread can run or read a file inside an installed extension, so connector scripts get their approved token. State files under `~/.0/extensions` are still protected.
+- Messages that named a command that does not exist now point at `0 --headless`, and a console that belongs to another folder says which folder.
+- `0 findings list --all` and `--format sarif|json|md` work as documented. Without IDs the export covers every finding and honours `--severity`, `--category`, `--status` and `--triage`.
+- `0 findings list` and `0 agents set --state` reject an unknown value and list the valid ones.
+- `0 threads list --format text` is a table. Agent and scan threads are titled `Agent: ...` and `Scan: ...`, not Sentinel or Workflow.
+- `0 ... | head` ends quietly instead of printing an EPIPE stack trace.
+- `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`.
+- `0 skills extensions list` shows an extension that no longer matches its pinned commit as `refused`, with the reason.
+- `0 memory set --import` on a file that is not a memory archive says so. `0 scan . --module bogus` and a missing folder give a plain message.
+- The Extensions page has one Connect button on the GitHub card, squared chips and shorter intro copy.
+- The command palette has Diagnostics, Tools, Folder and Fix again, and the slash menu names `/extensions list`.
+- The audit log says "Agent create" instead of "Sentinel create", and "Finish setting up" no longer asks for a first thread when you have saved ones.
+- A link to a deleted saved thread returns Home with a note instead of a retry loop.
 
 ## [0.36.0] - 2026-11-15
 
