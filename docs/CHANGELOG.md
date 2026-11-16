@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Removed
+
+- The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
+
 ## [0.38.0] - 2026-11-16
 
 This release makes Memory one thing, gives Settings > Appearance a live preview, replaces the backgrounds with six new scenes and puts every page on one width.

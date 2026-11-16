@@ -29,7 +29,7 @@ One page, Settings > Appearance, owns every look-and-feel preference. Everything
 
 ## The page
 
-A sticky live preview (sidebar strip, the backdrop frame at the opacity the real screen uses, heading, composer) built from the real tokens, so it follows theme, accent, mode and text size at once. Then, in order: Mode (small app thumbnails; System is half light, half dark), Theme (cards with a mini UI in that theme's colours), Accent (named swatches; non-Zero themes bring their own accent, so the row says so), Background (16:10 tiles of real frames; hover or focus plays the live animation; None is an empty frame with a slash), Text and layout (Font size, Compact transcript with a before and after), Motion (System, On, Off).
+There is no preview strip (the owner decided on 2026-11-16 that the page does not need one): changes apply to the real console behind the page. In order: Mode (small app thumbnails; System is half light, half dark), Theme (cards with a mini UI in that theme's colours), Accent (named swatches; non-Zero themes bring their own accent, so the row says so), Background (16:10 tiles of real frames; hover or focus plays the live animation; None is an empty frame with a slash), Text and layout (Font size, Compact transcript with a before and after), Motion (System, On, Off).
 Each group is a keyboard radiogroup (`ChoiceGroup`). One-line descriptions, plain words.
 
 ## Structure
