@@ -7,7 +7,7 @@ export const CURATED_SLASH_COMMANDS = [
   "threads list",
   "findings list",
   "models default",
-  "plugin list",
+  "extensions list",
   "config list",
   "status",
   "help",

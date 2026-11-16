@@ -142,7 +142,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   // Skills, memory, extensions
   cmd("skills list", "Skills", "Browse your skills", {
     cli: "skills list",
-    destination: "/plugins/skills",
+    destination: "/skills",
     legacy: ["skills"],
   }),
   cmd("memory list", "Memory", "What 0 remembers", {
@@ -150,13 +150,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     destination: "/memory",
     legacy: ["memory"],
   }),
-  cmd("plugin list", "Extensions", "Browse and turn on extensions", {
-    cli: "skills list",
+  cmd("extensions list", "Extensions", "Browse and turn on extensions", {
+    cli: "skills extensions list",
     destination: "/extensions",
-    aliases: ["plugins"],
-    legacy: ["plugin", "hackstore", "store", "market", "marketplace"],
+    aliases: ["extensions"],
+    legacy: ["plugin list", "plugins", "plugin", "hackstore", "store", "market", "marketplace"],
   }),
-  cmd("plugin browse", "Extensions", "Browse extensions to add", {
+  cmd("extensions browse", "Extensions", "Browse extensions to add", {
+    legacy: ["plugin browse"],
     cli: "skills list --catalog",
     destination: "/extensions",
   }),
