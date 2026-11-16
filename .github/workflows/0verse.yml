@@ -8,6 +8,11 @@ on:
   push:
     branches: ["**"]
     paths: ["0verse/**", ".github/workflows/0verse.yml"]
+  # Weekly: the locked Python and Rust dependencies are audited for new advisories
+  # (moved here from the retired Dependency Security workflow).
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,6 +22,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install audit tooling
+        run: python -m pip install uv==0.11.2 pip-audit==2.10.1
+      - name: Export every locked Python extra
+        run: uv export --directory 0verse --frozen --all-extras --no-emit-project --output-file "$RUNNER_TEMP/0verse-audit.txt"
+      - name: Audit pinned Python dependencies
+        # Audit metadata without installing or executing optional binary engines.
+        run: pip-audit --strict --require-hashes --disable-pip -r "$RUNNER_TEMP/0verse-audit.txt"
+
+  cargo-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        with:
+          toolchain: stable
+      - name: Install cargo-deny
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
+        with:
+          tool: cargo-deny@0.20.2
+      # Lockfiles retain disabled optional backends. Check every resolved
+      # workspace feature and platform, without advisory exceptions.
+      - name: Audit resolved Rust dependencies
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' lockfile; do
+            cargo deny --manifest-path "${lockfile%Cargo.lock}Cargo.toml" \
+              --workspace --all-features --locked check advisories
+          done < <(git ls-files -z -- Cargo.lock '**/Cargo.lock')
+
   core:
     # Core checks use the locked dev environment and need no bench hardware.
     # The repository has no online Linux/X64 self-hosted runner.
@@ -28,10 +81,10 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
       - name: Install uv

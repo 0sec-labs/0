@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBuildPostHogKey } from "./built-in-posthog-key.mjs";
@@ -60,7 +60,7 @@ test("bundle-cli and bun-compile validate before bundling and embed via define",
 test("only the release compile step receives the secret", () => {
   const release = readFileSync(join(ROOT, ".github/workflows/release.yml"), "utf8");
   assert.equal(release.match(/secrets\.ZERO_RELEASE_POSTHOG_KEY/g)?.length, 1);
-  for (const name of ["main.yml", "public-pr.yml", "docs.yml", "install-e2e.yml"]) {
+  for (const name of readdirSync(join(ROOT, ".github/workflows")).filter((f) => !["release.yml", "docker-publish.yml"].includes(f) && /\.ya?ml$/.test(f))) {
     assert.equal(readFileSync(join(ROOT, ".github/workflows", name), "utf8").includes("ZERO_RELEASE_POSTHOG_KEY"), false, name);
   }
 });

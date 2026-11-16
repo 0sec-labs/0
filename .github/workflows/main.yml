@@ -2,10 +2,13 @@ name: "0: Main"
 
 # One required check: `verify`. It aggregates the parallel jobs below and
 # passes only if each one succeeded or was legitimately skipped by `changes`.
-# Tags never skip anything. On main and branches only a diff that is entirely
-# docs skips the test groups (static still runs: it checks docs and image names);
-# see scripts/ci-changed.sh. The main diff base is the last GREEN Main run, so a
-# cancelled code commit can never hide behind a later docs-only commit.
+# The CLI is built ONCE (`build`) and shared with every job as an artifact.
+# Tags never skip anything. On main and branches only the groups a diff can
+# reach run (scripts/ci-changed.sh): a docs-only diff skips the test groups
+# (static still runs: it checks docs and image names). The main diff base is the
+# last GREEN Main run, so a cancelled code commit can never hide behind a later
+# docs-only commit. Multi-check jobs run through scripts/run-checks.mjs: every
+# check runs and the failures are summarised at the end.
 # scripts/ci-local.sh replays these jobs (steps are read from this file).
 
 on:
@@ -38,8 +41,14 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
+      docs: ${{ steps.diff.outputs.docs }}
+      docker: ${{ steps.diff.outputs.docker }}
+      replay: ${{ steps.diff.outputs.replay }}
+      windows: ${{ steps.diff.outputs.windows }}
+      action: ${{ steps.diff.outputs.action }}
+      deps: ${{ steps.diff.outputs.deps }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       - id: diff
@@ -58,51 +67,56 @@ jobs:
           fi
           bash scripts/ci-changed.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
-  static:
-    name: static checks
+  build:
+    name: build CLI once
     runs-on: graphide
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-ci
-      - name: Check package layering
-        run: |
-          pnpm check:architecture
-          node --test scripts/check-architecture.test.mjs
-      - name: Check no npm publishing
-        run: pnpm check:no-npm-publish
-      - name: Check workflow triggers keep CI lean and releases gated
-        run: pnpm check:workflow-triggers
-      - name: Check container image name
-        run: |
-          pnpm check:image-name
-          pnpm test:image-name
       - name: Build CLI
+        # `pnpm build` clears tsconfig.tsbuildinfo first so a stale incremental
+        # state can never ship a missing output; the fresh .tsbuildinfo files
+        # travel in the artifact so `pnpm lint` (tsc --noEmit) reuses them.
         run: pnpm build
-      - name: Type-check
-        run: pnpm lint
-      - name: Check CLI documentation freshness
-        run: pnpm docs:check
-      - name: Check documented commands, flags, links and environment variables
-        run: pnpm check:docs-commands
-      - name: Check documentation code pointers
-        run: pnpm test:docs-pointers
-      - name: Check standalone installer
-        run: node --test scripts/install-script.test.mjs
-      - name: Check update URLs and asset names against the release workflow
-        run: pnpm check:update-contract
+      - name: Share the build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist
+            packages/*/dist
+            packages/*/tsconfig.tsbuildinfo
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  static:
+    name: static checks
+    needs: build
+    runs-on: graphide
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup-ci
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Run every static check and summarise failures
+        run: node scripts/run-checks.mjs static
 
   engine:
     name: engine and bench tests
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.engine == 'true')) }}
+    needs: [changes, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.engine == 'true')) }}
     runs-on: graphide
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-ci
-      - name: Build CLI
-        run: pnpm build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Check database initialization and engine suites
         run: pnpm test:workspace-support
         env:
@@ -120,47 +134,33 @@ jobs:
 
   browser:
     name: dashboard and browser checks
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    needs: [changes, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-ci
-      - name: Build CLI
-        run: pnpm build
-      - name: Check custom provider model picker
-        run: |
-          pnpm --filter @0/engine exec playwright install --with-deps chromium
-          node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs
-      - name: Check CI report import in browser
-        run: pnpm test:ci-report-browser
-      - name: Check Home paints at once without flicker
-        run: pnpm test:home-paint
-      - name: Check CLI and browser share one engine
-        run: pnpm test:web-cli-parity
-      - name: Check the pull request Agent end to end
-        run: pnpm test:pr-agent-e2e
-      - name: Check the GitHub webhook receiver end to end
-        run: pnpm test:webhook-e2e
-      - name: Check automatic telemetry against local fakes
-        run: pnpm test:telemetry
-      - name: Check interactive console controls
-        run: node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-autonomy-modes.test.mjs
-      - name: Check dashboard component suites
-        run: pnpm test:dashboard
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Install browser
+        run: pnpm --filter @0/engine exec playwright install --with-deps chromium
+      - name: Run every dashboard and browser check and summarise failures
+        run: node scripts/run-checks.mjs browser
 
   smoke:
     name: built CLI smoke
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    needs: [changes, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-ci
-      - name: Build CLI
-        run: pnpm build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Check worker orchestration through built CLI
         run: bun scripts/check-worker-orchestration-bun.ts packages/cli/dist/index.js
       - name: Smoke CLI
@@ -173,15 +173,16 @@ jobs:
 
   unit:
     name: package and script tests
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
+    needs: [changes, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: graphide
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-ci
-      - name: Build CLI
-        run: pnpm build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Install browser for script tests
         run: pnpm --filter @0/engine exec playwright install --with-deps chromium
       - name: Run package tests
@@ -199,11 +200,234 @@ jobs:
           AZURE_OPENAI_API_KEY: ""
           KIMI_API_KEY: ""
       - name: Run script tests
+        # Always runs, even if the package tests failed: both results are reported.
+        if: ${{ !cancelled() }}
         run: pnpm test:public:scripts
+
+  windows-storage:
+    name: windows storage
+    # Windows runners bill at 2x: only when the code it exercises can have changed.
+    needs: changes
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.windows == 'true')) }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check native NTFS privacy, artifacts and junction rejection
+        working-directory: packages/engine
+        run: pnpm exec vitest run src/improvement/private-storage.test.ts src/improvement/private-storage.windows.test.ts
+      - name: Check the Bun 1.3.14 standalone Windows runtime
+        run: |
+          bun build --compile scripts/check-windows-storage-bun.ts --outfile windows-storage-check.exe
+          ./windows-storage-check.exe
+
+  docker-server:
+    name: docker server smoke
+    # Builds the image and checks the single-node server story end to end:
+    # health and readiness, an anonymous page that never carries the control
+    # token, bad Host => 403, sign-in, CSRF refusal and a clean SIGTERM.
+    needs: changes
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.docker == 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+      DOCKER_BUILD_SUMMARY: "false"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Validate the compose file
+        run: |
+          set -euo pipefail
+          cp deploy/compose/.env.example deploy/compose/.env
+          ZERO_IMAGE_TAG=latest docker compose -f deploy/compose/docker-compose.yml config -q
+          ZERO_DOMAIN=0.example.com docker compose -f deploy/compose/docker-compose.yml --profile proxy config -q
+          rm deploy/compose/.env
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        id: buildx
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: ./scripts/docker/Dockerfile
+          platforms: linux/amd64
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          tags: zero-server-smoke:ci
+          cache-from: |
+            type=gha,scope=0
+            type=gha,scope=docker-server
+          cache-to: type=gha,mode=max,scope=docker-server
+      - name: Tools the server story depends on
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint ssh zero-server-smoke:ci -V
+          docker run --rm --entrypoint scp zero-server-smoke:ci -h 2>&1 | head -1 || true
+          docker run --rm --entrypoint gh zero-server-smoke:ci --version
+          docker run --rm --entrypoint git zero-server-smoke:ci --version
+          # one-shot use still works: arguments replace the default command
+          docker run --rm zero-server-smoke:ci --help >/dev/null
+      - name: Start like the compose service does
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -base64 32)"
+          echo "::add-mask::$TOKEN"
+          echo "ZERO_TEST_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          docker volume create zero-smoke-data >/dev/null
+          docker run -d --name zero-smoke -p 127.0.0.1:48123:48123 -v zero-smoke-data:/data \
+            -e ZERO_ACCESS_TOKEN="$TOKEN" -e ZERO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e ZERO_TRUSTED_PROXY=172.17.0.0/16 -e ZERO_NO_TELEMETRY=1 \
+            zero-server-smoke:ci --host 0.0.0.0 --server-mode
+      - name: Probe health, anonymous access, Host rules and sign-in
+        run: node scripts/smoke-server-mode.mjs --port 48123 --host-name localhost --token "$ZERO_TEST_TOKEN"
+      - name: Container health status and logs
+        if: always()
+        run: |
+          docker inspect zero-smoke >/dev/null 2>&1 || exit 0
+          docker inspect --format 'health={{.State.Health.Status}}' zero-smoke || true
+          if docker logs zero-smoke 2>&1 | grep -qF "$ZERO_TEST_TOKEN"; then echo "::error::access token found in container logs"; exit 1; fi
+      - name: SIGTERM drains and exits 0
+        run: |
+          set -euo pipefail
+          docker stop --time 30 zero-smoke >/dev/null
+          code="$(docker inspect --format '{{.State.ExitCode}}' zero-smoke)"
+          echo "exit code: $code"
+          test "$code" = "0"
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs zero-smoke 2>&1 | sed "s|$ZERO_TEST_TOKEN|[token]|g" | tail -80 || true
+
+  docker-replay:
+    name: docker replay
+    needs: changes
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.replay == 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build replay engine and dependencies
+        run: pnpm --filter '@0/engine...' -r build
+      - name: Exercise real containers, scope, timeout cleanup, and patch controls
+        run: node scripts/smoke-docker-replay.mjs
+
+  action:
+    name: GitHub Action contracts
+    # Composite action wiring with a stub CLI: no model credentials, read-only token.
+    needs: changes
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.action == 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Check shell syntax
+        run: bash -n scripts/run-github-action.sh
+      - name: Check CI execution, reports, and failure gates
+        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs scripts/post-github-suggestions.test.mjs
+      - name: Create stub CLI (no model calls)
+        run: |
+          mkdir -p "$RUNNER_TEMP/stub"
+          cat > "$RUNNER_TEMP/stub/0" <<'STUB'
+          #!/usr/bin/env node
+          if (process.argv[2] === '--version') { console.log('0 selftest-stub'); process.exit(0); }
+          process.stdout.write(JSON.stringify({ findings: [], warnings: [], summary: { totalFindings: 0 } }));
+          STUB
+          chmod +x "$RUNNER_TEMP/stub/0"
+      - name: Run the action against this repository
+        id: zero
+        uses: ./
+        with:
+          cli-path: ${{ runner.temp }}/stub/0
+          report-dir: ${{ runner.temp }}/0-report
+          cost-ceiling: '1'
+      - name: Assert outputs
+        env:
+          SKIPPED: ${{ steps.zero.outputs.skipped }}
+          SHOULD_FAIL: ${{ steps.zero.outputs.should-fail }}
+          EXEC_OK: ${{ steps.zero.outputs.execution-successful }}
+        run: |
+          [[ "$SHOULD_FAIL" == false && "$EXEC_OK" == true ]]
+          echo "skipped=$SKIPPED"
+
+  docs:
+    name: docs site build
+    needs: changes
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.docs == 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build CLI registrations
+        run: pnpm --filter '@0/cli...' build
+      - run: pnpm --filter @0/docs build
+      - name: Check built documentation links
+        run: node scripts/check-docs-site.mjs --write-marker
+      - name: Keep the built site for the deploy job
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docs-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  audit:
+    name: npm advisory audit (non-blocking)
+    # Replaces the old Dependency Security workflow's npm job. Advisory drift is
+    # a registry/time effect, so it warns here and never blocks Main or a
+    # release; Dependabot (.github/dependabot.yml) opens the fixing PRs.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deps == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Audit JavaScript dependencies
+        run: pnpm audit --audit-level=high
 
   verify:
     name: verify
-    needs: [changes, static, engine, browser, smoke, unit]
+    needs: [changes, build, static, engine, browser, smoke, unit, windows-storage, docker-server, docker-replay, action, docs]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -216,3 +440,41 @@ jobs:
           for r in $RESULTS; do
             case "$r" in success|skipped) ;; *) echo "::error::a verify job finished as '$r'"; exit 1 ;; esac
           done
+
+  docs-deploy:
+    name: deploy docs
+    # Publishes the docs only from a fully green Main on main, never from a tag
+    # or a branch, and only when the docs inputs changed.
+    needs: [changes, docs, verify]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.verify.result == 'success' && needs.docs.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: docs-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docs-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs/dist
+      # Resolve the existing project by its public domain, then publish to
+      # its production branch. Do not silently create an unattached project.
+      - name: Resolve public docs Pages project
+        id: docs-project
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: e84b55c82d29ff76b789af0aea3d9121
+        run: node scripts/diagnose-docs-routing.mjs
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: e84b55c82d29ff76b789af0aea3d9121
+        run: |
+          npx --yes wrangler@4 pages deploy docs/dist --project-name="${{ steps.docs-project.outputs.project_name }}" --branch="${{ steps.docs-project.outputs.production_branch }}"
+      - name: Verify public documentation deployment
+        run: node scripts/check-docs-site.mjs --live

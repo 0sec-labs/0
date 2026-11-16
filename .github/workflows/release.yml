@@ -42,8 +42,9 @@ on:
         type: boolean
         default: false
 
+# Least privilege: jobs that publish say so themselves.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   # A superseded dry run is worthless; a tag release must never be cancelled.
@@ -51,6 +52,42 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  main-gate:
+    name: Main is green on the exact tag commit
+    # The release gate. A tag (or a manual non-dry run) publishes nothing until
+    # the full `0: Main` run for THAT tag has concluded successfully on the tag's
+    # own commit. Main's push run on the branch does not count: tag runs are never
+    # path-skipped. Checked by scripts/check-workflow-triggers.mjs.
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Wait for a green Main run on this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' || { echo "::error::$TAG is not a release tag; releases publish from v<semver> tags only"; exit 1; }
+          sha="$(gh api "repos/$REPO/commits/$TAG" --jq .sha)"
+          echo "tag $TAG -> $sha"
+          for i in $(seq 1 120); do
+            runs="$(gh run list --repo "$REPO" --workflow main.yml --event push --branch "$TAG" --commit "$sha" --limit 20 --json status,conclusion,url)"
+            if [ "$(jq '[.[] | select(.status == "completed" and .conclusion == "success")] | length' <<<"$runs")" -gt 0 ]; then
+              echo "Main is green on $sha"; exit 0
+            fi
+            if [ "$(jq 'length' <<<"$runs")" -gt 0 ] && [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")" -eq 0 ]; then
+              echo "::error::Main finished without success on $sha. Fix it or re-run Main, then re-run this workflow."
+              jq -r '.[].url' <<<"$runs"; exit 1
+            fi
+            echo "waiting for Main on $sha ($i/120)"; sleep 60
+          done
+          echo "::error::timed out waiting for Main on $sha"; exit 1
+
   build:
     name: build ${{ matrix.asset }}
     strategy:
@@ -67,14 +104,16 @@ jobs:
             asset: 0-windows-x64.exe
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: read
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       ZERO_BUILD_RELEASE_CHANNEL: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && 'beta' || 'dev' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           # The vendored native parser preserves its grammar ABI while building
           # with the C++20 standard required by our supported Node 24 runtime.
@@ -86,7 +125,7 @@ jobs:
       # Keep the compiler pinned while the bundled OpenTUI/native-addon surface
       # is validated. `bun-compile.sh` stages tree-sitter's runtime-discovered
       # N-API addons so their direct requires are embedded in the executable.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.3.14"
       - name: Install dependencies
@@ -115,7 +154,7 @@ jobs:
         # One script shared with `scripts/ci-local.sh --only standalone-smoke`.
         shell: bash
         run: bash scripts/smoke-standalone-binary.sh "dist-bin/${{ matrix.asset }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.asset }}
           path: dist-bin/${{ matrix.asset }}
@@ -124,13 +163,13 @@ jobs:
 
   release:
     name: publish release
-    needs: build
+    needs: [build, main-gate]
     if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist-bin
           merge-multiple: true
@@ -169,3 +208,26 @@ jobs:
               --notes-file release-notes.md \
               --verify-tag
           fi
+
+  install-e2e:
+    name: ${{ matrix.method }} install (nightly)
+    # Verifies the public install commands in README.md and Getting Started
+    # against what is actually published, not a build-tree approximation. Runs
+    # nightly (it catches registry, GitHub Release and base-image drift) and on a
+    # manual dry run; it never runs on a tag, before the assets exist.
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [binary, source, container]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # These checks deliberately exercise the public default-branch surface.
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Exercise documented ${{ matrix.method }} installation
+        run: bash scripts/install-e2e.sh ${{ matrix.method }}

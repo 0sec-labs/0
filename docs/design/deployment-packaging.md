@@ -115,7 +115,7 @@ Out of scope and not supported: multiple replicas, shared volumes, HA, shared sa
 - `scripts/docker/Dockerfile`: `EXPOSE 48123`, `HEALTHCHECK` on `/healthz`, `VOLUME /data` with `HOME=/data` (state under `/data/.0`), tini as PID 1, uid 1000, `org.opencontainers.image.*` labels, default `CMD web --host 0.0.0.0 --server-mode`; the entrypoint still takes `scan ...`. `ZERO_ALLOWED_HOSTS` defaults to `localhost,127.0.0.1`.
 - `.github/workflows/docker-publish.yml`: adds `vX.Y.Z` and `X.Y` tags when the built commit carries the matching `vX.Y.Z` git tag; SHA, `main` and `latest` as before, both ghcr names.
 - `deploy/compose/`: `docker-compose.yml`, `.env.example`, `Caddyfile`. One service, one named volume, loopback-published port, stop grace period 40 s, optional `proxy` profile (Caddy, automatic HTTPS) with the proxy network pre-trusted.
-- `.github/workflows/docker-server.yml`: builds the image, starts it with compose-equivalent settings and runs `scripts/smoke-server-mode.mjs` (health, readiness, anonymous page has no token, bad Host 403, login, CSRF).
+- the `docker-server` job of `.github/workflows/main.yml`: builds the image, starts it with compose-equivalent settings and runs `scripts/smoke-server-mode.mjs` (health, readiness, anonymous page has no token, bad Host 403, login, CSRF).
 
 ## 6. Not built, by decision
 
