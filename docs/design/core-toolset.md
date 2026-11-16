@@ -170,4 +170,69 @@ commands that write), so Read-only keeps refusing the shell, and exploration the
 
 ## 4. A/B evidence
 
-PENDING
+What was run, and what was not.
+
+**Not run: XBOW (the 12-challenge subset).** There is no XBOW checkout on this host (and no
+network access to fetch and build one here), and the XBOW runners call `agenticScan`, which
+does not go through the console turn engine. Its web roles already use a shell-first list
+(`agentic/phase-runners.ts`). So an XBOW run would not exercise the `core`/`full` switch at all.
+Scans stay on `full` and nothing here is a claim about them.
+
+**Run: the workflow-hardening class, through the 0 CLI and a headless engine** (`threads start`
+against `0 web --headless`, model gpt-6-luna, effort medium, access Can make changes, cost
+ceiling 0.25 USD per thread). Eight repos from the earlier fix experiment, two attempts each,
+two arms (`ZERO_TOOLSET=core` and `=full`), 16 runs per arm, identical prompt (it asks to
+triage zizmor findings and pin actions, narrow permissions, move template injections to env).
+One fresh engine process per run (see the note on engine failures below).
+
+Pass = a patch exists, the in-scope zizmor classes (unpinned-uses, excessive-permissions,
+template-injection, artipacked) are gone after applying it, and every pinned SHA matches
+`git ls-remote` for the tag in its comment. This is the harness-side check, not the agent's claim.
+zizmor and the SHA check, not a reviewer, decided; nothing was executed.
+
+| Arm | Pass | Wilson 95% | Mean cost / run | Mean input tokens / run | Mean tool calls | Mean model turns | Finished (end_turn) |
+|---|---|---|---|---|---|---|---|
+| core | 9 / 16 | 33% to 77% | USD 0.0069 | 207k | 23.1 | 14.3 | 16 / 16 |
+| full | 8 / 16 | 28% to 72% | USD 0.0081 | 271k | 23.8 | 16.6 | 16 / 16 |
+
+Per repo the outcome is the same in both arms (color 2/2, execa 2/2, just 2/2, semver 2/2 pass;
+gson 0/2, rack-attack 0/2, yq 0/2 fail) except fd, where core passed once and full never. The
+shared failures are task limits, not tool limits: gson produced no patch in either arm,
+rack-attack leaves `ruby/setup-ruby@v1` (a branch), yq leaves self-referencing `@master` pins.
+
+Reading: N is 16 per arm on 8 repos, so the intervals are about 40 points wide. This detects a
+large loss and cannot show equivalence. There is **no evidence of a regression** and a
+directional saving: about 24% fewer input tokens and 15% lower cost per run, same tool calls,
+slightly fewer turns. The full arm spent 58 calls on `update_todos` across 16 runs (core has none,
+and used `done` in 15/16 runs against 6/16 in full). Spend for the whole experiment including
+failed attempts and probes was about USD 0.47 (engine-estimated) of the USD 15 cap.
+
+Skill loading: `load_skill` was called in 3 of 16 core runs (4 calls). None of these tasks needed
+a pack, so the packs were not exercised end to end against a model; pack loading is covered only by
+the unit tests. Skills alone are often never invoked, so must-know rules belong in the system
+prompt, not only in a skill.
+
+Other measured fact: on a trivial prompt the first request is 5,145 input tokens (core) against
+6,873 (full): the system prompt is most of what is left, about 4k tokens, and is the next thing to cut.
+
+### Decision
+
+Keep `core` as the default for Threads and Agents (the owner decided; the data does not argue
+against it). Scans keep `full` until `web-pentest` is wrapped as a pipeline skill and an XBOW A/B passes
+(skills-as-the-unit.md section 8.4). Not measured: a stronger model, other task classes
+(web, source review, fix with tests), pack-using tasks. Do not read this as proof for other work.
+
+### Engine failure seen during the A/B (unresolved, not tool-list specific)
+
+A long-lived headless engine began failing every model call with
+`OpenAI transport failure [unknown]: fetch failed` and then never recovered. In the first
+batch the core engine failed after about four heavy threads (12 of 16 core runs lost) and the
+full engine failed on its last two runs (semver-2, yq-2). It reproduced on a fresh core engine
+after six real threads (the seventh, `just`, died mid-run at 190k input tokens), while that
+engine had made only seven outbound connections (`NODE_DEBUG=net`). A fresh engine answers trivial
+prompts every time (eight in a row), so it is not a payload problem, and the error carries no code.
+So a long-lived engine appears to keep a broken connection and not replace it; it showed up sooner in
+the core arm in my runs, which I cannot explain (the tool list does not touch the HTTP client).
+I did not find the cause. To keep the comparison clean the final batch used one fresh engine per
+run; of the 32 final runs 2 (one per arm) needed one retry on transport failure. If Threads die with
+this error after a few turns of work, look at the engine's HTTP client reuse, not at the tool list.
