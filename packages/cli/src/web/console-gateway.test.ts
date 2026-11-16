@@ -1070,6 +1070,26 @@ describe("ConsoleGateway", () => {
     expect(observedModes).toEqual(["ask", "ask"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
   });
 
+  it("never auto-approves a changed MCP tool list, even when commands run without asking", async () => {
+    let bash: boolean | undefined;
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => {
+        bash = await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } });
+        await input.approveTool!({ name: "mcp_tools_approve", arguments: { summary: "echo changed" } });
+        return outcome();
+      };
+      return session;
+    });
+    const created = instance.create({ autonomyMode: lifted() });
+    await instance.send(created.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    expect(bash).toBe(true);
+    const decision = instance.get(created.id).pendingDecisions[0]!;
+    instance.resolveDecision(created.id, decision.id, { approve: false });
+    await idle(instance, created.id);
+  });
+
   it("applies turning off Ask before running commands to an outstanding approval exactly once", async () => {
     let session: ConsoleSession;
     const instance = gateway(input => {
