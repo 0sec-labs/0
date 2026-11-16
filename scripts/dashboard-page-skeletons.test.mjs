@@ -20,7 +20,7 @@ test("page placeholders expose a single loading status and keep cached skills vi
   }
   for (const variant of ["detail","form"]) assert.equal(loading({label:"Loading memory…",variant}),"");
   const cached=skills({loading:true,skills:[{id:"cached",name:"Cached skill",description:"Ready to use",scope:"personal",fileCount:1,writable:true,revision:"v1",source:"local"}]});
-  assert.match(cached,/Open skill Cached skill/);assert.doesNotMatch(cached,/data-slot="skeleton-panel"/);
+  assert.match(cached,/href="\/skills\?skill=cached"[^>]*>Cached skill<\/a>/);assert.doesNotMatch(cached,/data-slot="skeleton-panel"/);
   const empty=skills({loading:true,skills:[]});assert.match(empty,/data-slot="skeleton-panel"/);assert.doesNotMatch(empty,/No installed skills/);
  }finally{await rm(directory,{recursive:true,force:true});}
 });

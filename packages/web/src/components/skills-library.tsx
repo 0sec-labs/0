@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { Cell, Tile } from "@/components/skills/cells";
-import { useSkillsCatalog } from "@/components/skills/skills-catalog";
 import { abbreviateStars, VERIFIED_BY_0, VERIFIED_HINT, type CatalogPublisher, type CatalogSkill } from "@/components/skills/skills-catalog-model";
 import { cleanSkillSummary } from "@/components/skills-model";
 import { installedSource, installedTile, isFirstParty, rankInstalled, type InstalledSkill } from "@/lib/installed-skills";
@@ -42,11 +41,14 @@ function InstalledRow({ skill, shared, publishers, catalog, onSelect }: { skill:
 }
 
 /** Skills page body. Installed is a flat ranked list (yours, built-in, extension) in the same Cell as Browse; Browse is passed in. The search lives in the page header. */
-export function SkillsLibrary({ skills, loading, error, onSelect, disabled = false, shared = false, onRetry, tab = "installed", onTab, browse, query = "" }: {
+export function SkillsLibrary({ skills, loading, error, onSelect, disabled = false, shared = false, onRetry, tab = "installed", onTab, browse, query = "", publishers = {}, catalog = new Map() }: {
   tab?: "installed" | "browse";
   onTab?: (tab: "installed" | "browse") => void;
   browse?: ReactNode;
   query?: string;
+  /** Catalog publishers (avatars) and skills (stars), for rows added from GitHub. */
+  publishers?: Record<string, CatalogPublisher>;
+  catalog?: ReadonlyMap<string, CatalogSkill>;
   skills: SkillLibraryItem[];
   loading: boolean;
   error?: string;
@@ -55,9 +57,6 @@ export function SkillsLibrary({ skills, loading, error, onSelect, disabled = fal
   shared?: boolean;
   onRetry?: () => void;
 }) {
-  const { inventory } = useSkillsCatalog();
-  const publishers = inventory.data?.publishers ?? {};
-  const catalog = new Map((inventory.data?.skills ?? []).map(skill => [skill.id, skill] as const));
   const rows = rankInstalled(skills, query, shared);
   const content = loading && !skills.length ? <LoadingState label="Loading skills…" />
     : error ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-menu)] bg-destructive/10 p-4 text-sm"><p className="text-destructive">{error}</p>{onRetry && <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onRetry}>Try again</Button>}</div>

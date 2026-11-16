@@ -1,7 +1,7 @@
 import { queryKeys } from "@/queries";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { Disclosure } from "@/components/ui/disclosure";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
@@ -20,6 +20,7 @@ import { Markdown } from "@/console/markdown";
 import { SkillsLibrary } from "@/components/skills-library";
 import { skillSourceLabel } from "@/components/skills-model";
 import { SkillsBrowse } from "@/components/skills/skills-browse";
+import { useSkillsCatalog } from "@/components/skills/skills-catalog";
 import { EditorChat } from "@/components/editor-chat";
 import { errorText } from "@/lib/api-error";
 
@@ -40,6 +41,8 @@ export function SkillsPage() {
   const selectedId = search.get("skill");
   const tab = search.get("tab") === "browse" ? "browse" : "installed";
   const setTab = (next: "installed" | "browse") => setSearch(previous => { const copy = new URLSearchParams(previous); if (next === "browse") copy.set("tab", "browse"); else copy.delete("tab"); return copy; });
+  const catalogData = useSkillsCatalog().inventory.data;
+  const catalog = useMemo(() => new Map((catalogData?.skills ?? []).map(entry => [entry.id, entry] as const)), [catalogData]);
   const query = search.get("q") ?? "";
   const setQuery = (value: string) => setSearch(previous => { const next = new URLSearchParams(previous); if (value) next.set("q", value); else next.delete("q"); return next; }, { replace: true });
   const [addOpen, setAddOpen] = useState(false);
@@ -125,7 +128,7 @@ export function SkillsPage() {
     <input ref={folderInput} type="file" className="hidden" multiple {...{ webkitdirectory: "" }} aria-label="Import skill folder" onChange={event => { const files = event.currentTarget.files; if (files?.length) void perform(() => importFolder(files)); event.currentTarget.value = ""; }} />
     <input ref={bundleInput} type="file" className="hidden" accept=".json" aria-label="Import exported skill" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void perform(async () => { if (file.size > 12 * 1024 * 1024) throw new Error("Choose an export under 12 MB."); let bundle: unknown; try { bundle = JSON.parse(await file.text()); } catch { throw new Error("That file is not a valid exported skill."); } await imported(bundle); }); event.currentTarget.value = ""; }} />
     {error && !dialog && !(previewTab === "source" && draft) && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {!selectedId ? <SkillsLibrary skills={inventory.data?.skills ?? []} loading={inventory.isPending} error={inventory.error?.message} onRetry={() => void inventory.refetch()} onSelect={select} disabled={busy} shared={team.enabled} tab={tab} onTab={setTab} query={query} browse={<SkillsBrowse query={query} addOpen={addOpen} onAddOpenChange={setAddOpen} />} /> : detail.error ? (detail.error as { status?: number }).status === 404 ? <EmptyState title="Skill not found" body="It was deleted or renamed, or the link is out of date." action={<Button variant="outline" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; })}>Back to skills</Button>} /> : <div className="flex flex-col items-start gap-3"><p role="alert" className="text-sm text-destructive">{detail.error.message}</p><Button variant="outline" onClick={() => void detail.refetch()}>Try again</Button></div> : detail.isPending ? <LoadingState label="Loading skill…" variant="detail" /> : skill && <div className="grid min-h-[620px] gap-3 lg:h-[calc(100dvh-240px)] lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
+    {!selectedId ? <SkillsLibrary skills={inventory.data?.skills ?? []} loading={inventory.isPending} error={inventory.error?.message} onRetry={() => void inventory.refetch()} onSelect={select} disabled={busy} shared={team.enabled} tab={tab} onTab={setTab} query={query} publishers={catalogData?.publishers ?? {}} catalog={catalog} browse={<SkillsBrowse query={query} addOpen={addOpen} onAddOpenChange={setAddOpen} />} /> : detail.error ? (detail.error as { status?: number }).status === 404 ? <EmptyState title="Skill not found" body="It was deleted or renamed, or the link is out of date." action={<Button variant="outline" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; })}>Back to skills</Button>} /> : <div className="flex flex-col items-start gap-3"><p role="alert" className="text-sm text-destructive">{detail.error.message}</p><Button variant="outline" onClick={() => void detail.refetch()}>Try again</Button></div> : detail.isPending ? <LoadingState label="Loading skill…" variant="detail" /> : skill && <div className="grid min-h-[620px] gap-3 lg:h-[calc(100dvh-240px)] lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
       <section className="flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[var(--radius-panel)] bg-background lg:min-h-0" aria-label="Skill editor">
         <div className="flex h-12 shrink-0 items-center border-b border-border/40 px-5 text-sm font-medium">Chat<span className="ml-auto text-xs font-normal text-muted-foreground">{skill.writable ? "Editing this skill" : "Saves as your own copy"}</span></div>
         {!editing[skill.id] && newSkillPrompt?.id !== skill.id ? <div className="grid flex-1 place-items-center p-6"><Button variant="outline" disabled={!writable} onClick={() => setEditing(previous => ({ ...previous, [skill.id]: true }))}>Change this skill</Button></div> : <EditorChat key={`${client.backendId}:skill:${skill.id}`} resource={{ kind: "skill", id: skill.id, name: skill.name }} initialPrompt={newSkillPrompt?.id === skill.id ? newSkillPrompt.text : undefined} readOnly={!writable} onResourceChange={id => { select(id); void inventory.refetch(); }} />}
