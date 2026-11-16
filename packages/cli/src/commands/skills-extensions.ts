@@ -1,6 +1,6 @@
 // `0 skills add <source>` and `0 skills extensions ...`: the CLI adapter over the engine's extension service.
-// An extension is an installable git folder pinned by commit that can bundle skills, scripts run through bash, MCP
-// server definitions, a connector, a scope policy and a verifier. This file only parses arguments and prints: every
+// An extension connects 0 to a service or tool (a connector, MCP servers) or adds rules (a scope policy, a verifier);
+// it is a git folder pinned by commit and may come with a skill, scripts run through bash. This file only parses arguments and prints: every
 // decision (pin, diff, approval, tamper check, env allowlist) lives in the engine.
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -80,9 +80,9 @@ export async function addExtension(io: CommandIo, source: string, options: Optio
 }
 
 export function registerExtensionCommands(skills: Command, io: CommandIo): void {
-  const ext = skills.command("extensions").description("Installed extensions: list, info, enable, disable, update, remove (install with `0 skills add`)");
+  const ext = skills.command("extensions").description("Extensions that connect 0 to your tools and services: list, info, enable, disable, update, remove (install with `0 skills add`)");
 
-  consoleOptions(ext.command("add <source>").description("Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this project only"))
+  consoleOptions(ext.command("add <source>").description("Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this project only"))
     .action(async (source: string, options: Options) => { await addExtension(io, source, options); });
 
   consoleOptions(ext.command("mcp <name> [command...]").description("Add one MCP server as a local extension: `mcp docs --url https://host/mcp` or `mcp docs -- npx -y some-mcp`; shows the same prompt first").option("--url <https-url>", "A remote server instead of a command").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable, enable for this project only"))

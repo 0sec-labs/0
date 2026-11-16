@@ -1,9 +1,17 @@
 ---
 title: Extensions
-description: Add skills, scripts, MCP servers and connections to 0 as one reviewed, commit-pinned extension.
+description: Connect 0 to your tools and services with reviewed, commit-pinned extensions.
 ---
 
-An extension is a git folder pinned to one commit. It can bundle [skills](/skills/), scripts the agent runs through bash, MCP servers, a [connection](#connect-a-service) to a service, a scope policy and a verifier. There is no second runtime: its scripts and MCP servers are ordinary commands under the same approvals, [scope](/configuration/#scope) and sandbox as anything the agent runs. Themes are not extensions. Read the [security model](/configuration/#security-model) before adding third-party code.
+Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit and never updates on its own. An extension is a git folder pinned to one commit. It can give 0 a [connection](#connect-a-service) to a service, start MCP servers, or add rules such as a scope policy and a verifier. There is no second runtime: its MCP servers and any scripts are ordinary commands under the same approvals, [scope](/configuration/#scope) and sandbox as anything the agent runs. Themes are not extensions. Read the [security model](/configuration/#security-model) before adding third-party code.
+
+An extension may also come with a [skill](/skills/) that explains how to use it; that skill appears on the Skills page labelled with its source.
+
+> **Skills vs Extensions**
+> - Skills are instructions the model loads. They contain no code.
+> - Extensions are connections, tools and rules.
+> - An extension can bring a skill along.
+> - Skills never connect to anything on their own.
 
 ## Add one
 
@@ -14,7 +22,7 @@ An extension is a git folder pinned to one commit. It can bundle [skills](/skill
 0 skills extensions mcp docs -- npx some-mcp-server@1.2.3
 ```
 
-You always see one prompt first: the repository at the full commit, the licence, the files, hidden-Unicode flags and what it can do (commands it can run, MCP servers it connects to, services it calls, scope it defines). Nothing is installed without `--yes` from your own terminal, and a flag alone never approves. Without a pinned commit, `--yes` is refused. The browser app has the same flow on **Extensions**: **Add extension** takes a git source, **Add MCP server** takes a command or an https URL and creates a local extension that goes through the same prompt.
+You always see one prompt first: the repository at the full commit, the licence, the files, hidden-Unicode flags and what it can do (which service it connects to, MCP servers it starts, rules it adds, and any skills it adds last). Nothing is installed without `--yes` from your own terminal, and a flag alone never approves. Without a pinned commit, `--yes` is refused. The browser app has the same flow on **Extensions**: **Add extension** takes a git source, **Add MCP server** takes a command or an https URL and creates a local extension that goes through the same prompt.
 
 ## Manage them
 

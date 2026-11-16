@@ -39,7 +39,7 @@ This release replaces the old plugin system with extensions: one installable, co
 
 ### Added
 
-- Extensions are installable git folders pinned to a commit that can bundle skills, scripts, MCP servers, a connector and a scope policy. Install one with `0 skills add <repo>@<sha>`. A prompt shows what it can do and, on update, the diff since the last approved version; nothing updates on its own.
+- Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit and never updates on its own. Install one with `0 skills add <repo>@<sha>`. A prompt shows what it can do and, on update, the diff since the last approved version; nothing updates on its own.
 - `0 skills extensions list|info|enable|disable|update|remove` manage extensions from the CLI. A folder that no longer matches its pinned commit refuses to load, and scripts get a scrubbed environment with only the names you approved.
 - The Extensions page (`/extensions`) lists installed and built-in extensions, what each can do, its source at a commit and an on/off switch. Add shows the install prompt and Update shows the diff. Only team owners in the browser console can install, update, enable or remove, and each is audited.
 - MCP servers now live inside extensions and start on demand. A thread's default tool list carries one line per server and no MCP schema; tool schemas load only when the model asks for a server. Add one from the Extensions page (**Add MCP server**) or `0 skills extensions mcp`.

@@ -1,5 +1,7 @@
 # One extension system: plugins
 
+> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules like scope. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
+
 Architecture of the store, installer and importer (step 2): [extension-architecture.md](./extension-architecture.md). Naming decision: user-facing text says "extension"; skills stay "skills".
 
 Status: DESIGN ONLY, nothing implemented. Owner direction (Doruk): everything beyond

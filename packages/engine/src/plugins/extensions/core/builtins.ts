@@ -39,7 +39,7 @@ export const BUILTIN_EXTENSIONS: readonly BuiltinExtension[] = [
   {
     name: "scope", version: "1.1.0", required: "scope-defined", pluginTitle: "Scope enforcement",
     description: "Enforces engagement host/path authorization, exclusions and local filesystem scope. On by default: it enforces whenever a scope is defined and allows everything when none is. Credential protection, sandboxing and resource limits remain independent.",
-    canDo: ["defines a scope: allows or denies commands before they run"], confirmDisable: "Disabling scope runs commands without scope enforcement; while a scope is defined, commands are denied instead.",
+    canDo: ["adds rules: scope allows or denies commands before they run"], confirmDisable: "Disabling scope runs commands without scope enforcement; while a scope is defined, commands are denied instead.",
   },
   {
     name: "github", version: "1.0.0", required: "always", description: "GitHub connection used by pull request Agents, the pull request trigger and the webhook receiver. Built in: it cannot be removed and updates with the 0 binary.",

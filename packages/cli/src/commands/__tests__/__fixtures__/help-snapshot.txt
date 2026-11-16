@@ -4039,15 +4039,16 @@ Options:
 
 Commands:
   list [options]          List installed skills and linked folders
-  add [options] <source>  Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a
-                          catalog id or owner/repo/path; shows one prompt first
+  add [options] <source>  Add a skill (instructions) or an extension (a connection, MCP server or
+                          rules): <url|owner/repo|folder>@<full sha>, a catalog id or
+                          owner/repo/path; shows one prompt first
   help [command]          display help for command
 
 ### 0 skills add
 Usage: 0 skills add [options] <source>
 
-Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path;
-shows one prompt first
+Add a skill (instructions) or an extension (a connection, MCP server or rules):
+<url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path; shows one prompt first
 
 Options:
   --preview         Only show the review
@@ -4116,7 +4117,8 @@ Options:
 ### 0 skills extensions (hidden)
 Usage: 0 skills extensions [options] [command]
 
-Installed extensions: list, info, enable, disable, update, remove (install with `0 skills add`)
+Extensions that connect 0 to your tools and services: list, info, enable, disable, update, remove
+(install with `0 skills add`)
 
 Options:
   -h, --help      display help for command
@@ -4127,7 +4129,8 @@ Commands:
 ### 0 skills extensions add (hidden)
 Usage: 0 skills extensions add [options] <source>
 
-Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
+Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as
+`0 skills add`
 
 Options:
   --preview         Only show the install prompt

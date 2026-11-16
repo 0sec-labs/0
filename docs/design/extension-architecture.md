@@ -1,5 +1,7 @@
 # Extension architecture (step 2 of the build plan)
 
+> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules like scope. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
+
 Implements the store, manifest reader, installer, install prompt and importer from
 `one-extension-system.md`. The owner naming decision applies: user-facing text says
 **extension**; code under `packages/engine/src/plugins/extensions/` keeps the folder name.

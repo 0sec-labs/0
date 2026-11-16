@@ -61,18 +61,18 @@ export function capabilityDelta(previous: Capabilities | null, next: Capabilitie
 /** Plain-language list for the install prompt. */
 export function canDoLines(c: Capabilities): string[] {
   const out: string[] = [];
+  if (c.service) out.push(connectorCanDo(c.service));
   if (c.runs.length) out.push(`runs commands through bash (${c.runs.length}): ${c.runs.slice(0, 8).join(", ")}${c.runs.length > 8 ? ", ..." : ""}`);
-  for (const s of c.mcp) out.push(`connects to MCP server ${s.name}: ${s.url ?? [s.command, ...s.args].join(" ")}${s.env.length ? ` (env ${s.env.join(", ")})` : ""}${s.headers.length ? ` (headers ${s.headers.join(", ")})` : ""}`);
+  for (const s of c.mcp) out.push(`${s.url ? "connects to" : "starts an"} MCP server ${s.name}: ${s.url ?? [s.command, ...s.args].join(" ")}${s.env.length ? ` (env ${s.env.join(", ")})` : ""}${s.headers.length ? ` (headers ${s.headers.join(", ")})` : ""}`);
   for (const s of c.mcp) {
     const l = s.command ? inspectLauncher(s.command, s.args) : null;
     if (l) out.push(`downloads ${l.spec ? JSON.stringify(l.spec.slice(0, 80)) : "a package"} from ${l.hosts[0]} each time MCP server ${s.name} starts via ${l.launcher}${l.pinned ? " (exact version pinned)" : ": NOT pinned to an exact version, so it will be refused at launch until the extension pins one"}`);
   }
-  if (c.service) out.push(connectorCanDo(c.service));
-  if (c.scope) out.push(`defines a scope (${c.scope})`);
-  if (c.verify) out.push(`provides a verifier (${c.verify})`);
+  if (c.scope) out.push(`adds rules: scope (${c.scope})`);
+  if (c.verify) out.push(`adds rules: verifier (${c.verify})`);
   if (c.env.length) out.push(`receives environment variables: ${c.env.join(", ")} (model provider keys are never passed unless listed here)`);
-  if (c.skills.length) out.push(`adds skills (text instructions): ${c.skills.join(", ")}`);
   if (c.ignored.length) out.push(`ignored, never run: ${c.ignored.join(", ")}`);
+  if (c.skills.length) out.push(`adds skills (text instructions): ${c.skills.join(", ")}`);
   return out;
 }
 
