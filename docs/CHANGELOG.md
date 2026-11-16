@@ -31,7 +31,7 @@ on the GitHub Release tag.
 ### Removed
 
 - The Reports page (`/runs/:id`), the scans list and the Engagements page (`/scope`). Findings and Threads carry the same findings, evidence and exports; the old addresses open Findings. The scan, report and engagement APIs are unchanged.
-- The Automations page and its list, the Agents group in the sidebar, the Findings board layout, and unused web code (dead API client functions, imports and components).
+- The Automations page and its list, the Agents group in the sidebar, and unused web code (dead API client functions, imports and components).
 
 ## [0.36.0] - 2026-11-15
 

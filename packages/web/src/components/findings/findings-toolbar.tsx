@@ -1,7 +1,8 @@
-import { Download } from "lucide-react";
+import { Columns3, Download, List } from "lucide-react";
 import { CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/ui/components/select";
+import { Tooltip } from "@/ui/components/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { REPORT_FORMATS, useReportDownload } from "@/components/report-export-control";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,10 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
           </label>
           <FilterMenu {...props} />
           <DisplayMenu display={display} onDisplay={onDisplay} />
+          <div role="group" aria-label="Layout" className="flex items-center rounded-md border-[0.5px] border-border-1 p-px">
+            <Tooltip content="List"><Button variant="ghost" size="icon-xs" aria-label="List layout" aria-pressed={display.layout === "list"} data-selected={display.layout === "list" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "list" })}><List /></Button></Tooltip>
+            <Tooltip content="Board"><Button variant="ghost" size="icon-xs" aria-label="Board layout" aria-pressed={display.layout === "board"} data-selected={display.layout === "board" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "board" })}><Columns3 /></Button></Tooltip>
+          </div>
           <DropdownMenu>
             <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" className={iconButton} />}><MoreHorizontal /></DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" className="w-56">

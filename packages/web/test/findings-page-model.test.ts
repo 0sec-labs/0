@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_DISPLAY, EMPTY_FILTERS, HEADER_STRIDE, ROW_STRIDE, activeFilterCount, buildActivity, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus,
+  DEFAULT_DISPLAY, EMPTY_FILTERS, HEADER_STRIDE, ROW_STRIDE, activeFilterCount, boardColumns, buildActivity, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus,
   flattenSections, layoutRows, matchesFilters, matchesFindingSearch, matchesPreset, mergeView, navigableFingerprints, sortFindings, stepCursor, visibleRange,
   type FindingsView,
 } from "../src/components/findings/findings-model";
@@ -99,6 +99,12 @@ describe("ordering and grouping", () => {
     expect(flattenSections(none, {}).every(row => row.type === "finding")).toBe(true);
     expect(buildSections([], DEFAULT_DISPLAY)).toEqual([]);
   });
+  it("builds board columns in lifecycle order with only engine-owned review stages refusing drops", () => {
+    const columns = boardColumns([group("a", { status: "in_progress" }), group("b", { status: "human_review" })], "severity", "desc");
+    expect(columns.map(column => column.status)).toEqual(["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "accepted", "done", "cancelled"]);
+    expect(columns.find(column => column.status === "in_progress")!.items).toHaveLength(1);
+    expect(columns.filter(column => !column.droppable).map(column => column.status)).toEqual(["agent_review", "human_review"]);
+  });
 });
 
 describe("windowing", () => {
@@ -136,8 +142,8 @@ describe("windowing", () => {
 
 describe("persisted view and activity", () => {
   it("falls back for junk and clamps the panel width", () => {
-    const view = mergeView({ display: { groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any", hasFixPr: true }, collapsed: { done: false, x: "y" }, panelWidth: 99999 }) as FindingsView;
-    expect(view.display).toEqual({ groupBy: "category", orderBy: "severity", direction: "desc" });
+    const view = mergeView({ display: { layout: "grid", groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any", hasFixPr: true }, collapsed: { done: false, x: "y" }, panelWidth: 99999 }) as FindingsView;
+    expect(view.display).toEqual({ layout: "list", groupBy: "category", orderBy: "severity", direction: "desc" });
     expect(view.preset).toBe("all");
     expect(view.filters).toMatchObject({ severity: ["high"], status: ["done"], match: "any", hasFixPr: true });
     expect(view.collapsed).toEqual({ done: false });

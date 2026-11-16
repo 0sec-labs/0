@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOSED_ACCEPT_NOTE, REVIEW_LOCK_NOTE, REVIEW_STAGE_NOTE, resolveDrop } from "./findings-model";
+import { CLOSED_ACCEPT_NOTE, REVIEW_LOCK_NOTE, REVIEW_STAGE_NOTE, boardColumns, resolveDrop, type FindingStatus } from "./findings-model";
 import { patchDashboardTriage, patchDashboardWorkflow, triageForWorkflow } from "./use-finding-mutations";
 import { findingStatus } from "./findings-model";
 import type { DashboardResponse, FindingGroup, FindingWorkflowStatus } from "@/types";
@@ -13,7 +13,7 @@ function group(fingerprint: string, status: FindingWorkflowStatus, triageStatus 
 }
 const dashboard = (...groups: FindingGroup[]) => ({ groups }) as unknown as DashboardResponse;
 
-describe("status move rules", () => {
+describe("board drop rules", () => {
   it("moves between people-settable columns", () => {
     for (const target of ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"] as const) {
       expect(resolveDrop(target === "todo" ? "backlog" : "todo", target)).toEqual({ ok: true, kind: "workflow", status: target });
@@ -36,9 +36,14 @@ describe("status move rules", () => {
   it("ignores a drop on the same column silently", () => {
     expect(resolveDrop("todo", "todo")).toEqual({ ok: false, reason: null });
   });
+  it("keeps every board column a drop target so refusals can be shown", () => {
+    const targets: FindingStatus[] = boardColumns([], "severity", "desc").map(column => column.status);
+    expect(targets).toContain("human_review");
+    expect(targets).toContain("accepted");
+  });
 });
 
-describe("optimistic status moves", () => {
+describe("optimistic board moves", () => {
   it("moves a dismissed card out of Cancelled and an accepted card out of Accepted at once", () => {
     const next = patchDashboardWorkflow(dashboard(group("a", "backlog", "suppressed"), group("b", "backlog", "accepted")), { fingerprint: "a", workflowStatus: "todo", workflowAssignee: "", optimisticStatus: "todo" });
     expect(findingStatus(next.groups[0]!)).toBe("todo");

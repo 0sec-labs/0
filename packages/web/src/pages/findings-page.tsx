@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { PageContent } from "@/components/page-header";
 import { EmptyState } from "@/components/state-panel";
 import { FindingDetail } from "@/components/findings/finding-detail";
+import { FindingsBoard } from "@/components/findings/findings-board";
 import { FindingsBulkBar } from "@/components/findings/findings-bulk-bar";
 import { FindingsList } from "@/components/findings/findings-list";
 import { FindingsToolbar } from "@/components/findings/findings-toolbar";
 import {
-  PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus, flattenSections, matchesFilters,
+  PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, boardColumns, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus, flattenSections, matchesFilters,
   matchesFindingSearch, matchesPreset, resolveDrop, STATUS_LABEL, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
   type DisplayOptions, type FindingFilters, type FindingPreset, type FindingStatus, type FindingsView,
 } from "@/components/findings/findings-model";
@@ -126,7 +127,10 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
 
   const sections = useMemo(() => buildSections(visible, display, missionNames), [visible, display, missionNames]);
   const rows = useMemo(() => flattenSections(sections, collapsed), [sections, collapsed]);
-  const navigable = useMemo(() => navigableFingerprints(rows), [rows]);
+  const navigable = useMemo(
+    () => display.layout === "board" ? boardColumns(visible, display.orderBy, display.direction).flatMap(column => column.items.map(group => group.fingerprint)) : navigableFingerprints(rows),
+    [display, visible, rows],
+  );
   const categories = useMemo(() => facetCounts(groups, group => group.latest.category), [groups]);
   const missions = useMemo(() => facetCounts(groups, missionKey), [groups]);
 
@@ -272,6 +276,20 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
             <EmptyState variant="fill" title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button size="sm" variant="accent" render={<Link to="/chats" />}>{v("Start {a mission}")}</Button>} />
           ) : visible.length === 0 ? (
             <EmptyState variant="fill" title="Nothing matches" body={hasFilters ? "No findings match the current search or filters." : "Nothing needs attention here right now."} action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
+          ) : display.layout === "board" ? (
+            <FindingsBoard
+              groups={visible}
+              orderBy={display.orderBy}
+              direction={display.direction}
+              activeFingerprint={activeFingerprint}
+              cursorFingerprint={cursor}
+              selected={selected}
+              pendingFingerprint={mutations.workflow.isPending ? mutations.workflow.variables?.fingerprint ?? null : null}
+              fixPrs={fixPrs}
+              onOpen={fp => openFinding(fp)}
+              onToggleSelect={toggleSelect}
+              onMove={moveStatus}
+            />
           ) : (
             <FindingsList
               rows={rows}
