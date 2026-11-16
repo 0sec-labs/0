@@ -67,7 +67,7 @@ export function mapErrorText(message: string): string {
 
 /** Friendly sentence for a mission/session/chat the backend no longer has (404). */
 export const MISSING_MISSION_MESSAGE = "That thread isn't available here.";
-const MISSING_MISSION = /\b(?:mission|thread|session|chat|conversation)\b[^.]*\bnot found\b/i;
+const MISSING_MISSION = /\b(?:mission|thread|session|chat|conversation|transcript)\b[^.]*\bnot found\b/i;
 export const isMissingMissionText = (message: string | undefined): boolean => Boolean(message && (message === MISSING_MISSION_MESSAGE || MISSING_MISSION.test(message)));
 
 const RAW_TEXT = /^\s*(<|https?:\/\/)/i;

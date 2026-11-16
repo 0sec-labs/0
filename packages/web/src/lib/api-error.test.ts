@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { consoleErrorMessage, needsModelEnabled } from "@/console/provider-error";
-import { API_ERROR_MESSAGES, ApiError, apiErrorFrom, describeApiFailure, errorText, isModelDisabledError, mapErrorText } from "./api-error";
+import { API_ERROR_MESSAGES, ApiError, apiErrorFrom, describeApiFailure, errorText, isMissingMissionText, isModelDisabledError, mapErrorText } from "./api-error";
 import { NonJsonResponseError } from "./network-resilience";
 
 describe("api error mapper", () => {
@@ -73,5 +73,13 @@ describe("missing thread wording", () => {
     expect(errorText(new ApiError("Console thread was not found.", 404))).toBe("That thread isn't available here.");
     expect(errorText("Console session not found.")).toBe("That thread isn't available here.");
     expect(errorText(new ApiError("Finding not found.", 404))).toBe("Finding not found.");
+  });
+});
+
+describe("missing thread text", () => {
+  it("treats a missing saved transcript like a missing thread", () => {
+    expect(isMissingMissionText("Saved transcript was not found.")).toBe(true);
+    expect(isMissingMissionText("Console thread was not found.")).toBe(true);
+    expect(isMissingMissionText("Reconnecting…")).toBe(false);
   });
 });
