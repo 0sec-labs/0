@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">AI security agents for the enterprise</h1>
+<h1 align="center">Sovereign AI security agents</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is software infrastructure to build and deploy sovereign, persistent AI security agents, tailored to each environment, that continuously find, prove and fix security risks across any tech stack. It is open source, so every agent and workflow is yours to shape, and it runs on your own infrastructure with the models you choose.
+  0security is software infrastructure for deploying sovereign, persistent AI security agents. They find and fix security risks across any tech stack, work with any model, and run anywhere.
 </p>
 
 <p align="center">
