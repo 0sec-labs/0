@@ -288,7 +288,7 @@ export async function executeEntraPosture(
   if (!accessToken) {
     return errResult(
       `Missing ${GRAPH_TOKEN_ENV}. Export a Microsoft Graph access token with directory read scopes; ` +
-        "0 never accepts it as an argument.",
+        "0security never accepts it as an argument.",
     );
   }
 

@@ -442,7 +442,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "archiveIdleDays",
     label: "Archive idle conversations",
-    description: "At startup, archive saved conversations idle for more than this many days. 0 keeps everything. Applies to this computer.",
+    description: "At startup, archive saved conversations idle for more than this many days. Set to 0 to keep everything. Applies to this computer.",
     kind: "number",
     default: 0,
     min: 0,

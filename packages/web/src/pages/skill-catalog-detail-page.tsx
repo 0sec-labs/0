@@ -84,7 +84,7 @@ export function SkillCatalogDetailPage() {
           <RailFact label="Licence">{skill.licence ?? "None declared"}{data?.licence.shareAlike && <span className="block text-muted-foreground-2">Share-alike: keep attribution</span>}</RailFact>
           <RailFact label="Pinned commit"><External href={githubCommitUrl(skill.repo, skill.commit)} mono>{skill.commit.slice(0, 12)}</External></RailFact>
           <RailFact label="Contents">{skill.files} {skill.files === 1 ? "file" : "files"}, {size(skill.bytes)}</RailFact>
-          <RailFact label="Permissions"><ul className="flex flex-col gap-2">{["Instructions the agent follows with your permissions", ...(skill.hasScripts ? ["Carries scripts. 0 stores them and never runs them"] : []), "Never updates by itself"].map(item => <li key={item} className="flex gap-2"><span aria-hidden="true" className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground-2" /><span>{item}</span></li>)}</ul></RailFact>
+          <RailFact label="Permissions"><ul className="flex flex-col gap-2">{["Instructions the agent follows with your permissions", ...(skill.hasScripts ? ["Carries scripts. 0security stores them and never runs them"] : []), "Never updates by itself"].map(item => <li key={item} className="flex gap-2"><span aria-hidden="true" className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground-2" /><span>{item}</span></li>)}</ul></RailFact>
         </dl>
       </aside>
     </div>

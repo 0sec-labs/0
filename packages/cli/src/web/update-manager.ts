@@ -216,7 +216,7 @@ export class UpdateManager {
     if (updatesDisabledByEnvironment(this.#o.env)) throw new UpdateError(409, "updates_disabled", "Updates are disabled by ZERO_OFFLINE or ZERO_NO_UPDATE_CHECK.");
     if (this.#applying || this.#restarted) throw new UpdateError(409, "update_in_progress", "An update is already in progress.");
     const tag = this.#staged ?? readCheckCache()?.latestVersion;
-    if (!isStableNewer(tag, this.#o.current)) throw new UpdateError(409, "up_to_date", "0 is already up to date.");
+    if (!isStableNewer(tag, this.#o.current)) throw new UpdateError(409, "up_to_date", "0security is already up to date.");
     const threads = this.#o.threadCount();
     if (threads > 0 && options.confirm !== true) {
       throw new UpdateError(409, "threads_running", `${threads} ${threads === 1 ? "thread is" : "threads are"} running. Update after they finish, or update anyway.`, { threads });
