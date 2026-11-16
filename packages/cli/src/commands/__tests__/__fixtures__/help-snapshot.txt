@@ -1293,7 +1293,7 @@ Commands:
 ### 0 findings triage mark-fp (hidden)
 Usage: 0 findings triage mark-fp [options] <finding-id>
 
-Mark a finding as false positive and auto-create a memory
+Mark a finding as false positive and remember why
 
 Arguments:
   finding-id             Finding ID (full or prefix)
@@ -1308,7 +1308,7 @@ Options:
 ### 0 findings triage memory (hidden)
 Usage: 0 findings triage memory [options] [command]
 
-Manage Semgrep-style triage memories
+Moved: false-positive reasons are notes in `0 memory`
 
 Options:
   -h, --help      display help for command
@@ -1332,21 +1332,19 @@ Options:
 ### 0 findings triage memory list (hidden)
 Usage: 0 findings triage memory list [options]
 
-List all triage memories
+List false-positive notes
 
 Options:
-  --scope <scope>        Filter by scope: global | target | package
-  --category <category>  Filter by vulnerability category
-  --db-path <path>       Path to SQLite database
-  -h, --help             display help for command
+  --db-path <path>  Path to SQLite database
+  -h, --help        display help for command
 
 ### 0 findings triage memory remove (hidden)
 Usage: 0 findings triage memory remove [options] <id>
 
-Delete a memory by id
+Forget a note by id
 
 Arguments:
-  id                Memory ID
+  id                Note ID
 
 Options:
   --db-path <path>  Path to SQLite database
@@ -3055,81 +3053,103 @@ Usage: 0 memory [options] [command]
 What 0 remembers across threads
 
 Options:
-  -h, --help                   display help for command
+  -h, --help             display help for command
 
 Commands:
-  list [options]               List memories
-  set [options] [id] [on|off]  Turn a memory on or off, load memories with --import, or manage
-                               triage memories with --add and --remove <id>
-  export [options]             Export memories as a portable archive
-  help [command]               display help for command
+  list [options]         List notes
+  add [options] <text>   Remember a note
+  remove [options] <id>  Forget a note
+  help [command]         display help for command
+
+### 0 memory add
+Usage: 0 memory add [options] <text>
+
+Remember a note
+
+Options:
+  --folder <path>   Folder the note is about (default: this folder)
+  --global          Remember it everywhere
+  --kind <kind>     One of fix-decision, convention, command, avoid
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
+
+### 0 memory clear (hidden)
+Usage: 0 memory clear [options]
+
+Forget every note, or every note for one folder
+
+Options:
+  --folder <path>   Only this folder
+  --yes             Confirm
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
 
 ### 0 memory disable (hidden)
-Usage: 0 memory disable [options] <id>
+Usage: 0 memory disable [options]
 
-Stop using a memory in future threads
+Stop using notes in new threads (they stay on disk)
 
 Options:
   --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
+  --db-path <path>  Engine database to import older memories from
   -h, --help        display help for command
 
 ### 0 memory enable (hidden)
-Usage: 0 memory enable [options] <id>
+Usage: 0 memory enable [options]
 
-Use a disabled memory again
+Use notes in new threads again
 
 Options:
   --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
+  --db-path <path>  Engine database to import older memories from
   -h, --help        display help for command
 
-### 0 memory export
+### 0 memory export (hidden)
 Usage: 0 memory export [options]
 
-Export memories as a portable archive
+Write notes to a file
 
 Options:
-  --folder <id>        Only memories for this folder id
+  --folder <path>      Only this folder
   -o, --output <file>  Write to a file instead of stdout
   --json               Print machine-readable JSON
-  --db-path <path>     Use this engine database instead of the default
+  --db-path <path>     Engine database to import older memories from
   -h, --help           display help for command
 
 ### 0 memory import (hidden)
 Usage: 0 memory import [options] <file>
 
-Import a memory archive; imported memories start disabled
+Add the notes from an export file
 
 Options:
-  --preview         Only show what would be imported
   --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
+  --db-path <path>  Engine database to import older memories from
   -h, --help        display help for command
 
 ### 0 memory list
 Usage: 0 memory list [options]
 
-List memories
+List notes
 
 Options:
-  --folder <id>     Only memories for this folder id
-  --limit <n>       At most this many (1-200) (default: "100")
+  --folder <path>   Only notes for this folder
+  --global          Only global notes
+  --search <text>   Only notes containing this text
   --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
+  --db-path <path>  Engine database to import older memories from
   -h, --help        display help for command
 
-### 0 memory set
-Usage: 0 memory set [options] [id] [on|off]
+### 0 memory remove
+Usage: 0 memory remove [options] <id>
 
-Turn a memory on or off, load memories with --import, or manage triage memories with --add and
---remove <id>
+Forget a note
 
 Options:
-  --import <file>  Import memories from a file
-  --add            Add a triage memory (see findings triage)
-  --remove         Remove a triage memory
-  -h, --help       display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
 
 ### 0 models
 Usage: 0 models [options] [command]

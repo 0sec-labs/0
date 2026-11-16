@@ -8,7 +8,7 @@ import { LearningService } from "../learning-service.js";
 import { LearningStore, learningProjectId } from "../storage/learning.js";
 import { osecDB } from "../storage/database.js";
 import { migrateOldMemory, migrationReportPath } from "./migrate.js";
-import { createFileMemoryStore } from "./store.js";
+import { createFileNoteStore } from "./store.js";
 
 let home: string; let repo: string; let db: string;
 beforeEach(() => {
@@ -38,7 +38,7 @@ describe("migrateOldMemory", () => {
     const craft = seedOldStores();
     const huntFile = join(home, ".0", "hunt-memory", "patterns.jsonl");
     const before = readFileSync(huntFile, "utf8");
-    const store = createFileMemoryStore({ home });
+    const store = createFileNoteStore({ home });
     const report = migrateOldMemory(store, { home, dbPath: db, craftPaths: [craft] });
     const texts = store.list().map(n => n.text);
     expect(texts.some(t => t.includes("Sessions are checked in auth.ts"))).toBe(true);
@@ -58,7 +58,7 @@ describe("migrateOldMemory", () => {
   it("is idempotent even when the report is lost, and skips damaged lines", () => {
     seedOldStores();
     appendFileSync(join(home, ".0", "hunt-memory", "patterns.jsonl"), "{not json\n");
-    const store = createFileMemoryStore({ home });
+    const store = createFileNoteStore({ home });
     migrateOldMemory(store, { home, dbPath: db });
     const count = store.list().length;
     rmSync(migrationReportPath(home));
@@ -66,7 +66,7 @@ describe("migrateOldMemory", () => {
     expect(store.list().length).toBe(count);
   });
   it("is a no-op with no old stores", () => {
-    const store = createFileMemoryStore({ home });
+    const store = createFileNoteStore({ home });
     expect(migrateOldMemory(store, { home, dbPath: join(home, "none.db") }).total).toBe(0);
   });
 });

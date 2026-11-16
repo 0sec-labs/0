@@ -36,6 +36,7 @@ import { fixEligibility } from "../state/fix-action.js";
 import { createResearchWorkflowExecutors, validateResearchWorkflowInputs } from "../workflow-research-executors.js";
 import { type FindingCandidateStore, createFindingCandidateStore, createFindingWorkflowExecutors, validateFindingWorkflowInputs } from "../finding-workflow-executors.js";
 import { WebLearningService } from "./learning.js";
+import { handleMemoryRequest } from "./memory-api.js";
 
 const execFileAsync = promisify(execFile);
 const PREFIX = "/api/console/";
@@ -356,6 +357,8 @@ export class WebWorkflowService {
   }
 
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
+    const memory = handleMemoryRequest(pathname, method, input, query);
+    if (memory) return memory;
     const learning = await this.learning.handle(pathname, method, input, query);
     if (learning) return learning;
     if (!pathname.startsWith(PREFIX + "workflows") && !pathname.startsWith(PREFIX + "workflow-definitions") && !pathname.startsWith(PREFIX + "workflow-executions") && pathname !== PREFIX + "workflow-tool-catalog" && !pathname.startsWith(PREFIX + "fixes/")) return null;

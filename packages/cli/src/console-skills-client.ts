@@ -12,6 +12,7 @@ import { SkillsStore, SkillsError } from "./web/skills.js";
 import { SkillsCatalogService, handleSkillsCatalogRequest } from "./web/skills-catalog.js";
 import { WebOperatorServices } from "./web/operator-services.js";
 import { WebLearningService } from "./web/learning.js";
+import { handleMemoryRequest } from "./web/memory-api.js";
 
 export interface ConsoleReply { status: number; data: unknown }
 export interface ConsoleClient {
@@ -81,6 +82,7 @@ function embedded(options: ConsoleOptions): ConsoleClient {
           const result = await handleSkillsCatalogRequest(catalog, pathname.slice("/api/console/".length), method, body);
           if (result) return result;
         }
+        const memory = handleMemoryRequest(pathname, method, body, url.searchParams); if (memory) return memory;
         if (pathname === "/api/console/learning" || pathname.startsWith("/api/console/learning/")) {
           if (!learning) {
             const { SecurityWorkflowStore } = await import("@0/engine/storage");

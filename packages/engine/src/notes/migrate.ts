@@ -7,7 +7,7 @@ import { createShimmedDatabase } from "../storage/wasm-shim.js";
 import { resolveOsecDbPath } from "../storage/database-lifecycle.js";
 import { learningProjectId } from "../storage/learning.js";
 import { cleanText, type NoteKind } from "./core.js";
-import { memoryDir, type MemoryStore } from "./store.js";
+import { memoryDir, type NoteStore } from "./store.js";
 
 export interface MigrationOptions {
   home?: string;
@@ -79,7 +79,7 @@ function fromTriage(dbPath: string): Candidate[] {
 export function migrationReportPath(home?: string): string { return join(memoryDir(home), "import-report.json"); }
 
 /** Runs once: when a report exists it returns it unchanged. Safe to call on every start. */
-export function migrateOldMemory(store: MemoryStore, options: MigrationOptions = {}): MigrationReport {
+export function migrateOldMemory(store: NoteStore, options: MigrationOptions = {}): MigrationReport {
   const reportPath = migrationReportPath(options.home);
   if (existsSync(reportPath)) { try { return JSON.parse(readFileSync(reportPath, "utf8")) as MigrationReport; } catch { /* rewrite a damaged report */ } }
   const dbPath = options.dbPath ?? resolveOsecDbPath();

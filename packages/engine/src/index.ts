@@ -1171,6 +1171,7 @@ export {
 export { budgetNativeRuntime } from "./scan-plan.js";
 export * from "./learning-service.js";
 export { HuntMemoryStore } from "./memory/hunt-memory.js";
+export * from "./notes/index.js";
 
 export * from "./report-export.js";
 

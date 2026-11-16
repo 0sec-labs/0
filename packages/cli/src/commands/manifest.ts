@@ -38,7 +38,7 @@ export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = 
   threads: ["list", "send", "stop"],
   agents: ["list", "run", "set"],
   skills: ["list", "add"],
-  memory: ["list", "set", "export"],
+  memory: ["list", "add", "remove"],
   models: ["list", "set", "connect"],
   computers: ["list", "add", "stop"],
   config: ["get", "set", "doctor"],

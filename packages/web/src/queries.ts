@@ -47,7 +47,7 @@ export const queryKeys = {
   consoleChecks: key("console-checks"),
   consoleDoctor: key("console-doctor"),
   updateStatus: key("update-status"),
-  consoleLearning: key("console-learning"),
+  consoleMemory: key("console-memory"),
   settingsUsage: key("settings-usage"),
   settingsAuditLog: key("settings-audit-log"),
   extensions: key("extensions"),

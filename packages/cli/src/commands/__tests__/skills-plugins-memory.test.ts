@@ -45,7 +45,7 @@ describe("command tree", () => {
     const program = new Command(); registerCommandTree(program);
     const paths = (command: Command, prefix = ""): string[] => command.commands.flatMap(child => [`${prefix}${child.name()}`, ...paths(child, `${prefix}${child.name()} `)]);
     const all = paths(program);
-    for (const path of ["skills list", "skills catalog", "skills add", "skills link", "memory list", "memory import", "plugin submit", "plugin connect", "plugin mcp add", "plugin mcp test"]) expect(all).toContain(path);
+    for (const path of ["skills list", "skills catalog", "skills add", "skills link", "memory list", "memory add", "memory import", "memory clear", "plugin submit", "plugin connect", "plugin mcp add", "plugin mcp test"]) expect(all).toContain(path);
   });
 });
 
@@ -90,24 +90,33 @@ describe("skills (embedded)", () => {
   });
 });
 
-describe("memory (embedded)", () => {
-  const archive = (id: string) => ({ format: "zero-memory", version: 1, exportedAt: "2026-01-01T00:00:00.000Z", knowledge: [{ id, projectId: "p1", summary: "Prefers pnpm", status: "current", createdAt: "2026-01-01T00:00:00.000Z", sourceLinks: [], provenance: [] }] });
-  it("previews, imports (disabled), lists, disables, refuses enable and exports", async () => {
-    const file = join(work, "memory.json"); writeFileSync(file, JSON.stringify(archive("k1")));
-    await run("memory", "import", file, "--preview", "--json"); expect(json().preview.importable).toBe(1);
-    await run("memory", "list", "--json"); expect(json().memories).toEqual([]);
-    await run("memory", "import", file, "--json");
-    await run("memory", "list", "--json"); const [row] = json().memories; expect(row.status).toBe("disabled");
-    await run("memory", "disable", row.id, "--json"); expect(json().memory.status).toBe("disabled");
-    // Imported memory cannot be switched on without fresh evidence; the engine's refusal is surfaced as a failure.
-    await run("memory", "enable", row.id); expect(code).toBe(1); expect(err.join("")).toContain("fresh evidence");
-    await run("memory", "export", "-o", join(work, "out.json")); expect(JSON.parse(readFileSync(join(work, "out.json"), "utf8")).knowledge).toHaveLength(1);
+describe("memory (local notes)", () => {
+  it("adds, lists, filters, exports, imports, disables and clears under a temp HOME", async () => {
+    await run("memory", "list"); expect(out.join("\n")).toContain("Nothing remembered yet.");
+    await run("memory", "add", "Run tests with pnpm test", "--global", "--kind", "command", "--json"); const note = json().note; expect(note.scope).toBe("global");
+    await run("memory", "add", "Prefer small PRs", "--folder", work, "--json");
+    await run("memory", "list", "--json"); expect(json().notes).toHaveLength(2);
+    await run("memory", "list", "--folder", work, "--json"); expect(json().notes.map((n: { text: string }) => n.text)).toEqual(["Prefer small PRs"]);
+    await run("memory", "list", "--search", "pnpm", "--json"); expect(json().notes).toHaveLength(1);
+    const file = join(work, "out.json"); await run("memory", "export", "-o", file);
+    expect(JSON.parse(readFileSync(file, "utf8")).notes).toHaveLength(2);
+    await run("memory", "remove", note.id); await run("memory", "list", "--json"); expect(json().notes).toHaveLength(1);
+    await run("memory", "import", file, "--json"); expect(json()).toEqual({ added: 1, total: 2 });
+    await run("memory", "clear"); expect(code).toBe(2); expect(err.join("")).toContain("--yes");
+    await run("memory", "clear", "--yes", "--json"); expect(json().removed).toBe(2);
   });
-  it("rejects a bad --limit with exit 2 and a missing archive with exit 2", async () => {
-    await run("memory", "list", "--limit", "0"); expect(code).toBe(2);
-    await run("memory", "import", join(work, "missing.json")); expect(code).toBe(2);
+  it("rejects a bad kind, a missing note and a file that is not a memory file with the right exit codes", async () => {
+    await run("memory", "add", "x", "--global", "--kind", "bogus"); expect(code).toBe(2);
+    await run("memory", "remove", "m_nothere"); expect(code).toBe(1);
     const wrong = join(work, "wrong.json"); writeFileSync(wrong, JSON.stringify({ bad: 1 }));
-    await run("memory", "import", wrong); expect(code).toBe(2); expect(err.join("")).toContain("is not a 0 memory archive");
+    await run("memory", "import", wrong); expect(code).toBe(2); expect(err.join("")).toContain("is not a 0 memory file");
+    await run("memory", "import", join(work, "missing.json")); expect(code).toBe(2);
+  });
+  it("still reads an older archive and adds its memories as notes", async () => {
+    const file = join(work, "old.json");
+    writeFileSync(file, JSON.stringify({ format: "zero-memory", version: 1, knowledge: [{ id: "k1", projectId: "p1", summary: "Prefers pnpm", status: "current" }] }));
+    await run("memory", "import", file, "--json"); expect(json().added).toBe(1);
+    await run("memory", "list", "--json"); expect(json().notes[0]).toMatchObject({ text: "Prefers pnpm", source: "0" });
   });
 });
 

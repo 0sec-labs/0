@@ -29,7 +29,7 @@ import {
 import type { DashboardResponse } from "@/types";
 import type { SecurityWorkflow } from "@0/engine/shared";
 import { searchSettings, settingsHref, settingsPages } from "./console-control/settings-index";
-import type { LearningResponse } from "./learning-panel";
+import type { MemoryResponse } from "@/memory-model";
 import { useTeamAccess } from "./team-access";
 import { useSentinels } from "@/sentinels/api";
 import { sentinelHref } from "@/sentinels/model";
@@ -91,7 +91,7 @@ export function CommandPalette({
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: queryKeys.appSearch(...scope, name), queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "sentinels"));
   const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
-  const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: sourceEnabled("memory") });
+  const memoryQuery = useQuery({ ...lazyList<MemoryResponse>("memory", "/api/console/memory", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
   const inventoryEnabled = open && (tab !== "all" || Boolean(searchQuery));
   const navigate = useNavigate();
@@ -301,14 +301,9 @@ export function CommandPalette({
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
       run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
     });
-    for (const memory of memoryQuery.data?.knowledge ?? []) base.push({
-      id: `memory-${memory.id}`, group: "Memory", label: memory.title || memory.summary || "Saved memory", meta: memory.status, icon: CapyDatabaseIcon,
-      keywords: searchKeywords(memory.content, memory.summary, memory.target, memory.scope, memory.projectId),
-      run: () => navigate("/memory"),
-    });
-    for (const event of memoryQuery.data?.events ?? []) base.push({
-      id: `memory-event-${event.id}`, group: "Memory", label: event.title || event.summary || "Memory event", meta: event.outcome || event.kind, icon: CapyDatabaseIcon,
-      keywords: searchKeywords(event.summary, event.target, event.kind, event.projectId),
+    for (const note of memoryQuery.data?.notes ?? []) base.push({
+      id: `memory-${note.id}`, group: "Memory", label: note.text, meta: note.scope === "global" ? "Everywhere" : "Folder", icon: CapyDatabaseIcon,
+      keywords: searchKeywords(note.text, note.kind, note.folder),
       run: () => navigate("/memory"),
     });
     for (const backend of connection?.backends ?? []) base.push({

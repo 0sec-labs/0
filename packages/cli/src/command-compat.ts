@@ -190,24 +190,6 @@ function skills(a: Args): string[] | undefined {
   return undefined;
 }
 
-function memory(a: Args): string[] | undefined {
-  if (a[1] === "list") {
-    const triage = pull(a.slice(2), "--triage", false);
-    if (triage.found) return ["findings", "triage", "memory", "list", ...triage.rest];
-  }
-  if (a[1] !== "set") return undefined;
-  const tail = a.slice(2);
-  const add = pull(tail, "--add", false);
-  if (add.found) return ["findings", "triage", "memory", "add", ...add.rest];
-  const remove = pull(tail, "--remove", false);
-  if (remove.found && isWord(remove.rest[0])) return ["findings", "triage", "memory", "remove", ...remove.rest];
-  const imported = pull(tail, "--import", true);
-  if (imported.value) return ["memory", "import", imported.value, ...imported.rest];
-  const state = tail[1];
-  if (isWord(tail[0]) && (state === "on" || state === "off")) return ["memory", state === "on" ? "enable" : "disable", tail[0], ...tail.slice(2)];
-  return undefined;
-}
-
 function models(a: Args): string[] | undefined {
   const tail = a.slice(2);
   if (a[1] === "set") return ["models", "default", ...tail];
@@ -322,7 +304,7 @@ function plugin(a: Args): string[] | undefined {
   }
 }
 
-const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, memory, models, computers, config, scan };
+const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, models, computers, config, scan };
 
 /** The implementation argv for a new-grammar invocation, or undefined when `args` is not one. */
 export function rewriteNewForms(args: Args): string[] | undefined {
@@ -359,7 +341,7 @@ export const LEGACY: readonly LegacyRow[] = rows([
   // findings
   ["findings accept", "0 findings update <id> --status accepted"], ["findings suppress", "0 findings update <id> --status suppressed"],
   ["findings reopen", "0 findings update <id> --status open"], ["findings triage mark-fp", "0 findings update <id> --status false-positive"],
-  ["findings triage memory add", "0 memory set --add"], ["findings triage memory list", "0 memory list --triage"], ["findings triage memory remove", "0 memory set --remove <id>"], ["findings triage memory", "0 memory list --triage"], ["findings triage", "0 findings update <id> --status ..."],
+  ["findings triage memory add", "0 memory add <text> --kind avoid"], ["findings triage memory list", "0 memory list"], ["findings triage memory remove", "0 memory remove <id>"], ["findings triage memory", "0 memory list"], ["findings triage", "0 findings update <id> --status ..."],
   ["findings export", "0 findings list --format sarif|json|md"], ["findings reports import", "0 findings list --import <report>"],
   ["findings reports export", "0 findings list --format md"], ["findings reports", "0 findings list"],
   ["findings keys list", "0 config get api.keys"], ["findings keys create", "0 config set api.key <name>"], ["findings keys revoke", "0 config set api.key --revoke <id>"], ["findings keys", "0 config get api.keys"],
@@ -393,7 +375,6 @@ export const LEGACY: readonly LegacyRow[] = rows([
   ["plugin connectors", "0 skills extensions list"], ["plugin connect", "the Extensions page in the web app"], ["plugin disconnect", "the Extensions page in the web app"],
   ["plugin mcp add", "0 skills extensions mcp <name> --url <url>"], ["plugin mcp list", "0 skills extensions list"], ["plugin mcp test", "0 skills extensions info <name>"], ["plugin mcp remove", "0 skills extensions remove <name>"], ["plugin mcp", "0 skills extensions mcp <name> --url <url>"], ["plugin", "0 skills extensions"],
   // memory, config, doctor, web
-  ["memory enable", "0 memory set <id> on"], ["memory disable", "0 memory set <id> off"], ["memory import", "0 memory set --import <file>"],
   ["config show", "0 config get"], ["config list", "0 config get --all"], ["config reset", "0 config set --reset"], ["config export", "0 config get --export"],
   ["config import", "0 config set --from-file <file>"], ["config audit-log", "0 config get audit"], ["config team list", "0 config get team"], ["config team", "0 config set team <init|add-user>"],
   ["config db repair", "0 config doctor --fix"], ["config db", "0 config set db reset"], ["config github status", "0 config get github"], ["config github", "0 config set github <connect|repos>"],

@@ -1,247 +1,76 @@
+// `0 findings triage ...` (hidden, kept for one release). False-positive reasons are now notes in
+// the one Memory (kind "avoid"); `0 memory` is where they are listed and removed.
 import type { Command } from "commander";
 import chalk from "chalk";
-import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 
-type TriageMemoryAddOptions = {
-  dbPath?: string;
-  finding: string;
-  reason: string;
-  scope?: "global" | "target" | "package";
-  scopeValue?: string;
-};
+type DbOption = { dbPath?: string };
+type TriageMemoryAddOptions = DbOption & { finding: string; reason: string; scope?: string; scopeValue?: string };
+type TriageMarkFpOptions = DbOption & { reason: string; scope?: string; scopeValue?: string };
 
-type TriageMemoryListOptions = {
-  dbPath?: string;
-  scope?: "global" | "target" | "package";
-  category?: string;
-};
-
-type TriageMarkFpOptions = {
-  dbPath?: string;
-  reason: string;
-  scope?: "global" | "target" | "package";
-  scopeValue?: string;
-};
-
-interface FindingRow {
-  id: string;
-  scanId: string;
-  title: string;
-  category: string;
-  fingerprint?: string | null;
-  description: string;
-  severity: string;
-  status: string;
-  evidenceRequest: string;
-  evidenceResponse: string;
-  evidenceAnalysis?: string | null;
-  timestamp: number;
-}
+interface FindingRow { id: string; title: string; category: string }
 
 function resolveFindingByPrefix(rows: FindingRow[], id: string): FindingRow | undefined {
   const exact = rows.find((row) => row.id === id);
   if (exact) return exact;
   const matches = rows.filter((row) => row.id.startsWith(id));
-  if (matches.length > 1) {
-    throw new Error(`Finding prefix '${id}' is ambiguous (${matches.length} matches).`);
-  }
+  if (matches.length > 1) throw new Error(`Finding prefix '${id}' is ambiguous (${matches.length} matches).`);
   return matches[0];
-}
-
-/**
- * Convert a DB finding row (from @0/engine/storage listFindings) into the shared
- * Finding shape that @0/engine's MemoryStore expects. The evidence fields
- * are folded into the nested `evidence` object and defaults are applied to
- * optional properties.
- */
-function rowToFinding(row: FindingRow): import("@0/engine/shared").Finding {
-  return {
-    id: row.id,
-    templateId: "",
-    title: row.title,
-    description: row.description,
-    severity: row.severity as import("@0/engine/shared").Severity,
-    category: row.category as import("@0/engine/shared").AttackCategory,
-    status: row.status as import("@0/engine/shared").FindingStatus,
-    evidence: {
-      request: row.evidenceRequest,
-      response: row.evidenceResponse,
-      analysis: row.evidenceAnalysis ?? undefined,
-    },
-    fingerprint: row.fingerprint ?? undefined,
-    timestamp: row.timestamp,
-  };
-}
-
-async function openStore(dbPath?: string) {
-  const { MemoryStore } = await import("@0/engine");
-  return new MemoryStore(dbPath);
 }
 
 async function loadFinding(dbPath: string | undefined, findingId: string): Promise<FindingRow> {
   const { osecDB } = await import("@0/engine/storage");
   const db = new osecDB(dbPath);
   try {
-    const rows = db.listFindings({ limit: 5000 }) as FindingRow[];
-    const row = resolveFindingByPrefix(rows, findingId);
-    if (!row) {
-      throw new Error(`Finding '${findingId}' not found.`);
-    }
+    const row = resolveFindingByPrefix(db.listFindings({ limit: 5000 }) as FindingRow[], findingId);
+    if (!row) throw new Error(`Finding '${findingId}' not found.`);
     return row;
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
 }
 
-async function runMemoryAdd(opts: TriageMemoryAddOptions): Promise<void> {
-  const row = await loadFinding(opts.dbPath, opts.finding);
-  const finding = rowToFinding(row);
-  const store = await openStore(opts.dbPath);
-  try {
-    const memory = await store.recordFp(
-      finding,
-      opts.reason,
-      opts.scope ?? "target",
-      opts.scopeValue,
-    );
-    console.log(
-      `${chalk.green("Added memory")} ${chalk.gray(memory.id.slice(0, 8))} ${chalk.gray(`scope:${memory.scope}${memory.scopeValue ? `(${memory.scopeValue})` : ""}`)} ${chalk.gray(`category:${memory.category}`)}`,
-    );
-    console.log(`  ${chalk.gray("pattern:")} ${memory.pattern}`);
-    console.log(`  ${chalk.gray("reason :")} ${memory.reasoning}`);
-  } finally {
-    await store.close();
-  }
+async function rememberFalsePositive(row: FindingRow, reason: string, opts: DbOption & { scope?: string; scopeValue?: string }) {
+  const { openMemory } = await import("@0/engine");
+  const where = opts.scope && opts.scope !== "global" && opts.scopeValue ? ` (${opts.scope} ${opts.scopeValue})` : "";
+  return openMemory(opts.dbPath ? { dbPath: opts.dbPath } : {}).add({ text: `Treat as a false positive${where}, ${row.category}: ${row.title}. Why: ${reason}`, scope: "global", kind: "avoid", source: "you" });
 }
 
-async function runMemoryList(opts: TriageMemoryListOptions): Promise<void> {
-  const store = await openStore(opts.dbPath);
-  try {
-    const memories = await store.listAll();
-    const filtered = memories
-      .filter((m) => (opts.scope ? m.scope === opts.scope : true))
-      .filter((m) => (opts.category ? m.category === opts.category : true));
-    if (filtered.length === 0) {
-      console.log(chalk.gray("No triage memories found."));
-      return;
-    }
-    console.log("");
-    console.log(chalk.red.bold("  ◆ 0") + chalk.gray(` triage memories (${filtered.length})`));
-    console.log("");
-    for (const m of filtered) {
-      const scopeLabel =
-        m.scope === "global" ? "global" : `${m.scope}:${m.scopeValue ?? "?"}`;
-      console.log(
-        `  ${chalk.cyan(m.id.slice(0, 8))} ${chalk.gray(scopeLabel.padEnd(30))} ${chalk.yellow(m.category.padEnd(18))} ${chalk.gray(`applied:${m.appliedCount}`)}`,
-      );
-      console.log(`    ${chalk.white(m.pattern)}`);
-      console.log(`    ${chalk.dim(m.reasoning)}`);
-      console.log("");
-    }
-  } finally {
-    await store.close();
-  }
-}
-
-async function runMemoryRemove(id: string, dbPath?: string): Promise<void> {
-  const store = await openStore(dbPath);
-  try {
-    const ok = await store.remove(id);
-    if (!ok) {
-      console.error(chalk.red(`No memory with id '${id}' found.`));
-      process.exitCode = 1;
-      return;
-    }
-    console.log(`${chalk.green("Removed memory")} ${chalk.gray(id.slice(0, 8))}`);
-  } finally {
-    await store.close();
-  }
-}
-
-async function runMarkFp(findingId: string, opts: TriageMarkFpOptions): Promise<void> {
-  // 1. Flip the finding's triage status to suppressed.
-  // 2. Auto-create a memory from the finding + reason.
-  const row = await loadFinding(opts.dbPath, findingId);
-  const finding = rowToFinding(row);
-
-  const { osecDB } = await import("@0/engine/storage");
-  const db = new osecDB(opts.dbPath);
-  try {
-    db.updateFindingTriage(row.id, "suppressed", opts.reason);
-  } finally {
-    db.close();
-  }
-
-  const store = await openStore(opts.dbPath);
-  try {
-    const memory = await store.recordFp(
-      finding,
-      opts.reason,
-      opts.scope ?? "target",
-      opts.scopeValue,
-    );
-    console.log(
-      `${chalk.green("Marked FP")} ${chalk.gray(row.id.slice(0, 8))} ${chalk.gray("and recorded memory")} ${chalk.gray(memory.id.slice(0, 8))}`,
-    );
-  } finally {
-    await store.close();
-  }
-}
+const fail = (err: unknown) => { console.error(chalk.red(err instanceof Error ? err.message : String(err))); process.exitCode = 1; };
 
 export function registerTriageCommand(program: Command): void {
   const triage = program.command("triage").description("Triage findings and manage false-positive memories");
+  const memory = triage.command("memory").description("Moved: false-positive reasons are notes in `0 memory`");
 
-  const memory = triage.command("memory").description("Manage Semgrep-style triage memories");
-
-  memory
-    .command("add")
-    .description("Create a memory from an existing finding")
+  memory.command("add").description("Create a memory from an existing finding")
     .requiredOption("--finding <id>", "Finding ID (full or prefix) to derive the memory from")
     .requiredOption("--reason <text>", "Why this finding is a false positive")
     .option("--scope <scope>", "Memory scope: global | target | package", "target")
     .option("--scope-value <value>", "Scope identifier (target URL or package name)")
     .option("--db-path <path>", "Path to SQLite database")
     .action(async (opts: TriageMemoryAddOptions) => {
-      try {
-        await runMemoryAdd(opts);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        process.exitCode = 1;
-      }
+      try { const note = await rememberFalsePositive(await loadFinding(opts.dbPath, opts.finding), opts.reason, opts); console.log(`${chalk.green("Remembered")} ${note.id}`); } catch (err) { fail(err); }
     });
 
-  memory
-    .command("list")
-    .description("List all triage memories")
-    .option("--scope <scope>", "Filter by scope: global | target | package")
-    .option("--category <category>", "Filter by vulnerability category")
+  memory.command("list").description("List false-positive notes")
     .option("--db-path <path>", "Path to SQLite database")
-    .action(async (opts: TriageMemoryListOptions) => {
+    .action(async (opts: DbOption) => {
       try {
-        await runMemoryList(opts);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        process.exitCode = 1;
-      }
+        const { openMemory } = await import("@0/engine");
+        const notes = openMemory(opts.dbPath ? { dbPath: opts.dbPath } : {}).list().filter((note) => note.kind === "avoid");
+        if (!notes.length) { console.log(chalk.gray("Nothing remembered yet.")); return; }
+        for (const note of notes) console.log(`  ${chalk.cyan(note.id)} ${note.text}`);
+      } catch (err) { fail(err); }
     });
 
-  memory
-    .command("remove")
-    .description("Delete a memory by id")
-    .argument("<id>", "Memory ID")
+  memory.command("remove").description("Forget a note by id").argument("<id>", "Note ID")
     .option("--db-path <path>", "Path to SQLite database")
-    .action(async (id: string, opts: { dbPath?: string }) => {
+    .action(async (id: string, opts: DbOption) => {
       try {
-        await runMemoryRemove(id, opts.dbPath);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        process.exitCode = 1;
-      }
+        const { openMemory } = await import("@0/engine");
+        if (!openMemory(opts.dbPath ? { dbPath: opts.dbPath } : {}).remove(id)) { console.error(chalk.red(`No note ${id}.`)); process.exitCode = 1; return; }
+        console.log(`${chalk.green("Forgot")} ${id}`);
+      } catch (err) { fail(err); }
     });
 
-  triage
-    .command("mark-fp")
-    .description("Mark a finding as false positive and auto-create a memory")
+  triage.command("mark-fp").description("Mark a finding as false positive and remember why")
     .argument("<finding-id>", "Finding ID (full or prefix)")
     .requiredOption("--reason <text>", "Why this finding is a false positive")
     .option("--scope <scope>", "Memory scope: global | target | package", "target")
@@ -249,10 +78,12 @@ export function registerTriageCommand(program: Command): void {
     .option("--db-path <path>", "Path to SQLite database")
     .action(async (findingId: string, opts: TriageMarkFpOptions) => {
       try {
-        await runMarkFp(findingId, opts);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        process.exitCode = 1;
-      }
+        const row = await loadFinding(opts.dbPath, findingId);
+        const { osecDB } = await import("@0/engine/storage");
+        const db = new osecDB(opts.dbPath);
+        try { db.updateFindingTriage(row.id, "suppressed", opts.reason); } finally { db.close(); }
+        const note = await rememberFalsePositive(row, opts.reason, opts);
+        console.log(`${chalk.green("Marked FP")} ${chalk.gray(row.id.slice(0, 8))} ${chalk.gray("and remembered")} ${chalk.gray(note.id)}`);
+      } catch (err) { fail(err); }
     });
 }

@@ -67,7 +67,7 @@ describe("the 0.35 surface", () => {
 });
 
 /** Old nodes that are deliberately silent: the hidden developer group and the permanent `doctor`/`api` aliases. */
-const SILENT = (path: readonly string[]): boolean => path[0] === "lab" || path[0] === "api" || (path.length === 1 && path[0] === "doctor") || path.slice(0, 2).join(" ") === "agents webhook";
+const SILENT = (path: readonly string[]): boolean => path[0] === "lab" || path[0] === "api" || (path.length === 1 && path[0] === "doctor") || path.slice(0, 2).join(" ") === "agents webhook" || (path[0] === "memory" && ["export", "import", "enable", "disable"].includes(path[1] ?? ""));
 
 describe("alias table: every 0.34 command still resolves", () => {
   it("lists the whole old tree", () => expect(OLD_COMMANDS.length).toBeGreaterThan(280));
@@ -177,12 +177,6 @@ describe("the new grammar reaches the implementation commands", () => {
     ["skills list s1 --export -o x.json", "skills export s1 -o x.json"],
     ["skills list s1 --delete --yes", "skills delete s1 --yes"],
     ["skills add --remove s1", "skills remove s1"],
-    ["memory set m1 on", "memory enable m1"],
-    ["memory list --triage", "findings triage memory list"],
-    ["memory set --add --finding f1 --reason r", "findings triage memory add --finding f1 --reason r"],
-    ["memory set --remove t1", "findings triage memory remove t1"],
-    ["memory set m1 off", "memory disable m1"],
-    ["memory set --import m.json", "memory import m.json"],
     ["models set gpt-x --provider openai", "models default gpt-x --provider openai"],
     ["models list --usage", "models usage"],
     ["models connect", "models connections list"],

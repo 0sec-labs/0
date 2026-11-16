@@ -14,7 +14,7 @@ import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
-  CommandPalette, ConsolePage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, SavedConversationPage,
+  CommandPalette, ConsolePage, FindingsApiAccessPage, FindingsPage, MemoryPage, PageFallback, SavedConversationPage,
   ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
 import { NotFoundPage } from "@/pages/not-found-page";
@@ -99,7 +99,7 @@ export function OperationsApp() {
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
             <Route path="/extensions" element={<ExtensionsPage />} />
-            <Route path="/memory" element={<LearningPage />} />
+            <Route path="/memory" element={<MemoryPage />} />
             <Route path="/findings" element={findings} />
             <Route path="/computers" element={<WorkersPage />} />
             <Route path="/findings/:fingerprint" element={findings} />

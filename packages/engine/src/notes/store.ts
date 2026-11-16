@@ -1,4 +1,4 @@
-// MemoryStore port and its file adapter: one MEMORY.md per scope under <home>/.0/memory/.
+// NoteStore port and its file adapter: one MEMORY.md per scope under <home>/.0/memory/.
 // Global notes: memory/MEMORY.md. Folder notes: memory/<folder-hash>/MEMORY.md, so nothing is
 // written into a repository and a repository cannot supply notes of its own.
 import { existsSync, mkdirSync, realpathSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { cleanText, folderKey, formatNote, isKind, noteId, parseNotes, type Note
 export interface NoteInput { text: string; scope?: NoteScope; folder?: string; kind?: NoteKind; source?: NoteSource; created?: string }
 export interface NoteFilter { folder?: string; scope?: NoteScope; query?: string }
 
-export interface MemoryStore {
+export interface NoteStore {
   list(filter?: NoteFilter): Note[];
   add(input: NoteInput): Note;
   edit(id: string, text: string): Note | undefined;
@@ -33,7 +33,7 @@ export interface FileStoreOptions { home?: string; now?: () => Date }
 
 export function memoryDir(home?: string): string { return join(homeStateDir(home), "memory"); }
 
-export function createFileMemoryStore(options: FileStoreOptions = {}): MemoryStore {
+export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
   const dir = memoryDir(options.home);
   const now = () => (options.now?.() ?? new Date()).toISOString();
   const globalFile = join(dir, "MEMORY.md");
