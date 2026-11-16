@@ -118,7 +118,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "0security is an open-source framework for building and deploying security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, reproduce them, fix them, verify the fix and keep watching. It runs on your own infrastructure, with the LLMs you choose.",
+        "0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks. It is open source and runs on your own infrastructure, with the LLMs you choose. It runs on your own infrastructure, with the LLMs you choose.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",

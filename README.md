@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">Continuous security agents for your whole tech stack</h1>
+<h1 align="center">AI security agents for the enterprise</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is an open-source framework for building and deploying security agents. They find vulnerabilities across your code, dependencies, infrastructure, LLM apps and AI agents, prove them, fix them, verify the fix and keep watching. It runs on your own infrastructure, with the LLMs you choose.
+  0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks. It is open source and runs on your own infrastructure, with the LLMs you choose. It runs on your own infrastructure, with the LLMs you choose.
 </p>
 
 <p align="center">
