@@ -398,11 +398,6 @@ export type {
 export type {
   CraftEvidenceRecord,
 } from "./stages/craft-evidence-ledger.js";
-// Cross-task learning memory (the 5-tier "Crystalline-style" moat).
-export { CraftMemoryStore, preseedMemory, consolidateMemory } from "./craft-memory/index.js";
-export type {
-  Memory,
-} from "./craft-memory/index.js";
 
 // Unified pipeline: prepare + static analysis
 export {
@@ -568,7 +563,7 @@ export type {
 } from "./triage/auto-triage.js";
 
 // Triage memories (Semgrep-style persistent FP learning)
-export { MemoryStore, scoreMemory, inferPackage } from "./triage/memories.js";
+export { inferPackage } from "./triage/package.js";
 
 export type {
   NoveltyResult,
@@ -822,9 +817,6 @@ export {
   clampOutboundBody,
   sendOperatorMessage,
 } from "./agent/agent-messaging.js";
-// Persistent cross-session hunt memory: a redacted, crash-safe findings/pattern
-// store so one target's learnings inform the next.
-export * from "./memory/index.js";
 // Per-project view of first-party built-in enablement (today: scope). The one store is extensions/state.json.
 export {
   emptyEnablement,
@@ -1170,7 +1162,6 @@ export {
 } from "./assessment.js";
 export { budgetNativeRuntime } from "./scan-plan.js";
 export * from "./learning-service.js";
-export { HuntMemoryStore } from "./memory/hunt-memory.js";
 export * from "./notes/index.js";
 
 export * from "./report-export.js";

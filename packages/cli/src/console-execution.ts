@@ -1,10 +1,8 @@
 import { existsSync, realpathSync } from "node:fs";
-import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/engine";
+import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench } from "@0/engine";
 import type { ConsoleRuntime, ConsoleSession, ConsoleSessionConfig } from "@0/engine";
 import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/engine/shared";
-import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/engine/storage";
-import { relative, resolve, sep } from "node:path";
-import { validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
+import { osecDB } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { loadGlobalSettings } from "./state/settings.js";
@@ -46,15 +44,9 @@ export function createIsolatedConsoleSession(
   const models = [...new Set([model, ...Object.values(routing?.agentModels ?? {}).filter(value => value !== "auto")])];
   if (!runtime.workbenchCredentialResolver) throw new Error("The selected runtime cannot bind its account to the host provider broker.");
   const broker = createWorkbenchProviderBroker({ provider, models, resolveCredentials: runtime.workbenchCredentialResolver() });
-  const { runtime: _runtime, learningStore: hostLearningStore, huntMemoryStore: hostMemoryStore, sourceLessonHints: _hostHints, ...guestConfig } = config;
-  const learningEnabled = config.codebaseLearning === true && config.role !== "verify";
-  if (/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) guestConfig.codebaseLearning = false;
-  let memory: HuntMemoryStore | undefined = hostMemoryStore;
-  const hostMemory = () => memory ??= new HuntMemoryStore({ home: options.homeDir });
-  const withLearning = <T>(use: (service: LearningService) => T): T => {
-    const store = hostLearningStore ?? new LearningStore(options.dbPath);
-    try { return use(new LearningService(store)); } finally { if (!hostLearningStore) store.close(); }
-  };
+  // The isolated workbench has no Memory: notes live on the host, and nothing is read or written from inside the VM.
+  const { runtime: _runtime, ...guestConfig } = config;
+  guestConfig.codebaseLearning = false;
   const approvedWorkspace = realpathSync(workbench.workspaceRoot ?? options.workspaceRoot ?? config.workspaceRoot ?? process.cwd());
   const scanId = config.scanId ?? `console-${randomUUID()}`;
   try {
@@ -66,44 +58,6 @@ export function createIsolatedConsoleSession(
       pluginHomeDir: options.homeDir, assets: options.assets ?? currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
       network: workbenchNetworkEnabled(),
       onExecution: options.onExecution,
-      onSourceLesson: (artifact, context) => {
-        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
-        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) throw new Error("Source lesson workspace differs from host grant");
-        const lesson = validateWorkbenchSourceLesson(artifact, approvedWorkspace, context.scopePath);
-        const memory = hostMemory();
-        const paths = lesson.sourceLinks.map(link => relative(context.scopePath, resolve(context.workspaceRoot, link.path)).split(sep).join("/"));
-        // Identical source lessons reuse the admitted record so repeated exports cannot resurrect disabled knowledge.
-        const prior = memory.all().find(note => note.codebase?.root === realpathSync(context.scopePath) && note.title === lesson.title && note.summary === lesson.summary &&
-          JSON.stringify(note.codebase?.files.map(file => ({ path: file.path, hash: file.digest }))) === JSON.stringify(lesson.sourceLinks.map((link, index) => ({ path: paths[index], hash: link.hash }))));
-        if (!prior) memory.rememberCodebase({ root: context.scopePath, paths, title: lesson.title, summary: lesson.summary, source: `smolvm:${context.scanId}` });
-        withLearning(service => service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8));
-      },
-      readSourceLessons: context => {
-        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return [];
-        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) return [];
-        const memory = hostMemory();
-        return withLearning(service => {
-          return service.recallCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 6).flatMap(note => {
-            const sourceLinks = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
-            const lesson = { title: note.title, summary: note.summary, sourceLinks: sourceLinks.map(link => ({ ...link, path: relative(context.workspaceRoot, resolve(context.scopePath, link.path)).split(sep).join("/") })) };
-            try { return [validateWorkbenchSourceLesson(lesson, context.workspaceRoot, context.scopePath)]; } catch { return []; }
-          });
-        });
-      },
-      onSourceContext: (artifact, context) => {
-        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
-        const store = new LearningStore(options.dbPath);
-        try {
-          const digest = learningArtifactDigest(JSON.stringify(artifact.sourceLinks));
-          store.recordExperience({
-            idempotencyKey: `vm-source:${learningArtifactDigest(context.runId + digest)}`,
-            projectId: learningProjectId(context.workspaceRoot),
-            kind: "source-context", outcome: "current", evidenceStrength: "hypothesis",
-            summary: "Source references retained from an isolated workspace.",
-            runId: context.runId, sourceLinks: artifact.sourceLinks, evidenceDigests: [digest],
-          });
-        } finally { store.close(); }
-      },
       onFindings: (findings, completion) => {
         // No host store is opened until the VM has stopped and native teardown is proven.
         const validated = findings.map(finding => findingSchema.parse(finding) as Finding);

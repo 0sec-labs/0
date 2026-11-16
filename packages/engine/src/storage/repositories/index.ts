@@ -1,7 +1,6 @@
 import type { ShimmedDatabase } from "../wasm-shim.js";
 import type { osecDB } from "../database.js";
 import { Repository, type OsecDrizzle } from "./base.js";
-import { TriageMemoryRepository } from "./triage-memory-repository.js";
 import { CaseGraphRepository } from "./case-graph-repository.js";
 import { CaseWorkRepository } from "./case-work-repository.js";
 import { ScanRepository } from "./scan-repository.js";
@@ -16,7 +15,6 @@ export type { OsecDrizzle };
 export { Repository };
 
 export interface Repositories {
-  triageMemories: TriageMemoryRepository;
   caseGraph: CaseGraphRepository;
   caseWork: CaseWorkRepository;
   scans: ScanRepository;
@@ -32,7 +30,6 @@ export interface Repositories {
 export function createRepositories(sqlite: ShimmedDatabase, db: OsecDrizzle, owner: osecDB): Repositories {
   const repos = {} as Repositories;
   Object.assign(repos, {
-    triageMemories: new TriageMemoryRepository(sqlite, db, repos, owner),
     caseGraph: new CaseGraphRepository(sqlite, db, repos, owner),
     caseWork: new CaseWorkRepository(sqlite, db, repos, owner),
     scans: new ScanRepository(sqlite, db, repos, owner),

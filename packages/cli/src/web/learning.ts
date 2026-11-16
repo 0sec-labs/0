@@ -1,21 +1,9 @@
-import { createHash } from "node:crypto";
 import { LearningStore, LearningStoreError, SecurityWorkflowStoreError, learningProjectId, type SecurityWorkflowStore } from "@0/engine/storage";
-import { HuntMemoryStore, LearningService, type LearningServiceOptions } from "@0/engine";
+import { LearningService, type LearningServiceOptions } from "@0/engine";
 import { z } from "zod";
 
 const revision = z.object({ revision: z.number().int().positive() }).strict();
 const processInput = z.object({ limit: z.number().int().min(1).max(100).optional(), projectId: z.string().min(1).max(256).optional() }).strict();
-const archive = z.object({
-  format: z.literal("zero-memory"), version: z.literal(1), exportedAt: z.string().datetime(),
-  knowledge: z.array(z.object({ id: z.string().min(1).max(256), projectId: z.string().min(1).max(256), summary: z.string().min(1).max(4000), status: z.enum(["current", "stale", "disabled"]), createdAt: z.string().datetime(),
-    sourceLinks: z.array(z.object({ path: z.string().min(1).max(4096), hash: z.string().regex(/^sha256:[a-f0-9]{64}$/i) }).strict()).max(64),
-    provenance: z.array(z.object({ id: z.string().min(1).max(256), kind: z.string().min(1).max(256), evidenceStrength: z.enum(["operational", "hypothesis", "verified", "human-feedback"]).optional(), createdAt: z.string().datetime() }).strict()).max(64),
-  }).strict()).max(200),
-}).strict();
-const importPreviewInput = z.object({ archive }).strict();
-const importInput = z.object({ archive, digest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict();
-const archiveDigest = (value: z.infer<typeof archive>) => `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
-function boundedArchive(value: unknown): void { if (Buffer.byteLength(JSON.stringify(value) ?? "", "utf8") > 1_048_576) throw new LearningStoreError("Memory archive exceeds 1 MiB.", 413); }
 type Response = { status: number; data: unknown };
 
 /** Customer-engine-owned learning. HTTP never accepts labels or evaluation receipts. */
@@ -33,17 +21,6 @@ export class WebLearningService {
     this.service = new LearningService(this.store, { ...options, workflows: definitions });
     this.#timer = setInterval(() => { void this.process().catch(() => undefined); }, 5000);
     this.#timer.unref();
-  }
-
-  recordChatOutcome(event: { id: string; project: string; outcome: string }): void {
-    this.store.recordExperience({ idempotencyKey: `chat:${event.id}`, projectId: learningProjectId(event.project),
-      kind: "chat-turn", outcome: event.outcome, evidenceStrength: "operational", summary: `Conversation turn ${event.outcome}.`, runId: event.id });
-  }
-
-  /** Called only after host authorization of a completed local source workflow. */
-  retainSourceContext(root: string): void {
-    if (/^(1|true)$/i.test(process.env["ZERO_DISABLE_HUNT_MEMORY"] ?? "")) return;
-    this.service.importCodebaseNotes(learningProjectId(root), root, new HuntMemoryStore());
   }
 
   process(options: { limit?: number; projectId?: string } = {}): Promise<unknown> {
@@ -67,39 +44,11 @@ export class WebLearningService {
         const selection = { projectId, limit: requestedLimit };
         return { status: 200, data: {
           events: this.store.listEvents(selection).filter(event => !workflowId || event.workflowId === workflowId),
-          knowledge: this.store.listKnowledge(selection),
           improvements: this.store.listCandidates(selection).filter(candidate => !workflowId || candidate.targetId === workflowId),
           worker: this.service.status(projectId),
         } };
       }
-      if (path === "/api/console/learning/export" && method === "GET") {
-        const projectId = query.get("projectId") ?? undefined;
-        const knowledge = this.store.exportKnowledge(projectId).map(entry => ({ id: entry.importedFrom?.id ?? entry.id, projectId: entry.projectId, summary: entry.summary, status: entry.status, sourceLinks: entry.sourceLinks, createdAt: entry.importedFrom?.createdAt ?? entry.createdAt,
-          provenance: entry.importedFrom?.evidence ?? entry.evidenceEventIds.flatMap(id => { const event = this.store.getEvent(id); return event && event.projectId === entry.projectId ? [{ id: event.id, kind: event.kind, evidenceStrength: event.evidenceStrength, createdAt: event.createdAt }] : []; }) }));
-        const result = archive.parse({ format: "zero-memory", version: 1, exportedAt: new Date().toISOString(), knowledge });
-        boundedArchive(result);
-        return { status: 200, data: result };
-      }
-      if (path === "/api/console/learning/import/preview" && method === "POST") {
-        boundedArchive(input);
-        const value = importPreviewInput.parse(input).archive;
-        const duplicates = this.store.previewKnowledgeImport(value.knowledge, value.exportedAt);
-        return { status: 200, data: { preview: { digest: archiveDigest(value), total: value.knowledge.length, importable: duplicates.filter(duplicate => !duplicate).length, duplicates: duplicates.filter(Boolean).length,
-          projects: [...new Set(value.knowledge.map(entry => entry.projectId))], knowledge: value.knowledge.map((entry, index) => ({ id: entry.id, projectId: entry.projectId, summary: entry.summary, sourceCount: entry.sourceLinks.length, duplicate: duplicates[index] })),
-          warnings: ["Imported memory is disabled and is not used in future chats. Source paths and original provenance are untrusted data."] } } };
-      }
-      if (path === "/api/console/learning/import" && method === "POST") {
-        boundedArchive(input);
-        const value = importInput.parse(input);
-        if (archiveDigest(value.archive) !== value.digest) return { status: 409, data: { error: "Memory archive changed. Preview it again before importing." } };
-        return { status: 200, data: { result: this.store.importKnowledge(value.archive.knowledge, value.archive.exportedAt) } };
-      }
       if (path === "/api/console/learning/process" && method === "POST") return { status: 200, data: { result: await this.process(processInput.parse(input ?? {})) } };
-      const knowledge = path.match(/^\/api\/console\/learning\/knowledge\/([A-Za-z0-9_.:-]+)$/);
-      if (knowledge && method === "PATCH") {
-        const value = z.object({ status: z.enum(["disabled", "current"]) }).strict().parse(input);
-        return { status: 200, data: { knowledge: this.store.setKnowledgeStatus(knowledge[1]!, value.status) } };
-      }
       const candidate = path.match(/^\/api\/console\/learning\/improvements\/([A-Za-z0-9_.:-]+)(?:\/(reject|evaluate|apply))?$/);
       if (candidate) {
         const value = this.store.getCandidate(candidate[1]!);

@@ -35,7 +35,7 @@ export const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   save_finding: true,
   update_finding: true,
   done: true,
-  remember_codebase: true,
+  memory: true,
   // Delegation shares the audit's scope, tool capabilities, budget and worker tree.
   spawn_agent: true,
   spawn_agents: true,

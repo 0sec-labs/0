@@ -4,7 +4,6 @@ import { ScopePolicy, withScopeEnforcement, eventBus, TOOL_DEFINITIONS, observeE
   type ConsoleSession, type ConsoleSessionConfig, type McpToolHost } from "@0/engine";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
-import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
 import { connectExtensionMcp, connectExtensionRuns } from "./console-extension-mcp.js";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, HOST_CONSOLE_CALLBACKS, type HostConsoleFrame, type HostConsoleBootstrap } from "./host-console-protocol.js";
@@ -42,7 +41,6 @@ export async function runHostConsoleWorker(): Promise<void> {
   let turn: AbortController | undefined;
   let bootstrap: HostConsoleBootstrap;
   let mcpHost: McpToolHost | undefined;
-  let learningStore: LearningStore | undefined;
   let active = false;
   let runtime: ReturnType<typeof createWebConsoleRuntimeFromBootstrap>["runtime"];
   let lastMessageCount = -1;
@@ -84,7 +82,7 @@ export async function runHostConsoleWorker(): Promise<void> {
     for (const pending of callbacks.values()) pending.reject(new Error("Host session worker closing"));
     callbacks.clear();
     const failures: unknown[] = [];
-    for (const close of [() => session?.cleanup(), () => mcpHost?.closeAll(), () => learningStore?.close()]) {
+    for (const close of [() => session?.cleanup(), () => mcpHost?.closeAll()]) {
       try { await close(); } catch (error) { failures.push(error); }
     }
     unsubscribe(); clearInterval(tick);
@@ -111,7 +109,6 @@ export async function runHostConsoleWorker(): Promise<void> {
         Object.assign(process.env, bootstrap.executionEnvironment);
         runtime = createWebConsoleRuntimeFromBootstrap(bootstrap.runtime).runtime;
         const config = { ...bootstrap.config, scanId: bootstrap.sessionId, runtime } as unknown as Omit<ConsoleSessionConfig, "db">;
-        if (bootstrap.learningDbPath) config.learningStore = learningStore = new LearningStore(bootstrap.learningDbPath);
         if (bootstrap.config.scope) config.scope = ScopePolicy.fromJson(bootstrap.config.scope as Parameters<typeof ScopePolicy.fromJson>[0]);
         const direct = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"];
         for (const name of direct) if (bootstrap.callbacks.includes(name)) (config as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => invoke(name, args);
@@ -119,7 +116,6 @@ export async function runHostConsoleWorker(): Promise<void> {
           const value = await invoke("requestScope", [request]) as { target: string; scope: Parameters<typeof ScopePolicy.fromJson>[0] } | null;
           return value ? { ...value, scope: ScopePolicy.fromJson(value.scope) } : null;
         };
-        if (bootstrap.callbacks.includes("sourceLessonHints")) config.sourceLessonHints = (root) => invoke("sourceLessonHints", [root]) as ReturnType<NonNullable<ConsoleSessionConfig["sourceLessonHints"]>>;
         if (bootstrap.callbacks.includes("historyList")) config.conversationHistory = {
           list: (...args) => invoke("historyList", args) as ReturnType<NonNullable<ConsoleSessionConfig["conversationHistory"]>["list"]>,
           read: (...args) => invoke("historyRead", args) as ReturnType<NonNullable<ConsoleSessionConfig["conversationHistory"]>["read"]>,

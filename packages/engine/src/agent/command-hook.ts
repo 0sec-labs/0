@@ -69,7 +69,7 @@ export const DELEGATING_TOOLS: ReadonlySet<string> = new Set(["spawn_agent", "sp
 /** No process, file or network effect of their own. Adding a tool here is a reviewed decision. */
 export const INERT_TOOLS: ReadonlySet<string> = new Set([
   "save_finding", "query_findings", "use_loot", "plan", "update_finding", "update_target", "payload_lookup", "mongo_objectid", "list_skills", "load_skill",
-  "read_skill", "done", "ask_operator", "update_todos", "write_todos", "visualize", "remember_codebase", "assemble_advisory", "variant_hunt",
+  "read_skill", "done", "ask_operator", "update_todos", "write_todos", "visualize", "memory", "assemble_advisory", "variant_hunt",
   "assumption_hunt", "generate_fix", "verify_finding", "protocol_conformance", "spec_drift", "safety_eval",
 ]);
 

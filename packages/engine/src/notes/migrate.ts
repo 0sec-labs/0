@@ -23,7 +23,7 @@ export interface MigrationReport { version: 1; importedAt: string; sources: Reco
 interface Candidate { text: string; folder?: string; kind?: NoteKind; created?: string }
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" ? value as Record<string, unknown> : {});
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
-const iso = (ms: unknown): string | undefined => (typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : undefined);
+const iso = (ms: unknown): string | undefined => (typeof ms === "number" && Number.isFinite(ms) && ms > 1e11 ? new Date(ms).toISOString() : undefined);
 const sentence = (title: string, summary: string): string => cleanText(title && summary && !summary.startsWith(title) ? `${title}: ${summary}` : summary || title);
 
 function jsonl(path: string): Array<Record<string, unknown>> {
@@ -65,7 +65,7 @@ function fromLessons(dbPath: string, roots: Map<string, string>): Candidate[] {
   return rows(dbPath, "SELECT body FROM learning_knowledge").flatMap(row => {
     const entry = record((() => { try { return JSON.parse(str(row["body"])); } catch { return {}; } })());
     const text = str(entry["status"]) === "disabled" ? "" : cleanText(str(entry["summary"])); // a lesson the user switched off stays off
-    return text ? [{ text, folder: roots.get(str(entry["projectId"])), created: str(entry["createdAt"]) || undefined }] : [];
+    return str(entry["summary"]) ? [{ text, folder: roots.get(str(entry["projectId"])), created: str(entry["createdAt"]) || undefined }] : [];
   });
 }
 

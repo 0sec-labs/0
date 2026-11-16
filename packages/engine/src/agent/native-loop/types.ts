@@ -13,10 +13,9 @@ import type { TodoSnapshot } from "../todos.js";
 import { type TrustGraphConfig } from "../trust-graph-runtime.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
 import type { ScanCostLedger } from "../cost-ledger.js";
-import { HuntMemoryStore } from "../../memory/index.js";
+import type { NoteStore } from "../../notes/index.js";
 import { type InlineOracle, type InlineValidationOutcome } from "../inline-validation.js";
 import type { osecDB } from "../../storage/index.js";
-import { LearningStore } from "../../storage/index.js";
 import type { Finding, AttackResult, TargetInfo } from "../../shared/index.js";
 
 // ── Native Agent Loop Config ──
@@ -179,7 +178,7 @@ export interface NativeAgentConfig {
   publicNetwork?: ToolContext["publicNetwork"];
   /**
    * Enable codebase learning: recall prior source-grounded notes into context
-   * at loop start and expose the `remember_codebase` tool. For scoped source
+   * at loop start and expose the `memory` tool. For scoped source
    * reviews (agent-runner.ts, purpose === "research") this is set to true by
    * the caller. For attack/discovery roles with a scopePath it defaults to
    * true when not explicitly set. purpose === "verify" or any non-scoped run
@@ -222,13 +221,10 @@ export interface NativeAgentLoopOptions {
    */
   inlineValidationOracle?: InlineOracle;
   /**
-   * Optional store override; supplying one opts into cross-scan hunt memory.
-   * Otherwise persistent hunt memory is disabled unless codebaseLearning is
-   * true. ZERO_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
+   * Optional Memory override; supplying one opts into Memory for this run. Otherwise Memory is used only
+   * when codebaseLearning is true. ZERO_DISABLE_MEMORY=1/true vetoes either opt-in.
    */
-  huntMemoryStore?: HuntMemoryStore;
-  /** Optional tenant-local learning mirror; never enables source-memory access. */
-  learningStore?: LearningStore;
+  memoryStore?: NoteStore;
 }
 
 export interface NativeAgentState {

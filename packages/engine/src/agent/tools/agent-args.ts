@@ -6,11 +6,12 @@ import type { OperatorQuestion, OperatorQuestionOption, OperatorQuestionRequest 
 import { todoInputSchema, MAX_TODOS } from "../todos.js";
 import { z } from "zod";
 
-export const rememberCodebaseArgsSchema = z.object({
-  title: z.string().trim().min(1).max(2000),
-  summary: z.string().trim().min(1).max(4000),
-  paths: z.array(z.string().min(1).max(1024)).min(1).max(16),
-  tags: z.array(z.string().max(100)).max(16).optional(),
+export const memoryArgsSchema = z.object({
+  action: z.enum(["remember", "forget"]),
+  note: z.string().trim().max(2000).optional(),
+  kind: z.string().max(40).optional(),
+  scope: z.enum(["folder", "global"]).optional(),
+  id: z.string().max(64).optional(),
 }).strip();
 
 // ── Operator question tool (`ask_operator`) ─────────────────────────────────

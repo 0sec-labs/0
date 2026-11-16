@@ -142,7 +142,7 @@ const TOOL_REGISTRY_ORDER = [
   "update_todos",
   "write_todos",
   "visualize",
-  "remember_codebase",
+  "memory",
   // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
   // lazy ProxyDriver seam; scope-gated like http_request/browser.
   "proxy",

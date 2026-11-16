@@ -1,11 +1,9 @@
-import { randomUUID, createHash } from "node:crypto";
-import { SecurityWorkflowStore, workflowRestorePolicy, learningProjectId, LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent, type KnowledgeEntry, type KnowledgeInput } from "./storage/index.js";
-import type { HuntMemoryStore, HuntRecord } from "./memory/hunt-memory.js";
+import { randomUUID } from "node:crypto";
+import { SecurityWorkflowStore, workflowRestorePolicy, learningProjectId, LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent } from "./storage/index.js";
 import { evolutionDigest, loadEvolutionRegistry, loadEvolutionReceipt, verifyEvolutionSnapshot, receiptsDir } from "./improvement/registry.js";
 import { readEvolutionArtifact } from "./improvement/artifacts.js";
 import type { EvolutionConfig, EvolutionRunResult } from "./improvement/types.js";
-import { resolve, join, sep, isAbsolute } from "node:path";
-import { realpathSync, lstatSync, openSync, constants, fstatSync, readSync, closeSync } from "node:fs";
+import { resolve, join } from "node:path";
 
 /** Only a trusted host adapter may execute evaluation; never supply this from a request body. */
 export interface LearningEvaluator {
@@ -14,34 +12,10 @@ export interface LearningEvaluator {
 export interface LearningServiceOptions {
   evaluator?: LearningEvaluator;
   workflows?: SecurityWorkflowStore;
-  /** Trusted host derivation only; event text is untrusted and never becomes instructions by default. */
-  deriveKnowledge?: (event: Readonly<LearningEvent>) => KnowledgeInput | null;
   maxEventsPerTick?: number;
   evaluationTimeoutMs?: number;
 }
 export interface LearningTickResult { proposed: number; processed: number; retained: number; skipped: number; retried: number }
-
-function sourceStillCurrent(root: string, path: string, hash: string): boolean {
-  if (isAbsolute(path) || path.split(/[\\/]/).some(part => part === "..") || !/^sha256:[a-f0-9]{64}$/i.test(hash)) return false;
-  let fd: number | undefined;
-  try {
-    const canonical = realpathSync(root);
-    const full = resolve(canonical, path);
-    if (!full.startsWith(canonical + sep)) return false;
-    let cursor = canonical;
-    for (const component of path.split(/[\\/]/).filter(Boolean)) {
-      cursor = join(cursor, component);
-      if (lstatSync(cursor).isSymbolicLink()) return false;
-    }
-    fd = openSync(full, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.nlink !== 1 || stat.size > 1_048_576) return false;
-    const bytes = Buffer.alloc(1_048_577);
-    const length = readSync(fd, bytes, 0, bytes.length, 0);
-    if (length > 1_048_576) return false;
-    return `sha256:${createHash("sha256").update(bytes.subarray(0, length)).digest("hex")}` === hash;
-  } catch { return false; } finally { if (fd !== undefined) closeSync(fd); }
-}
 
 /** Durable bounded derivation; no model calls, permission changes, or automatic activation. */
 export class LearningService {
@@ -56,7 +30,6 @@ export class LearningService {
   status(projectId?: string) {
     return { configuredEvaluation: this.configuredEvaluation, processing: this.running, retainedSampleLimit: 200,
       events: this.store.listEvents({ projectId, limit: 200 }).length,
-      knowledge: this.store.listKnowledge({ projectId, limit: 200 }).length,
       improvements: this.store.listCandidates({ projectId, limit: 200 }).length, queue: this.store.queueStatus(projectId) };
   }
   async processPending(options: { projectId?: string; limit?: number } = {}): Promise<LearningTickResult> {
@@ -74,12 +47,7 @@ export class LearningService {
             this.store.retryWork(work.id, work.claimToken!, 1_000); result.retried++; continue;
           }
           if (event && this.proposeWorkflowRestore(event)) result.proposed++;
-          const derived = event && work.kind === "derive-knowledge" ? this.options.deriveKnowledge?.(structuredClone(event)) : null;
-          if (event && derived) {
-            if (derived.projectId !== event.projectId || !derived.evidenceEventIds.includes(event.id)) throw new Error("Derived knowledge must cite its same-project source event.");
-            this.store.putKnowledge(derived);
-            result.retained++;
-          } else result.skipped++;
+          result.skipped++;
           this.store.completeWork(work.id, work.claimToken!);
           result.processed++;
         } catch {
@@ -116,74 +84,6 @@ export class LearningService {
       summary: `This step failed in three runs. Version ${baseline.workflowRevision} finished successfully. Try its earlier instructions?` });
     return Boolean(this.store.createWorkflowSuggestion({projectId: event.projectId, kind: "workflow-restore", targetId: current.id,
       baseVersion: String(current.revision), proposal, evidenceEventIds: evidence.slice(0, 64).map(item => item.id)}));
-  }
-
-  /** Mirror source-grounded notes into the durable evidence ledger. */
-  importCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 8): KnowledgeEntry[] {
-    return this.codebaseNotes(projectId, root, memory, limit).map(({ entry }) => entry);
-  }
-
-  /** Fresh, operator-enabled source lessons ready for a bounded model request. */
-  recallCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 6): HuntRecord[] {
-    return this.codebaseNotes(projectId, root, memory, limit)
-      .filter(({ entry }) => entry.status === "current").map(({ note }) => note);
-  }
-
-  // Keep the admitted note beside its ledger entry. Callers need neither a
-  // second file-hashing pass nor their own summary/source-link matching logic.
-  private codebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit: number): Array<{ note: HuntRecord; entry: KnowledgeEntry }> {
-    this.refreshCodebaseNotes(projectId, root, memory);
-    const entries: Array<{ note: HuntRecord; entry: KnowledgeEntry }> = [];
-    const eventKey = (note: Readonly<HuntRecord>, links: KnowledgeInput["sourceLinks"]) =>
-      `codebase-note:${projectId}:${note.id}:${evolutionDigest(links)}`;
-    for (const note of memory.recallCodebase(root, Math.min(16, Math.max(1, limit)), note => {
-      const links = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
-      const prior = this.store.findSourceKnowledge(projectId, note.summary, links, eventKey(note, links));
-      // Restoring old bytes must not reactivate stale evidence or use a slot.
-      return !prior || prior.status === "current";
-    })) {
-      if (!note.codebase) continue;
-      const sourceLinks = note.codebase.files.map(file => ({ path: file.path, hash: file.digest }));
-      const event = this.store.appendEvent({ projectId, idempotencyKey: eventKey(note, sourceLinks),
-        kind: "source-context", outcome: "current-source", summary: note.summary, evidenceStrength: "hypothesis", sourceLinks,
-        evidenceRefs: [note.id] });
-      entries.push({ note, entry: this.store.putKnowledge({ projectId, summary: note.summary, evidenceEventIds: [event.id], sourceLinks }) });
-    }
-    return entries;
-  }
-  refreshCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore): number {
-    let canonicalRoot: string;
-    try { canonicalRoot = realpathSync(root); } catch { canonicalRoot = resolve(root); }
-    const scopedIds = new Set(memory.all().filter(note => note.codebase?.root === canonicalRoot).map(note => note.id));
-    if (!scopedIds.size) return 0;
-    let invalidated = 0;
-    let afterId: string | undefined;
-    const sourceChecks = new Map<string, boolean>();
-    const stillCurrent = (link: KnowledgeInput["sourceLinks"][number]) => {
-      const key = JSON.stringify([link.path, link.hash]);
-      if (!sourceChecks.has(key)) sourceChecks.set(key, sourceStillCurrent(canonicalRoot, link.path, link.hash));
-      return sourceChecks.get(key)!;
-    };
-    for (;;) {
-      const page = this.store.listCurrentSourceKnowledgePage(projectId, afterId);
-      if (!page.length) break;
-      afterId = page[page.length - 1]!.id;
-      for (const entry of page) {
-        const ownsSource = entry.evidenceEventIds.some(id => {
-          const event = this.store.getEvent(id);
-          return event?.kind === "source-context" && event.evidenceRefs?.some(ref => scopedIds.has(ref));
-        });
-        if (!ownsSource) continue;
-        if (entry.sourceLinks.length > 16 || entry.sourceLinks.some(link => !stillCurrent(link))) {
-          this.store.setKnowledgeStatus(entry.id, "stale"); invalidated++;
-        }
-      }
-      if (page.length < 200) break;
-    }
-    return invalidated;
-  }
-  invalidateKnowledge(projectId: string, currentHashes: Record<string, string>): number {
-    return this.store.invalidateKnowledge(projectId, currentHashes);
   }
 
   /** Mirror actual controller-owned registry state; never promote or reinterpret fixture tests as exploit proofs. */

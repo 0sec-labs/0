@@ -95,7 +95,7 @@ import { TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, CLOUD_TOOL_NAMES, OAST_TOOL_NAMES
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
 import { z } from "zod";
-import { rememberCodebaseArgsSchema, nonEmptyString, buildOperatorQuestionRequest, toolExecutorCheckpointSchema, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
+import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, toolExecutorCheckpointSchema, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { SUBAGENT_MODEL_TIMEOUT_MS, resolveBashWallclockCeilingMs, runBashWithWallclock, SCANNER_INSTALL_HINTS, executePipeline, buildEditCardMeta, buildStrReplaceMeta } from "./tools/exec-helpers.js";
 import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool, containsUnquotedShellChars, splitOnTopLevelPipes, detectHttpEgressSegments, injectAuthIntoBashCommand, tokenizeCommand, resolveDependencyAuditCommand } from "./tools/shell-commands.js";
 import { validateScopedCommand, validateTargetUrl } from "./tools/target-validation.js";
@@ -867,15 +867,12 @@ export class ToolExecutor {
     }
   }
 
-  private rememberCodebase(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.rememberCodebase) {
-      return { success: false, output: null, error: "Codebase learning is unavailable in this session" };
-    }
-    const parsed = rememberCodebaseArgsSchema.safeParse(args);
-    if (!parsed.success) {
-      return { success: false, output: null, error: parsed.error.issues[0]?.message ?? "Invalid codebase note" };
-    }
-    return { success: true, output: this.ctx.rememberCodebase(parsed.data) };
+  private memoryTool(args: Record<string, unknown>): ToolResult {
+    if (!this.ctx.memory) return { success: false, output: null, error: "Memory is unavailable in this session" };
+    const parsed = memoryArgsSchema.safeParse(args);
+    if (!parsed.success) return { success: false, output: null, error: parsed.error.issues[0]?.message ?? "Invalid memory request" };
+    try { return { success: true, output: this.ctx.memory(parsed.data) }; }
+    catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
   }
 
   /**
@@ -7445,7 +7442,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // `write_todos` is a dispatchable ALIAS of `update_todos` — keep it out of
     // the audit/review "everything" set so only one plan tool is advertised.
     && name !== "write_todos"
-    && name !== "remember_codebase"
+    && name !== "memory"
     // burp-network-20260913 — the intercepting `proxy` tool is registered +
     // dispatchable + unit-tested, but NOT YET advertised by any role. It is a
     // powerful effectful capability (a local MITM proxy + a generated CA); like
@@ -7462,7 +7459,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && ((featureFlags.cveAdapt && authorized) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
-    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
+    name !== "memory" && (featureFlags.zeroverse || name !== "analyze_binary"),
   );
   const roleTools: Record<string, string[]> = {
     discovery: networkTools,

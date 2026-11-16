@@ -650,10 +650,6 @@ export class WebWorkflowService {
       for (const result of Object.values(nodeResults)) if (result.status === "queued") result.status = status === "cancelled" ? "cancelled" : "blocked";
       for (const result of Object.values(nodeResults)) if (result.status === "running") result.status = status;
       this.#definitions.updateExecution(execution.id, { status, nodeResults, ...(parent.view.error ? { error: parent.view.error } : {}) });
-      if (status === "completed" && target.plan.kind === "source" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) && !target.plan.target.startsWith("git@")) {
-        try { this.learning.retainSourceContext(target.plan.target); }
-        catch { this.#event(parent, "report", { learningRetained: false }); }
-      }
       this.#graphConnections.delete(parent.view.id);
       this.#graphJobs.delete(execution.id);
     }, true);

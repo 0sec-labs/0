@@ -139,45 +139,6 @@ export class osecDB {
     this.repos = createRepositories(this.sqlite, this.db, this);
   }
 
-  insertTriageMemory(row: {
-    id: string;
-    scope: "global" | "target" | "package";
-    scopeValue?: string | null;
-    category: string;
-    pattern: string;
-    reasoning: string;
-    createdAt: number;
-    appliedCount?: number;
-  }): void {
-    return this.repos.triageMemories.insertTriageMemory(row);
-  }
-
-  listTriageMemories(opts?: {
-    scope?: "global" | "target" | "package";
-    scopeValue?: string;
-    category?: string;
-    limit?: number;
-  }): Array<{
-    id: string;
-    scope: "global" | "target" | "package";
-    scopeValue: string | null;
-    category: string;
-    pattern: string;
-    reasoning: string;
-    createdAt: number;
-    appliedCount: number;
-  }> {
-    return this.repos.triageMemories.listTriageMemories(opts);
-  }
-
-  deleteTriageMemory(id: string): boolean {
-    return this.repos.triageMemories.deleteTriageMemory(id);
-  }
-
-  incrementMemoryAppliedCount(id: string): void {
-    return this.repos.triageMemories.incrementMemoryAppliedCount(id);
-  }
-
   ensureCaseWorkPlan(scanId: string): string | null {
     return this.repos.caseGraph.ensureCaseWorkPlan(scanId);
   }

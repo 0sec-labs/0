@@ -12,3 +12,4 @@ export function openMemory(options: FileStoreOptions & Pick<MigrationOptions, "d
   return store;
 }
 export * from "./archive.js";
+export * from "./context.js";

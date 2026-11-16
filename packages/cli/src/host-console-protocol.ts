@@ -54,7 +54,6 @@ export interface HostConsoleBootstrap {
   executionProfile: "local";
   config: Record<string, unknown>;
   dbPath?: string;
-  learningDbPath?: string;
   executionEnvironment: Record<string, string>;
   runtime: WebConsoleRuntimeBootstrap;
   scopeEnforcement: ScopeEnforcementState;
@@ -73,7 +72,7 @@ export interface HostConsoleStopResult {
 
 export const HOST_CONSOLE_CALLBACKS = [
   "requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator",
-  "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead", "sourceLessonHints",
+  "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead",
   "workflowList", "workflowRead", "workflowSave", "workflowEditorRead", "workflowInvoke",
   "historyList", "historyRead",
 ] as const;

@@ -19,7 +19,6 @@ import type {
   NativeMessage,
   NativeContentBlock,
 } from "../runtime/types.js";
-import type { MemoryStore } from "./memories.js";
 import type { VerifyOutcome, VerifyVerdict, VerifySignal } from "./verify-verdict.js";
 
 // ── Memory Integration ──
@@ -30,7 +29,8 @@ import type { VerifyOutcome, VerifyVerdict, VerifySignal } from "./verify-verdic
  * current evidence without running the verification steps.
  */
 export interface VerifyMemoryOptions {
-  memoryStore?: MemoryStore;
+  /** Pre-rendered untrusted Memory notes (see scanVerifyContext). */
+  memoryBlock?: string;
 }
 
 // ── Public Types ──
@@ -789,22 +789,7 @@ export async function runStructuredVerify(
   const steps: StepResult[] = [];
 
   // Retrieve historical context without letting prior labels decide the verdict.
-  let memoryBlock = "";
-  if (memoryOptions?.memoryStore) {
-    const store = memoryOptions.memoryStore;
-    try {
-      const relevant = await store.getRelevantMemories(finding, target);
-      if (relevant.length > 0) {
-        memoryBlock = await store.formatForPrompt(relevant);
-        for (const m of relevant) {
-          await store.recordApplied(m.id).catch(() => {});
-        }
-      }
-    } catch {
-      // Memory integration must never hard-fail the pipeline.
-      memoryBlock = "";
-    }
-  }
+  const memoryBlock = memoryOptions?.memoryBlock ?? "";
 
   for (const step of STEPS) {
     const result = await executeStep(step, finding, target, runtime, memoryBlock);

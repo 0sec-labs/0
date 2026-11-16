@@ -1,4 +1,4 @@
-import { osecDB, resolveOsecDbPath } from "@0/engine/storage";
+import { osecDB } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
 import { isApiRuntime } from "@0/engine";
 import { homeStateDir, toShareSafeFindings } from "@0/engine/shared";
@@ -45,8 +45,6 @@ export async function createWorkspaceServices(options: Options) {
   try {
     workflows = new WebWorkflowService({ gateway, dbPath: options.dbPath });
     const workflow = workflows;
-    gateway.attachSourceLearning(workflow.learning.store, resolveOsecDbPath(options.dbPath));
-    gateway.attachLearningRecorder(event => workflow.learning.recordChatOutcome(event));
     gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflow.invokeLifecycle(sessionId, name, args, capabilities) });
     engine = new WorkflowEngineService({ token: options.engineBearer ?? options.controlToken, workspace: options.workspace, scopePath: options.scopePath, target: options.target, allowApply: options.allowApply, dbPath: options.dbPath, timeCapMs: options.timeCapMs, costCapUsd: options.costCapUsd }, { gateway, workflows: workflow });
     await engine.ready;

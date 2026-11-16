@@ -149,7 +149,7 @@ export type {
   FusedTriageResult,
   FusedDecision,
 } from "./multi-modal.js";
-export { MemoryStore, scoreMemory, inferPackage } from "./memories.js";
+export { inferPackage } from "./package.js";
 export { routeFinding } from "./learned-router.js";
 export type { RouterResult, RouterDecision } from "./learned-router.js";
 export { hybridRoute } from "./hybrid-router.js";
@@ -228,12 +228,6 @@ export type {
   FuzzLoopResult,
   ExploitabilityVerdict,
 } from "./memsafety-types.js";
-export type {
-  TriageMemory,
-  MemoryScope,
-  MemoryStoreOptions,
-  MemoryDbHandle,
-} from "./memories.js";
 export {
   assessImpact,
   heuristicImpact,

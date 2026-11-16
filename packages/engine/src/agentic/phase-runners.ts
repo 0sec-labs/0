@@ -15,7 +15,7 @@ import {
   shellPentestPrompt,
   buildAccessControlPromptBlock,
 } from "../agent/prompts.js";
-import { createScanMemoryStore } from "../triage/memories.js";
+import { scanVerifyContext } from "../notes/index.js";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
 import type { ScanListener } from "../events/scan-event.js";
@@ -690,16 +690,10 @@ export async function runNativeVerify(
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
   // pool the model can starve from.
-  const memoryStore = db ? createScanMemoryStore(db) : undefined;
+  const memoryContext = scanVerifyContext(config.repoPath);
   let turns = 0;
   for (const finding of findings) {
     config.signal?.throwIfAborted();
-    let memoryContext = "";
-    if (memoryStore) {
-      try {
-        memoryContext = await memoryStore.formatForPrompt(await memoryStore.getRelevantMemories(finding, config.target));
-      } catch { /* Historical context never replaces independent verification. */ }
-    }
     const state = await runNativeAgentLoop({
       config: {
         role: "verify",

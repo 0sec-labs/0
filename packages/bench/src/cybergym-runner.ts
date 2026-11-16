@@ -77,7 +77,7 @@ import { join, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { agenticScan, CraftMemoryStore, preseedMemory, consolidateMemory, runEnsembleCraft, parseEnsembleModels, defaultCraftCandidateReviewer } from "@0/engine";
+import { agenticScan, runEnsembleCraft, parseEnsembleModels, defaultCraftCandidateReviewer } from "@0/engine";
 import type {
   CraftCandidateJudge,
   CraftEvidenceRecord,
@@ -797,17 +797,11 @@ export const runEngineDefault: EngineRunner = async (task, opts) => {
     tmpdir(),
     `0-cybergym-${sanitizeId(task.taskId)}-${Date.now()}.db`,
   );
-  // Cross-task learning memory (the moat). Enabled by CYBERGYM_MEMORY_DB (a JSONL
-  // path shared across all task runs). Preseeded once; consolidated after each task.
-  const memory = process.env.CYBERGYM_MEMORY_DB
-    ? new CraftMemoryStore(process.env.CYBERGYM_MEMORY_DB)
-    : undefined;
   const cpgPath = process.env.CYBERGYM_CPG_PATH;
   const adversarialReviewModel = process.env.CYBERGYM_ADVERSARIAL_REVIEW_MODEL?.trim();
   const llmTimeoutMs = cyberGymLlmTimeoutMs();
   const deadlineMs = cyberGymCraftDeadlineMs();
   const generatorUid = cyberGymCraftGeneratorUid();
-  if (memory) preseedMemory(memory);
   const report = await agenticScan({
     config: {
       target: task.repoRoot,
@@ -914,15 +908,10 @@ export const runEngineDefault: EngineRunner = async (task, opts) => {
           meta: { pocId: s.pocId, vulExitCode: s.submitExitCode },
         };
       }),
-      ...(memory ? { memory } : {}),
     },
     challengeHint: task.description,
   });
 
-  // Hebbian consolidation: promote recent episodes into reusable knowledge.
-  if (memory) {
-    try { await consolidateMemory(memory, { everyN: 15 }); } catch { /* best-effort */ }
-  }
 
   const findings = (report as { findings?: unknown[] }).findings ?? [];
   const pocPath = extractPocPath(findings);
@@ -1146,16 +1135,12 @@ export async function runTaskBestOfN(
     // "graded" evaluator are BOTH the vul-only oracle, so the N trajectories
     // never touch the differential grading. The one graded submit is below.
     const vulOnly = vulSideCraftEvaluator(task);
-    const memory = process.env.CYBERGYM_MEMORY_DB
-      ? new CraftMemoryStore(process.env.CYBERGYM_MEMORY_DB)
-      : undefined;
     const cpgPath = process.env.CYBERGYM_CPG_PATH;
     const adversarialReviewModel = process.env.CYBERGYM_ADVERSARIAL_REVIEW_MODEL?.trim();
     const llmTimeoutMs = cyberGymLlmTimeoutMs();
     const deadlineMs = cyberGymCraftDeadlineMs();
     const generatorUid = cyberGymCraftGeneratorUid();
-    if (memory) preseedMemory(memory);
-
+  
     const ensemble = await runEnsembleCraft({
       target: {
         sourceRoot: task.repoRoot,
@@ -1186,17 +1171,12 @@ export async function runTaskBestOfN(
           : {}),
         testPoc: vulOnly,
         evaluatePoc: vulOnly,
-        ...(memory ? { memory } : {}),
-      },
+        },
       ...(deps.model ? { judgeModel: deps.model } : {}),
       ...(deps.runCraft ? { runCraft: deps.runCraft } : {}),
       ...(deps.judge ? { judge: deps.judge } : {}),
     });
 
-    // Hebbian consolidation: promote recent episodes into reusable knowledge.
-    if (memory) {
-      try { await consolidateMemory(memory, { everyN: 15 }); } catch { /* best-effort */ }
-    }
 
     const craftAttempts = Array.isArray(ensemble.attempts) ? ensemble.attempts : [];
 

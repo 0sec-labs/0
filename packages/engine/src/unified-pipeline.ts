@@ -31,7 +31,7 @@ import { enumerateAttackSurfaces, formatAttackSurfaceForPrompt } from "./kernel/
 import { researchPrompt, researchPromptSingleFile, blindVerifyPrompt } from "./agent/prompts.js";
 import { isDisclosureWorthy, evidenceKindForFinding } from "./triage/verify-verdict.js";
 import type { VerifyVerdict } from "./triage/verify-verdict.js";
-import { createScanMemoryStore } from "./triage/memories.js";
+import { scanVerifyContext } from "./notes/index.js";
 import { runNpmDynamicDiscovery } from "./stages/npm-dynamic-discovery.js";
 import { createSandboxPackageRunner } from "./stages/npm-detectors/sandbox-probe.js";
 import type { NpmPackageRunner } from "./stages/npm-detectors/sandbox-probe.js";
@@ -1520,7 +1520,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
         logPipelineEvent("verify", "stage_skipped", { reason: "cost_ceiling" });
       } else {
       try {
-        const memoryStore = db ? createScanMemoryStore(db) : undefined;
+        const verifyMemory = scanVerifyContext(prepared.scopePath);
         const verifyResults = await mapWithConcurrency(
           findings,
           diffReview ? 1 : verifyConcurrency(),
@@ -1540,12 +1540,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
             if (diffReview) {
               verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. The research finding already owns the PR annotation and any exact replacement; do not emit a second suggestion. Cite the actual source path if confirmed, and report independently whether the claimed issue holds.";
             }
-            if (memoryStore) {
-              try {
-                const memories = await memoryStore.getRelevantMemories(finding, opts.target);
-                verifySystemPrompt += "\n\n" + await memoryStore.formatForPrompt(memories);
-              } catch { /* Current evidence verification remains independent of historical context. */ }
-            }
+            if (verifyMemory) verifySystemPrompt += "\n\n" + verifyMemory;
 
             // #416 Bug C: the inner verifyEmit previously re-fired
             // `verify:result` on every `finding` event from the verify

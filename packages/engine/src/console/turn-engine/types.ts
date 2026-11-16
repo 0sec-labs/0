@@ -5,7 +5,7 @@ import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } f
 import type { McpToolHost } from "../../agent/mcp-host.js";
 import type { ExtensionRunPort } from "../../agent/types.js";
 import { LearningStore, type osecDB } from "../../storage/index.js";
-import { HuntMemoryStore } from "../../memory/hunt-memory.js";
+import type { NoteStore } from "../../notes/index.js";
 import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
 import { ScopePolicy } from "../../scope/scope.js";
 import type { ScopeEnforcementState } from "../../scope/activation.js";
@@ -365,13 +365,10 @@ export interface ConsoleSessionConfig {
    * console keeps its historical in-memory-only behavior.
    */
   db?: osecDB | null;
-  /** Retain and recall source-linked lessons in authorized local scopes. No extra model calls. */
+  /** Use Memory (read notes each turn, offer the memory tool). No extra model calls. */
   codebaseLearning?: boolean;
-  /** Host-owned stores, optionally injected for a tenant or test. */
-  huntMemoryStore?: HuntMemoryStore;
-  learningStore?: LearningStore;
-  /** Trusted host bridge: bounded source hints, never stored in guest memory or checkpoints. */
-  sourceLessonHints?: (root: string, signal?: AbortSignal) => Promise<Array<{ title: string; summary: string; sourceLinks: Array<{ path: string; hash: string }> }>>;
+  /** Host-owned Memory, optionally injected for a tenant or test. */
+  memoryStore?: NoteStore;
   /**
    * Optional cap on tool-call rounds within a single operator turn.
    * Unlimited by default: long reviews continue until the model finishes or the

@@ -1,7 +1,4 @@
 import type { Command } from "commander";
-import { realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
-import { homedir } from "node:os";
 import type { EvolutionConfig, EvolutionDependencies, EvolutionRunResult } from "@0/engine";
 import { loadEvolutionConfigFile, runEvolution } from "@0/engine";
 
@@ -22,7 +19,7 @@ interface LearningCommandDependencies {
 }
 
 async function defaultService(): Promise<LearningCommandService> {
-  const { LearningService, HuntMemoryStore } = await import("@0/engine");
+  const { LearningService } = await import("@0/engine");
   const { SecurityWorkflowStore, learningProjectId } = await import("@0/engine/storage");
   const workflows = new SecurityWorkflowStore();
   const store = workflows.learningStore();
@@ -30,19 +27,7 @@ async function defaultService(): Promise<LearningCommandService> {
   const project = (value: string) => /^sha256:[a-f0-9]{64}$/.test(value) ? value : learningProjectId(value);
   return {
     status: projectId => service.status(projectId === undefined ? undefined : project(projectId)),
-    processPending: options => {
-      const selected = options.projectId;
-      if (selected && !/^(1|true)$/i.test(process.env["ZERO_DISABLE_HUNT_MEMORY"] ?? "")) {
-        const source = selected.startsWith("source:") ? selected.slice(7) : selected;
-        if (isAbsolute(source) || /^\.{1,2}\//.test(source) || source.startsWith("~/")) {
-          // Explicit local project selection imports only already-retained, current notes.
-          let root: string | undefined;
-          try { root = realpathSync(source.startsWith("~/") ? resolve(homedir(), source.slice(2)) : source); } catch { /* No current local source context. */ }
-          if (root) service.importCodebaseNotes(project(selected), root, new HuntMemoryStore());
-        }
-      }
-      return service.processPending({ ...options, projectId: selected === undefined ? undefined : project(selected) });
-    },
+    processPending: options => service.processPending({ ...options, projectId: options.projectId === undefined ? undefined : project(options.projectId) }),
     mirrorEvolutionRun: (projectId, config, result) => service.mirrorEvolutionRun(project(projectId), config, result),
     close: () => { store.close(); workflows.close(); },
   };

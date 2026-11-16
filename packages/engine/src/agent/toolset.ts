@@ -29,6 +29,7 @@ export const CORE_TOOL_NAMES: readonly string[] = [
   "save_finding",
   "update_finding",
   "ask_operator",
+  "memory",
   "load_skill",
   "done",
 ];

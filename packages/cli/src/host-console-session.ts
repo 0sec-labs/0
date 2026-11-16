@@ -11,8 +11,8 @@ interface Mirror {
   approvals: ApprovalsChoice; webSearchEnabled?: boolean; target: string;
   localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
-const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "sourceLessonHints"] as const;
-const UNSUPPORTED = ["mcpHost", "extensionRuns", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
+const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
+const UNSUPPORTED = ["mcpHost", "extensionRuns", "contribution", "developmentSourceRoot"] as const;
 const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", ...DIRECT_CALLBACKS]);
 
 function executionEnvironment(): Record<string, string> {
@@ -33,11 +33,11 @@ function closeInterruptedHostToolCalls(messages: readonly NativeMessage[]): Nati
   return result;
 }
 
-function serialConfig(config: Config, learningDbPath?: string): Record<string, unknown> {
-  for (const key of UNSUPPORTED) if (config[key] !== undefined && !(key === "learningStore" && learningDbPath)) throw new Error(`Host ${key} requires an explicit worker adapter`);
+function serialConfig(config: Config): Record<string, unknown> {
+  for (const key of UNSUPPORTED) if (config[key] !== undefined) throw new Error(`Host ${key} requires an explicit worker adapter`);
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (BRIDGED.has(key) || value === undefined || (key === "learningStore" && learningDbPath)) continue;
+    if (BRIDGED.has(key) || value === undefined) continue;
     if (["maxTurnTokens", "maxToolIterations"].includes(key) && value === Infinity) continue;
     const supplied = key === "skillDiscoveryOptions" && typeof value === "function" ? value() : value;
     const encoded = JSON.stringify(supplied, (_name, item) => {
@@ -53,12 +53,12 @@ function serialConfig(config: Config, learningDbPath?: string): Record<string, u
 }
 
 /** Explicit eligibility, never fallback to a different provider or execution profile. */
-export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "learningDbPath" | "executionEnvironment" | "scopeEnforcement"> = {}): { supported: boolean; reason?: string } {
+export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "executionEnvironment" | "scopeEnforcement"> = {}): { supported: boolean; reason?: string } {
   if (!["darwin", "linux"].includes(process.platform)) return { supported: false, reason: "Confirmed host session termination is qualified only on macOS and Linux; this platform keeps in-process execution" };
   if (!process.versions.bun) return { supported: false, reason: "Confirmed host session termination requires Bun native SQLite; Node's WASM database locks are not qualified for forced exit" };
   try {
-    encodeHostConsoleFrame({ type: "init", value: { sessionId: config.scanId, executionProfile: "local", config: serialConfig(config, options.learningDbPath), runtime: captureWebConsoleRuntimeBootstrap(config.runtime),
-      learningDbPath: options.learningDbPath, executionEnvironment: options.executionEnvironment ?? executionEnvironment(), scopeEnforcement: options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
+    encodeHostConsoleFrame({ type: "init", value: { sessionId: config.scanId, executionProfile: "local", config: serialConfig(config), runtime: captureWebConsoleRuntimeBootstrap(config.runtime),
+      executionEnvironment: options.executionEnvironment ?? executionEnvironment(), scopeEnforcement: options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
     return { supported: true };
   }
   catch { return { supported: false, reason: "This session has a runtime or live host resource that cannot be captured by the host execution worker" }; }
@@ -68,7 +68,6 @@ interface HostConsoleSessionOptions {
   config: Config;
   dbPath?: string;
   /** Only supply after proving the injected host store uses this exact backing DB. */
-  learningDbPath?: string;
   /** Captured execution/MCP policy, private pipe only; never a public snapshot. */
   executionEnvironment?: Record<string, string>;
   launch: Pick<HostConsoleProcessOptions, "command" | "args" | "cwd" | "env" | "graceMs" | "confirmationMs">;
@@ -86,7 +85,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   if (!["darwin", "linux"].includes(process.platform)) throw new Error("Host session process termination is not qualified on this platform");
   if (!process.versions.bun) throw new Error("Host session process termination requires Bun native SQLite");
   const { config } = options;
-  const serial = serialConfig(config, options.learningDbPath);
+  const serial = serialConfig(config);
   const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);
   if (!config.scanId) throw new Error("Host session workers require a stable session identity");
   let scope = config.initialCheckpoint
@@ -150,7 +149,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   }
   if (config.workflowLifecycle) callbacks.workflowInvoke = (...args) => config.workflowLifecycle!.invoke(...args as Parameters<NonNullable<Config["workflowLifecycle"]>["invoke"]>);
   const policy = options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot);
-  const bootstrap: HostConsoleBootstrap = { sessionId: config.scanId, executionProfile: "local", config: serial, dbPath: options.dbPath, learningDbPath: options.learningDbPath,
+  const bootstrap: HostConsoleBootstrap = { sessionId: config.scanId, executionProfile: "local", config: serial, dbPath: options.dbPath,
     executionEnvironment: options.executionEnvironment ?? executionEnvironment(), runtime, scopeEnforcement: policy, callbacks: Object.keys(callbacks) };
   // Eligibility must fail before an OS process is created; no silent truncation.
   encodeHostConsoleFrame({ type: "init", value: bootstrap });

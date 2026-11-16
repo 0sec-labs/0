@@ -7,7 +7,7 @@ import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchR
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/engine/storage";
+import { SecurityWorkflowStore, osecDB, resolveOsecDbPath } from "@0/engine/storage";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { protectedFolderName } from "./workspace-access.js";
@@ -405,9 +405,6 @@ export class ConsoleGateway {
   readonly #skillActor = new AsyncLocalStorage<ConsoleMessageAuthor | undefined>();
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
   #scheduleLifecycle?: ConsoleScheduleLifecycleAdapter;
-  #sourceLearningStore?: LearningStore;
-  #sourceLearningDbPath?: string;
-  #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
 
@@ -1243,14 +1240,13 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
-            ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             ...callbacks,
           }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: managed.workspacePath ?? this.#projectPath,
@@ -1264,14 +1260,13 @@ export class ConsoleGateway {
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
-            ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
             workspaceRoot: managed.workspacePath ?? this.#projectPath,
             operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
             ...callbacks,
           };
-          const boundary = { learningDbPath: this.#sourceLearningDbPath, scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
+          const boundary = { scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
           const support = hostConsoleSessionSupport(localConfig, boundary);
           if (support.supported) {
             session = createHostConsoleSession({ config: localConfig, dbPath: resolveOsecDbPath(this.#options.dbPath), ...boundary,
@@ -1407,10 +1402,7 @@ export class ConsoleGateway {
       },
     };
   }
-  /** Records lifecycle metadata only; conversation text and tool output stay out of learning. */
-  attachSourceLearning(store: LearningStore, backingDbPath?: string): void { this.#sourceLearningStore = store; this.#sourceLearningDbPath = backingDbPath; }
 
-  attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
     const startingEpoch = ++managed.executionEpoch;
     this.#clearCancellation(managed);
@@ -1500,14 +1492,6 @@ export class ConsoleGateway {
         }
       } catch (error) { if (managed.status !== "closed") managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); }
       finally {
-        try {
-          this.#learningRecorder?.({ id: `${managed.id}:${managed.turnOwner}`, project: managed.workspacePath ?? this.#projectPath,
-            outcome: abort.signal.aborted ? "cancelled" : managed.status === "failed" ? "failed" : managed.lastOutcome?.stopReason === "end_turn" ? "completed" : "inconclusive" });
-        } catch (error) {
-          const code = record(error) && typeof error.code === "string" && ["SQLITE_BUSY", "SQLITE_LOCKED", "SQLITE_READONLY", "SQLITE_FULL", "SQLITE_CANTOPEN", "SQLITE_CONSTRAINT", "SQLITE_IOERR"].includes(error.code) ? error.code : "unknown";
-          console.warn(`[console] Learning activity retention failed (${code}).`);
-          this.#emit(managed, { type: "notice", text: "Learning activity could not be retained for this turn." });
-        }
         this.#clearCancellation(managed);
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {

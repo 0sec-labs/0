@@ -24,7 +24,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, readdir
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eventBus, type SubagentMessagePayload } from "../events/bus.js";
-import { HuntMemoryStore } from "../memory/index.js";
+import { createFileNoteStore } from "../notes/index.js";
 import { buildSubagentMessage, getToolsForRole, ToolExecutor } from "./tools.js";
 
 const scopedTransport = vi.hoisted(() => vi.fn<typeof import("../http.js").fetchScoped>());
@@ -33,14 +33,14 @@ vi.mock("../http.js", async (importOriginal) => ({
   fetchScoped: scopedTransport,
 }));
 
-// Hunt memory defaults ON in the engine; keep the suite from writing to the
-// real ~/.0 store. The dedicated hunt-memory describe below re-enables it and
-// injects a throwaway store. This file-level hook runs outer-most, before any
+// Memory is opt-in per run; keep the suite from reading or writing the real ~/.0 store.
+// The dedicated Memory describe below re-enables it and injects a throwaway store. This file-level hook runs outer-most, before any
 // describe-scoped beforeEach, so a nested `delete` of the same var wins.
 beforeEach(() => {
   scopedTransport.mockReset();
   scopedTransport.mockRejectedValue(new Error("Unexpected scoped HTTP fixture request"));
   process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
+  process.env["ZERO_DISABLE_MEMORY"] = "1";
 });
 afterEach(() => {
   delete process.env["ZERO_DISABLE_HUNT_MEMORY"];
@@ -2727,297 +2727,52 @@ describe("runNativeAgentLoop — action-level tool_calls log", () => {
 
 // ── Hunt memory integration (default ON, opt out via ZERO_DISABLE_HUNT_MEMORY) ──
 
-describe("runNativeAgentLoop — hunt memory integration", () => {
-  const HM_ENV = "ZERO_DISABLE_HUNT_MEMORY";
-  let tmp: string;
-
+describe("runNativeAgentLoop — Memory", () => {
+  let home: string;
   beforeEach(() => {
-    // The file-level hook set this to "1"; enable memory for these tests.
-    delete process.env[HM_ENV];
-    tmp = mkdtempSync(join(tmpdir(), "0-huntmem-"));
+    delete process.env["ZERO_DISABLE_HUNT_MEMORY"]; delete process.env["ZERO_DISABLE_MEMORY"];
+    home = mkdtempSync(join(tmpdir(), "0-memory-"));
+    vi.stubEnv("HOME", home);
   });
-  afterEach(() => {
-    rmSync(tmp, { recursive: true, force: true });
-  });
+  afterEach(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }); });
+  const cfg = (extra: Partial<NativeAgentConfig> = {}): NativeAgentConfig => ({ role: "review", codebaseLearning: true, scopePath: home, target: home, scanId: "memory", systemPrompt: "Review", tools: [], maxTurns: 2, ...extra });
 
-  it("learns through a scoped tool, recalls in a later run, and expires changed evidence", async () => {
-    const path = join(tmp, "notes.jsonl");
-    writeFileSync(join(tmp, "module.ts"), "export const route = '/health';\n");
-    const note = "The health route is declared in module.ts.";
-    const config = {
-      role: "review" as const, codebaseLearning: true, scopePath: tmp,
-      systemPrompt: "Review source", tools: [], maxTurns: 1, target: tmp, scanId: "learn-source",
-    };
-    await runNativeAgentLoop({
-      config, db: null, huntMemoryStore: new HuntMemoryStore({ path }),
-      runtime: createMockRuntime([{
-        content: [{ type: "tool_use", id: "learn", name: "remember_codebase", input: {
-          title: "Health routing", summary: note, paths: ["module.ts"],
-          root: "/outside", digests: ["forged"],
-        } }],
-        stopReason: "tool_use", durationMs: 1,
-      }]),
-    });
-    const reopened = new HuntMemoryStore({ path });
-    expect(reopened.recallCodebase(tmp)[0]?.codebase?.root).toBe(realpathSync(tmp));
-    const seen: string[] = [];
-    const reader: NativeRuntime = {
-      type: "api", isAvailable: async () => true,
-      executeNative: async (_system, messages) => {
-        seen.push(JSON.stringify(messages));
-        return { content: [{ type: "text", text: "Review complete" }], stopReason: "end_turn", durationMs: 1 };
-      },
-    };
-    await runNativeAgentLoop({ config: { ...config, scanId: "recall-source" }, runtime: reader, db: null, huntMemoryStore: reopened });
-    expect(seen[0]).toContain(note);
-    writeFileSync(join(tmp, "module.ts"), "export const route = '/status';\n");
-    await runNativeAgentLoop({ config: { ...config, scanId: "changed-source" }, runtime: reader, db: null, huntMemoryStore: reopened });
-    expect(seen[1]).not.toContain(note);
-  });
-
-  it.each(["verify", "disabled"] as const)("keeps %s runs cold even when a model requests learning", async (mode) => {
-    const store = new HuntMemoryStore({ path: join(tmp, "notes.jsonl") });
-    writeFileSync(join(tmp, "module.ts"), "export const route = '/health';\n");
-    const note = "Private learned routing context";
-    store.rememberCodebase({ root: tmp, paths: ["module.ts"], title: "Routing", summary: note, source: "test" });
-    if (mode === "disabled") process.env[HM_ENV] = "1";
+  it("shows folder notes at loop start and lets the model remember one", async () => {
+    const store = createFileNoteStore({ home });
+    store.add({ text: "Routes live in module.ts", folder: home });
+    let first = true; const seen: string[] = []; let tools: string[] = [];
     const runtime: NativeRuntime = {
       type: "api", isAvailable: async () => true,
-      executeNative: async (_system, messages, tools) => {
-        expect(JSON.stringify(messages)).not.toContain(note);
-        expect(tools.some((tool) => tool.name === "remember_codebase")).toBe(false);
-        return {
-          content: [{ type: "tool_use", id: "forbidden", name: "remember_codebase", input: {
-            title: "Unapproved", summary: "Do not persist", paths: ["module.ts"],
-          } }],
-          stopReason: "tool_use", durationMs: 1,
-        };
+      executeNative: async (_system, messages, offered) => {
+        seen.push(JSON.stringify(messages)); tools = offered.map((tool) => tool.name);
+        if (!first) return { content: [{ type: "text", text: "done" }], stopReason: "end_turn", durationMs: 1 };
+        first = false;
+        return { content: [{ type: "tool_use", id: "m", name: "memory", input: { action: "remember", note: "Tests run with pnpm test", kind: "command" } }], stopReason: "tool_use", durationMs: 1 };
       },
     };
-    await runNativeAgentLoop({
-      config: { role: mode === "verify" ? "verify" : "review", codebaseLearning: true,
-        scopePath: tmp, target: tmp, scanId: mode, systemPrompt: "Review", tools: [], maxTurns: 1 },
-      runtime, db: null, huntMemoryStore: store,
-    });
-    expect(store.all().map((record) => record.title)).toEqual(["Routing"]);
+    await runNativeAgentLoop({ config: cfg(), runtime, db: null, memoryStore: store });
+    expect(seen[0]).toContain("Routes live in module.ts"); expect(seen[0]).toContain("untrusted");
+    expect(tools).toContain("memory");
+    expect(store.list({ folder: home }).map((note) => note.text)).toContain("Tests run with pnpm test");
   });
 
-  function saveThenDone(input: Record<string, unknown>): NativeRuntime {
-    let turn = 0;
-    return {
-      type: "api" as const,
-      async executeNative() {
-        turn++;
-        if (turn === 1) {
-          return {
-            content: [
-              { type: "tool_use", id: "f1", name: "save_finding", input },
-            ],
-            stopReason: "tool_use",
-            durationMs: 1,
-          };
-        }
-        return {
-          content: [
-            { type: "tool_use", id: "d1", name: "done", input: { summary: "ok" } },
-          ],
-          stopReason: "tool_use",
-          durationMs: 1,
-        };
-      },
-      async isAvailable() {
-        return true;
-      },
+  it("stays cold for verify, when the run opts out, and when the environment vetoes it", async () => {
+    const store = createFileNoteStore({ home });
+    store.add({ text: "Private routing context", folder: home });
+    const run = async (config: NativeAgentConfig, extra: { memoryStore?: typeof store } = { memoryStore: store }) => {
+      const seen: string[] = []; const names: string[] = [];
+      const runtime: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async (_s, messages, tools) => { seen.push(JSON.stringify(messages)); names.push(...tools.map((tool) => tool.name)); return { content: [{ type: "text", text: "done" }], stopReason: "end_turn", durationMs: 1 }; } };
+      await runNativeAgentLoop({ config, runtime, db: null, ...extra });
+      return { text: seen.join(""), names };
     };
-  }
-
-  it("keeps local findings ephemeral until memory is explicitly enabled", async () => {
-    vi.stubEnv("HOME", tmp);
-    const finding = {
-      title: "Reflected XSS in search", severity: "high", category: "xss",
-      evidence_request: "GET /?q=<script>", evidence_response: "<script>",
-    };
-    const config = {
-      role: "attack" as const, systemPrompt: "Inspect the target", tools: [],
-      maxTurns: 2, target: "https://shop.example.com", scanId: "local-cold",
-     
-    };
-    const cold = await runNativeAgentLoop({
-      config, runtime: saveThenDone(finding), db: null,
-    });
-    expect(cold.findings.map(record => record.title)).toEqual([finding.title]);
-    expect(existsSync(join(tmp, ".0", "hunt-memory"))).toBe(false);
-
-    await runNativeAgentLoop({
-      config: { ...config, codebaseLearning: true, scanId: "explicit-memory" },
-      runtime: saveThenDone(finding), db: null,
-    });
-    expect(new HuntMemoryStore({ home: tmp }).all().map(record => record.title))
-      .toEqual([finding.title]);
-  });
-
-  it("appends a redacted HuntRecord to an injected store on a saved finding", async () => {
-    const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
-    const runtime = saveThenDone({
-      title: "Reflected XSS in search",
-      severity: "high",
-      category: "xss",
-      evidence_request: "GET /?q=<script>",
-      // A secret-shaped value that MUST be redacted before it reaches disk.
-      evidence_response: "set-cookie: session_token=supersecretvalue123456",
-    });
-
-    const state = await runNativeAgentLoop({
-      config: {
-        role: "attack",
-        systemPrompt: "t",
-        tools: [],
-        maxTurns: 5,
-        target: "https://shop.example.com",
-        scanId: "hm-scan-1",
-      },
-      runtime,
-      db: null,
-      huntMemoryStore: store,
-    });
-
-    expect(state.findings).toHaveLength(1);
-
-    const recs = store.all();
-    expect(recs).toHaveLength(1);
-    const rec = recs[0];
-    expect(rec.kind).toBe("finding");
-    expect(rec.target).toBe("https://shop.example.com");
-    expect(rec.vulnClass).toBe("xss");
-    expect(rec.source).toBe("scan:hm-scan-1");
-    expect(typeof rec.createdAt).toBe("number");
-    expect(rec.createdAt).toBeGreaterThan(0);
-    // evidenceRef is a POINTER, never raw evidence.
-    expect(rec.evidenceRef).toMatch(/^(fp:|finding:)/);
-    // Redaction: no secret material anywhere in the persisted record.
-    expect(JSON.stringify(rec)).not.toContain("supersecretvalue123456");
-  });
-
-  it("swallows a memory-store error without failing the scan or dropping the finding", async () => {
-    const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
-    // Make every append blow up — the scan must not notice.
-    store.append = () => {
-      throw new Error("boom: disk full");
-    };
-
-    const runtime = saveThenDone({
-      title: "SQLi in id param",
-      severity: "critical",
-      category: "sql-injection",
-      evidence_request: "GET /item?id=1'",
-      evidence_response: "SQL syntax error",
-    });
-
-    const state = await runNativeAgentLoop({
-      config: {
-        role: "attack",
-        systemPrompt: "t",
-        tools: [],
-        maxTurns: 5,
-        target: "https://api.example.com",
-        scanId: "hm-scan-2",
-      },
-      runtime,
-      db: null,
-      huntMemoryStore: store,
-    });
-
-    // The finding survived and the loop completed cleanly despite the store error.
-    expect(state.findings).toHaveLength(1);
-    expect(state.findings[0].title).toBe("SQLi in id param");
-    expect(state.done).toBe(true);
-  });
-
-  it("surfaces a prior-findings context line at loop start via onEvent", async () => {
-    const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
-    // Seed a prior finding on a DIFFERENT target so the cross-target lookup hits.
-    store.append({
-      kind: "finding",
-      target: "other.example.org",
-      vulnClass: "sqli",
-      title: "prior sqli",
-      summary: "s",
-      source: "scan:prev",
-      createdAt: 1,
-    });
-
-    const events: Array<[string, Record<string, unknown>]> = [];
-    let turn = 0;
-    const runtime: NativeRuntime = {
-      type: "api" as const,
-      async executeNative() {
-        turn++;
-        return {
-          content: [
-            { type: "tool_use", id: "d1", name: "done", input: { summary: "ok" } },
-          ],
-          stopReason: "tool_use",
-          durationMs: 1,
-        };
-      },
-      async isAvailable() {
-        return true;
-      },
-    };
-
-    await runNativeAgentLoop({
-      config: {
-        role: "attack",
-        systemPrompt: "t",
-        tools: [],
-        maxTurns: 3,
-        target: "https://new-target.example.com",
-        scanId: "hm-scan-3",
-      },
-      runtime,
-      db: null,
-      huntMemoryStore: store,
-      onEvent: (t, p) => events.push([t, p]),
-    });
-
-    const ctx = events.find(([t]) => t === "hunt_memory_context");
-    expect(ctx).toBeDefined();
-    expect(ctx![1].crossTargetFindings).toBe(1);
-    expect(ctx![1].topClasses).toContain("sqli");
-    expect(typeof ctx![1].note).toBe("string");
-  });
-
-  it("writes nothing when disabled via ZERO_DISABLE_HUNT_MEMORY", async () => {
-    process.env[HM_ENV] = "1";
-    const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
-    const runtime = saveThenDone({
-      title: "XSS",
-      severity: "high",
-      category: "xss",
-      evidence_request: "GET /",
-      evidence_response: "<script>",
-    });
-
-    const state = await runNativeAgentLoop({
-      config: {
-        role: "attack",
-        systemPrompt: "t",
-        tools: [],
-        maxTurns: 5,
-        target: "https://off.example.com",
-        scanId: "hm-scan-4",
-      },
-      runtime,
-      db: null,
-      huntMemoryStore: store,
-    });
-
-    expect(state.findings).toHaveLength(1);
-    expect(store.all()).toHaveLength(0);
+    for (const result of [await run(cfg({ role: "verify" })), await run(cfg({ codebaseLearning: false, role: "review" }))]) {
+      expect(result.text).not.toContain("Private routing context"); expect(result.names).not.toContain("memory");
+    }
+    process.env["ZERO_DISABLE_MEMORY"] = "1";
+    const vetoed = await run(cfg());
+    expect(vetoed.text).not.toContain("Private routing context"); expect(vetoed.names).not.toContain("memory");
   });
 });
-
-// ── Coordinator rails enforcement (opt-in via ZERO_FEATURE_COORDINATOR_RAILS) ──
 
 describe("runNativeAgentLoop — coordinator rails enforcement", () => {
   beforeEach(() => {
