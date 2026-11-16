@@ -12,7 +12,7 @@
  *   POST extensions/enable|disable   { name, approve? | confirm? }
  *   POST extensions/remove           { name, confirm }
  */
-import { createExtensionService, type ExtensionService, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
+import { approvalFor, createExtensionService, type ExtensionService, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
 import { z } from "zod";
 
 export interface ExtensionReply { status: number; data: unknown }
@@ -70,7 +70,7 @@ export async function handleExtensionRequest(svc: ExtensionService, path: string
       case "extensions/preview": return await body(schemas.preview, async v => fromResult(await svc.installer.prepare(v.source), p => ({ status: 200, data: prompt(p) })));
       case "extensions/install": return await body(schemas.install, async v => {
         const prepared = await prepareExactly(svc, v.source, v.approvedRevision);
-        return fromResult(prepared, p => fromResult(svc.installer.commit(p, { approvedRevision: v.approvedRevision, ...(v.enable ? { enable: { scope: "global" as const } } : {}) }), done => ({ status: 201, data: { installed: true, ...done, enabled: v.enable === true } })));
+        return fromResult(prepared, p => fromResult(svc.installer.commit(p, approvalFor(p, v.enable ? { scope: "global" as const } : undefined)), done => ({ status: 201, data: { installed: true, ...done, enabled: v.enable === true } })));
       });
       case "extensions/update/preview": return await body(schemas.updatePreview, async v => fromResult(await svc.installer.prepareUpdate(v.name, v.to), r => ({ status: 200, data: "upToDate" in r ? r : prompt(r) })));
       case "extensions/update": return await body(schemas.update, async v => {
@@ -78,7 +78,7 @@ export async function handleExtensionRequest(svc: ExtensionService, path: string
         return fromResult(prepared, r => {
           if ("upToDate" in r) return { status: 200, data: r };
           if (r.prompt.revision !== v.approvedRevision) return fail("review_mismatch", "This changed since you reviewed it. Review it again.");
-          return fromResult(svc.installer.commit(r, { approvedRevision: v.approvedRevision }), done => ({ status: 200, data: { updated: true, ...done } }));
+          return fromResult(svc.installer.commit(r, approvalFor(r)), done => ({ status: 200, data: { updated: true, ...done } }));
         });
       });
       case "extensions/enable": return body(schemas.enable, v => fromResult(svc.installer.enable(v.name, { approve: v.approve === true }), done => ({ status: 200, data: done })));

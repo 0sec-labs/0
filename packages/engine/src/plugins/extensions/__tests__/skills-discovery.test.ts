@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { discoverAgentSkills } from "../../../agent/skills/agent-skills.js";
 import { ToolExecutor } from "../../../agent/tools.js";
 import { createExtensionService, extensionSkillRoots, runStartupImport, unwrap } from "../index.js";
-import { SKILL, cleanup, makeRepo, tmp } from "./fixtures.js";
+import { SKILL, approve, cleanup, makeRepo, tmp } from "./fixtures.js";
 
 const dirs: string[] = [];
 afterEach(() => { cleanup(...dirs.splice(0)); });
 async function installed(enable: boolean) {
   const home = tmp("home"); const repo = makeRepo([{ "extension.json": JSON.stringify({ name: "demo", version: "1.0.0" }), "skills/alpha/SKILL.md": SKILL("alpha") }]); dirs.push(home, repo.dir);
   const svc = createExtensionService({ home });
-  unwrap(svc.installer.commit(unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]!, ...(enable ? { enable: { scope: "global" as const } } : {}) }));
+  unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), enable ? { enable: { scope: "global" as const } } : {}));
   return { home, svc };
 }
 

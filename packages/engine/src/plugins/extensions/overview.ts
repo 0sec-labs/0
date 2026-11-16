@@ -36,7 +36,7 @@ export function extensionOverview(store: ExtensionStore, projectKey: string | nu
   const refused = new Map(loadable(store, projectKey).refused.map(r => [r.name, r]));
   const rows = listed.rows.map((row): ExtensionOverviewRow => {
     const builtin = BUILTIN_EXTENSIONS.find(b => b.name === row.name);
-    const entry = row.kind === "built-in" ? undefined : state.value.plugins[row.name];
+    const entry = row.kind === "built-in" ? undefined : state.value.extensions[row.name];
     let canDo: string[] = builtin ? [...builtin.canDo] : []; let skills: string[] = []; let description = builtin?.description ?? row.detail;
     if (entry && !entry.legacy && entry.active) {
       const files = readVerified(store, entry, entry.active);
