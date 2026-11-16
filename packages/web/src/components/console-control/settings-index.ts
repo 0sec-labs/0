@@ -45,7 +45,7 @@ export const settingsHref = (category: string, key?: string) => `/settings?secti
 
 const categoryKeywords: Record<SettingsPageId, string> = {
   general: "updates update policy reset defaults messages queue interrupt privacy usage metrics analytics problem reports telemetry diagnostics status support feedback",
-  appearance: "theme light dark mode colors browser density compact spacing profile",
+  appearance: "theme light dark mode colors accent background font size text motion browser density compact spacing profile",
   threads: "thread threads chat chats summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
   usage: "usage spend cost tokens model chats billing credits activity",
   helpers: "helpers helper agents subagents where agents run computer sandbox extensions",

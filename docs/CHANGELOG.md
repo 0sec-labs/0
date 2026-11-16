@@ -17,6 +17,7 @@ on the GitHub Release tag.
 - There is now one Memory: short plain notes 0 remembers across threads, per folder or everywhere. They are Markdown files under `~/.0/memory/`, and the Memory page lists every note, including the ones the old page hid. Threads read the notes at the start of each turn as untrusted context and have one `memory` tool (remember, forget).
 - `0 memory` is now `list`, `add`, `remove`, `clear`, `export` and `import`. `0 findings update --status false-positive` remembers why as an `avoid` note, and scans show `avoid` notes to the verifier. `0 findings triage memory add|list|remove` still works for one release with a `moved:` line.
 - Migration: the first time Memory opens, the older stores (source lessons in hunt memory, craft memory files, lessons and triage memories in the database) are copied into notes once. Nothing is deleted. The report is in `~/.0/memory/import-report.json`; a lesson you had switched off is not imported.
+- Settings > Appearance is now one page with a live preview of a new thread at the top. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do: theme cards are miniatures of the app in that theme, and every Background tile is a real frame of that background (Aurora is no longer an empty tile). The profile menu has a single Appearance item, and the command palette has Change theme, Change background and Switch to light, dark or system mode.
 
 ### Removed
 

@@ -218,9 +218,9 @@ export function CommandPalette({
       });
     }
 
-    base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "System, Light or Dark · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance light dark browser"], run: () => navigate(settingsHref("appearance", "web-theme")) });
-    base.push({ id: "web-background", group: "Settings", label: "Change background", meta: "Dither, Aurora, Grid and more · saved in this browser", icon: CapyAppearanceIcon, keywords: ["background backdrop animation atmosphere dither aurora grid waves ripple"], run: () => navigate(settingsHref("appearance", "web-background")) });
-    for (const theme of ["system", "light", "dark"] as const) base.push({ id: `web-theme-${theme}`, group: "Settings", label: `Use ${theme === "light" ? "Light" : theme === "dark" ? "Dark" : "System"} appearance`, meta: "This browser", icon: CapyAppearanceIcon, keywords: ["theme appearance browser", theme], run: () => setWebTheme(theme) });
+    base.push({ id: "web-theme", group: "Settings", label: "Change theme", meta: "Colours, accent and mode · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance colour color palette accent dracula nord", "appearance"], run: () => navigate(settingsHref("appearance", "web-color-theme")) });
+    base.push({ id: "web-background", group: "Settings", label: "Change background", meta: "The picture behind a new thread · saved in this browser", icon: CapyAppearanceIcon, keywords: ["background backdrop animation atmosphere dither topography none"], run: () => navigate(settingsHref("appearance", "web-background")) });
+    for (const theme of ["system", "light", "dark"] as const) base.push({ id: `web-mode-${theme}`, group: "Settings", label: `Switch to ${theme} mode`, meta: "This browser", icon: CapyAppearanceIcon, keywords: ["theme appearance mode browser", theme], run: () => setWebTheme(theme) });
 
     const selectedFindingId = selectedFamilyQuery.data?.latest.id;
     if (selectedFindingId) {

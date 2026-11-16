@@ -9,7 +9,6 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { CapyApiKeyIcon as KeyRound, CapyAppearanceIcon as Palette, CapyBuildingIcon as Users, CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyChevronUpIcon as ChevronUp, CapyKeyboardIcon as Keyboard, CapyLogOutIcon as LogOut, CapySettingsIcon as Settings } from "@/ui/icons/capy";
-import { useWebTheme, type WebTheme } from "@/lib/web-theme";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/ui/components/kbd";
 import { useOpenWhatsNew } from "@/lib/use-open-whats-new";
@@ -109,7 +108,6 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
   const navigate = useNavigate();
   const openWhatsNew = useOpenWhatsNew();
   const cache = useQueryClient();
-  const [theme, setTheme] = useWebTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const user = team.enabled ? team.user : null;
@@ -125,7 +123,6 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
   const name = user ? user.displayName : "Local";
   const subtitle = user ? team.workspace?.name ?? "Team" : "This computer";
   const initial = (user ? user.displayName.trim().charAt(0) : "L").toUpperCase() || "?";
-  const themeItem = (value: WebTheme, label: string) => <MenuPrimitive.Item key={value} className={menuItemClasses} onClick={() => setTheme(value)}>{label}{theme === value && <Check aria-hidden="true" className="ml-auto" />}</MenuPrimitive.Item>;
   return <MenuPrimitive.Root>
     <MenuPrimitive.Trigger aria-label={`Account: ${name}`} className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md p-1.5 text-left outline-none select-none transition-colors duration-100 hover:bg-secondary data-[popup-open]:bg-secondary focus-visible:outline-ring-inset">
       <span aria-hidden="true" className="relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary text-[10px] font-medium text-foreground">{initial}</span>
@@ -136,10 +133,7 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
       <MenuPrimitive.Positioner side="top" align="start" sideOffset={4} alignOffset={4} className="z-[60] outline-none">
         <MenuPrimitive.Popup data-slot="account-menu" className={cn(menuSurfaceClasses, "w-56")}>
           <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate(settingsHref)}><Settings aria-hidden="true" />Settings<Kbd aria-hidden="true" className="ml-auto">⌘,</Kbd></MenuPrimitive.Item>
-          <MenuPrimitive.SubmenuRoot>
-            <MenuPrimitive.SubmenuTrigger className={menuItemClasses}><Palette aria-hidden="true" />Appearance<ChevronRight aria-hidden="true" className="ml-auto" /></MenuPrimitive.SubmenuTrigger>
-            <MenuPrimitive.Portal><MenuPrimitive.Positioner side="right" align="start" sideOffset={4} className="z-[60] outline-none"><MenuPrimitive.Popup className={cn(menuSurfaceClasses, "min-w-32")}>{themeItem("system", "System")}{themeItem("light", "Light")}{themeItem("dark", "Dark")}</MenuPrimitive.Popup></MenuPrimitive.Positioner></MenuPrimitive.Portal>
-          </MenuPrimitive.SubmenuRoot>
+          <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate(settingsHref.split("?")[0] + "?section=appearance")}><Palette aria-hidden="true" />Appearance</MenuPrimitive.Item>
           <MenuPrimitive.Item className={menuItemClasses} onClick={openWhatsNew}><Sparkles strokeWidth={1.5} aria-hidden="true" />What's new</MenuPrimitive.Item>
           <MenuPrimitive.Item className={menuItemClasses} onClick={openShortcutsDialog}><Keyboard aria-hidden="true" />Keyboard shortcuts<Kbd aria-hidden="true" className="ml-auto">?</Kbd></MenuPrimitive.Item>
           {user && <>

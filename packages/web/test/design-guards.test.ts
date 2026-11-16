@@ -6,7 +6,6 @@ const SRC = join(__dirname, "..", "src");
 
 /** Files (relative to src) that may use rounded-lg/xl/2xl. Each entry needs a reason; the default radius is rounded-md (see DESIGN.md). */
 const ROUNDED_ALLOWED: Record<string, string> = {
-  "components/appearance/theme-gallery.tsx": "Theme preview tiles are miniature app windows and keep the panel radius.",
   "components/sentinels/sentinel-avatar.tsx": "Large agent avatar tile is a deliberate squircle, like other avatars.",
   "components/skills/cells.tsx": "Catalog logo tiles are avatars and scale their radius with size.",
   "ui/components/toast.tsx": "Toast is a popover surface and uses the 8px menu radius from DESIGN.md.",

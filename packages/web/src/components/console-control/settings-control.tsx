@@ -8,7 +8,7 @@ import { useBackendApi } from "@/api";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { AppearanceRows } from "./appearance-control";
+import { AppearancePage } from "@/components/appearance/appearance-page";
 import { ShortcutsControl } from "./shortcuts-control";
 import { GitSettings } from "./settings-data-pages";
 import { NotificationsSettings } from "./notifications-control";
@@ -129,6 +129,10 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   if (!presentationOnly && category === "usage") return <UsageSettings />;
   if (!presentationOnly && category === "git") return <GitSettings />;
   if (!presentationOnly && category === "instructions") return <InstructionsSettings />;
+  if (category === "appearance") return <>
+    <Feedback error={save.error} message={message} />
+    <AppearancePage compact={presentationOnly || !settings.data ? undefined : settings.data.settings.density === "compact"} onCompact={next => save.mutate({ key: "density", value: next ? "compact" : "comfortable", scope })} />
+  </>;
   return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <Feedback error={save.error ?? (resetScope === null ? reset.error : null)} message={message} />
@@ -145,9 +149,6 @@ export function SettingsControl({ presentationOnly = false, category = "general"
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
       if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
       return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "privacy" ? privacyDisclosure : undefined} quiet={categoriesOfPage(category).length === 1}>
-        {section.id === "appearance" && <>
-          <AppearanceRows />
-        </>}
         {!presentationOnly && section.id === "agents" && settings.data?.accessUpgradeNotice && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
           <p className="min-w-0 text-muted-foreground-2">Threads and Agents now always have shell access; limits are scope, budget and the sandbox.</p>
           <Button type="button" variant="ghost" size="sm" disabled={dismissNotice.isPending} onClick={() => dismissNotice.mutate()}>Dismiss</Button>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { PageHeader } from "@/components/page-shell";
+import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { Navigate, useLocation } from "react-router-dom";
 import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapyPullRequestIcon, CapySettingsIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
@@ -31,6 +31,8 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   const category = settingsPageId(params.get("section"));
   const redirect = mode === "settings" ? settingsRedirect(params.get("section")) : undefined;
 
+  // Appearance has a grid of themes and backgrounds, so it takes the wider column.
+  usePageVariant(mode === "settings" && category === "appearance" ? "list" : undefined);
   useEffect(() => { if (!location.hash) headingRef.current?.focus(); }, [mode, category, location.hash]);
   // Connections and Models are one page; old links keep working.
   if (mode === "connections") return <Navigate replace to={{ pathname: "/models", search: location.search, hash: location.hash }} />;

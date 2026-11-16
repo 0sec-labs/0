@@ -25,3 +25,6 @@ export const parseBackdrop = (value: unknown): BackdropKind => isBackdrop(value)
 export const PEAK_ALPHA: Record<BackdropKind, number> = {
   none: 0, dither: 0.15, aurora: 0.3, grid: 0.34, topography: 0.34, constellation: 0.42, scanline: 0.2, "code-rain": 0.42, waves: 0.34, ripple: 0.38,
 }
+
+/** Opacity of a gallery tile or other thumbnail. Nothing reads over it, so it is well above the screen cap: the look has to be visible at 160px. */
+export const tileOpacity = (kind: BackdropKind) => Math.min(0.75, PEAK_ALPHA[kind] * 2.4)

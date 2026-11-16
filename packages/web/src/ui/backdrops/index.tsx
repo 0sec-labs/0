@@ -7,23 +7,11 @@ import { cn } from "../lib/utils.js"
 import { DitherBackdrop } from "../components/dither-backdrop.js"
 import { Aurora } from "./aurora.js"
 import { CanvasSketch } from "./canvas-sketch.js"
-import { createCodeRain } from "./code-rain.js"
-import { createConstellation } from "./constellation.js"
 import { readSafeAlpha } from "./contrast.js"
 import { shouldAnimate, watchActivity, type Activity } from "./engine.js"
-import { createGrid } from "./grid.js"
-import { PEAK_ALPHA, type BackdropKind } from "./kinds.js"
-import { createRipple } from "./ripple.js"
-import { createScanline } from "./scanline.js"
-import type { Sketch } from "./sketch.js"
-import { createTopography } from "./topography.js"
-import { createWaves } from "./waves.js"
+import { PEAK_ALPHA, tileOpacity, type BackdropKind } from "./kinds.js"
+import { SKETCHES } from "./sketches.js"
 
-/** The canvas kinds. Each factory builds one scene; `none`, `dither` and `aurora` are handled in `Backdrop`. */
-const SKETCHES: Partial<Record<BackdropKind, () => Sketch>> = {
-  grid: createGrid, topography: createTopography, constellation: createConstellation, scanline: createScanline,
-  "code-rain": createCodeRain, waves: createWaves, ripple: createRipple,
-}
 /** Glow from the top and corners, clear in the lower middle behind the composer (same mask as Dither). */
 const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 48%, rgb(0 0 0 / .4) 70%, rgb(0 0 0 / .9) 94%)"
 
@@ -50,9 +38,9 @@ function Layer({ kind, preview, playing, className }: { kind: BackdropKind; prev
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-accent", "data-color-theme"] })
     return () => observer.disconnect()
   }, [peak])
-  const opacity = preview ? Math.min(0.5, cap * 2.2) : cap
+  const opacity = preview ? tileOpacity(kind) : cap
   return (
-    <div ref={ref} aria-hidden="true" data-slot="backdrop" data-kind={kind} className={cn("pointer-events-none absolute inset-0 overflow-hidden text-[var(--dither-ink)]", !preview && "z-[-1]", className)}
+    <div ref={ref} aria-hidden="true" data-slot="backdrop" data-kind={kind} className={cn("pointer-events-none absolute inset-0 overflow-hidden text-[var(--dither-ink)] [container-type:size]", !preview && "z-[-1]", className)}
       style={{ opacity, ...(preview ? null : { maskImage: MASK, WebkitMaskImage: MASK, maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" }) }}>
       {kind === "aurora" && <Aurora animate={animate} />}
       {kind === "dither" && <span className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.6px)] bg-[length:6px_6px]" />}
@@ -82,3 +70,6 @@ function Backdrop({ kind, className, preview = false, playing = true }: { kind: 
 
 export { Backdrop }
 export * from "./kinds.js"
+
+export { BackdropStill } from "./backdrop-still.js"
+export { renderStill, type StillTheme } from "./still.js"

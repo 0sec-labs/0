@@ -976,13 +976,13 @@ function ConsolePageContent({
       }
       if (name === "theme" && command.args) {
         const appearance = command.args.trim().toLowerCase();
-        if (appearance !== "light" && appearance !== "dark") {
-          setNotice("Use /theme light or /theme dark for browser appearance.");
+        if (appearance !== "light" && appearance !== "dark" && appearance !== "system") {
+          setNotice("Use /theme light, /theme dark or /theme system.");
           return;
         }
         setWebTheme(appearance);
         messageWorkspace.setDraft("");
-        setNotice(`Web appearance set to ${appearance}.`);
+        setNotice(`Mode set to ${appearance}.`);
         return;
       }
       if (name === "feedback") {
@@ -1042,7 +1042,7 @@ function ConsolePageContent({
       }
       const destination = getCommandByName(name)?.destination;
       if (destination) {
-        let extra = name === "theme" ? "#setting-web-theme" : name === "shortcuts" ? "&tab=keybindings" : "";
+        let extra = name === "theme" ? "#setting-web-color-theme" : name === "shortcuts" ? "&tab=keybindings" : "";
         if (name === "fix" && command.args) {
           if (command.args === "cancel") extra = "&intent=cancel";
           else if (command.args.startsWith("publish "))
