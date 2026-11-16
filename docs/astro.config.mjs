@@ -118,7 +118,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "0security is software infrastructure for deploying sovereign, persistent AI security agents. They find and fix security risks across any tech stack, work with any model, and run anywhere.",
+        "0security is software infrastructure for deploying sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",
