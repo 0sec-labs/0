@@ -21,7 +21,7 @@ export function ExtensionRow({ row, scopeDefined, disabled, onToggle, onUpdate, 
         {(status.tone === "danger" || status.tone === "warning" || row.status === "needs-approval") && <StatusBadge tone={status.tone} appearance="outline" className="rounded-md">{status.label}</StatusBadge>}
       </div>
       {row.description && <p className="text-sm break-words text-muted-foreground-1">{row.description}</p>}
-      <p className="font-mono text-xs break-all text-muted-foreground-2">{sourceLine(row)}</p>
+      {!row.builtin && <p className="font-mono text-xs break-all text-muted-foreground-2">{sourceLine(row)}</p>}
       {row.canDo.length > 0 && <p className="text-xs break-words text-muted-foreground-2">Can: {row.canDo.join("; ")}</p>}
       {status.detail && <p className={status.tone === "danger" ? "text-xs break-words text-destructive" : "text-xs break-words text-muted-foreground-1"}>{status.detail}</p>}
     </div>

@@ -37,7 +37,7 @@ export function auditLogPath(options: { q?: string; before?: number | null; limi
   return `/api/console/audit-log?${params}`;
 }
 
-const ACRONYMS = new Map([["mcp", "MCP"], ["github", "GitHub"], ["ok", "OK"]]);
+const ACRONYMS = new Map([["mcp", "MCP"], ["github", "GitHub"], ["ok", "OK"], ["sentinel", "agent"], ["workflow", "automation"], ["mission", "thread"], ["session", "thread"], ["worker", "computer"]]);
 /** "mcp.create" -> "MCP create", "access.browser_only" -> "Access browser only". */
 const SENTINEL_STATUS_LABEL: Record<string, string> = { archived: "Agent archived", active: "Agent turned on", paused: "Agent paused" };
 export function auditActionLabel(action: string, detail: Record<string, unknown> = {}): string {
