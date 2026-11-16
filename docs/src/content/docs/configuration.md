@@ -18,7 +18,7 @@ Resolution order, highest first: command-line flag, environment variable, projec
 
 ## Execution profile
 
-`executionProfile` chooses where the whole harness runs. It does not choose the model.
+`executionProfile` chooses where the agent and its tools run. It does not choose the model.
 
 | Value | Meaning |
 | --- | --- |

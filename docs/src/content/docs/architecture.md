@@ -133,7 +133,7 @@ A runtime adapter is not an execution sandbox. Three choices are independent.
 
 | Layer | Responsibility | Current choice |
 | --- | --- | --- |
-| Controller | Provider auth, scope, budgets, approvals, evidence | 0's TypeScript harness |
+| Controller | Provider auth, scope, budgets, approvals, evidence | 0's TypeScript controller |
 | Toolbox artifact | Filesystem with tools and dependencies | OCI image, provisioned before execution |
 | Execution engine | Host and guest boundary, mounts, network, limits, teardown | Apple Silicon SmolVM workbench. Docker or Linux SmolVM for separately configured offline workers. |
 
@@ -141,7 +141,7 @@ OCI is the image format. It does not mean Docker execution. SmolVM boots the ima
 
 ## Rust boundary
 
-The decision is to keep the TypeScript harness and evaluate a small native execution supervisor before any full rewrite. A separate process with a versioned protocol is safer than adding native failure modes inside the credential-bearing controller. Candidate duties are process ownership, PTYs, OS confinement, resource accounting and confirmed teardown. Rust does not provide those guarantees by itself.
+The decision is to keep the TypeScript controller and evaluate a small native execution supervisor before any full rewrite. A separate process with a versioned protocol is safer than adding native failure modes inside the credential-bearing controller. Candidate duties are process ownership, PTYs, OS confinement, resource accounting and confirmed teardown. Rust does not provide those guarantees by itself.
 
 Before a port, measure CLI startup, peak memory, controller CPU, cancellation latency and sustained output. Require parity for scope, credentials, sessions, evidence and rollback. No benchmark so far shows that a full rewrite is warranted. The reasoning is in [TypeScript and Rust boundary](/research/typescript-rust-boundary/).
 

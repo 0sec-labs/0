@@ -628,7 +628,7 @@ Show spend and tokens of the open threads, by model or by thread. Open threads a
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--by <model\|mission>` | — | Group by model (default) or list each mission |
+| `--by <model\|mission>` | — | Group by model (default) or list each thread |
 | `--json` | — | Print JSON |
 
 ### config audit-log
@@ -652,7 +652,7 @@ Show the local log of privileged actions: connection and settings changes, plugi
 
 ### doctor workbench
 
-Set up and inspect the whole-harness online SmolVM security workbench on
+Set up and inspect the online SmolVM security workbench on
 Apple Silicon macOS. The local Linux guest contains 0, the security tools and
 the browser; Docker is not required to run the workbench.
 
@@ -3734,7 +3734,7 @@ Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for 
 | `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
 | `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
 | `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
-| `--enable` | — | Enable it for missions once added |
+| `--enable` | — | Enable it for threads once added |
 | `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
 | `--yes` | — | Approve the reviewed command and settings |
 | `--json` | — | Print machine-readable JSON |
@@ -5264,7 +5264,7 @@ Create a Agent from a preset or a JSON definition.
 | `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
 | `--name <name>` | — | Name |
 | `--access <level>` | — | Access: read-only \| changes |
-| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
+| `--file <path>` | — | Agent JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
@@ -5283,7 +5283,7 @@ Change a Agent's settings.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--name <name>` | — | Name |
-| `--mission <text>` | — | One-line mission |
+| `--mission <text>` | — | One-line purpose |
 | `--access <level>` | — | Access: read-only \| changes |
 | `--daily-usd <usd>` | — | Daily budget in USD |
 | `--max-runs <n>` | — | Maximum runs per day |

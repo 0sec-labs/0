@@ -11,7 +11,7 @@ const record = (value: unknown): Record<string, unknown> => (value && typeof val
 const memoryPath = (id: string) => `/api/console/learning/knowledge/${encodeURIComponent(id)}`;
 
 export function registerMemoryCommand(program: Command, io: CommandIo = defaultIo()): void {
-  const memory = program.command("memory").description("List, disable, export and import what 0 remembers across missions");
+  const memory = program.command("memory").description("List, disable, export and import what 0 remembers across threads");
   const run = (options: OutputOptions, fn: Parameters<typeof runConsole>[2]) => runConsole(io, options, fn);
 
   consoleOptions(memory.command("list").description("List memories").option("--folder <id>", "Only memories for this folder id").option("--limit <n>", "At most this many (1-200)", "100"))
@@ -24,7 +24,7 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
       emit(io, options, { memories: rows }, () => rows.length ? renderTable(rows.map(row => [row.id, row.status, row.summary.replace(/\s+/g, " ").slice(0, 80)]), ["ID", "STATUS", "MEMORY"]) : "No memories yet.");
     }));
 
-  for (const [verb, status, description] of [["disable", "disabled", "Stop using a memory in future missions"], ["enable", "current", "Use a disabled memory again"]] as const) {
+  for (const [verb, status, description] of [["disable", "disabled", "Stop using a memory in future threads"], ["enable", "current", "Use a disabled memory again"]] as const) {
     consoleOptions(memory.command(`${verb} <id>`).description(description)).action((id: string, options: OutputOptions) => run(options, async client => {
       const entry = record(record(expectOk(await client.request("PATCH", memoryPath(id), { status }))).knowledge);
       emit(io, options, { memory: entry }, () => `Memory ${id} is now ${String(entry.status)}.`);

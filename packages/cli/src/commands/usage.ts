@@ -39,7 +39,7 @@ export function runUsage(options: JsonOption & { by?: string }, deps: ConsoleCom
 
 export function registerUsageCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
   program.command("usage").description("Show spend and tokens of the open missions, by model or by mission")
-    .option("--by <model|mission>", "Group by model (default) or list each mission")
+    .option("--by <model|mission>", "Group by model (default) or list each thread")
     .option("--json", "Print JSON")
     .action((o: JsonOption & { by?: string }) => exitWhenDone(runUsage(o, deps)));
 }

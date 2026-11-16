@@ -74,7 +74,7 @@ export function registerPluginConnectCommands(plugin: Command, io: CommandIo = d
       emit(io, options, { ok: true, id: service }, () => `Disconnected ${service}.`);
     }));
 
-  const mcp = plugin.command("mcp").description("Manage custom MCP servers that missions can use");
+  const mcp = plugin.command("mcp").description("Manage custom MCP servers that threads can use");
   consoleOptions(mcp.command("list").description("List custom MCP servers")).action((options: OutputOptions) => run(options, async client => {
     const data = record(expectOk(await client.request("GET", "/api/console/mcp-servers")));
     const items = (data.items ?? []) as Array<{ id: string; name: string; transport: string; enabled: boolean; status: string; toolCount: number }>;
@@ -86,7 +86,7 @@ export function registerPluginConnectCommands(plugin: Command, io: CommandIo = d
     .option("--cwd <path>", "Relative directory inside the workspace to run in")
     .option("--env <KEY=VALUE>", "Environment variable for a local server (repeatable)", collect).option("--env-from <KEY=ENVVAR>", "Take an environment value from this variable (repeatable)", collect)
     .option("--header <NAME=VALUE>", "Header for a remote server (repeatable)", collect).option("--header-from <NAME=ENVVAR>", "Take a header value from this variable (repeatable)", collect)
-    .option("--enable", "Enable it for missions once added").option("--allow-dangerous-env", "Also approve environment variables that change which code loads")
+    .option("--enable", "Enable it for threads once added").option("--allow-dangerous-env", "Also approve environment variables that change which code loads")
     .option("--yes", "Approve the reviewed command and settings"))
     .action((name: string, command: string[], options: OutputOptions & { url?: string; transport?: string; cwd?: string; env?: string[]; envFrom?: string[]; header?: string[]; headerFrom?: string[]; enable?: boolean; allowDangerousEnv?: boolean; yes?: boolean }) => run(options, async client => {
       const transport = options.transport ?? (options.url ? "http" : "stdio");

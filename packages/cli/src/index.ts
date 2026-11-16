@@ -123,7 +123,7 @@ async function buildProgram(): Promise<Command> {
   const program = new Command();
   program
     .name("0")
-    .description("Open-source security harness that fixes what it finds.")
+    .description("Security agents for your repositories. Run 0 to open the console.")
     .version(VERSION)
     .enablePositionalOptions();
   program.hook("preAction", (_command, action) => {
@@ -163,6 +163,16 @@ function exitWithCommandError(err: unknown): never {
 
 // ── Entry point ──
 let userArgs = process.argv.slice(2);
+// Hidden A/B switch for the model-visible tool list: `--toolset core|full` (same as ZERO_TOOLSET).
+{
+  const at = userArgs.indexOf("--toolset");
+  const value = at >= 0 ? userArgs[at + 1] : undefined;
+  if (value === "core" || value === "full") {
+    process.env["ZERO_TOOLSET"] = value;
+    userArgs.splice(at, 2);
+    process.argv = [process.argv[0], process.argv[1], ...userArgs];
+  }
+}
 const moved = rewriteMovedCommand(userArgs);
 if (moved) {
   if (moved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);

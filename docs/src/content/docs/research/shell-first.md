@@ -3,6 +3,8 @@ title: Shell-first rationale
 description: Why 0 uses bash instead of structured tools, with A/B test data from the XBOW benchmark.
 ---
 
+> **Decision (2026-11):** the default tool list for Threads and Agents is now a small core with everything else behind skill-provided packs; see [Core toolset](https://github.com/0sec-labs/0security/blob/main/docs/design/core-toolset.md). The text below is the earlier single-challenge experiment.
+>
 > **Historical experiment and rationale.** The small A/B observations below are
 > preserved, not a current universal performance claim or exhaustive tool list.
 > Current workflows expose additional tools, explicit scope controls and
@@ -56,7 +58,12 @@ We built 10 structured tools (crawl, submit_form, http_request, etc.). Then test
 - **[Terminus](https://www.tbench.ai/news/terminus)** -- single tmux tool, 74.7% on Terminal-Bench.
 - **[XBOW](https://xbow.com/blog/core-components-ai-pentesting-framework)** -- structured tools + real security tooling, 85%.
 - **[KinoSec](https://kinosec.ai)** -- 92.3% on XBOW, black-box HTTP.
-- **["Shell or Nothing"](https://arxiv.org/abs/2509.09207)** -- terminal agents struggle in general, but pentesting is their strongest domain.
+- **["Is Bash All You Need?"](https://arxiv.org/abs/2609.11999)** -- compares typed, typed plus bash, bash-only and programmatic interfaces; reports bash alone beating typed tools with fewer tokens (abstract read; sample sizes not verified).
+- **[Vercel: we removed 80% of our agent's tools](https://vercel.com/blog/we-removed-80-percent-of-our-agents-tools)** -- vendor report, 5 queries, directional only.
+- **[Anthropic: advanced tool use](https://www.anthropic.com/engineering/advanced-tool-use)** -- tool search over large tool libraries.
+- **[Pi coding agent](https://mariozechner.at/posts/2025-11-30-pi-coding-agent)** and **[mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)** -- small-core and bash-only agents.
+
+An earlier version of this page cited arXiv 2509.09207 ("Shell or Nothing"). That paper is a pentesting system paper (TermiBench), not a bash-only comparison, so it was removed as support.
 
 ## A/B tests
 
