@@ -60,7 +60,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
     .argument("<repo>", "Local path or git URL to review")
     .option("--depth <depth>", "Review depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
-    .option("--runtime <runtime>", "Runtime: auto, claude, codex, gemini, api, ollama", "auto")
+    .option("--runtime <runtime>", "Runtime: auto, claude, codex, api", "auto")
     .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
     .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--db-path <path>", "Path to SQLite database")

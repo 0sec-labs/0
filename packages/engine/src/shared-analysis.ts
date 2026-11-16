@@ -18,7 +18,7 @@ export const FOXGUARD_PINNED_TAG = "v0.14.0";
  * run commands, and do multi-turn analysis natively. We bypass our own agent
  * loop and let the CLI handle everything, then parse findings from its output.
  */
-export const CLI_RUNTIME_TYPES = new Set<RuntimeType>(["claude", "codex", "gemini", ]);
+export const CLI_RUNTIME_TYPES = new Set<RuntimeType>(["claude", "codex"]);
 
 export function bufferToString(value: Buffer | string | undefined): string {
   if (!value) {

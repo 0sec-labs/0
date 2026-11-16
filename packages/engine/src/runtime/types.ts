@@ -1,7 +1,7 @@
 import type { SiwcConnection } from "./siwc-connection.js";
 import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "../shared/index.js";
 
-export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
+export type RuntimeType = "api" | "claude" | "codex";
 
 /** Routing labels only; selecting a model never changes agent permissions. */
 export interface SubagentModelSelection {

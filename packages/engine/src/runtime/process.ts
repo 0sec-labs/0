@@ -9,16 +9,6 @@ import { validateCyberAccessProgram } from "./cyber-access-program.js";
 import { readCacheUsage } from "./prompt-cache.js";
 import type { ModelTokenUsage, TokenUsageForPricing } from "../shared/index.js";
 
-function readGeminiUsage(raw: unknown): TokenUsageForPricing | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const stats = raw as Record<string, unknown>;
-  if (typeof stats.input_tokens !== "number" || typeof stats.output_tokens !== "number") return undefined;
-  const outputTokens = typeof stats.total_tokens === "number"
-    ? Math.max(stats.output_tokens, stats.total_tokens - stats.input_tokens) : stats.output_tokens;
-  return { inputTokens: stats.input_tokens, outputTokens,
-    ...(typeof stats.cached === "number" ? { cachedInputTokens: stats.cached } : {}) };
-}
-
 // Dim the subprocess output so it's visually distinct from 0's own output
 const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 
@@ -65,7 +55,6 @@ function showToolCall(
 const RUNTIME_COMMANDS: Record<string, string> = {
   claude: "claude",
   codex: "codex",
-  gemini: "gemini",
 };
 
 function resolveCliEntrypoint(): string {
@@ -247,25 +236,6 @@ export class ProcessRuntime implements Runtime {
               if (event.type === "turn.completed" && event.usage) {
                 usage = { inputTokens: Number(event.usage.input_tokens ?? 0), outputTokens: Number(event.usage.output_tokens ?? 0) };
               }
-              if (this.type === "gemini") {
-                if (event.type === "message" && event.role === "assistant" && typeof event.content === "string") {
-                  resultText += event.content;
-                  this.config.onThinking?.(event.content);
-                } else if (event.type === "tool_use") {
-                  showToolCall(onToolCall, event.tool_name, event.parameters);
-                } else if (event.type === "result") {
-                  usage = readGeminiUsage(event.stats);
-                  if (event.stats?.models && typeof event.stats.models === "object") {
-                    usageByModel = [];
-                    for (const [model, stats] of Object.entries(event.stats.models)) {
-                      const measured = readGeminiUsage(stats);
-                      if (measured) usageByModel.push({ model, usage: measured });
-                    }
-                  }
-                  if (event.status === "error") runtimeError = event.error?.message ?? "Gemini CLI returned an error result.";
-                }
-              }
-
             } catch {
               // Not valid JSON line, skip
             }
@@ -416,11 +386,6 @@ export class ProcessRuntime implements Runtime {
           args.push("--output-schema", schemaPath);
         }
         args.push(prompt);
-        return args;
-      }
-      case "gemini": {
-        const args = ["-p", prompt, "--output-format", "stream-json"];
-        if (this.config.model) args.push("--model", this.config.model);
         return args;
       }
       default:

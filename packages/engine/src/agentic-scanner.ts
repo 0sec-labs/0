@@ -333,7 +333,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   if (!opts.nativeRuntime) assertApiRuntimeSelection(config.runtime, nativeApiDiagnostics);
   const nativeApiAvailable = !!opts.nativeRuntime || nativeApiDiagnostics.valid;
 
-  let selectedRuntimeType: "api" | "claude" | "codex" | "gemini" | "ollama" = "api";
+  let selectedRuntimeType: "api" | "claude" | "codex" = "api";
   let useNative = false;
   // Subscription-CLI mode: when claude is selected without an API key,
   // we drive the native loop through the local CLI's session-resume
@@ -354,7 +354,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     } else {
       const availableCli = await detectAvailableRuntimes();
       // Claude is the supported local adapter for live target scanning.
-      // Codex and Gemini are experimental and limited to source-analysis workflows.
+      // Codex is experimental and limited to source-analysis workflows.
       if (availableCli.has("claude")) {
         selectedRuntimeType = "claude";
         // No API key but Claude Code is installed — opt the native
@@ -379,9 +379,6 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           stage: "discovery",
           message: "Warning: Codex CLI is source-analysis only for live targets. Configure ChatGPT Codex direct auth, use runtime=api, or install Claude Code CLI for full tool-loop support.",
         });
-      } else if (availableCli.has("gemini")) {
-        selectedRuntimeType = "gemini";
-        emit({ type: "stage:start", stage: "discovery", message: "Warning: gemini is experimental for live targets. Prefer runtime=api or install Claude Code CLI for full tool-loop support." });
       } else {
         selectedRuntimeType = "api";
       }

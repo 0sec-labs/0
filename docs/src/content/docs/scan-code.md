@@ -40,7 +40,7 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 | `--depth quick\|default\|deep` | Investigation budget. Default `default`. Not a wall-clock deadline. |
 | `--cost-ceiling <usd>` | Stop when estimated model spend passes this. Partial findings are kept. |
 | `--format terminal\|json\|md\|html\|sarif\|pdf` | Output format. See [Reports](/reports/). |
-| `--runtime auto\|api\|claude\|codex\|gemini\|ollama` | Model runtime. Default `auto`. |
+| `--runtime auto\|api\|claude\|codex` | Model runtime. Default `auto`. |
 | `--profile <name>` | Review profile, for example `c-library`, `linux-kernel`, `evm-onchain`, `solana-onchain`, `move-onchain`, `cairo-onchain`. Default `default` (web, JS/TS, Python). |
 | `--hypothesis <text>` | Seed the agents with a direction to investigate. |
 | `--prior-findings <path>` | JSON array of earlier findings. Treated as untrusted context; the review looks for variants. |

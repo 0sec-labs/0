@@ -2405,8 +2405,8 @@ Options:
   --review-subsystem         After ingest, run linux-kernel review against the crash subsystem for
                              sibling bugs
   --tree <path>              Linux source tree used by --review-subsystem
-  --runtime <runtime>        Review runtime for --review-subsystem: auto, claude, codex, gemini,
-                             api (default: "auto")
+  --runtime <runtime>        Review runtime for --review-subsystem: auto, claude, codex, api
+                             (default: "auto")
   --api-key <key>            API key for --review-subsystem API runtime
   -m, --model <model>        Model for --review-subsystem
   --timeout <ms>             AI review timeout for --review-subsystem (default: "600000")
@@ -2743,7 +2743,7 @@ Options:
                           oci-image
   --profile <profile>     Source review profile
   --depth <depth>         quick, default, or deep (default: "default")
-  --runtime <runtime>     auto, api, claude, codex, gemini, or ollama (default: "auto")
+  --runtime <runtime>     auto, api, claude, or codex (default: "auto")
   --artifact-root <path>  Research artifact root (default: ".0-research")
   -h, --help              display help for command
 
@@ -2760,7 +2760,7 @@ Options:
   --json                    Emit the full result (findings + attempts) as JSON on stdout.
   --max-exercises <N>       Cap how many ranked hypotheses to exercise against the target (default
                             8).
-  --runtime <runtime>       LLM runtime: auto/api (codex login or API key), claude, codex, gemini.
+  --runtime <runtime>       LLM runtime: auto/api (codex login or API key), claude, codex.
                             (default: "auto")
   --protocol <name>         Protocol name for the report/finding (default HTTP/1.1).
   --spec-version <version>  Spec edition for the report (default RFC 9110).
@@ -3014,7 +3014,7 @@ Run the verification worker against queued cases
 Options:
   --db-path <path>      Path to SQLite database
   --limit <n>           Maximum queued cases to claim per pass (default: "1")
-  --runtime <runtime>   Runtime override: auto, claude, codex, gemini, api
+  --runtime <runtime>   Runtime override: auto, claude, codex, api
   --timeout <ms>        Request timeout in milliseconds (default: "30000")
   --api-key <key>       API key for LLM provider
   -m, --model <model>   LLM model to use
@@ -3034,7 +3034,7 @@ Arguments:
 Options:
   --db-path <path>             Path to SQLite database
   --format <format>            Output format override: terminal, json, md, html, sarif, pdf
-  --runtime <runtime>          Runtime override: auto, claude, codex, gemini, api
+  --runtime <runtime>          Runtime override: auto, claude, codex, api
   --timeout <ms>               AI agent timeout override in milliseconds
   --api-key <key>              API key for LLM provider
   -m, --model <model>          LLM model to use
@@ -3879,7 +3879,7 @@ Options:
   --depth <depth>              Audit depth: quick, default, deep (default: "default")
   --format <format>            Output format: terminal, json, md, html, sarif, pdf (default:
                                "terminal")
-  --runtime <runtime>          Runtime: auto, claude, codex, gemini, api (default: "auto")
+  --runtime <runtime>          Runtime: auto, claude, codex, api (default: "auto")
   --db-path <path>             Path to SQLite database
   --api-key <key>              API key for LLM provider
   -m, --model <model>          LLM model to use
@@ -3942,8 +3942,7 @@ Options:
   --depth <depth>                   Review depth: quick, default, deep (default: "default")
   --format <format>                 Output format: terminal, json, md, html, sarif, pdf (default:
                                     "terminal")
-  --runtime <runtime>               Runtime: auto, claude, codex, gemini, api, ollama (default:
-                                    "auto")
+  --runtime <runtime>               Runtime: auto, claude, codex, api (default: "auto")
   --provider <provider>             Explicit provider: openai API or chatgpt-codex subscription
                                     (requires --runtime api)
   --cyber-access-program <program>  Explicit standard, daybreak_blue, or daybreak_red; requires
@@ -4102,8 +4101,7 @@ Options:
   --depth <depth>                    Scan depth: quick, default, deep (default: "default")
   --format <format>                  Output format: terminal, json, md, html, sarif, pdf (default:
                                      "terminal")
-  --runtime <runtime>                Model provider: auto, api, claude, codex, gemini (default:
-                                     "auto")
+  --runtime <runtime>                Model provider: auto, api, claude, codex (default: "auto")
   --provider <provider>              Explicit provider: openai API or chatgpt-codex subscription
                                      (requires --runtime api)
   --cyber-access-program <program>   Explicit standard, daybreak_blue, or daybreak_red; requires

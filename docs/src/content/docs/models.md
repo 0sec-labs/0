@@ -98,16 +98,16 @@ export ZERO_SELECTED_PROVIDER="openai"
 
 For OpenCode Go, use its published base URL, such as `https://opencode.ai/inference/go/openai/v1`.
 
-### Ollama for source review
+### Ollama
 
-`scan source` can call a local Ollama server directly:
+The direct `--runtime ollama` runtime was removed in 0.35. Ollama serves an OpenAI-compatible endpoint, so use it through the API runtime:
 
 ```bash
-OLLAMA_HOST=http://localhost:11434 \
-  0 scan source ./authorized-repo --runtime ollama --model gemma4:27b
+OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
+  0 scan source ./authorized-repo --runtime api --model gemma4:27b
 ```
 
-The model comes from `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`. `OLLAMA_HOST` defaults to `http://localhost:11434`. Pull a model that supports tool calling first. A remote `OLLAMA_HOST` receives your source context.
+Pull a model that supports tool calling first. A remote Ollama server receives your source context.
 
 ## ChatGPT Codex
 
@@ -276,8 +276,6 @@ If a provider misbehaves under `auto`, set `ZERO_RUNTIME=legacy` and report it.
 | `api` | Direct HTTP calls with the provider rules above. |
 | `claude` | The installed, signed-in Claude Code CLI. |
 | `codex` | Source reviews keep 0's own tool boundary. Live scans use the ChatGPT Codex provider directly. |
-| `gemini` | The installed, signed-in Gemini CLI, for source work. |
-| `ollama` | A local Ollama server, for `scan source`. |
 
 ```bash
 0 scan web --target https://api.example.com --scope ./scope.json --runtime claude
@@ -314,7 +312,7 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 
 - Setting a provider's variables alone does not prove all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
 - Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
-- The `claude`, `codex` and `gemini` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
+- The `claude` and `codex` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
 
 ## Manage connections from a shell
 

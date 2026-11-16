@@ -588,7 +588,7 @@ async function runFamilyCandidate(
             model: opts.model,
           })
         : createRuntime({
-            type: opts.runtime as "claude" | "codex" | "gemini" | "api",
+            type: opts.runtime as "claude" | "codex" | "api",
             timeout: parseInt(opts.timeout ?? "30000", 10),
             apiKey: opts.apiKey,
             model: opts.model,
@@ -647,7 +647,7 @@ export function registerOrchestrateCommand(program: Command): void {
     .description("Run the verification worker against queued cases")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--limit <n>", "Maximum queued cases to claim per pass", "1")
-    .option("--runtime <runtime>", "Runtime override: auto, claude, codex, gemini, api")
+    .option("--runtime <runtime>", "Runtime override: auto, claude, codex, api")
     .option("--timeout <ms>", "Request timeout in milliseconds", "30000")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")

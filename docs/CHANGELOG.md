@@ -21,6 +21,11 @@ on the GitHub Release tag.
 - Threads and Agents now give the model 11 tools by default (`bash`, `read_file`, `list_files`, `search_files`, `str_replace`, `apply_patch`, `save_finding`, `update_finding`, `ask_operator`, `load_skill`, `done`) instead of 17 plus a catalog of about 40 more. Specialist tools (browser, HTTP probes, cloud, OAST, proxy, binary, kernel, AD and Entra, source-audit engines, delegation) load only when a skill that needs them is loaded. Read-only, scope and approval checks are unchanged. Set `ZERO_TOOLSET=full` to get the previous list; scans keep the full list.
 - `load_skill` with no skill ID now lists the available skills, which replaces advertising `list_skills`. Old tool names keep working for saved threads.
 - Help text says Agents and threads instead of Sentinels and missions, and the top-level description is now "Security agents for your repositories. Run 0 to open the console."
+- `0 --version` and `0 --help` start in about 0.15 s instead of 0.72 s: command modules now load only when their command runs. Help output is unchanged. They no longer run the startup update check or print the telemetry notice.
+
+### Removed
+
+- `--runtime ollama` and `--runtime gemini` are removed. They fail with "removed in 0.35: use an OpenAI-compatible endpoint with --runtime api". Ollama serves one at `http://localhost:11434/v1`; see [Models and keys](/models/#ollama). The `gemini` and `ollama` values are gone from the `--runtime` help text of `scan`, `scan source`, `scan package` and related commands, and `0 scan` no longer picks the Gemini CLI automatically when no API key or other CLI is found.
 
 ### Fixed
 

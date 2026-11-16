@@ -77,7 +77,7 @@ export function snapshotBenchVariant(value: BenchVariant): Readonly<BenchVariant
     throw new Error("bench harness id must be filesystem-safe");
   }
   if (value.model !== undefined && (!value.model || value.model !== value.model.trim())) throw new Error("bench variant model must be non-empty and trimmed");
-  if (value.runtime !== undefined && !["api", "claude", "codex", "gemini", "ollama", "auto"].includes(value.runtime)) throw new Error("bench variant runtime is unsupported");
+  if (value.runtime !== undefined && !["api", "claude", "codex", "auto"].includes(value.runtime)) throw new Error("bench variant runtime is unsupported");
   if (value.depth !== undefined && !["quick", "default", "deep"].includes(value.depth)) throw new Error("bench variant depth is unsupported");
   if (value.costCeilingUsdPerAttempt !== undefined && (!Number.isFinite(value.costCeilingUsdPerAttempt) || value.costCeilingUsdPerAttempt <= 0)) throw new Error("bench variant cost ceiling must be positive and finite");
   const promptOverrides = Object.fromEntries(Object.entries(value.promptOverrides ?? {}).sort(([a], [b]) => a.localeCompare(b)));

@@ -184,7 +184,7 @@ function validateCandidateVariantChange(
     expected.featureFlags[key] = value;
   } else if (change.kind === "routing" && key === "model" && typeof value === "string" && value !== "" && value === value.trim()) {
     expected.modelOverride = value;
-  } else if (change.kind === "routing" && key === "runtime" && typeof value === "string" && ["api", "claude", "codex", "gemini", "ollama", "auto"].includes(value)) {
+  } else if (change.kind === "routing" && key === "runtime" && typeof value === "string" && ["api", "claude", "codex", "auto"].includes(value)) {
     expected.runtimeOverride = value;
   } else if (change.kind === "harness" && key === "harnessId" && typeof value === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(value)) {
     expected.harnessId = value;

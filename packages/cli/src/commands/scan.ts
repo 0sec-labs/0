@@ -204,7 +204,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
     .requiredOption("--target <target>", "Target URL or mcp:// endpoint")
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
-    .option("--runtime <runtime>", "Model provider: auto, api, claude, codex, gemini", "auto")
+    .option("--runtime <runtime>", "Model provider: auto, api, claude, codex", "auto")
     .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
     .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")

@@ -51,11 +51,11 @@ interface ProtocolCheckOpts {
  * from the `--runtime` flag, via the SAME unified path the rest of the CLI uses:
  *   - api / auto → `LlmApiRuntime` (resolves the chatgpt-codex login token, an
  *     Anthropic/OpenAI/etc. key, in priority order — never a hand-rolled fetch).
- *   - claude / codex / gemini → `createRuntime` (`CliNativeRuntime`), the
+ *   - claude / codex → `createRuntime` (`CliNativeRuntime`), the
  *     subscription-CLI path.
  *
  * `ProcessRuntime` (the legacy single-shot `createRuntime` codex path) does NOT
- * implement `executeNative`, so we route codex/claude/gemini through the
+ * implement `executeNative`, so we route codex/claude through the
  * native-capable runtimes and surface a clear error if the chosen one lacks it.
  */
 function resolveNativeRuntime(runtimeFlag: string | undefined): NativeRuntime {
@@ -65,7 +65,7 @@ function resolveNativeRuntime(runtimeFlag: string | undefined): NativeRuntime {
     return createNativeApiRuntime({ type: "api", timeout });
   }
   const rt = createRuntime({
-    type: choice as "claude" | "codex" | "gemini",
+    type: choice as "claude" | "codex",
     timeout,
   });
   if (typeof (rt as Partial<NativeRuntime>).executeNative !== "function") {
@@ -221,7 +221,7 @@ export function registerProtocolCheckCommand(program: Command): void {
     )
     .option(
       "--runtime <runtime>",
-      "LLM runtime: auto/api (codex login or API key), claude, codex, gemini.",
+      "LLM runtime: auto/api (codex login or API key), claude, codex.",
       "auto",
     )
     .option("--protocol <name>", "Protocol name for the report/finding (default HTTP/1.1).")

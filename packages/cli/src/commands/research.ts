@@ -50,7 +50,7 @@ export function registerResearchCommand(program: Command): Command {
     .option("--target-type <type>", "url, web-app, source-code, npm-package, pypi-package, cargo-package, or oci-image")
     .option("--profile <profile>", "Source review profile")
     .option("--depth <depth>", "quick, default, or deep", "default")
-    .option("--runtime <runtime>", "auto, api, claude, codex, gemini, or ollama", "auto")
+    .option("--runtime <runtime>", "auto, api, claude, or codex", "auto")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; targetType?: string; profile?: string; depth: string; runtime: string; artifactRoot: string }) => {
       const { UnifiedPipelineResearchAdapter, runResearch } = await import("@0/engine");
@@ -66,7 +66,7 @@ export function registerResearchCommand(program: Command): Command {
             options: {
               depth: opts.depth as "quick" | "default" | "deep",
               format: "json",
-              runtime: opts.runtime as "auto" | "api" | "claude" | "codex" | "gemini" | "ollama",
+              runtime: opts.runtime as "auto" | "api" | "claude" | "codex",
               ...(opts.targetType ? { targetType: opts.targetType as "url" | "web-app" | "source-code" | "npm-package" | "pypi-package" | "cargo-package" | "oci-image" } : {}),
               ...(opts.profile ? { reviewProfile: opts.profile as "default" } : {}),
             },

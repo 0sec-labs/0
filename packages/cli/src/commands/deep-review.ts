@@ -658,7 +658,7 @@ export async function runDeepReview(
       const threatModule = await import("@0/engine");
       allocateAcrossLanes = threatModule.allocateCandidatesAcrossLanes;
       // Map RuntimeMode to RuntimeType, defaulting to "api" for "auto".
-      const rtType = (runtime !== "auto" ? runtime : "api") as "api" | "claude" | "codex" | "gemini" | "ollama";
+      const rtType = (runtime !== "auto" ? runtime : "api") as "api" | "claude" | "codex";
       const plannerRuntime: Runtime = opts.nativeRuntime ? {
         type: opts.nativeRuntime.type,
         isAvailable: () => opts.nativeRuntime!.isAvailable(),

@@ -24,7 +24,7 @@ export function registerAuditCommand(program: Command, name = "audit"): void {
     .option("--ver <version>", "Alias for --package-version")
     .option("--depth <depth>", "Audit depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
-    .option("--runtime <runtime>", "Runtime: auto, claude, codex, gemini, api", "auto")
+    .option("--runtime <runtime>", "Runtime: auto, claude, codex, api", "auto")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")

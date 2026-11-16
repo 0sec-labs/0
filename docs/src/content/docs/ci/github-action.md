@@ -54,7 +54,7 @@ Run it from a trusted workflow and a reviewed revision. Never use `pull_request_
 | `scope` | none | [Scope](/scope/) JSON file (`scan`, required). |
 | `scan-mode` | `probe` | `probe`, `deep`, `mcp` or `web` (`scan`). |
 | `depth` | `quick` | `quick`, `default` or `deep`. |
-| `runtime` | `api` | `api`, `claude`, `codex`, `gemini` or `auto`. Pass credentials as step `env`. |
+| `runtime` | `api` | `api`, `claude`, `codex` or `auto`. Pass credentials as step `env`. |
 | `timeout` | `300000` | Per-tool timeout in ms. It is not a job deadline. |
 | `cost-ceiling` | `5` | Positive USD model budget. In-flight usage can overshoot. |
 | `format` | `json` | Primary report, `json` or `sarif`. Both are written. |
@@ -319,7 +319,7 @@ Package and live-target scans work the same way:
 
 Pass the provider's key as a step-scoped secret, never as a literal. Name the runtime explicitly when several keys are present. For example, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY` or `Z_AI_API_KEY`. Azure OpenAI uses `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL` and `AZURE_OPENAI_MODEL`. ChatGPT Codex uses `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`. See [Models and keys](/models/) for providers and fallback. Subscription sign-in does not mean the provider allows unattended CI.
 
-`claude`, `codex` and `gemini` runtimes need their CLI and sign-in on the runner. `api` is the simplest unattended path.
+`claude` and `codex` runtimes need their CLI and sign-in on the runner. `api` is the simplest unattended path.
 
 ## Review CI reports in the browser
 

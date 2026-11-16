@@ -587,3 +587,42 @@ not as a golden test on purpose: the core toolset is being changed in parallel, 
 golden test would fail that work without telling it anything. Stage prompt hashes are
 not recorded (no cheap single entry point; the structural proof for later steps is the
 help fixture and this tool hash).
+
+## Step 2 results (dead and duplicate code, re-proved on `origin/main` after step 1)
+
+Every candidate was re-checked by grepping importers across `packages`, `scripts`,
+`docs`, `.github`, `action.yml`, the engine `exports` map and
+`scripts/create-public-source-export.mjs`. Only what survived the check was deleted.
+
+Deleted:
+
+| What | LOC | Proof |
+|---|---:|---|
+| `engine/src/runtime/ollama.ts` (`OllamaRuntime`) | 456 | Sole importer was `runtime/index.ts` (`createRuntime`, barrel). `--runtime ollama` was documented, so it now fails with "removed in 0.35: use an OpenAI-compatible endpoint with --runtime api" (`shared/removed-runtimes.ts`, covered by `removed-runtimes.test.ts` and the `run.test.ts` gating test). The Ollama provider, `local-ollama-routing` and the web connection UI use the OpenAI-compatible path and are untouched. |
+| `runtime/ollama.test.ts` | 445 | Tests only the deleted class. |
+| Gemini branch of `runtime/process.ts` (usage reader, CLI map, stream parser, argv builder) and its test | 47 | `ProcessRuntime` still serves `claude` and `codex`; only the `gemini` type is gone. `--runtime gemini` gets the same removal error. |
+| `ollama` and `gemini` registry entries, stage preferences, `RuntimeType`/`RuntimeMode` members, legacy auto-pick of the Gemini CLI, bench variant/evidence allow-lists, `--runtime` help text on 8 commands, 5 docs pages, engine README | about 110 | `tsc` for engine and cli; the help fixture shows only those `--runtime` lines changing. |
+
+Skipped, with the reason:
+
+- The 16 "unreachable" files (1,554 LOC; 14 files and 1,428 LOC by my regex graph,
+  which also treats the `exports` map and the `0-llm` bin as entries). Not dead:
+  `improvement/registry.ts` and `provenance.ts` hold their names in source-snapshot
+  allow-lists and hash them, `scripts/security-evolution-study/summary-ablation.mjs`
+  imports `development-summary` from `dist`, `docs/design/security-evolution-offline-studies.md`
+  documents the studies, each has a test, and the three `__fixtures__` files are child
+  processes spawned by tests. `agent/tools/syscall-boundary-map.ts` is also inside the
+  area another change owns. They stay until the improvement group moves in step 5.
+- `graph/` (158 LOC): imported by `stages/graph-slice-hunt-context`; goes with step 3.
+- `runtime/opencode-go.ts` (21 lines): not a runtime wrapper. It detects OpenCode Go
+  endpoints and holds published context windows used by `llm-api`; the changelog lists
+  recent fixes to it.
+- `runtime/process.ts` as a whole: it is the `claude` and `codex` CLI runtime.
+- `attack/` barrel export: `cli/src/commands/timeline.ts` and `formatters/timeline.ts`
+  import the technique lookups through `@0/engine`.
+- Hidden flags `--race`, `--egats`, `--dispatch`: the plan itself ties them to the legacy
+  scanner (step 6) and section 11 warns they may sit behind benchmark baselines.
+  `--no-decoy-detection`, `--branch-from`, `--replay` are documented in the generated
+  command reference and covered by `scan.test.ts`; `--review-subsystem-fixture` is used by
+  `scripts/kernel-validator-e2e.sh`. `--mode`, `--yolo`, `--autonomy`, `--tool-access`
+  untouched (the plan keeps `--yolo` and `--mode` one release).

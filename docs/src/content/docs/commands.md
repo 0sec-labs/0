@@ -901,7 +901,7 @@ Guide: [Read the workflow](/scan-web/).
 | `--target <target>` **required** | — | Target URL or mcp:// endpoint |
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex |
 | `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
 | `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
@@ -1007,7 +1007,7 @@ Guide: [Read the workflow](/scan-code/).
 | `--ver <version>` | — | Alias for --package-version |
 | `--depth <depth>` | `default` | Audit depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, gemini, api |
+| `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, api |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -1038,7 +1038,7 @@ Guide: [Read the workflow](/scan-code/).
 | --- | --- | --- |
 | `--depth <depth>` | `default` | Review depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, gemini, api, ollama |
+| `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, api |
 | `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
 | `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--db-path <path>` | — | Path to SQLite database |
@@ -1660,7 +1660,7 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--force-kernel-build` | — | Rebuild kernel VM artifacts even when a cache entry exists |
 | `--review-subsystem` | — | After ingest, run linux-kernel review against the crash subsystem for sibling bugs |
 | `--tree <path>` | — | Linux source tree used by --review-subsystem |
-| `--runtime <runtime>` | `auto` | Review runtime for --review-subsystem: auto, claude, codex, gemini, api |
+| `--runtime <runtime>` | `auto` | Review runtime for --review-subsystem: auto, claude, codex, api |
 | `--api-key <key>` | — | API key for --review-subsystem API runtime |
 | `-m, --model <model>` | — | Model for --review-subsystem |
 | `--timeout <ms>` | `600000` | AI review timeout for --review-subsystem |
@@ -1852,7 +1852,7 @@ Guide: [Read the workflow](/verify-and-fix/).
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--format <format>` | — | Output format override: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
+| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, api |
 | `--timeout <ms>` | — | AI agent timeout override in milliseconds |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -1913,7 +1913,7 @@ Guide: [Read the workflow](/automations/).
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--limit <n>` | `1` | Maximum queued cases to claim per pass |
-| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
+| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, api |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -2367,7 +2367,7 @@ Run the existing web/AI/source/package pipeline through the shared evidence plan
 | `--target-type <type>` | — | url, web-app, source-code, npm-package, pypi-package, cargo-package, or oci-image |
 | `--profile <profile>` | — | Source review profile |
 | `--depth <depth>` | `default` | quick, default, or deep |
-| `--runtime <runtime>` | `auto` | auto, api, claude, codex, gemini, or ollama |
+| `--runtime <runtime>` | `auto` | auto, api, claude, or codex |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 #### lab research mobile
@@ -2783,7 +2783,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--target <url>` **required** | — | Base URL of the live target to exercise (e.g. http://127.0.0.1:8080). |
 | `--json` | — | Emit the full result (findings + attempts) as JSON on stdout. |
 | `--max-exercises <N>` | — | Cap how many ranked hypotheses to exercise against the target (default 8). |
-| `--runtime <runtime>` | `auto` | LLM runtime: auto/api (codex login or API key), claude, codex, gemini. |
+| `--runtime <runtime>` | `auto` | LLM runtime: auto/api (codex login or API key), claude, codex. |
 | `--protocol <name>` | — | Protocol name for the report/finding (default HTTP/1.1). |
 | `--spec-version <version>` | — | Spec edition for the report (default RFC 9110). |
 | `--spec-ref <ref>` | — | Auditable spec citation (e.g. 'RFC 9110 §9.3.6'). |

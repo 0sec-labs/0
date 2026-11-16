@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION, validateScanPlan } from "@0/engine/shared";
+import { VERSION, validateScanPlan, removedRuntimeMessage } from "@0/engine/shared";
 import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/engine/shared";
 import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/engine";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
@@ -514,11 +514,14 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     },
   });
 
-  const validRuntimes = ["api", "claude", "codex", "gemini", "ollama", "auto"];
+  const validRuntimes = ["api", "claude", "codex", "auto"];
   if (!validRuntimes.includes(runtime)) {
-    console.error(chalk.red(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`));
+    // `ollama` and `gemini` were removed in 0.35: say what to use instead of "unknown".
+    const removed = removedRuntimeMessage(runtime);
+    const message = removed.startsWith("Unknown runtime") ? `Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}` : removed;
+    console.error(chalk.red(message));
     unsubscribeCost();
-    if (opts.embedded) throw new Error(`Unknown runtime '${runtime}'.`);
+    if (opts.embedded) throw new Error(message);
     process.exit(2);
   }
 

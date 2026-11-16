@@ -58,7 +58,7 @@ export function registerDoctorCommand(program: Command): void {
         console.log(chalk.gray("    0 scan source ."));
         console.log(chalk.gray("    0 scan package express"));
       } else {
-        console.log(chalk.yellow("  Next step: install Claude/Codex/Gemini CLI or set an API key."));
+        console.log(chalk.yellow("  Next step: install Claude/Codex CLI or set an API key."));
       }
       console.log("");
     });

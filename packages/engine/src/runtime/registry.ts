@@ -30,32 +30,15 @@ export const RUNTIME_REGISTRY: readonly RuntimeInfo[] = [
     strengths: ["verify", "source-analysis", "discovery"],
     supportsSystemPrompt: false,
   },
-  {
-    type: "gemini",
-    command: "gemini",
-    description: "Gemini CLI (experimental) — large context window, good for source analysis and reports",
-    strengths: ["source-analysis", "report", "discovery"],
-    supportsSystemPrompt: false,
-  },
-  {
-    type: "ollama",
-    // No external binary — health-checked over HTTP. Field is informational
-    // so detection tools that key off `command` don't crash; the registry
-    // uses `isAvailable()` not `which(command)` for ollama.
-    command: "ollama",
-    description: "Ollama (local) — Gemma 4 27B via /api/chat with native function-calling. Pairs with `--seed-findings` for full-local hunts. See 0#369.",
-    strengths: ["source-analysis", "discovery"],
-    supportsSystemPrompt: true,
-  },
 ] as const;
 
 /** Default stage-to-runtime preferences for `--runtime auto`. */
 const STAGE_PREFERENCES: Record<PipelineStage, RuntimeType[]> = {
-  "discovery": ["claude", "codex", "gemini"],
-  "source-analysis": ["claude", "gemini", "codex"],
-  "attack": ["claude", "codex", "gemini"],
-  "verify": ["codex", "claude", "gemini"],
-  "report": ["claude", "gemini", "codex"],
+  "discovery": ["claude", "codex"],
+  "source-analysis": ["claude", "codex"],
+  "attack": ["claude", "codex"],
+  "verify": ["codex", "claude"],
+  "report": ["claude", "codex"],
 };
 
 /**

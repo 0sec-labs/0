@@ -205,7 +205,7 @@ describe("runUnified — runtime gating", () => {
         targetType: "url",
         depth: "default",
         format: "json",
-        // intentionally invalid; the valid set is api|claude|codex|gemini|auto
+        // intentionally invalid; the valid set is api|claude|codex|auto
         runtime: "definitely-not-a-runtime" as never,
         timeout: 30000,
         verbose: false,

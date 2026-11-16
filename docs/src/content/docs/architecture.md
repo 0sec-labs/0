@@ -121,11 +121,10 @@ The pipeline does not depend on one model backend. Each adapter implements one i
 | Adapter | Backend |
 | --- | --- |
 | `LlmApiRuntime` | A configured API provider, with native tool calls. |
-| `ProcessRuntime` | The Claude, Codex or Gemini CLI as a subprocess. Not a tool sandbox. |
+| `ProcessRuntime` | The Claude or Codex CLI as a subprocess. Not a tool sandbox. |
 | `CliNativeRuntime` | A supported installed coding CLI, with CLI-native sessions. |
-| `OllamaRuntime` | Local Ollama. |
 
-`createRuntime(config)` builds API, process or Ollama runtimes from `config.type`. `auto` is a selection policy, not a class. MCP is separate from the model runtime. See [Configuration](/configuration/#runtime-modes).
+`createRuntime(config)` builds API or process runtimes from `config.type`. `auto` is a selection policy, not a class. MCP is separate from the model runtime. See [Configuration](/configuration/#runtime-modes).
 
 ## Execution isolation
 

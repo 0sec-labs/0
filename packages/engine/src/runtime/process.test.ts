@@ -71,18 +71,6 @@ describe("ProcessRuntime claude", () => {
   });
 });
 
-describe("ProcessRuntime gemini", () => {
-  it("does not return the raw event stream after an error result", async () => {
-    fakeCli("gemini", [{ type: "result", status: "error", error: { message: "quota exceeded" } }], 1);
-
-    const result = await new ProcessRuntime({ type: "gemini", timeout: 10_000 }).execute("Assess the target.");
-
-    expect(result.error).toBe("quota exceeded");
-    expect(result.output).toBe("");
-  });
-});
-
-
 describe("ProcessRuntime Codex cyber access program", () => {
   const events = [{ type: "item.completed", item: { type: "agent_message", text: "Source review complete." } }];
 

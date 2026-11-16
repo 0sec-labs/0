@@ -73,24 +73,16 @@ Rules:
 | `api` | Direct HTTPS calls to a configured provider. Required for `--provider` pinning and `--cyber-access-program`. |
 | `claude` | Runs the signed-in Claude Code CLI. |
 | `codex` | Managed source review keeps the native API tool boundary. Live scans use the ChatGPT Codex provider when you are signed in. |
-| `gemini` | Runs the signed-in Gemini CLI. |
-| `ollama` | Local Ollama for source review. Needs a tool-calling model. |
 
 `--model` does not select a runtime. Pass `--runtime api` to use the provider rules in [Models and keys](/models/) instead of workflow-based selection.
 
-The `claude`, `codex` and `gemini` runtimes need that CLI installed and signed in (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`):
+The `claude` and `codex` runtimes need that CLI installed and signed in (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`):
 
 ```bash
 0 scan source ./my-repo --runtime claude --depth deep
 ```
 
-Ollama:
-
-```bash
-OLLAMA_HOST=http://localhost:11434 0 scan source ./repo --runtime ollama --model gemma4:27b
-```
-
-The model is `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`. A remote `OLLAMA_HOST` receives your source context.
+`--runtime gemini` and `--runtime ollama` were removed in 0.35. Use `--runtime api` with an OpenAI-compatible endpoint instead; see [Custom and local providers](/models/#custom-and-local-providers).
 
 ## Common flags
 

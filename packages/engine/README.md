@@ -224,11 +224,10 @@ no wrapper, too short, too long, expected-shape mismatch), and the full
 The package provides multiple LLM runtime backends in `src/runtime/`:
 
 - **LlmApiRuntime** — direct API requests and native tool-use loops.
-- **ProcessRuntime** — subprocess adapters for Claude, Codex and Gemini CLIs.
-- **OllamaRuntime** — local inference through Ollama.
+- **ProcessRuntime** — subprocess adapters for Claude and Codex CLIs.
 - **CliNativeRuntime** — CLI-native session execution.
 
-`createRuntime(config)` constructs the API, process or Ollama runtime from
+`createRuntime(config)` constructs the API or process runtime from
 `config.type`. Other exported adapters have their own constructors.
 `pickRuntimeForStage` and `detectAvailableRuntimes` are registry helpers.
 Provider metadata does not establish credentials or account access.
