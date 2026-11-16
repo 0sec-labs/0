@@ -151,7 +151,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["memory"],
   }),
   cmd("plugin list", "Extensions", "Browse and turn on extensions", {
-    cli: "skills extensions list",
+    cli: "skills list",
     destination: "/extensions",
     aliases: ["plugins"],
     legacy: ["plugin", "hackstore", "store", "market", "marketplace"],

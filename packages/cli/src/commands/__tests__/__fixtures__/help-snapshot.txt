@@ -14,7 +14,7 @@ Work:
   agents              Agents and their automations: list, run, change
 
 Setup:
-  skills              Skills, plugins and connectors: list, add, run
+  skills              Skills and extensions: list, add
   memory              What 0 remembers across threads
   models              Models and provider connections
   computers|worker    Remote computers that run 0
@@ -668,7 +668,7 @@ Commands:
 ### 0 config audit-log (hidden)
 Usage: 0 config audit-log [options]
 
-Show the local log of privileged actions (connections, settings, plugins)
+Show the local log of privileged actions (connections, settings, extensions)
 
 Options:
   --q <text>     Only events whose action, subject or actor contains this text
@@ -3252,139 +3252,105 @@ Options:
 ### 0 plugin (hidden)
 Usage: 0 plugin [options] [command]
 
-Find, install, enable, inspect, run, and author plugins
+Moved: see `0 skills extensions`
 
 Options:
-  -h, --help                            display help for command
+  -h, --help      display help for command
 
 Commands:
-  list                                  List installed plugins and their per-project enabled/stale
-                                        state
-  search [options] <query>              Search the configured registry for plugins
-  browse [options]                      List everything in the configured registry
-  install [options] <id-or-path>        Install registry code, an offline source with --local, or
-                                        github:owner/repo after a review; never enables or executes
-  enable <id>                           Approve installed code or activate built-in scope
-                                        enforcement FOR THIS PROJECT
-  disable <id>                          Revoke project approval or disable built-in scope
-                                        enforcement (external files stay installed)
-  info <id>                             Show an installed plugin's manifest, capabilities, and
-                                        enablement state
-  run [options] <id> [tool] [pairs...]  Invoke a tool of an ENABLED plugin over the protocol
-                                        (spawns the plugin; effectful tools require --yes). Args:
-                                        key=value pairs and/or --json '<obj>'.
-  init [options] <name>                 Scaffold a new plugin directory ready to edit, validate,
-                                        and submit
-  validate [options] <path>             Validate a manifest.json (or a directory containing one)
-                                        against the plugin manifest contract
-  submit [options] <path>               Prepare the files to submit a plugin to the plugin
-                                        registry; does not publish (you open the pull request
-                                        yourself)
-  connectors [options]                  List service connectors (Linear, Slack and others) and
-                                        whether they are connected
-  connect [options] <service>           Connect a service connector; secrets come from environment
-                                        variables, never argv
-  disconnect [options] <service>        Forget a connector's credentials
-  mcp                                   Manage custom MCP servers that threads can use
-  help [command]                        display help for command
+  list            Moved: see `0 skills extensions`
+  search          Moved: see `0 skills extensions`
+  browse          Moved: see `0 skills extensions`
+  install         Moved: see `0 skills extensions`
+  enable          Moved: see `0 skills extensions`
+  disable         Moved: see `0 skills extensions`
+  info            Moved: see `0 skills extensions`
+  run             Moved: see `0 skills extensions`
+  init            Moved: see `0 skills extensions`
+  validate        Moved: see `0 skills extensions`
+  submit          Moved: see `0 skills extensions`
+  connectors      Moved: see `0 skills extensions`
+  connect         Moved: see `0 skills extensions`
+  disconnect      Moved: see `0 skills extensions`
+  mcp             Moved: see `0 skills extensions mcp`
+  help [command]  display help for command
 
 ### 0 plugin browse
 Usage: 0 plugin browse [options]
 
-List everything in the configured registry
+Moved: see `0 skills extensions`
 
 Options:
-  --registry <url>  plugin registry index URL (https)
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin connect
-Usage: 0 plugin connect [options] <service>
+Usage: 0 plugin connect [options]
 
-Connect a service connector; secrets come from environment variables, never argv
+Moved: see `0 skills extensions`
 
 Options:
-  --set <key=value>          A non-secret field (repeatable)
-  --secret-env <key=ENVVAR>  Read a secret field from this environment variable (repeatable)
-  --yes                      Approve connecting this service
-  --json                     Print machine-readable JSON
-  --db-path <path>           Use this engine database instead of the default
-  -h, --help                 display help for command
+  -h, --help  display help for command
 
 ### 0 plugin connectors
 Usage: 0 plugin connectors [options]
 
-List service connectors (Linear, Slack and others) and whether they are connected
+Moved: see `0 skills extensions`
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin disable
-Usage: 0 plugin disable [options] <id>
+Usage: 0 plugin disable [options]
 
-Revoke project approval or disable built-in scope enforcement (external files stay installed)
+Moved: see `0 skills extensions`
 
 Options:
   -h, --help  display help for command
 
 ### 0 plugin disconnect
-Usage: 0 plugin disconnect [options] <service>
+Usage: 0 plugin disconnect [options]
 
-Forget a connector's credentials
+Moved: see `0 skills extensions`
 
 Options:
-  --yes             Confirm
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin enable
-Usage: 0 plugin enable [options] <id>
+Usage: 0 plugin enable [options]
 
-Approve installed code or activate built-in scope enforcement FOR THIS PROJECT
+Moved: see `0 skills extensions`
 
 Options:
   -h, --help  display help for command
 
 ### 0 plugin info
-Usage: 0 plugin info [options] <id>
+Usage: 0 plugin info [options]
 
-Show an installed plugin's manifest, capabilities, and enablement state
+Moved: see `0 skills extensions`
 
 Options:
   -h, --help  display help for command
 
 ### 0 plugin init
-Usage: 0 plugin init [options] <name>
+Usage: 0 plugin init [options]
 
-Scaffold a new plugin directory ready to edit, validate, and submit
+Moved: see `0 skills extensions`
 
 Options:
-  --dir <path>  Parent directory to create the plugin in (default: cwd)
-  --force       Write into a non-empty target directory
-  -h, --help    display help for command
+  -h, --help  display help for command
 
 ### 0 plugin install
-Usage: 0 plugin install [options] <id-or-path>
+Usage: 0 plugin install [options]
 
-Install registry code, an offline source with --local, or github:owner/repo after a review; never
-enables or executes
+Moved: see `0 skills extensions`
 
 Options:
-  --registry <url>  plugin registry index URL (https)
-  --local           Install a local directory containing manifest.json and plugin.js (no network)
-  --ref <ref>       Branch, tag or commit for github:owner/repo
-  --replace         Replace an installed plugin when installing from GitHub
-  --yes             Install the reviewed GitHub commit
-  --json            Print machine-readable JSON for github:owner/repo
-  --db-path <path>  Engine database for github:owner/repo
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin list
 Usage: 0 plugin list [options]
 
-List installed plugins and their per-project enabled/stale state
+Moved: see `0 skills extensions`
 
 Options:
   -h, --help  display help for command
@@ -3392,109 +3358,79 @@ Options:
 ### 0 plugin mcp
 Usage: 0 plugin mcp [options] [command]
 
-Manage custom MCP servers that threads can use
+Moved: see `0 skills extensions mcp`
 
 Options:
-  -h, --help                         display help for command
+  -h, --help  display help for command
 
 Commands:
-  list [options]                     List custom MCP servers
-  add [options] <name> [command...]  Add an MCP server: `add <name> -- <cmd> [args...]` for a local
-                                     one or --url for a remote one; shows a review first
-  test [options] <id>                Start the server and list its tools
-  remove [options] <id>              Remove a custom MCP server
-  help [command]                     display help for command
+  list        Moved: see `0 skills extensions`
+  add         Moved: see `0 skills extensions`
+  test        Moved: see `0 skills extensions`
+  remove      Moved: see `0 skills extensions`
 
 ### 0 plugin mcp add
-Usage: 0 plugin mcp add [options] <name> [command...]
+Usage: 0 plugin mcp add [options]
 
-Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for a remote one; shows
-a review first
+Moved: see `0 skills extensions`
 
 Options:
-  --url <url>                  Remote server URL (https) instead of a local command
-  --transport <kind>           stdio, http or sse (default: stdio, or http with --url)
-  --cwd <path>                 Relative directory inside the workspace to run in
-  --env <KEY=VALUE>            Environment variable for a local server (repeatable)
-  --env-from <KEY=ENVVAR>      Take an environment value from this variable (repeatable)
-  --header <NAME=VALUE>        Header for a remote server (repeatable)
-  --header-from <NAME=ENVVAR>  Take a header value from this variable (repeatable)
-  --enable                     Enable it for threads once added
-  --allow-dangerous-env        Also approve environment variables that change which code loads
-  --yes                        Approve the reviewed command and settings
-  --json                       Print machine-readable JSON
-  --db-path <path>             Use this engine database instead of the default
-  -h, --help                   display help for command
+  -h, --help  display help for command
 
 ### 0 plugin mcp list
 Usage: 0 plugin mcp list [options]
 
-List custom MCP servers
+Moved: see `0 skills extensions`
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin mcp remove
-Usage: 0 plugin mcp remove [options] <id>
+Usage: 0 plugin mcp remove [options]
 
-Remove a custom MCP server
+Moved: see `0 skills extensions`
 
 Options:
-  --yes             Confirm the removal
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin mcp test
-Usage: 0 plugin mcp test [options] <id>
+Usage: 0 plugin mcp test [options]
 
-Start the server and list its tools
+Moved: see `0 skills extensions`
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin run
-Usage: 0 plugin run [options] <id> [tool] [pairs...]
+Usage: 0 plugin run [options]
 
-Invoke a tool of an ENABLED plugin over the protocol (spawns the plugin; effectful tools require
---yes). Args: key=value pairs and/or --json '<obj>'.
+Moved: see `0 skills extensions`
 
 Options:
-  --json <json>   JSON object of tool arguments
-  --yes           Authorize an effectful (non read-only) tool to run
-  --timeout <ms>  Per-call timeout in milliseconds
-  -h, --help      display help for command
+  -h, --help  display help for command
 
 ### 0 plugin search
-Usage: 0 plugin search [options] <query>
+Usage: 0 plugin search [options]
 
-Search the configured registry for plugins
+Moved: see `0 skills extensions`
 
 Options:
-  --registry <url>  plugin registry index URL (https)
-  -h, --help        display help for command
+  -h, --help  display help for command
 
 ### 0 plugin submit
-Usage: 0 plugin submit [options] <path>
+Usage: 0 plugin submit [options]
 
-Prepare the files to submit a plugin to the plugin registry; does not publish (you open the pull
-request yourself)
+Moved: see `0 skills extensions`
 
 Options:
-  --out <directory>  New output directory (default: <id>-submission)
-  -h, --help         display help for command
+  -h, --help  display help for command
 
 ### 0 plugin validate
-Usage: 0 plugin validate [options] <path>
+Usage: 0 plugin validate [options]
 
-Validate a manifest.json (or a directory containing one) against the plugin manifest contract
+Moved: see `0 skills extensions`
 
 Options:
-  --json      Emit machine-readable JSON
   -h, --help  display help for command
 
 ### 0 scan
@@ -4093,17 +4029,16 @@ Options:
 ### 0 skills
 Usage: 0 skills [options] [command]
 
-Skills, plugins and connectors: list, add, run
+Skills and extensions: list, add
 
 Options:
-  -h, --help                    display help for command
+  -h, --help              display help for command
 
 Commands:
-  list [options]                List installed skills and linked folders
-  add [options] <source>        Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a
-                                catalog id or owner/repo/path; shows one prompt first
-  run <name> [tool] [pairs...]  Run a skill or a plugin tool
-  help [command]                display help for command
+  list [options]          List installed skills and linked folders
+  add [options] <source>  Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a
+                          catalog id or owner/repo/path; shows one prompt first
+  help [command]          display help for command
 
 ### 0 skills add
 Usage: 0 skills add [options] <source>
@@ -4257,6 +4192,22 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
+### 0 skills extensions mcp (hidden)
+Usage: 0 skills extensions mcp [options] <name> [command...]
+
+Add one MCP server as a local extension: `mcp docs --url https://host/mcp` or `mcp docs -- npx -y
+some-mcp`; shows the same prompt first
+
+Options:
+  --url <https-url>  A remote server instead of a command
+  --preview          Only show the install prompt
+  --yes              Install the exact revision shown
+  --enable           Also enable it
+  --project <dir>    With --enable, enable for this project only
+  --json             Print machine-readable JSON
+  --db-path <path>   Use this engine database instead of the default
+  -h, --help         display help for command
+
 ### 0 skills extensions remove (hidden)
 Usage: 0 skills extensions remove [options] <name>
 
@@ -4330,14 +4281,6 @@ Options:
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
-
-### 0 skills run
-Usage: 0 skills run [options] <name> [tool] [pairs...]
-
-Run a skill or a plugin tool
-
-Options:
-  -h, --help  display help for command
 
 ### 0 skills show (hidden)
 Usage: 0 skills show [options] <id-or-name>
