@@ -12,6 +12,11 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Extensions: one installable unit, a git folder pinned to a commit, that can bundle skills, scripts run through bash, MCP server definitions, a connector, a scope policy and a verifier. `0 skills add <url|folder>@<full sha>` shows one prompt (repo at commit, what it can do, the diff since the last approved version) and installs only after `--yes`. `0 skills extensions list|info|enable|disable|update|remove` manage them. Third-party extensions never update on their own, a folder that no longer matches its pinned commit refuses to load, repository `.0/` and `.claude/` folders can only suggest extensions, and scripts get a scrubbed environment with only approved names.
+- A one-time importer carries earlier skills (with their pinned commit and approval) and custom MCP servers into extensions and reports what could not be migrated. It never deletes anything.
+
 ### Changed
 
 - Scope is a built-in extension that is on by default. It enforces whenever a scope is set (`--scope`, a thread, Agent or automation scope, a pull request checkout) and allows everything when none is, so a fresh install no longer runs scoped work unenforced. This reverses 0.33's "scope is off until enabled" and the rule that a scope file alone never activates checks.

@@ -80,3 +80,48 @@ Folder mounting works with local thread execution. Mounted skills are not copied
 - [Plugin security](/plugin-trust/#adding-skills-from-github): what to check before adding a skill from GitHub.
 - [Agents](/agents/): give a standing agent the skills it should load.
 - [Plugins](/plugins/): add tools, not instructions.
+
+## Extensions
+
+An extension is an installable folder, pinned to one git commit, that can bundle skills, scripts, MCP server definitions, a connector, a scope policy and a verifier. Scripts only ever run through bash, under the same scope, approvals and sandbox as any command. There is no second permission system.
+
+### Install
+
+```sh
+0 skills add https://github.com/owner/repo@<full commit sha>
+0 skills add ./my-extension
+```
+
+`0 skills add` looks at what the source contains and shows one prompt:
+
+- `repo @ full commit`, the licence, the file list and any hidden Unicode.
+- What it can do: runs commands (the scripts), connects to MCP servers (command or URL and environment variable names), calls a service (hosts and read/write list), defines a scope, receives environment variables.
+- Claude `hooks`, `commands` and `agents` are shown as ignored. They never run.
+
+Nothing is installed until you re-run with `--yes`. Add `--enable` to turn it on right away, with `--project <dir>` to limit it to one project. Branches, tags and short SHAs are refused: only the full 40-character SHA is stored. Installs are immutable and live in `~/.0/extensions/<name>/<sha>/`. A folder source has no commit, so its content hash is its version and any change asks again.
+
+An extension can use `extension.json` (preferred), `.claude-plugin/plugin.json`, `plugin.json` with an optional `"0"` object (`connector`, `scope`, `verify`, `requires`), or just a `SKILL.md` folder. The first one found wins.
+
+### Update, enable, remove
+
+```sh
+0 skills extensions list
+0 skills extensions info <name>
+0 skills extensions update <name>                 # shows the diff and what changed in capabilities
+0 skills extensions update <name> --to <sha> --yes
+0 skills extensions enable <name> [--project <dir>]
+0 skills extensions disable <name>
+0 skills extensions remove <name> --yes
+```
+
+Third-party extensions never update by themselves. `update` fetches the newer commit, shows the folder diff and any new capability, and waits for you to approve that exact commit with `--yes --to <sha>`. Even one new script asks again. Built-in extensions (`scope`, `github`) ship inside the binary and update with it; they cannot be removed, and disabling one needs `--yes`.
+
+### Safety
+
+- A folder whose content no longer matches its pinned commit refuses to load.
+- A repository's own `.0/` or `.claude/` folder can suggest extensions but never installs or enables one. Only approvals in `~/.0` count.
+- An extension's scripts get a scrubbed environment plus only the names it declared and you approved. Model provider keys are never passed unless the prompt listed them.
+
+### Moving from plugins
+
+The first time you use the commands above, 0 imports what you already have and prints what it could not migrate. It never deletes anything. Skills you added from GitHub keep their pinned commit and approval. Custom MCP servers become local extensions that you re-approve before first use (secret values stay where they are). Plugins with executable tools and model-written plugins cannot run in the new system: they are listed, kept, and need to be rewritten as scripts or an MCP server. Run `0 skills extensions import` to see the report again.

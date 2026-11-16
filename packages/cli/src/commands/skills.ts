@@ -4,6 +4,7 @@ import { lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Command } from "commander";
 import type { ConsoleClient } from "../console-skills-client.js";
+import { addExtension, isExtensionSource, registerExtensionCommands } from "./skills-extensions.js";
 import { UsageError, consoleOptions, defaultIo, emit, expectOk, renderTable, requireYes, runConsole, type CommandIo, type OutputOptions } from "./console-output.js";
 
 interface SkillRow { id: string; name: string; description: string; scope: string; writable: boolean; revision: string }
@@ -133,9 +134,11 @@ export function registerSkillsCommand(program: Command, io: CommandIo = defaultI
       emit(io, options, { ...data, skills: rows }, () => rows.length ? renderTable(rows.map(row => [row.id, row.installed ? (row.installed.current ? "added" : "update") : row.installable ? "-" : "blocked", row.summary.slice(0, 70)]), ["ID", "STATE", "SUMMARY"]) : "No catalog skills match.");
     }));
 
-  consoleOptions(skills.command("add <catalog-id-or-repo>").description("Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first")
-    .option("--preview", "Only show the review").option("--yes", "Install the reviewed commit"))
-    .action((source: string, options: OutputOptions & { preview?: boolean; yes?: boolean }) => run(options, async client => {
+  registerExtensionCommands(skills, io);
+
+  consoleOptions(skills.command("add <source>").description("Add skills or an extension: <url|owner/repo|folder>@<full sha>, or a catalog id / owner/repo[/path]; shows one prompt first")
+    .option("--preview", "Only show the review").option("--yes", "Install the reviewed commit").option("--enable", "Extensions: also enable it").option("--project <dir>", "Extensions: with --enable, enable for this project only"))
+    .action((source: string, options: OutputOptions & { preview?: boolean; yes?: boolean; enable?: boolean; project?: string }) => isExtensionSource(source) ? addExtension(io, source, options) : run(options, async client => {
       const repo = /^([^/]+\/[^/]+)(?:\/(.+))?$/.exec(source);
       const target = repo ? { repo: repo[1], path: repo[2] ?? "" } : { id: source };
       const review = record(expectOk(await client.request("POST", "/api/console/skills/catalog/preview", target)));
