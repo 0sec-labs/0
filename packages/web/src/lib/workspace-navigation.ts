@@ -1,5 +1,5 @@
 import { VOCAB } from "@/lib/vocabulary";
-import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlugIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
+import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
@@ -10,7 +10,6 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
   { to: "/extensions", label: "Extensions", icon: CapyPuzzleIcon },
-  { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
   { to: "/settings", label: "Settings", icon: CapySettingsIcon },
 ] as const;
 
@@ -53,6 +52,7 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/engines", routes: ["/engines"], to: "/computers", keep: "path" },
   { from: "/engagements", routes: ["/engagements", "/engagements/*"], to: "/scope", keep: "path" },
   { from: "/explore", routes: ["/explore", "/plugins/explore"], to: "/extensions", keep: "none" },
+  { from: "/plugins", routes: ["/plugins", "/plugins/:pluginId"], to: "/extensions", keep: "none" },
   { from: "/skills", routes: ["/skills", "/skills/*"], to: "/plugins/skills", keep: "path" },
 ];
 

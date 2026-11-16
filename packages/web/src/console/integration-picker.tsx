@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import { Plug, ShieldAlert, MessagesSquare } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBackendApi } from "@/api";
-import type { PluginsResponse } from "@/components/console-control/contracts";
 import {
   MENTION_GROUP_LABELS,
   filterMentions,
@@ -51,12 +50,6 @@ export function useIntegrationPicker({
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [selection, setSelection] = useState({ key: "", index: 0 });
   const open = !!mention && dismissed !== key;
-  const inventory = useQuery({
-    queryKey: queryKeys.consolePlugins(),
-    queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }),
-    enabled: open,
-    staleTime: 10_000,
-  });
   // Findings and missions reuse the shared query keys, so opening the menu costs no extra polling.
   const dashboard = useQuery({
     queryKey: queryKeys.chatFindings(client.backendId),
@@ -73,18 +66,6 @@ export function useIntegrationPicker({
   });
   const query = mention?.query ?? "";
   const groups: Partial<Record<MentionKind, MentionItem[]>> = {
-    plugin: filterMentions(
-      (inventory.data?.items ?? [])
-        .filter((plugin) => plugin.kind === "plugin" && plugin.state === "enabled" && plugin.loaded && !plugin.error)
-        .map((plugin) => ({
-          kind: "plugin" as const,
-          id: plugin.id,
-          label: plugin.name,
-          description: plugin.description,
-          token: `@${plugin.id} `,
-        })),
-      query,
-    ),
     finding: filterMentions(
       (dashboard.data?.groups ?? [])
         .filter((group) => group.latest.triageStatus !== "suppressed")
@@ -160,8 +141,8 @@ export function useIntegrationPicker({
     select,
     onKeyDown,
     id,
-    loading: inventory.isPending,
-    error: inventory.error,
+    loading: dashboard.isPending || missions.isPending,
+    error: dashboard.error ?? missions.error,
     textareaProps: {
       "aria-controls": open ? id : undefined,
       "aria-autocomplete": "list" as const,
@@ -295,15 +276,15 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
           {picker.loading
             ? "Loading…"
             : picker.error
-              ? "Couldn't load plugins."
-              : "No matching plugins, findings or threads."}
+              ? "Couldn't load results."
+              : "No matching findings or threads."}
         </p>
       )}
       <Link
-        to="/plugins"
+        to="/extensions"
         className="mt-1 flex min-h-[var(--h-menu-row,28px)] items-center gap-2 rounded-md px-2 py-1 leading-5 outline-none focus-visible:outline-ring-inset text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
       >
-        Manage plugins
+        Manage extensions
       </Link>
     </ComposerPickerSurface>
   );

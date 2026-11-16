@@ -24,6 +24,9 @@ export class ExtensionInstaller implements Installer {
     return this.#prepareFrom(resolved.value.source, undefined);
   }
 
+  /** The same prompt for a source the caller built itself (a typed MCP server). */
+  prepareSource(source: ExtensionSource): Promise<Result<PreparedInstall>> { return this.#prepareFrom(source, undefined); }
+
   async prepareUpdate(name: string, to?: string): Promise<Result<PreparedInstall | { upToDate: true; revision: string }>> {
     if (getBuiltin(name)) return err("builtin", `${name} is built in and updates with the 0 binary.`);
     const state = this.deps.store.read(); if (!state.ok) return state;

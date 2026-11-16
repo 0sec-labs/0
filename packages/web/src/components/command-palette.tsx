@@ -27,9 +27,8 @@ import {
 } from "@/components/ui/dialog";
 
 import type { DashboardResponse, ScanRecord } from "@/types";
-import type { SecurityWorkflow, ServicePluginsResponse } from "@0/engine/shared";
+import type { SecurityWorkflow } from "@0/engine/shared";
 import { searchSettings, settingsHref, settingsPages } from "./console-control/settings-index";
-import type { PluginsResponse } from "./console-control/contracts";
 import type { LearningResponse } from "./learning-panel";
 import { useTeamAccess } from "./team-access";
 import { useSentinels } from "@/sentinels/api";
@@ -94,8 +93,6 @@ export function CommandPalette({
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: queryKeys.appSearch(...scope, name), queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "automations"));
   const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
-  const pluginsQuery = useQuery(lazyList<PluginsResponse>("plugins", "/api/console/plugins", "plugins"));
-  const servicesQuery = useQuery(lazyList<ServicePluginsResponse>("services", "/api/console/service-plugins", "plugins"));
   const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
   const inventoryEnabled = open && (tab !== "all" || Boolean(searchQuery));
@@ -317,16 +314,6 @@ export function CommandPalette({
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
       run: () => navigate(`/plugins/skills?skill=${encodeURIComponent(skill.id)}`),
     });
-    for (const plugin of pluginsQuery.data?.items.filter(item => item.kind === "plugin") ?? []) base.push({
-      id: `plugin-${plugin.kind}-${plugin.id}`, group: "Plugins", href: "/plugins", label: plugin.name, meta: `Tool plugin · ${plugin.state}`, icon: CapyPlugIcon,
-      keywords: searchKeywords(plugin.id, plugin.description, ...plugin.capabilities),
-      run: () => navigate("/plugins"),
-    });
-    for (const service of servicesQuery.data?.items ?? []) base.push({
-      id: `service-${service.id}`, group: "Plugins", href: "/plugins", label: service.name, meta: service.configured ? "MCP server · connected" : "MCP server", icon: CapyPuzzleIcon,
-      keywords: searchKeywords(service.id, service.description, service.category),
-      run: () => navigate("/plugins"),
-    });
     for (const memory of memoryQuery.data?.knowledge ?? []) base.push({
       id: `memory-${memory.id}`, group: "Memory", label: memory.title || memory.summary || "Saved memory", meta: memory.status, icon: CapyDatabaseIcon,
       keywords: searchKeywords(memory.content, memory.summary, memory.target, memory.scope, memory.projectId),
@@ -367,7 +354,7 @@ export function CommandPalette({
     return [...remembered, ...chats, ...base];
   }, [
     chatsQuery.data, searchQuery, query, tab, recents, settingRows, resumeConsoleSession,
-    dashboard?.groups, dashboard?.workers, connection?.backends, workflowsQuery.data, sentinelsQuery.supported, sentinelsQuery.data, skillsQuery.data, pluginsQuery.data, servicesQuery.data, memoryQuery.data, sentinelsQuery.sentinels,
+    dashboard?.groups, dashboard?.workers, connection?.backends, workflowsQuery.data, sentinelsQuery.supported, sentinelsQuery.data, skillsQuery.data, memoryQuery.data, sentinelsQuery.sentinels,
     navigate,
     queryClient,
     selectedFingerprint,
@@ -378,9 +365,9 @@ export function CommandPalette({
   ]);
 
   const filteredItems = useMemo(() => filterAppSearch(items, deferredQuery, tab), [deferredQuery, items, tab]);
-  const inventories = [workflowsQuery, skillsQuery, pluginsQuery, servicesQuery, memoryQuery];
+  const inventories = [workflowsQuery, skillsQuery, memoryQuery];
   const inventoryLoading = inventories.some(result => result.isFetching && !result.data) || (sentinelsQuery.isFetching && !sentinelsQuery.data);
-  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "automations", skillsQuery.error && "skills", pluginsQuery.error && "plugins", servicesQuery.error && "integrations", memoryQuery.error && "Memory"].filter(Boolean) : [];
+  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "automations", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
 
   const orderedItems = useMemo(() => GROUPS.flatMap(group => filteredItems.filter(item => item.group === group)), [filteredItems]);
   const firstResult = orderedItems[0]?.id ?? "";
@@ -494,7 +481,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>{v("Search {missions}, pages and settings")}</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

@@ -5,14 +5,15 @@
  *
  *   GET  extensions                  overview rows + import report
  *   GET  extensions/info/<name>      install prompt for what is installed now
- *   POST extensions/preview          { source }                              -> install prompt, installs nothing
- *   POST extensions/install          { source, approvedRevision, confirm }   -> installs the exact revision shown
+ *   POST extensions/preview          { source } | { mcp }                    -> install prompt, installs nothing
+ *   POST extensions/install          { source | mcp, approvedRevision, confirm } -> installs the exact revision shown
+ *     mcp = { name, command, args? } or { name, url }: one local MCP server, reviewed through the same prompt
  *   POST extensions/update/preview   { name, to? }                           -> prompt with diff, or upToDate
  *   POST extensions/update           { name, to, approvedRevision, confirm } -> moves to the revision shown
  *   POST extensions/enable|disable   { name, approve? | confirm? }
  *   POST extensions/remove           { name, confirm }
  */
-import { approvalFor, createExtensionService, type ExtensionService, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
+import { approvalFor, createExtensionService, McpDraftSource, type ExtensionService, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
 import { z } from "zod";
 
 export interface ExtensionReply { status: number; data: unknown }
@@ -26,9 +27,10 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 const revision = z.string().regex(/^(?:[0-9a-f]{40}|local-[0-9a-f]{16})$/);
 const name = z.string().min(1).max(64);
 const source = z.string().min(1).max(2048);
+const mcp = z.object({ name: z.string().min(1).max(64), command: z.string().min(1).max(1024).optional(), args: z.array(z.string().max(1024)).max(64).optional(), url: z.string().min(1).max(2048).optional() }).strict();
 const schemas = {
-  preview: z.object({ source }).strict(),
-  install: z.object({ source, approvedRevision: revision, confirm: z.literal(true), enable: z.boolean().optional() }).strict(),
+  preview: z.union([z.object({ source }).strict(), z.object({ mcp }).strict()]),
+  install: z.union([z.object({ source, approvedRevision: revision, confirm: z.literal(true), enable: z.boolean().optional() }).strict(), z.object({ mcp, approvedRevision: revision, confirm: z.literal(true), enable: z.boolean().optional() }).strict()]),
   updatePreview: z.object({ name, to: z.string().regex(FULL_SHA).optional() }).strict(),
   update: z.object({ name, to: z.string().regex(FULL_SHA).optional(), approvedRevision: revision, confirm: z.literal(true) }).strict(),
   enable: z.object({ name, approve: z.boolean().optional() }).strict(),
@@ -44,6 +46,13 @@ const prompt = (p: PreparedInstall) => ({ prompt: p.prompt, installed: false });
 async function prepareExactly(svc: ExtensionService, input: string, approved: string): Promise<Result<PreparedInstall>> {
   const text = input.trim();
   const prepared = await svc.installer.prepare(FULL_SHA.test(approved) && !/@[0-9a-f]{40}$/.test(text) ? `${text}@${approved}` : text);
+  if (prepared.ok && prepared.value.prompt.revision !== approved) return { ok: false, error: { code: "review_mismatch", message: "This changed since you reviewed it. Review it again." } };
+  return prepared;
+}
+
+/** A typed MCP server prepared again and required to be the revision the operator reviewed (the revision is its content hash). */
+async function prepareDraft(svc: ExtensionService, draft: z.infer<typeof mcp>, approved: string): Promise<Result<PreparedInstall>> {
+  const prepared = await svc.installer.prepareSource(new McpDraftSource(draft));
   if (prepared.ok && prepared.value.prompt.revision !== approved) return { ok: false, error: { code: "review_mismatch", message: "This changed since you reviewed it. Review it again." } };
   return prepared;
 }
@@ -67,9 +76,9 @@ export async function handleExtensionRequest(svc: ExtensionService, path: string
     if (info && method === "GET") return fromResult(svc.info(decodeURIComponent(info[1]!)), v => ({ status: 200, data: { prompt: v.prompt, enabled: v.entry.enabled } }));
     if (method !== "POST") return fail("bad_request", "Method not allowed.", 405);
     switch (path) {
-      case "extensions/preview": return await body(schemas.preview, async v => fromResult(await svc.installer.prepare(v.source), p => ({ status: 200, data: prompt(p) })));
+      case "extensions/preview": return await body(schemas.preview, async v => fromResult("mcp" in v ? await svc.installer.prepareSource(new McpDraftSource(v.mcp)) : await svc.installer.prepare(v.source), p => ({ status: 200, data: prompt(p) })));
       case "extensions/install": return await body(schemas.install, async v => {
-        const prepared = await prepareExactly(svc, v.source, v.approvedRevision);
+        const prepared = "mcp" in v ? await prepareDraft(svc, v.mcp, v.approvedRevision) : await prepareExactly(svc, v.source, v.approvedRevision);
         return fromResult(prepared, p => fromResult(svc.installer.commit(p, approvalFor(p, v.enable ? { scope: "global" as const } : undefined)), done => ({ status: 201, data: { installed: true, ...done, enabled: v.enable === true } })));
       });
       case "extensions/update/preview": return await body(schemas.updatePreview, async v => fromResult(await svc.installer.prepareUpdate(v.name, v.to), r => ({ status: 200, data: "upToDate" in r ? r : prompt(r) })));

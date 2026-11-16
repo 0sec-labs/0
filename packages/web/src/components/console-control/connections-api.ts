@@ -1,33 +1,10 @@
 import { queryKeys } from "@/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
-import type { McpServerPayload } from "./mcp-model";
-import { connectionsClient, isUnsupported, mcpClient, type ConnectionsState } from "./mcp-contract";
+import { connectionsClient, isUnsupported, type ConnectionsState } from "./connections-contract";
 
-export const mcpQueryKey = ["console-mcp-servers"] as const;
 export const connectionsQueryKey = queryKeys.consoleConnections();
 const retryUnlessUnsupported = (count: number, error: unknown) => !isUnsupported(error) && count < 2;
-
-/** Custom MCP servers and GitHub plugins. `supported` is false against a host that predates these routes, so the page keeps today's behaviour. */
-export function useMcpServers() {
-  const { webFetchJson } = useBackendApi();
-  const queryClient = useQueryClient();
-  const client = mcpClient(webFetchJson);
-  const query = useQuery({ queryKey: mcpQueryKey, queryFn: ({ signal }) => client.list(signal), refetchInterval: 15_000, retry: retryUnlessUnsupported });
-  const supported = !query.isError || !isUnsupported(query.error);
-  const refresh = async () => { await Promise.all([mcpQueryKey, ["console-plugins"], ["console-tools"], ["workflow-tool-catalog"]].map(queryKey => queryClient.invalidateQueries({ queryKey }))); };
-  return {
-    query, supported, servers: supported ? query.data ?? [] : [],
-    preview: useMutation({ mutationFn: (config: McpServerPayload) => client.preview(config) }),
-    create: useMutation({ mutationFn: ({ config, fingerprint, enable }: { config: McpServerPayload; fingerprint: string; enable: boolean }) => client.create(config, fingerprint, enable), onSuccess: refresh }),
-    update: useMutation({ mutationFn: ({ id, ...patch }: { id: string; enabled?: boolean; approvedFingerprint?: string }) => client.update(id, patch), onSuccess: refresh, onError: () => { void query.refetch(); } }),
-    remove: useMutation({ mutationFn: ({ id }: { id: string }) => client.remove(id), onSuccess: refresh }),
-    test: useMutation({ mutationFn: ({ id }: { id: string }) => client.test(id), onSettled: refresh }),
-    githubReview: useMutation({ mutationFn: (input: { repo: string; ref?: string }) => client.githubReview(input) }),
-    githubApprove: useMutation({ mutationFn: (input: Parameters<typeof client.githubApprove>[0]) => client.githubApprove(input), onSuccess: refresh }),
-  };
-}
-export type McpActions = ReturnType<typeof useMcpServers>;
 
 /** Labels, order, spread, per-model switches and usage. `supported` is false on an older host. */
 export function useConnectionExtras() {

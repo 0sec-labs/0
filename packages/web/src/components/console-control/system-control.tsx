@@ -118,7 +118,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
   const { webFetchJson } = useBackendApi();
   const [filter, setFilter] = useState("");
   const [role, setRole] = useState("");
-  const tools = useQuery({ queryKey: queryKeys.consoleTools(), queryFn: ({ signal }) => webFetchJson<{ roles: string[]; tools: { name: string; description: string; roles: string[] }[]; plugins: { name: string; description: string }[] }>("/api/console/tools", { signal }) });
+  const tools = useQuery({ queryKey: queryKeys.consoleTools(), queryFn: ({ signal }) => webFetchJson<{ roles: string[]; tools: { name: string; description: string; roles: string[] }[] }>("/api/console/tools", { signal }) });
   const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(sessionId), enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}?window=1&workers=summary`, { signal })).snapshot, refetchInterval: 3000 });
   // Windowed snapshots omit the catalog; it is fixed for the session, so fetch it once. Older servers still send it inline.
   const catalog = useQuery({ queryKey: queryKeys.consoleSessionTools(sessionId), enabled: !!sessionId && snapshot.data?.tools.length === 0, staleTime: Infinity, queryFn: async ({ signal }) => (await webFetchJson<{ tools: SessionSnapshot["tools"] }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}/tools`, { signal })).tools });
@@ -138,6 +138,5 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
       {tools.data && rows.length === 0 && <Empty>No tools match these filters.</Empty>}
       <ul className="divide-y divide-border-1">{rows.map(tool => <li key={tool.name} className="space-y-1 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul>
     </ControlCard>
-    {tools.data?.plugins.length ? <ControlCard title="Plugin tools"><ul className="space-y-3">{tools.data.plugins.map(tool => <li key={tool.name}><p className="font-medium text-sm">{tool.name}</p><p className="text-xs text-muted-foreground">{tool.description}</p></li>)}</ul></ControlCard> : null}
   </div>;
 }

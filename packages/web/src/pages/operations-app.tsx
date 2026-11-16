@@ -15,7 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
   CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
-  PluginDetailPage, ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
+  ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
@@ -95,7 +95,7 @@ export function OperationsApp() {
           <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
           <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
           <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
-          {["connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
+          {["connections", "models", "settings", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/automations" element={<WorkflowsPage />} />
@@ -106,7 +106,6 @@ export function OperationsApp() {
           <Route path="/plugins/skills" element={<SkillsPage />} />
           <Route path="/plugins/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
           <Route path="/extensions" element={<ExtensionsPage />} />
-          <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
           <Route path="/memory" element={<LearningPage />} />
           <Route path="/scope" element={<EngagementsPage />} />
           <Route path="/findings" element={findings} />

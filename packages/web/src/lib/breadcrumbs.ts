@@ -43,7 +43,7 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
         if (label) return [{ label: "Skills", to: "/plugins/skills" }, { label: "Installed", to: "/plugins/skills" }, { label }];
         return [{ label: "Skills", to: "/plugins/skills" }, { label: browse ? "Browse" : "Installed" }];
       }
-      return [{ label: "Plugins" }, ...(second ? [{ label: label ?? "Plugin" }] : [])];
+      return [{ label: "Extensions" }];
     case "extensions": return [{ label: "Extensions" }];
     case "computers": case "engines": return list("Computers", "/computers");
     case "memory": return list("Memory", "/memory");

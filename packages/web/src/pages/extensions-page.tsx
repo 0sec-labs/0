@@ -4,6 +4,7 @@ import { PageContent, PageHeader } from "@/components/page-header";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { CapyPlusIcon } from "@/ui/icons/capy";
 import { AddExtensionDialog } from "@/components/extensions/add-extension-dialog";
+import { AddMcpDialog } from "@/components/extensions/add-mcp-dialog";
 import { ConnectionsSection } from "@/components/extensions/connections-section";
 import { ExtensionRow } from "@/components/extensions/extension-row";
 import { ReviewSheet } from "@/components/extensions/review-sheet";
@@ -46,7 +47,7 @@ export function ExtensionsPage() {
 
   return <PageContent aria-label="Extensions">
     <PageHeader title="Extensions" summary="Add-ons that give 0 skills, commands and connections. Each is pinned to a commit and never updates on its own."
-      actions={<Button size="sm" variant="inverse" disabled={!api.canChange || busy} onClick={flow.openAdd}><CapyPlusIcon className="size-4" />Add extension</Button>} />
+      actions={<div className="flex gap-2"><Button size="sm" variant="outline" disabled={!api.canChange || busy} onClick={flow.openAddMcp}>Add MCP server</Button><Button size="sm" variant="inverse" disabled={!api.canChange || busy} onClick={flow.openAdd}><CapyPlusIcon className="size-4" />Add extension</Button></div>} />
     {!api.canChange && <p className="text-sm text-muted-foreground-1">Only owners can add or change extensions.</p>}
     <ConnectionsSection canChange={api.canChange} />
     {note && <p role="status" className="text-sm text-muted-foreground-1">{note}</p>}
@@ -60,6 +61,7 @@ export function ExtensionsPage() {
         {data.rows.map(row => <ExtensionRow key={row.name} row={row} disabled={!api.canChange || busy} onToggle={toggle} onUpdate={r => void flow.startUpdate(r)} onRemove={r => setConfirm({ kind: "remove", row: r })} />)}
       </ul>}
     <AddExtensionDialog open={flow.step === "source"} pending={flow.pending} error={flow.error} problem={flow.problem} onSubmit={source => void flow.submitSource(source)} onClose={flow.close} />
+    <AddMcpDialog open={flow.step === "mcp"} pending={flow.pending} error={flow.error} onSubmit={input => void flow.submitInput(input)} onClose={flow.close} />
     <ReviewSheet open={flow.step === "review"} view={flow.view} pending={flow.pending} error={flow.error} onConfirm={() => void flow.confirm()} onClose={flow.close} />
     <ConfirmDialog open={confirm !== null} onOpenChange={open => { if (!open) setConfirm(null); }} pending={busy} destructive={confirm?.kind === "remove"} confirmLabel={confirm?.kind === "remove" ? "Remove" : "Turn off"} onConfirm={confirmed}
       title={confirm?.kind === "remove" ? `Remove ${confirm.row.name}?` : `Turn off ${confirm?.row.name ?? ""}?`}

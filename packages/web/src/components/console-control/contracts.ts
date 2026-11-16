@@ -38,9 +38,6 @@ export interface ModelsResponse {
 }
 export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum" | "number" | "text"; default: unknown; choices?: string[]; min?: number; max?: number; step?: number; maxLength?: number; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean; accessUpgradeNotice?: { agents: number; threads: number } }
-export interface PluginItem { id: string; kind: "plugin"; name: string; version: string; description: string; capabilities: string[]; signature: "verified" | "unverified"; state: "available" | "installed" | "enabled"; loaded: boolean; error: string | null; logo?: string; toolCount?: number; skillCount?: number; tools?: { name: string; description: string }[]; skills?: { name: string; description: string }[]; source?: "registry" | "github" | "local"; sha?: string; repo?: string }
-export interface PluginsResponse { executionProfile: "local" | "smolvm"; registry: { url: string; available: boolean; error: string | null }; items: PluginItem[]; deferred: string[]; host: { loadedPluginIds: string[]; tools: { name: string; description: string }[] } }
-export interface PluginResult { ok: boolean; message: string; state?: string; capabilities?: string[]; deferred?: boolean }
 export interface CheckItem { id: string; name: string; prompt: string; revision: number; enabled: boolean; approvedRevision: number | null }
 export interface ChecksResponse { project: string; checks: CheckItem[] }
 export interface ProjectResponse { path: string; name: string; git: { branch: string | null; dirty: boolean; root: string | null; error: string | null } }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { connectionsClient, normalizeConnectionUsage, usageUnavailableNote } from "./mcp-contract";
-import { usageBar } from "./mcp-model";
+import { connectionsClient, normalizeConnectionUsage, usageUnavailableNote } from "./connections-contract";
+import { usageBar } from "./connections-model";
 
 const openrouter = { usage: { available: true, source: "openrouter-key", reason: null, window: { kind: "credit-limit", limit: 10, remaining: 7.5, usedTotal: 2.5, usedDaily: 0.5, usedWeekly: null, usedMonthly: null, currency: "USD" } } };
 

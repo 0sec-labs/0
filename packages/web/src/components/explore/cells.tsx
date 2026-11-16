@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CapyCheckIcon as Check } from "@/ui/icons/capy";
-import { EntryLogo } from "@/components/console-control/mcp-ui";
+import { EntryLogo } from "@/components/console-control/entry-logo";
 import { LogoTile } from "@/ui/components/logo-tile";
 import { Tooltip } from "@/components/ui/tooltip";
-import { safeLogo } from "@/components/console-control/mcp-model";
+import { safeLogo } from "@/components/console-control/connections-model";
 
 /** The small verified check at a tile corner. `hint` adds a tooltip; the accessible name is always `label`. */
 export function VerifiedMark({ label = "Verified", hint, size = "sm" }: { label?: string; hint?: string; size?: "sm" | "md" }) {

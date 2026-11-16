@@ -57,6 +57,7 @@ export interface Approval { approvedRevision: string; promptId: string; capabili
 /** Install lifecycle as the CLI and the future Extensions page see it. */
 export interface Installer {
   prepare(input: string): Promise<Result<PreparedInstall>>;
+  prepareSource(source: ExtensionSource): Promise<Result<PreparedInstall>>;
   commit(prepared: PreparedInstall, approval: Approval): Result<{ name: string; revision: string; replaced: string | null }>;
   prepareUpdate(name: string, to?: string): Promise<Result<PreparedInstall | { upToDate: true; revision: string }>>;
   enable(name: string, options?: { project?: string; approve?: boolean }): Result<{ name: string; revision: string | null; builtin: boolean }>;

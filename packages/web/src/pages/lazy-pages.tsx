@@ -17,7 +17,6 @@ const loaders = {
   workers: () => import("@/pages/workers-page"),
   controls: () => import("@/pages/console-controls-page"),
   sentinels: () => import("@/pages/sentinels-page"),
-  pluginDetail: () => import("@/pages/plugin-detail-page"),
   extensions: () => import("@/pages/extensions-page"),
   skillCatalog: () => import("@/pages/skill-catalog-detail-page"),
 } as const;
@@ -53,7 +52,6 @@ export const SkillsPage = lazyRoute(() => loaders.skills().then((m) => m.SkillsP
 export const WorkersPage = lazyRoute(() => loaders.workers().then((m) => m.WorkersPage));
 export const SentinelsPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelsPage));
 export const SentinelPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelPage));
-export const PluginDetailPage = lazyRoute(() => loaders.pluginDetail().then((m) => m.PluginDetailPage));
 export const ExtensionsPage = lazyRoute(() => loaders.extensions().then((m) => m.ExtensionsPage));
 export const SkillCatalogDetailPage = lazyRoute(() => loaders.skillCatalog().then((m) => m.SkillCatalogDetailPage));
 export const WebConsoleControlsPage = lazyRoute(() => loaders.controls().then((m) => m.WebConsoleControlsPage));
@@ -65,12 +63,12 @@ export function prefetchRoute(name: RouteName) {
   void loaders[name]().catch(() => started.delete(name));
 }
 
-const CONTROL_ROUTES = ["connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"];
+const CONTROL_ROUTES = ["connections", "models", "settings", "doctor", "tools", "project", "fix"];
 export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
   if (first === "console") return second === "saved" ? "saved" : undefined;
   if (first === "chats") return second === "saved" ? "saved" : "console";
-  if (first === "plugins" && second && second !== "skills") return "pluginDetail";
+  if (first === "plugins" && second === "skills") return "skills";
   if (first === "extensions") return "extensions";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {

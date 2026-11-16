@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { ApiError } from "@/lib/api-error";
 import { failureLine, promptView, sourceProblem, type ExtensionRowDto, type InstallPromptDto, type PromptView } from "@/lib/extensions-model";
-import type { ExtensionsApi } from "./use-extensions";
+import type { ExtensionsApi, InstallInput } from "./use-extensions";
 
 type Flow =
   | { step: "closed" }
   | { step: "source" }
-  | { step: "review"; mode: "install"; source: string; prompt: InstallPromptDto }
+  | { step: "mcp" }
+  | { step: "review"; mode: "install"; input: InstallInput; prompt: InstallPromptDto }
   | { step: "review"; mode: "update" | "approve"; name: string; prompt: InstallPromptDto };
 
 const messageOf = (cause: unknown, fallback: string): string => cause instanceof ApiError ? failureLine(cause.code, cause.message) : cause instanceof Error ? cause.message : fallback;
@@ -30,12 +31,14 @@ export function useReviewFlow(api: ExtensionsApi) {
   return {
     step: flow.step, view: reviewView, error, notice, pending, close,
     openAdd: () => { setError(""); setNotice(""); setFlow({ step: "source" }); },
+    openAddMcp: () => { setError(""); setNotice(""); setFlow({ step: "mcp" }); },
     problem: (source: string) => sourceProblem(source),
-    async submitSource(source: string) {
+    async submitInput(input: InstallInput) {
       setError("");
-      try { const { prompt } = await api.preview.mutateAsync(source.trim()); setFlow({ step: "review", mode: "install", source: source.trim(), prompt }); }
+      try { const { prompt } = await api.preview.mutateAsync(input); setFlow({ step: "review", mode: "install", input, prompt }); }
       catch (cause) { fail(cause, "Could not read that source."); }
     },
+    submitSource(source: string) { return this.submitInput({ source: source.trim() }); },
     async startUpdate(row: ExtensionRowDto) {
       setError(""); setNotice("");
       try {
@@ -52,7 +55,7 @@ export function useReviewFlow(api: ExtensionsApi) {
       if (flow.step !== "review") return;
       setError("");
       try {
-        if (flow.mode === "install") { await api.install.mutateAsync({ source: flow.source, approvedRevision: flow.prompt.revision, enable: false }); setNotice(`Added ${flow.prompt.name}. Turn it on when you are ready.`); }
+        if (flow.mode === "install") { await api.install.mutateAsync({ ...flow.input, approvedRevision: flow.prompt.revision, enable: false }); setNotice(`Added ${flow.prompt.name}. Turn it on when you are ready.`); }
         else if (flow.mode === "update") { await api.update.mutateAsync({ name: flow.name, approvedRevision: flow.prompt.revision }); setNotice(`Updated ${flow.name}.`); }
         else { await api.enable.mutateAsync({ name: flow.name, approve: true }); setNotice(`Turned on ${flow.name}.`); }
         setFlow({ step: "closed" });

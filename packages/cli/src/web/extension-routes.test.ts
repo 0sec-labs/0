@@ -24,6 +24,20 @@ function fixture() {
 const call = (svc: ReturnType<typeof createExtensionService>, method: string, path: string, body?: unknown) => handleExtensionRequest(svc, path, method, body);
 
 describe("extension routes", () => {
+  it("adds a typed MCP server as a local extension through the same prompt and exact-revision confirm", async () => {
+    const { svc } = fixture();
+    const mcp = { name: "docs", command: "npx", args: ["-y", "docs-mcp"] };
+    const preview = await call(svc, "POST", "extensions/preview", { mcp });
+    expect(preview?.status).toBe(200);
+    const prompt = (preview!.data as { prompt: { revision: string; canDo: string[] } }).prompt;
+    expect(prompt.revision).toMatch(/^local-/); expect(prompt.canDo.join(" ")).toContain("docs");
+    expect(svc.list().rows.some(r => r.name === "docs")).toBe(false);
+    expect((await call(svc, "POST", "extensions/install", { mcp: { ...mcp, args: ["evil"] }, approvedRevision: prompt.revision, confirm: true }))?.status).toBe(409);
+    expect((await call(svc, "POST", "extensions/install", { mcp: { name: "x", url: "http://insecure" }, approvedRevision: prompt.revision, confirm: true }))?.status).toBe(400);
+    expect((await call(svc, "POST", "extensions/install", { mcp, approvedRevision: prompt.revision, confirm: true }))?.status).toBe(201);
+    expect(svc.list().rows.find(r => r.name === "docs")).toBeTruthy();
+  });
+
   it("previews without installing, then installs only the exact reviewed revision after an explicit confirm", async () => {
     const { svc, repo, v1 } = fixture();
     const preview = await call(svc, "POST", "extensions/preview", { source: `${repo}@${v1}` });

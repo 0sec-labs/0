@@ -10,7 +10,6 @@ const TITLES: Array<[RegExp, string]> = [
   [/^\/(?:agents|sentinels)(?:\/|$)/, "Agents"],
   [/^\/plugins\/skills(?:\/|$)/, "Skills"],
   [/^\/extensions(?:\/|$)/, "Extensions"],
-  [/^\/plugins(?:\/|$)/, "Plugins"],
   [/^\/(?:settings|project|fix)(?:\/|$)/, "Settings"],
   [/^\/connections(?:\/|$)/, "Models"],
   [/^\/models(?:\/|$)/, "Models"],

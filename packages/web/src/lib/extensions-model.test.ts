@@ -51,3 +51,15 @@ describe("MCP tool review on an enabled extension", () => {
     expect(statusView(row({ status: "enabled", enabled: true, mcp: [{ ...review, state: "approved", reason: "" }] })).label).toBe("On");
   });
 });
+
+describe("Add MCP server input", () => {
+  it("splits a command with quotes and sends a URL as a URL", async () => {
+    const { mcpDraftInput, mcpDraftProblem, splitCommand } = await import("./extensions-model");
+    expect(splitCommand(`npx -y "my pkg" 'a b'`)).toEqual(["npx", "-y", "my pkg", "a b"]);
+    expect(mcpDraftInput("docs", "npx -y docs-mcp")).toEqual({ mcp: { name: "docs", command: "npx", args: ["-y", "docs-mcp"] } });
+    expect(mcpDraftInput("docs", "https://example.com/mcp")).toEqual({ mcp: { name: "docs", url: "https://example.com/mcp" } });
+    expect(mcpDraftProblem("Docs", "x")).toMatch(/lowercase/);
+    expect(mcpDraftProblem("docs", "http://example.com")).toMatch(/https/);
+    expect(mcpDraftProblem("docs", "npx x")).toBeNull();
+  });
+});

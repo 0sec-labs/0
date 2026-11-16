@@ -917,7 +917,7 @@ export type {
 // Extensions: the one installable unit (store, installer, install prompt, importer). See plugins/extensions/index.ts.
 export {
   createExtensionService, parseManifest as parseExtensionManifest, renderInstallPrompt, extensionEnv, readRepoSuggestions, extensionSkillRoots, runStartupImport,
-  BUILTIN_EXTENSIONS, approvalFor, approvalRefusal, FsExtensionStore, DefaultSourceResolver, ExtensionInstaller, LegacyImporter, loadable as loadableExtensions, listRows as listExtensionRows, gitTreeHash,
+  BUILTIN_EXTENSIONS, approvalFor, approvalRefusal, FsExtensionStore, DefaultSourceResolver, McpDraftSource, ExtensionInstaller, LegacyImporter, loadable as loadableExtensions, listRows as listExtensionRows, gitTreeHash,
 } from "./plugins/extensions/index.js";
 export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,

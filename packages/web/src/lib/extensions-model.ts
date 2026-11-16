@@ -108,3 +108,25 @@ export function failureLine(code: string | undefined, message: string): string {
   if (code === "needs_approval") return "Review it before turning it on.";
   return message;
 }
+
+/** Split a typed command into words. Single and double quotes group; there is no other shell syntax. */
+export function splitCommand(text: string): string[] {
+  return (text.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(word => word.replace(/^(["'])(.*)\1$/, "$2"));
+}
+const isUrl = (text: string) => /^https?:\/\//i.test(text.trim());
+
+/** The Add MCP server form checked before any request. Returns an error line or null. */
+export function mcpDraftProblem(name: string, target: string): string | null {
+  if (!/^[a-z][a-z0-9]*([._-][a-z0-9]+)*$/.test(name.trim())) return "Name it with lowercase letters, digits and . _ - (start with a letter).";
+  if (!target.trim()) return "Enter a command or an https URL.";
+  if (isUrl(target) && !/^https:\/\//i.test(target.trim())) return "A URL must start with https://.";
+  if (isUrl(target) && /\s/.test(target.trim())) return "A URL cannot contain spaces.";
+  return null;
+}
+
+/** `https://…` is a remote server; anything else is a command line. */
+export function mcpDraftInput(name: string, target: string): { mcp: { name: string; command?: string; args?: string[]; url?: string } } {
+  if (isUrl(target)) return { mcp: { name: name.trim(), url: target.trim() } };
+  const [command = "", ...args] = splitCommand(target);
+  return { mcp: { name: name.trim(), command, args } };
+}

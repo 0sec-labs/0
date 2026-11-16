@@ -14,10 +14,10 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CapyGripIcon as Grip } from "@/ui/icons/capy";
-import { useConnectionExtras, useConnectionUsage } from "./mcp-api";
-import { usageUnavailableNote } from "./mcp-contract";
+import { useConnectionExtras, useConnectionUsage } from "./connections-api";
+import { usageUnavailableNote } from "./connections-contract";
 import { accountDisplayName, disconnectCopy } from "./connection-model";
-import { moveBefore, moveId, usageBar } from "./mcp-model";
+import { moveBefore, moveId, usageBar } from "./connections-model";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
