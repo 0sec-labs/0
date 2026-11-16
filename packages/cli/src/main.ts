@@ -175,6 +175,11 @@ let userArgs = process.argv.slice(2);
   const resolved = resolveInvocation(userArgs);
   if (resolved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(formatMovedNotice(resolved.notice, process.stderr.isTTY === true));
   userArgs = resolved.args;
+  // A valid `--module` was rewritten to its implementation command above; one that is still here has no module to run.
+  if (userArgs[0] === "scan" && userArgs.some(arg => arg === "--module" || arg.startsWith("--module="))) {
+    console.error("Unknown or missing --module value. Use deep, repair, campaign, deps or deps-fix.");
+    process.exit(2);
+  }
 }
 process.argv = [process.argv[0], process.argv[1], ...userArgs];
 const scanRoute = rewriteScanArgs(userArgs);
