@@ -111,7 +111,7 @@ describe("secure local engine discovery", () => {
     const paths = fixture();
     expect(() => registerLocalEngine(descriptor(paths.workspace, { url: "https://example.test/" }), paths.dbPath, paths)).toThrow("loopback");
     cleanup.push(registerLocalEngine(descriptor(paths.workspace), paths.dbPath, paths));
-    await expect(connectLocalEngine({ ...paths, workspace: paths.homeDir })).rejects.toThrow("owns this database");
+    await expect(connectLocalEngine({ ...paths, workspace: paths.homeDir })).rejects.toThrow("This console is for");
     await expect(connectLocalEngine({ ...paths, model: "replacement" })).rejects.toThrow("owns model");
     await expect(connectLocalEngine({ ...paths, scopePath: "/scope.json" })).rejects.toThrow("owns model");
   });

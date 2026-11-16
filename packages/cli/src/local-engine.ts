@@ -111,7 +111,7 @@ function openLocalRegistry(options: Omit<LocalEngineDiscoveryOptions, "workspace
   const descriptor = readDescriptor(path);
   if (!descriptor) return null;
   if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
-  if (options.workspace !== undefined && realpathSync(options.workspace) !== descriptor.workspace) throw new Error(`The console running for ${descriptor.workspace} owns this database. Run this command from that folder, or stop that console first.`);
+  if (options.workspace !== undefined && realpathSync(options.workspace) !== descriptor.workspace) throw new Error(`This console is for ${descriptor.workspace}. Run the command there, or add --db-path <path>.`);
   if (options.model !== undefined || options.scopePath !== undefined || options.allowApply === true) throw new Error("The running local engine owns model, scope and application permissions. Attach using its configuration instead of overriding it.");
   const backendId = "discovered-local-engine";
   const registry = new BackendConnectionRegistry({
@@ -180,6 +180,6 @@ export function findLiveLocalEngine(options: { dbPath?: string; homeDir?: string
   const descriptor = readDescriptor(path);
   if (!descriptor) return null;
   if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
-  if (realpathSync(options.workspace) !== descriptor.workspace) throw new Error(`The console running for ${descriptor.workspace} owns this database. Run this command from that folder, or stop that console first.`);
+  if (realpathSync(options.workspace) !== descriptor.workspace) throw new Error(`This console is for ${descriptor.workspace}. Run the command there, or add --db-path <path>.`);
   return { url: descriptor.url, token: descriptor.token, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId };
 }
