@@ -74,7 +74,7 @@ export const SecurityWorkflowInputSchema = z.object({
   ownerSentinelId: identifier.nullable().optional(), runIn: identifier.optional(), model: modelSchema.nullable().optional(),
 }).strict().superRefine((workflow, context) => {
   const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
-  if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in a Sentinel's home mission requires an owner Sentinel.");
+  if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in an Agent's home mission requires an owner Agent.");
   const ids = new Set(workflow.nodes.map(node => node.id));
   if (ids.size !== workflow.nodes.length) issue("Workflow node IDs must be unique.");
   const triggers = workflow.nodes.filter(node => node.type === "trigger");

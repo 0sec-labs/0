@@ -359,7 +359,7 @@ export class SentinelRunner {
     if (existing && this.#missions.reopen) {
       try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true); return reopened.id; } catch { /* Fall through to a fresh standing mission. */ }
     }
-    const home = this.#missions.create(this.#missionConfig(sentinel, `Sentinel: ${sentinel.name}`));
+    const home = this.#missions.create(this.#missionConfig(sentinel, `Agent: ${sentinel.name}`));
     actor?.onMissionCreated?.(home.id);
     return this.#store.setHomeMission(sentinel.id, home.id, Boolean(existing)).homeMissionId ?? home.id;
   }

@@ -288,7 +288,7 @@ describe("triggers API, ownership and deletion", () => {
   it("clears ownerSentinelId on hard delete and rejects workflows owned by a missing Agent", async () => {
     const f = fixture();
     const { id, automation } = await f.armed({}, "sentinel-home");
-    expect(() => f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: "ghost" })).toThrow(/Owner Sentinel/);
+    expect(() => f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: "ghost" })).toThrow(/Owner Agent/);
     const version = (await f.view(id)).version;
     const deleted = await f.call("DELETE", `${P}/${id}?version=${version}`);
     expect(deleted.status).toBe(200);

@@ -108,7 +108,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       requireYes(options.yes, "Deleting an Agent cannot be undone.");
       const current = await sentinel(client, id);
       return { ...(await client.request("DELETE", `${ROOT}/${enc(current.id)}?version=${current.version}`) as object), id: current.id };
-    }, result => `Deleted Sentinel ${result.id}`));
+    }, result => `Deleted Agent ${result.id}`));
 
   consoleFlags(group.command("run <id>").description("Run an Agent now; starts a thread (needs a running engine)")
     .option("--task <text>", "Task for this run").option("--yes", "Confirm that this run is authorized"))
