@@ -17,7 +17,8 @@ export function renderStill(c: CanvasRenderingContext2D, kind: BackdropKind, wid
   const scene = makeScene(theme.rgb ?? parseInk(theme.ink) ?? [128, 128, 128], theme.dpr ?? 1, theme.dark, true)
   c.save()
   c.globalAlpha = 1; c.fillStyle = theme.ink; c.strokeStyle = theme.ink
-  sketch.resize(width, height)
-  sketch.frame(c, width, height, time ?? sketch.still ?? STILL_TIME, { x: -1e4, y: -1e4, fresh: false }, scene)
+  const painted = height * (sketch.band ?? 1)
+  sketch.resize(width, painted)
+  sketch.frame(c, width, painted, time ?? sketch.still ?? STILL_TIME, { x: -1e4, y: -1e4, fresh: false }, scene)
   c.restore()
 }

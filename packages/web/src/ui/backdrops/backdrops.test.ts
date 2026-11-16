@@ -3,17 +3,18 @@ import { contrastRatio, parseColor } from "../../lib/appearance-model"
 import { COLOR_THEMES, mixSrgb, tokensFor, type ThemeMode } from "../../lib/color-themes"
 import { safeAlpha } from "./contrast"
 import { MAX_DPR, MAX_FPS, STILL_TIME, cappedDpr, createLoop, shouldAnimate, watchActivity, type LoopEnv } from "./engine"
-import { BACKDROPS, DEFAULT_BACKDROP, PEAK_ALPHA, REMOVED_BACKDROPS, isBackdrop, parseBackdrop } from "./kinds"
+import { BACKDROPS, BAND, DEFAULT_BACKDROP, LEGACY_BACKDROPS, PEAK_ALPHA, REMOVED_BACKDROPS, isBackdrop, parseBackdrop } from "./kinds"
 import { makeScene } from "./scene"
 import { SKETCHES } from "./sketches"
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe("registry", () => {
-  it("lists None plus six unique kinds with plain labels and keeps Dither as the default", () => {
-    expect(BACKDROPS.map(item => item.label)).toEqual(["None", "Dither", "Contours", "Glyph contours", "Fish school", "Plankton", "Ink"])
+  it("lists None plus seven unique kinds with plain labels and makes Dither (the top-only dots) the default", () => {
+    expect(BACKDROPS.map(item => item.label)).toEqual(["None", "Dither", "Dither flow", "Contours", "Glyph contours", "Fish school", "Plankton", "Ink"])
     expect(new Set(BACKDROPS.map(item => item.id)).size).toBe(BACKDROPS.length)
-    expect(DEFAULT_BACKDROP).toBe("dither")
+    expect(DEFAULT_BACKDROP).toBe("dither-top")
+    expect(BACKDROPS.map(item => item.id)).toEqual(["none", "dither-top", "dither-flow", "contours", "glyph", "school", "plankton", "ink"])
     expect(PEAK_ALPHA.none).toBe(0)
     expect(BACKDROPS.filter(item => item.id !== "none").every(item => PEAK_ALPHA[item.id] > 0 && PEAK_ALPHA[item.id] <= 0.75)).toBe(true)
   })
@@ -25,10 +26,15 @@ describe("registry", () => {
 
 describe("migration of removed backdrops", () => {
   it("maps every removed or unknown kind to Dither and keeps none and the new kinds", () => {
-    for (const old of REMOVED_BACKDROPS) { expect(isBackdrop(old), old).toBe(false); expect(parseBackdrop(old), old).toBe("dither") }
+    // Id table: dither-top = Dither (default), dither-flow = Dither flow, and the stored id `dither` (the owner's earlier choice) now reads as dither-top.
+    expect(LEGACY_BACKDROPS).toEqual({ dither: "dither-top" })
+    expect(parseBackdrop("dither")).toBe("dither-top")
+    expect(parseBackdrop("dither-flow")).toBe("dither-flow")
+    expect(parseBackdrop("toString")).toBe("dither-top")
+    for (const old of REMOVED_BACKDROPS) { expect(isBackdrop(old), old).toBe(false); expect(parseBackdrop(old), old).toBe("dither-top") }
     expect(REMOVED_BACKDROPS).toEqual(["aurora", "grid", "scanline", "code-rain", "waves", "ripple", "constellation", "topography"])
-    expect(parseBackdrop(null)).toBe("dither")
-    expect(parseBackdrop("matrix")).toBe("dither")
+    expect(parseBackdrop(null)).toBe("dither-top")
+    expect(parseBackdrop("matrix")).toBe("dither-top")
     expect(parseBackdrop("none")).toBe("none")
     for (const item of BACKDROPS) expect(parseBackdrop(item.id)).toBe(item.id)
   })
@@ -42,7 +48,7 @@ describe("selection persistence", () => {
     vi.stubGlobal("document", { documentElement: { dataset: {} } })
     vi.resetModules()
     const appearance = await import("../../lib/web-appearance")
-    expect(appearance.getWebBackground()).toBe("dither")
+    expect(appearance.getWebBackground()).toBe("dither-top")
     appearance.setWebBackground("glyph")
     expect(appearance.getWebBackground()).toBe("glyph")
     expect(data.get("zero-web-background")).toBe("glyph")
@@ -95,6 +101,18 @@ describe("loop and activity", () => {
     expect(times[0]).toBe(14)
     expect(times.length - 1).toBeLessThanOrEqual(11)
     expect(times.length - 1).toBeGreaterThan(6)
+  })
+  it("a slow scene sleeps between frames instead of waking at every display refresh, and pausing cancels the sleep", () => {
+    const sleeps: { id: number; ms: number }[] = [], cancelled: number[] = []
+    let rafs = 0, nextId = 1, pendingWake: (() => void) | undefined, pendingTick: ((now: number) => void) | undefined
+    const env: LoopEnv = { raf: cb => { rafs++; pendingTick = cb; return 0 }, caf: () => {}, wait: (cb, ms) => { pendingWake = cb; sleeps.push({ id: nextId, ms }); return nextId++ }, unwait: id => void cancelled.push(id) }
+    const frame = vi.fn()
+    const loop = createLoop(frame, env, 6)
+    loop.play(); pendingTick!(0)
+    expect(sleeps).toHaveLength(1); expect(sleeps[0]!.ms).toBeGreaterThan(100)
+    const before = rafs; pendingWake!(); pendingTick!(170)
+    expect(rafs).toBe(before + 1); expect(frame).toHaveBeenCalledTimes(1)
+    loop.pause(); expect(cancelled).toContain(2)
   })
   it("never paints faster than 30 fps and cancels its frame when paused", () => {
     const { env, step, pending } = fakeEnv()
@@ -172,10 +190,21 @@ describe("canvas scenes", () => {
       expect(calls.stroke + calls.fill + calls.text + calls.rect, `${kind} ${w}x${h} ${dark ? "dark" : "light"}`).toBeGreaterThan(0)
     }
   })
-  it("slow scenes cap their own frame rate at 10 to 20 fps", () => {
-    for (const kind of kinds) { const fps = SKETCHES[kind]().fps; expect(fps, kind).toBeGreaterThanOrEqual(10); expect(fps, kind).toBeLessThanOrEqual(20) }
+  it("slow scenes cap their own frame rate at 10 to 20 fps (Dither drifts slowly enough for 6)", () => {
+    for (const kind of kinds) { const fps = SKETCHES[kind]().fps; if (kind === "dither-top") { expect(fps).toBeLessThanOrEqual(8); continue } expect(fps, kind).toBeGreaterThanOrEqual(10); expect(fps, kind).toBeLessThanOrEqual(20) }
+  })
+  it("Dither paints only the top band, fades out below it, stays still-cheap and keeps the original dot size", () => {
+    const sketch = SKETCHES["dither-top"](), w = 1440, h = Math.round(900 * BAND), rows = new Set<number>(), centre: number[] = []
+    expect(sketch.band).toBe(BAND); expect(sketch.cell).toBe(3); expect(sketch.fps).toBeLessThanOrEqual(8)
+    const ctx = { canvas: undefined, save() {}, restore() {}, imageSmoothingEnabled: true, fillRect: (x: number, y: number) => { rows.add(Math.floor(y / 3)); if (x > 560 && x < 880) centre.push(y) }, fillStyle: "" } as unknown as CanvasRenderingContext2D
+    sketch.resize(w, h)
+    sketch.frame(ctx, w, h, 8, { x: 0, y: 0, fresh: false }, makeScene([212, 212, 216], 1, true))
+    expect(rows.size).toBeGreaterThan(20)
+    expect(Math.max(...rows) * 3).toBeLessThanOrEqual(h)
+    expect(centre.length).toBeGreaterThan(0)
+    expect(Math.max(...centre), "the lower middle behind the composer stays clear").toBeLessThan(900 * 0.5)
   })
   it("only the organic scenes react to the pointer", () => {
-    expect(kinds.filter(kind => SKETCHES[kind]().pointer).sort()).toEqual(["dither", "glyph", "ink", "plankton", "school"])
+    expect(kinds.filter(kind => SKETCHES[kind]().pointer).sort()).toEqual(["dither-flow", "glyph", "ink", "plankton", "school"])
   })
 })

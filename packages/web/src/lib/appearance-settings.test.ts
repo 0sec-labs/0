@@ -10,7 +10,7 @@ describe("parseAppearance", () => {
     expect(parseAppearance({ mode: "dark", theme: "zero", accent: "blue", background: "ink", fontSize: "large", motion: "reduce" })).toEqual({ mode: "dark", theme: "zero", accent: "blue", background: "ink", fontSize: "large", motion: "reduce" });
   });
   it("reads a removed background as Dither and keeps none", () => {
-    for (const old of ["aurora", "grid", "scanline", "code-rain", "waves", "ripple", "constellation", "topography"]) expect(parseAppearance({ background: old }).background, old).toBe("dither");
+    for (const old of ["aurora", "grid", "scanline", "code-rain", "waves", "ripple", "constellation", "topography"]) expect(parseAppearance({ background: old }).background, old).toBe("dither-top");
     expect(parseAppearance({ background: "none" }).background).toBe("none");
   });
   it("drops an accent the theme cannot take", () => {

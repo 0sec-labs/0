@@ -41,19 +41,20 @@ Each group is a keyboard radiogroup (`ChoiceGroup`). One-line descriptions, plai
 
 ## Backgrounds
 
-Settings > Appearance > Background offers None plus six scenes. Each is a canvas 2D sketch with its own frame cap, a still frame for tiles and reduced motion, and the same theme-ink colouring and contrast cap.
+Settings > Appearance > Background offers None plus seven scenes. Each is a canvas 2D sketch with its own frame cap, a still frame for tiles and reduced motion, and the same theme-ink colouring and contrast cap.
 
 | Option | What it is | Cap |
 | --- | --- | --- |
 | None | Nothing behind the thread | |
-| Dither (flow), the default | Dither flow v2: a domain-warped noise field, lit by three drifting lights, ordered-dithered in two tones with sparse accent dots | 12 fps |
+| Dither, the default (`dither-top`) | The original new-thread backdrop: a slow simplex field ordered-dithered (4x4 Bayer) into 3 px dots, painted only in the top 64% of the screen and faded out downward by the original radial mask. The canvas is that band only, at the dot grid size, scaled up pixelated | 6 fps |
+| Dither flow (`dither-flow`) | Dither flow v2, full screen: a domain-warped noise field, lit by three drifting lights, ordered-dithered in two tones with sparse accent dots | 12 fps |
 | Contours | A printed survey map: marching squares on a drifting field, minor, major and index lines, dot-tally elevation marks | 10 fps |
 | Glyph contours | A field of monospace punctuation chosen from a density ramp, densest along the ridges of drifting noise | 10 fps |
 | Fish school | Three depth layers of boids drawn as tapered fish with trails, dithered | 20 fps |
 | Plankton | Drifting plankton with dithered glow halos and four slow jellyfish | 16 fps |
 | Ink | Two ink plumes carried by a divergence-free flow, thinning into dithered wisps | 20 fps |
 
-Aurora, Grid, Scanline, Code rain, Waves, Ripple, Constellation and the old Topography were removed. A saved choice of any of them reads as Dither (`REMOVED_BACKDROPS` and `parseBackdrop` in `kinds.ts`); None stays None. Shared modules: `noise.ts` (simplex and value noise), `bayer.ts`, `boids.ts`, `curl.ts`, `pixels.ts` and `pixel-sketch.ts` (the low-resolution dither surface and its fixed-step host). Dither scenes keep the lab's low internal resolution and pixelated upscale. `assets/backdrops/print-sonar.html` is a spare candidate for the marketing site and is not part of the app.
+Aurora, Grid, Scanline, Code rain, Waves, Ripple, Constellation and the old Topography were removed. A saved choice of any of them reads as Dither (`dither-top`) (`REMOVED_BACKDROPS` and `parseBackdrop` in `kinds.ts`); None stays None. The stored id `dither` (before Dither flow existed it was the original Dither, and in between it named the flow scene) reads as `dither-top`; pick Dither flow again to get `dither-flow`. Shared modules: `noise.ts` (simplex and value noise), `bayer.ts`, `boids.ts`, `curl.ts`, `pixels.ts` and `pixel-sketch.ts` (the low-resolution dither surface and its fixed-step host). Dither scenes keep the lab's low internal resolution and pixelated upscale. `assets/backdrops/print-sonar.html` is a spare candidate for the marketing site and is not part of the app.
 
 ## Capy reference
 

@@ -22,6 +22,8 @@ export interface Sketch {
   fps?: number
   /** Dither scenes: logical px per cell. The host then sizes the canvas to the cell grid (`cellLayout`) and CSS scales it up, pixelated. */
   cell?: number
+  /** Fraction of the screen height the scene paints, from the top. The host sizes the layer to that band and the sketch receives the band as its box. */
+  band?: number
   /** True when the scene keeps its own pixels between frames (it redraws only what changed), so the host must not clear the canvas. */
   retained?: boolean
   /** Seconds into the scene that its single still frame shows (reduced motion, hidden, hover-off, tiles). */

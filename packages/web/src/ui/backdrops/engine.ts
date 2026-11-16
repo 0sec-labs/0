@@ -11,26 +11,29 @@ export const unit = (width: number) => Math.min(1, Math.max(0.3, width / 1000))
 export interface Activity { visible: boolean; onscreen: boolean; playing: boolean; reduced: boolean }
 export const shouldAnimate = (a: Activity) => a.visible && a.onscreen && a.playing && !a.reduced
 
-export interface LoopEnv { raf: (callback: (now: number) => void) => number; caf: (id: number) => void }
-const browserEnv: LoopEnv = { raf: callback => requestAnimationFrame(callback), caf: id => cancelAnimationFrame(id) }
+/** `wait`/`unwait` (optional) sleep between frames of a slow scene so the page is not woken at every display refresh; without them the loop polls on `raf`. */
+export interface LoopEnv { raf: (callback: (now: number) => void) => number; caf: (id: number) => void; wait?: (callback: () => void, ms: number) => number; unwait?: (id: number) => void }
+const browserEnv: LoopEnv = { raf: callback => requestAnimationFrame(callback), caf: id => cancelAnimationFrame(id), wait: (callback, ms) => window.setTimeout(callback, ms), unwait: id => window.clearTimeout(id) }
 export interface Loop { play(): void; pause(): void; draw(): void; readonly running: boolean }
 
 /** A frame-capped loop (`fps` at most the engine cap) on a virtual clock that starts at `start`: pausing never makes the scene jump when it resumes. */
 export function createLoop(frame: (seconds: number) => void, env: LoopEnv = browserEnv, fps = MAX_FPS, start = STILL_TIME): Loop {
   const interval = 1000 / Math.min(MAX_FPS, fps) - 1
-  let clock = start, last = -1, id = 0, on = false
+  const sleeps = interval > 40
+  let clock = start, last = -1, id = 0, timer = 0, on = false
+  const next = () => { if (sleeps && env.wait) { timer = env.wait(() => { id = env.raf(tick) }, interval - 12) } else id = env.raf(tick) }
   const tick = (now: number) => {
-    id = env.raf(tick)
-    if (last < 0) { last = now; return }
+    if (last < 0) { last = now; next(); return }
     const elapsed = now - last
-    if (elapsed < interval) return
+    if (elapsed < interval) { id = env.raf(tick); return }
     last = now
-    clock += Math.min(elapsed, 100) / 1000
+    clock += Math.min(elapsed, Math.max(100, interval * 2)) / 1000
     frame(clock)
+    next()
   }
   return {
     play() { if (on) return; on = true; last = -1; id = env.raf(tick) },
-    pause() { if (!on) return; on = false; env.caf(id) },
+    pause() { if (!on) return; on = false; env.caf(id); env.unwait?.(timer) },
     draw() { frame(clock) },
     get running() { return on },
   }

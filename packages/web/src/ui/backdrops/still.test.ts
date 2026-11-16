@@ -43,7 +43,7 @@ describe("renderStill", () => {
     expect(log.drawn).toBe(0)
   })
   it("a frame changes with time for the animated kinds and is deterministic for the same time", () => {
-    for (const kind of ["dither", "contours", "school", "plankton"] as const) {
+    for (const kind of ["dither-top", "dither-flow", "contours", "school", "plankton"] as const) {
       const at = (time: number) => { const { ctx, log } = recorder(); renderStill(ctx, kind, 400, 250, { ink: "#555555" }, time); return [...log.points].join("|") }
       expect(at(8), kind).toBe(at(8))
       expect(at(8), kind).not.toBe(at(20))
@@ -51,8 +51,8 @@ describe("renderStill", () => {
   })
   it("uses the dark or light tone from the ink unless told", () => {
     const light = recorder(), dark = recorder()
-    renderStill(light.ctx, "dither", 200, 120, { ink: "rgb(82, 82, 91)" })
-    renderStill(dark.ctx, "dither", 200, 120, { ink: "rgb(212, 212, 216)" })
+    renderStill(light.ctx, "dither-top", 200, 120, { ink: "rgb(82, 82, 91)" })
+    renderStill(dark.ctx, "dither-top", 200, 120, { ink: "rgb(212, 212, 216)" })
     expect(light.log.drawn).toBeGreaterThan(0); expect(dark.log.drawn).toBeGreaterThan(0)
   })
   it("tiles are boosted well above the screen cap but never opaque", () => {

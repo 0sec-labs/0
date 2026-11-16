@@ -7,7 +7,7 @@ import { cn } from "../lib/utils.js"
 import { CanvasSketch } from "./canvas-sketch.js"
 import { readSafeAlpha } from "./contrast.js"
 import { shouldAnimate, watchActivity, type Activity } from "./engine.js"
-import { PEAK_ALPHA, tileOpacity, type BackdropKind } from "./kinds.js"
+import { PEAK_ALPHA, bandOf, tileOpacity, type BackdropKind } from "./kinds.js"
 import { SKETCHES } from "./sketches.js"
 
 /** Whether the layer may move: visible tab, on screen, `playing`, and no reduced-motion request. */
@@ -33,10 +33,11 @@ function Layer({ kind, preview, playing, className }: { kind: BackdropKind; prev
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-accent", "data-color-theme"] })
     return () => observer.disconnect()
   }, [peak])
+  const band = bandOf(kind)
   const opacity = preview ? tileOpacity(kind) : cap
   return (
     <div ref={ref} aria-hidden="true" data-slot="backdrop" data-kind={kind} className={cn("pointer-events-none absolute inset-0 overflow-hidden text-[var(--dither-ink)] [container-type:size]", !preview && "z-[-1]", className)}
-      style={{ opacity }}>
+      style={{ opacity, ...(band < 1 ? { bottom: "auto", height: `${band * 100}%` } : null) }}>
       {make && <CanvasSketch create={make} animate={animate} />}
     </div>
   )

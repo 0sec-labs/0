@@ -19,6 +19,7 @@ on the GitHub Release tag.
 - The default look follows Capy's visual system: a blue accent (buttons, send, selection, focus ring, links) in dark and light, 3/6/8/12px radii, 0.8px control borders, 14px icons, 100ms colour-only control feedback with no press dim, and one-icon suggestion chips. Neutral stays as an accent choice. Tokens are listed in docs/design/tokens.md.
 - The Agents | Threads switch is a small icon toggle on the list header, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
 - Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
+- The original Dither background is back and is the default again: dots only in the top part of the screen, fading out downward, drawn on a small canvas that covers just that band and runs at 6 frames per second, pausing when the tab is hidden or off screen. The full-screen scene is now Dither flow in the Background list. A saved Dither choice shows the original Dither; pick Dither flow to keep the full-screen one.
 
 ### Removed
 
