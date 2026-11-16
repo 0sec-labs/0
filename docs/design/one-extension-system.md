@@ -1,5 +1,7 @@
 # One extension system: plugins
 
+Architecture of the store, installer and importer (step 2): [extension-architecture.md](./extension-architecture.md). Naming decision: user-facing text says "extension"; skills stay "skills".
+
 Status: DESIGN ONLY, nothing implemented. Owner direction (Doruk): everything beyond
 the tiny core is a plugin; scope, connectors and MCP are plugins; one word; drop
 registry signatures and harness trust.

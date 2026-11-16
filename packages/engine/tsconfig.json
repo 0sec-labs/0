@@ -7,5 +7,5 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.sync-conflict-*"]
+  "exclude": ["src/**/*.test.ts", "src/plugins/extensions/__tests__/fixtures.ts", "src/**/*.sync-conflict-*"]
 }
