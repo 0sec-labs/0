@@ -19,6 +19,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
 - `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
 
 ## [0.38.0] - 2026-11-16

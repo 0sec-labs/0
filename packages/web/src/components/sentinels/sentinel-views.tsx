@@ -14,7 +14,7 @@ import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { displayTime } from "@/components/workflow-triggers";
 import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
 import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
-import { sentinelHref } from "@/sentinels/model";
+import { addedSuggestions, sentinelHref, suggestedSchedule, type SentinelPresetAutomation } from "@/sentinels/model";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
 import { AddTriggerDialog } from "./add-trigger-dialog";
@@ -169,9 +169,20 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   const [creating, setCreating] = useState(false);
   const workflowId = search.get("workflow");
   const open = (id: string | null) => setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); return next; });
-  const setUp = (item: { templateId?: string; runIn: string }) => { if (item.templateId) void create.fromTemplate(item.templateId, { ownerSentinelId: sentinel.id, runIn: item.runIn as "sentinel-home" | "new-mission" }).then(definition => open(definition.id)).catch(cause => toast({ title: "Unable to set up the automation", description: errorText(cause, "Try again."), kind: "error" })); };
+  const { createTrigger } = useSentinelMutations();
+  const setUp = (item: SentinelPresetAutomation) => {
+    if (!item.templateId) return;
+    const schedule = item.trigger.kind === "schedule" ? suggestedSchedule(item.trigger.cadence, Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC") : undefined;
+    void create.fromTemplate(item.templateId, { ownerSentinelId: sentinel.id, runIn: item.runIn })
+      .then(async definition => {
+        // The suggested schedule is added switched off; enabling it is the reviewed step.
+        if (schedule) await createTrigger.mutateAsync({ id: sentinel.id, automationId: definition.id, kind: "schedule", schedule }).catch(cause => toast({ title: "The automation was added without its schedule", description: errorText(cause, "Add a trigger from the automation."), kind: "error" }));
+        open(definition.id);
+      })
+      .catch(cause => toast({ title: "Unable to set up the automation", description: errorText(cause, "Try again."), kind: "error" }));
+  };
   const preset = presets.data?.find(item => item.id === sentinel.role);
-  const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
+  const added = addedSuggestions(preset?.suggestedAutomations ?? [], (owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
   if (workflowId) return <AutomationEditor workflowId={workflowId} onClose={() => open(null)} />;
   return <div className="space-y-8">
     <Section title="Automations" action={readOnly ? undefined : <Button size="xs" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />New automation</Button>}>
@@ -184,11 +195,11 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
     {(owned.data ?? []).length > 0 && <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />}
     {preset && preset.suggestedAutomations.length > 0 && <Section title="Suggested">
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
-        {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+        {preset.suggestedAutomations.map((item, index) => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
           <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground-1">{item.trigger.kind === "schedule" ? item.trigger.cadence : item.trigger.kind}</span></span>
-          {item.templateId && !ownedTemplates.has(item.templateId)
+          {item.templateId && !added[index]
             ? <Button size="sm" variant="secondary" disabled={readOnly} onClick={() => setUp(item)}>Set up</Button>
-            : <Badge variant={item.templateId && ownedTemplates.has(item.templateId) ? "success" : "neutral"}>{item.templateId && ownedTemplates.has(item.templateId) ? "Added" : "Manual"}</Badge>}
+            : <Badge variant={added[index] ? "success" : "neutral"}>{added[index] ? "Added" : "Manual"}</Badge>}
         </li>)}
       </ul>
     </Section>}
