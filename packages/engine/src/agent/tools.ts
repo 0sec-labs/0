@@ -6536,10 +6536,13 @@ export class ToolExecutor {
     const requestedMs = Math.max(1, ((timeoutSec as number) ?? 90) * 1000);
     const env = { ...sanitizedEnv(), TARGET: this.ctx.target };
 
+    const signal = this._executionContext.getStore()?.signal;
+
     const outcome = await runScannerProcess(binary, argv, {
       timeoutMs: requestedMs,
       ceilingMs,
       env,
+      signal,
     });
 
     if (outcome.kind === "error") {
@@ -6574,12 +6577,14 @@ export class ToolExecutor {
           },
         };
       }
-      // Any other spawn failure is a genuine error.
-      this.recordToolHealth({
-        tool,
-        category: "error",
-        message: `${tool} failed: ${outcome.message}`.slice(0, 300),
-      });
+      // Any other spawn failure is a genuine error, EXCEPT intentional operator cancellation.
+      if (!outcome.cancelled) {
+        this.recordToolHealth({
+          tool,
+          category: "error",
+          message: `${tool} failed: ${outcome.message}`.slice(0, 300),
+        });
+      }
       return {
         success: false,
         output: null,
