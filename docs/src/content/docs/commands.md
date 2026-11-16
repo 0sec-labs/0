@@ -1264,6 +1264,7 @@ Guide: [Read the workflow](/findings/#verify-and-fix).
 | `--db-path <path>` | — | Database containing --finding-id |
 | `--verification-result <path>` | — | Optional verification_result JSON from `0 scan verify`; required when the finding does not already carry one |
 | `--test-command <command>` **required** | — | Explicit regression command to run in the isolated candidate worktree |
+| `--verify-image <image>` | — | Run --test-command in this digest-pinned container image with the network off; without it the command runs on this machine and the fix is never labelled Verified |
 | `--runtime <runtime>` | `auto` | Fix runtime: auto or api |
 | `-m, --model <model>` | — | Model identifier for the selected runtime |
 | `--api-key <key>` | — | API key for the selected runtime |
@@ -5018,6 +5019,7 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | `--folder <path>` | — | Folder the thread works in |
 | `--target <target>` | — | Authorized target |
 | `--scope <path>` | — | Scope policy JSON file |
+| `--skill <id>` | — | Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it |
 | `--title <title>` | — | Thread title |
 | `--wait` | — | Wait for the turn to finish and print the reply |
 | `--cost-ceiling <usd>` | — | Stop the thread when its estimated spend reaches this many USD |

@@ -35,7 +35,7 @@ function fakeModel(repo: string, claim: string, edit: boolean): (input: ConsoleG
       configureWorkspace: () => undefined, setWebSearchEnabled: () => undefined, setApprovals: async () => undefined, reconfigureRuntime: () => undefined,
       configureEngagement: () => undefined, setWorkerPolicy: () => undefined, clearConversation: () => undefined, stopPersistentAgent: async () => true,
       stopPersistentAgents: async () => undefined, exportCheckpoint: () => { throw new Error("no"); }, prepareHandoff: async () => ({}), cleanup: async () => undefined,
-      async send(text) {
+      async send(text: string) {
         messages.push({ role: "user", content: [{ type: "text", text }] });
         sent.push(text);
         if (edit) writeFileSync(join(repo, ".github/workflows/ci.yml"), WORKFLOW(`some-org/some-action@${"c".repeat(40)} # v1`));

@@ -107,7 +107,7 @@ Not verified: zizmor failed (detector did not run)
 
 - Without Docker or podman the result is **Not verified**, never Verified. `0 scan fix --test-command` without `--verify-image` still runs on this machine, and its line says so.
 - `0 scan fix ./my-app --finding finding.json --test-command "npm test" --verify-image ghcr.io/org/image@sha256:<digest>` runs the command in that digest-pinned image.
-- `0 threads start "Harden the workflows" --folder . --skill workflow-hardening --wait` runs zizmor with the repository's own configuration and actionlint after the Agent finishes. A planted unpinned action must be flagged first, so a configuration that turns the detector off reads as Not verified.
+- `0 threads send new "Harden the workflows" --folder . --skill workflow-hardening --wait` runs zizmor with the repository's own configuration and actionlint after the Agent finishes. A planted unpinned action must be flagged first, so a configuration that turns the detector off reads as Not verified.
 - **Corroborated** is the older independent check, where a second Agent agreed. It is a model judgment, not a run check.
 
 ### How scans verify findings
