@@ -40,6 +40,17 @@ describe("workflow CLI", () => {
     expect(deps.createRuntime).not.toHaveBeenCalled();
     expect(runtime.cancelRun).not.toHaveBeenCalled();
   });
+  it("thread commands need a running console: no private in-process fallback, one clear message, non-zero exit", async () => {
+    const { deps } = setup();
+    vi.mocked(deps.createRuntime).mockRejectedValue(new Error("No console running. Start one with: 0 web --headless"));
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    process.exitCode = 0;
+    await program.parseAsync(["threads", "list"], { from: "user" });
+    expect(deps.createRuntime).toHaveBeenCalledWith(expect.objectContaining({ requireEngine: true }));
+    expect(JSON.parse(vi.mocked(deps.err).mock.calls[0]![0])).toEqual({ error: "No console running. Start one with: 0 web --headless" });
+    expect(vi.mocked(deps.out)).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2); process.exitCode = 0;
+  });
   it("preserves every results page when inspecting a canonical workflow reference", async () => {
     const { runtime, deps } = setup();
     runtime.getWork = vi.fn(() => ({ id: "workflow:run-1", native: { workflowExecutionId: "run-1" } }));

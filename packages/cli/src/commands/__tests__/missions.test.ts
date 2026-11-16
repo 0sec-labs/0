@@ -62,6 +62,27 @@ describe("0 threads (console actions)", () => {
     expect(JSON.parse(h.out[0]!)).toMatchObject({ session: { status: "ready" }, reply: "done" });
   });
 
+  it("start --cost-ceiling is sent on create; --wait prints the reply with usage and exits 1 when the ceiling stopped it", async () => {
+    const h = harness(call => {
+      if (call.method === "GET") return { snapshot: { session: { id: "m1", status: "ready", lastTurnFailed: true, costCeilingUsd: 0.5, costCeilingExceeded: true }, lastOutcome: { stopReason: "cancelled" }, usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.52 }, messages: [{ role: "assistant", content: [{ type: "text", text: "partial" }] }] } };
+      return { session: { id: "m1", status: "ready" } };
+    });
+    await h.run("start", "hi", "--cost-ceiling", "0.5", "--wait");
+    expect(h.calls[0]).toMatchObject({ method: "POST", path: "/api/console/sessions", body: { costCeilingUsd: 0.5 } });
+    expect(h.out[0]).toContain("partial"); expect(h.out[0]).toContain("cost $0.5200"); expect(h.out[0]).toContain("$0.5 cost ceiling");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("start --wait exits 1 and prints the error when the turn errored, and rejects a bad ceiling", async () => {
+    const h = harness(call => call.method === "GET"
+      ? { snapshot: { session: { id: "m1", status: "failed" }, lastOutcome: { error: "rate limited" }, usage: { inputTokens: 1, outputTokens: 0 }, messages: [] } }
+      : { session: { id: "m1", status: "working" } });
+    await h.run("start", "hi", "--wait");
+    expect(h.out[0]).toContain("Error: rate limited"); expect(process.exitCode).toBe(1);
+    process.exitCode = 0; const bad = harness(); await bad.run("start", "hi", "--cost-ceiling", "0");
+    expect(process.exitCode).toBe(2); expect(bad.opened()).toBe(0);
+  });
+
   it("rejects bad usage with exit 2 before connecting", async () => {
     const h = harness();
     await h.run("start", "hi", "--mode", "chaos");

@@ -20,6 +20,8 @@ interface CliWorkflowRuntimeOptions {
   costCapUsd?: number;
   /** Host permission; a run must independently request application. */
   allowApply?: boolean;
+  /** Thread commands only make sense against a running console: never fall back to a private in-process one. */
+  requireEngine?: boolean;
 }
 export interface StartWorkflowRun {
   sessionId?: string;
@@ -59,6 +61,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
         return existing.startRun({ ...request, ...(timeCapMs !== undefined ? { timeCapMs } : {}), ...(costCapUsd !== undefined ? { costCapUsd } : {}) });
       } };
     }
+    if (options.requireEngine) throw new Error("No console running. Start one with: 0 web --headless");
   }
   const ownsHost = !dependencies.host;
   const gateway = dependencies.host?.gateway ?? new ConsoleGateway({ projectPath: workspace, dbPath: options.dbPath });

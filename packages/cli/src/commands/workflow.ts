@@ -36,7 +36,7 @@ export interface WorkflowCliRuntime {
 interface WorkflowOptions { chat?: string; engineUrl?: string; engineTokenEnv?: string; engine?: string; enginesConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
 export interface WorkflowCommandDeps {
   createRemoteRuntime?(options: { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }): Promise<WorkflowCliRuntime>;
-  createRuntime(options: { ownerId: string; workspace?: string; scopePath?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean }): Promise<WorkflowCliRuntime>;
+  createRuntime(options: { ownerId: string; workspace?: string; scopePath?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean; requireEngine?: boolean }): Promise<WorkflowCliRuntime>;
   out(text: string): void;
   err(text: string): void;
   sleep(): Promise<void>;
@@ -83,7 +83,7 @@ function renderText(value: unknown, depth = 0): string {
   }
   return `${indent}${String(value).replaceAll("\n", `\n${indent}`)}`;
 }
-async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, action: (runtime: WorkflowCliRuntime) => Promise<void>): Promise<void> {
+async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, action: (runtime: WorkflowCliRuntime) => Promise<void>, requireEngine = false): Promise<void> {
   let runtime: WorkflowCliRuntime | undefined;
   try {
     if (options.format !== undefined && !["json", "text"].includes(options.format)) throw new Error("Format must be json or text.");
@@ -96,7 +96,7 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
       if (!deps.createRemoteRuntime) throw new Error("Remote automation transport is unavailable.");
       runtime = await deps.createRemoteRuntime({ backendId: options.engine, configPath: options.enginesConfig, ...(options.engineUrl ? { engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv } : {}), ...(options.chat ? { sessionId: options.chat } : {}) });
     } else {
-      runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
+      runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}), ...(requireEngine ? { requireEngine: true } : {}) });
     }
     if (options.chat && !options.engine && !options.engineUrl) {
       if (!runtime.attachSession) throw new Error("The selected engine does not support thread attachment.");
@@ -224,17 +224,17 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       const operation = runtime[method];
       if (!operation) throw new Error(method === "forceStopSession" ? "The selected engine does not expose operator force stop; no work was changed." : "The selected engine does not support thread lifecycle operations.");
       output(deps, await (operation as (...values: unknown[]) => unknown).apply(runtime, args), options.format);
-    });
+    }, true);
   };
   inspectOptions(sessions.command("list").description("List live engine threads").option("--saved", "List retained thread snapshots"))
     .action(async (options: WorkflowOptions & { saved?: boolean }) => sessionAction(options, options.saved ? "listSavedSessions" : "listSessions"));
-  inspectOptions(sessions.command("show <id>").description("Read a live thread without recreating it"))
+  inspectOptions(sessions.command("show <id>").description("Read a live thread, including its usage and cost, without recreating it").option("--json", "Print JSON (the default)"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "getSession", [id]));
   inspectOptions(sessions.command("create").description("Create a thread within the engine's admission grants").option("--config <path>", "Thread configuration JSON object"))
     .action(async (options: WorkflowOptions & { config?: string }) => withRuntime(options, deps, async runtime => {
       if (!runtime.createSession) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.createSession(options.config ? await readWorkflowInputs(options.config) : undefined), options.format);
-    }));
+    }, true));
   inspectOptions(sessions.command("send <id> <text>").description("Send a message to a live thread"))
     .action(async (id: string, text: string, options: WorkflowOptions) => sessionAction(options, "sendMessage", [id, text]));
   inspectOptions(sessions.command("continue <id> [text]").description("Continue a live thread"))
@@ -249,14 +249,14 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (after !== undefined && (!Number.isSafeInteger(after) || after < 0)) throw new Error("Event cursor must be a nonnegative integer.");
       if (!runtime.getSessionEvents) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.getSessionEvents(id, after), options.format);
-    }));
+    }, true));
   inspectOptions(sessions.command("resume <saved-id>").description("Restore a retained snapshot as a new thread under current admission grants"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "resumeSession", [id]));
   inspectOptions(sessions.command("decide <id> <decision-id>").description("Respond to a pending thread decision").requiredOption("--response <path>", "Decision response JSON object"))
     .action(async (id: string, decisionId: string, options: WorkflowOptions & { response: string }) => withRuntime(options, deps, async runtime => {
       if (!runtime.resolveDecision) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.resolveDecision(id, decisionId, await readWorkflowInputs(options.response)), options.format);
-    }));
+    }, true));
   const runs = program.command("runs").description("Inspect security work and automation run history");
   inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine thread")
     .option("--branch-from-entry <index>", "Nonnegative retained history entry index")

@@ -88,13 +88,14 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
     .option("--access <level>", "Access: read-only | changes (default changes)").addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).addOption(new Option("--mode <mode>", "Alias for --access, also accepts older stored values").hideHelp()).option("--folder <path>", "Folder the thread works in")
     .option("--target <target>", "Authorized target").option("--scope <path>", "Scope policy JSON file")
     .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
+    .option("--cost-ceiling <usd>", "Stop the thread when its estimated spend reaches this many USD")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string };
+      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const config = {
         ...(Object.keys(runtime).length ? { runtime } : {}), ...(autonomyFlag(flags) ? { autonomyMode: autonomyFlag(flags) } : {}),
-        ...(flags.target ? { target: flags.target } : {}), ...(flags.title ? { title: flags.title } : {}),
+        ...(flags.target ? { target: flags.target } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
         ...(flags.scope ? { scope: JSON.parse(deps.readFile(flags.scope)) as unknown } : {}),
       };
       const created = asJson(asJson(await client.request("POST", "/api/console/sessions", config)).session);
@@ -112,10 +113,16 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
         const snapshot = asJson(asJson(await client.request("GET", `/api/console/sessions/${missionId(id)}`)).snapshot);
         const session = asJson(snapshot.session);
         const reply = lastAssistantText(snapshot);
-        const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && reply !== undefined);
+        const outcome = asJson(snapshot.lastOutcome);
+        const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (reply !== undefined || snapshot.lastOutcome != null));
         if (finished) {
-          print(options, { session, ...(reply ? { reply } : {}) }, `${summarize(session)}${reply ? `\n\n${reply}` : ""}`);
-          if (session.status === "failed") process.exitCode = 1;
+          const usage = asJson(snapshot.usage);
+          const failed = session.status === "failed" || session.lastTurnFailed === true || session.costCeilingExceeded === true || Boolean(outcome.error);
+          const error = session.costCeilingExceeded ? `Stopped at the $${String(session.costCeilingUsd)} cost ceiling.` : typeof outcome.error === "string" ? outcome.error : undefined;
+          const cost = typeof usage.costUsd === "number" ? `$${usage.costUsd.toFixed(4)}${usage.costUnavailable ? "+ (some pricing unknown)" : ""}` : "unknown";
+          print(options, { session, usage, ...(reply ? { reply } : {}), ...(error ? { error } : {}) },
+            `${summarize(session)}${reply ? `\n\n${reply}` : ""}${error ? `\n\nError: ${error}` : ""}\n\nUsage: ${String(usage.inputTokens ?? 0)} input tokens, ${String(usage.outputTokens ?? 0)} output tokens, cost ${cost}`);
+          if (failed) process.exitCode = 1;
           return;
         }
         if (Date.now() > deadline) throw new Error(`Timed out after ${flags.timeout}s; thread ${id} is still ${String(session.status)}.`);
@@ -126,6 +133,8 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
       choice(flags.mode, MODES, "--mode"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
       const seconds = Number(flags.timeout);
       if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError("--timeout must be a positive number of seconds.");
+      const ceiling = (options as { costCeiling?: string }).costCeiling;
+      if (ceiling !== undefined && (!Number.isFinite(Number(ceiling)) || Number(ceiling) <= 0 || Number(ceiling) > 1000)) throw new UsageError("--cost-ceiling must be a positive USD amount up to 1000.");
     }));
 
   action(transport(threads.command("stop <id>").description("Cancel a thread's active work").option("--force", "Force stop owned execution that did not drain")),
