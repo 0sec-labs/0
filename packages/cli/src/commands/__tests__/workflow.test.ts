@@ -156,6 +156,18 @@ describe("workflow CLI", () => {
     expect(runtime.cancelSession).toHaveBeenCalledWith("web-session");
     expect(deps.createRuntime).not.toHaveBeenCalled();
   });
+  it("lists threads as a table with --format text", async () => {
+    const { runtime, deps } = setup();
+    runtime.listSessions = vi.fn(() => [{ id: "t-1", status: "ready", title: "Fix the\nbuild", workspacePath: "/repo" }, { id: "t-2", status: "running", workspacePath: "/repo" }]);
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["threads", "list", "--format", "text", "--backend", "engine"], { from: "user" });
+    const printed = vi.mocked(deps.out).mock.calls.map(call => String(call[0])).join("\n");
+    expect(printed).toMatch(/^ID\s+STATUS\s+TITLE\s+FOLDER/);
+    expect(printed).toContain("t-1  ready");
+    expect(printed).toContain("Fix the build");
+    expect(printed).toContain("Untitled");
+  });
   it("resumes a scan in the selected engine session without claiming a workflow restart", async () => {
     const { runtime, deps } = setup();
     runtime.resumeScan = vi.fn(() => ({ runId: "scan-resume-run" }));
