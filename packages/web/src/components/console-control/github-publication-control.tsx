@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ControlCard, Feedback, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import {
-  GITHUB_INSTALL_COMMAND, GITHUB_INSTALL_URL, defaultGitHubMethod, deviceStatusText, formatExpiry, githubCardKind, githubHeadline, githubMethods, guidedTokenUrl, safeDeviceUrl, validToken,
+  GITHUB_INSTALL_COMMAND, GITHUB_INSTALL_URL, defaultGitHubMethod, deviceStatusText, formatExpiry, githubCardKind, githubConnectLabel, githubHeadline, githubMethods, showMethodSelector, guidedTokenUrl, safeDeviceUrl, validToken,
   type GitHubMethod, type GitHubPublicationAccount,
 } from "./github-connection-model";
 
@@ -72,7 +72,7 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
   return <ControlCard title="GitHub">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2 text-sm font-medium"><GitBranch className="size-4 shrink-0" /><span id="github-headline" className="min-w-0 break-words">{githubHeadline(data)}</span></div>
-      <Badge variant="outline">Computer: {data.computer}</Badge>
+      <Badge variant="outline" className="rounded-md">Computer: {data.computer}</Badge>
     </div>
     {expiry && data.connected && <p className="text-xs text-muted-foreground">Expires {expiry}</p>}
     {kind === "needs-permissions" && <div className="flex flex-wrap items-center gap-2">
@@ -80,7 +80,7 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
       <SubmitButton variant="outline" pending={busy && mutation.variables === "refresh"} disabled={busy} onClick={() => act("refresh")}>Update permissions</SubmitButton>
     </div>}
 
-    {!running && <Select aria-label="Connect with" size="sm" className="w-full sm:w-auto sm:min-w-56" value={method} disabled={busy} onValueChange={value => setPicked(value as GitHubMethod)} options={methods} />}
+    {!running && showMethodSelector(methods) && <Select aria-label="Connect with" size="sm" className="w-full sm:w-auto sm:min-w-56" value={method} disabled={busy} onValueChange={value => setPicked(value as GitHubMethod)} options={methods} />}
 
     {method === "cli" && !running && <p className="text-sm text-muted-foreground">Using the GitHub CLI login on {data.computer}.</p>}
 
@@ -96,7 +96,7 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
             {data.deviceAuth.verificationUrl && !deviceUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}
             {running
               ? <SubmitButton variant="outline" pending={busy && mutation.variables === "cancel"} disabled={busy} onClick={() => act("cancel")}>Cancel</SubmitButton>
-              : <SubmitButton variant="outline" pending={busy && mutation.variables === "sign-in"} disabled={busy} onClick={() => act("sign-in")}>{data.connected ? "Sign in with another account" : "Sign in with GitHub"}</SubmitButton>}
+              : <SubmitButton variant="outline" pending={busy && mutation.variables === "sign-in"} disabled={busy} onClick={() => act("sign-in")}>{githubConnectLabel(data)}</SubmitButton>}
           </div>
           {!running && !status && <p className="text-xs text-muted-foreground">Signs in on {data.computer}</p>}
         </>}

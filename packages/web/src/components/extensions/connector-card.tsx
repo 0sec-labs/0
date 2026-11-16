@@ -24,7 +24,7 @@ export function ConnectorCard({ row, disabled, pending, error, act }: { row: Con
   return <ControlCard title={row.connector.title} description={row.connector.description || undefined}>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <span data-connector-headline={name} className="min-w-0 text-sm font-medium break-words">{connectorHeadline(row)}</span>
-      {row.connector.hosts.length > 0 && <Badge variant="outline">{row.connector.hosts[0]}</Badge>}
+      {row.connector.hosts.length > 0 && <Badge variant="outline" className="rounded-md">{row.connector.hosts[0]}</Badge>}
     </div>
     <ConnectorAccess row={row} />
     {note && <p role="status" className="text-xs text-destructive">{note}</p>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultGitHubMethod, deviceStatusText, formatExpiry, githubCardKind, githubHeadline, githubMethods, guidedTokenUrl, safeDeviceUrl, validToken, type GitHubPublicationAccount } from "./github-connection-model";
+import { defaultGitHubMethod, deviceStatusText, formatExpiry, githubCardKind, githubHeadline, githubConnectLabel, githubMethods, guidedTokenUrl, showMethodSelector, safeDeviceUrl, validToken, type GitHubPublicationAccount } from "./github-connection-model";
 
 const account = (patch: Partial<GitHubPublicationAccount> = {}): GitHubPublicationAccount => ({
   available: true, connected: false, account: null, scopes: [], missingScopes: [], refreshCommand: null, source: null, expiresAt: null, computer: "mini", deviceAuth: { phase: "idle", message: "" }, ...patch,
@@ -63,5 +63,17 @@ describe("guided token", () => {
     expect(formatExpiry("2030-01-02T03:04:05.000Z")).toBe("2030-01-02");
     expect(formatExpiry(null)).toBeNull();
     expect(formatExpiry("x")).toBeNull();
+  });
+});
+
+describe("method selector", () => {
+  it("appears only when methods need different input", () => {
+    expect(showMethodSelector([{ value: "sign-in" }, { value: "token" }])).toBe(true);
+    expect(showMethodSelector([{ value: "sign-in" }])).toBe(false);
+    expect(showMethodSelector([{ value: "cli" }, { value: "sign-in" }])).toBe(false);
+  });
+  it("labels the sign-in button so it never repeats the selector", () => {
+    expect(githubConnectLabel({ connected: false })).toBe("Connect");
+    expect(githubConnectLabel({ connected: true })).toBe("Sign in with another account");
   });
 });

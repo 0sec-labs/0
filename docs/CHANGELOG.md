@@ -15,6 +15,7 @@ on the GitHub Release tag.
 ### Fixed
 
 - `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`, and `--preview`, `--yes`, `--enable` and `--project` work before or after the source. At a terminal a bare add asks to confirm. `--yes` installs without a terminal (CI, scripts) unless the command runs in an agent session, which still refuses.
+- The Extensions page no longer shows two sign-in controls on the GitHub card (the method selector appears only when methods need different input, and the button reads Connect), uses squared chips instead of pills, and has shorter intro copy. GitHub shows "Built in" and scope shows "On" without an on/off switch while a scope is defined.
 
 ## [0.36.0] - 2026-11-15
 

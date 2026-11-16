@@ -47,6 +47,15 @@ export function githubMethods(account: GitHubPublicationAccount): { value: GitHu
   return methods;
 }
 
+/** One selector only when several methods exist and they ask for different input; one method is just a Connect button. */
+export function showMethodSelector(methods: readonly { value: GitHubMethod }[]): boolean {
+  const input = (method: GitHubMethod) => method === "token" ? "token" : "none";
+  return methods.length > 1 && new Set(methods.map(item => input(item.value))).size > 1;
+}
+
+/** The sign-in button repeats nothing the selector already says. */
+export const githubConnectLabel = (account: Pick<GitHubPublicationAccount, "connected">): string => account.connected ? "Sign in with another account" : "Connect";
+
 export function defaultGitHubMethod(account: GitHubPublicationAccount): GitHubMethod {
   return githubMethods(account)[0]!.value;
 }

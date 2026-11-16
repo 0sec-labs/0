@@ -17,6 +17,8 @@ export interface BuiltinExtension {
   readonly connector?: ConnectorDecl;
   /** Skills it contributes, by id. They ship in the binary like the extension itself. */
   readonly skills?: readonly string[];
+  /** `always`: it cannot be switched off from the Extensions page. `scope-defined`: it cannot be while a scope is defined. */
+  readonly required?: "always" | "scope-defined";
 }
 
 /**
@@ -35,12 +37,12 @@ export const GITHUB_CONNECTOR: ConnectorDecl = {
 /** The ONE registry of built-ins. `plugins/builtin.ts` derives the `0 plugin` view from it; there is no second list. */
 export const BUILTIN_EXTENSIONS: readonly BuiltinExtension[] = [
   {
-    name: "scope", version: "1.1.0", pluginTitle: "Scope enforcement",
+    name: "scope", version: "1.1.0", required: "scope-defined", pluginTitle: "Scope enforcement",
     description: "Enforces engagement host/path authorization, exclusions and local filesystem scope. On by default: it enforces whenever a scope is defined and allows everything when none is. Credential protection, sandboxing and resource limits remain independent.",
     canDo: ["defines a scope: allows or denies commands before they run"], confirmDisable: "Disabling scope runs commands without scope enforcement; while a scope is defined, commands are denied instead.",
   },
   {
-    name: "github", version: "1.0.0", description: "GitHub connection used by pull request Agents, the pull request trigger and the webhook receiver. Built in: it cannot be removed and updates with the 0 binary.",
+    name: "github", version: "1.0.0", required: "always", description: "GitHub connection used by pull request Agents, the pull request trigger and the webhook receiver. Built in: it cannot be removed and updates with the 0 binary.",
     canDo: [connectorCanDo(GITHUB_CONNECTOR), "adds skills (text instructions): pr-diff-review"], confirmDisable: "Disabling github pauses pull request Agents.",
     connector: GITHUB_CONNECTOR, skills: ["pr-diff-review"],
   },

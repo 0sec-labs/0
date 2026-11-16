@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUpdate, failureLine, importNote, isOn, promptView, shortRevision, sourceLine, sourceProblem, statusView, toggleIntent, type ExtensionRowDto, type InstallPromptDto } from "./extensions-model";
+import { canUpdate, failureLine, importNote, isOn, promptView, rowControl, showBuiltInChip, shortRevision, sourceLine, sourceProblem, statusView, toggleIntent, type ExtensionRowDto, type InstallPromptDto } from "./extensions-model";
 
 const row = (over: Partial<ExtensionRowDto> = {}): ExtensionRowDto => ({ name: "demo", builtin: false, kind: "git", version: "1.0.0", description: "", status: "disabled", enabled: false, revision: "a".repeat(40), sourceLabel: "acme/demo", canDo: [], skills: [], refusal: null, note: "", ...over });
 const prompt = (over: Partial<InstallPromptDto> = {}): InstallPromptDto => ({ kind: "install", name: "demo", version: "1.0.0", description: "d", source: { type: "git", url: "u" }, revision: "b".repeat(40), pinned: true, repoAtCommit: `u @ ${"b".repeat(40)}`, licence: null, canDo: [], warnings: [], hiddenUnicode: [], files: [], diff: null, ...over });
@@ -61,5 +61,24 @@ describe("Add MCP server input", () => {
     expect(mcpDraftProblem("Docs", "x")).toMatch(/lowercase/);
     expect(mcpDraftProblem("docs", "http://example.com")).toMatch(/https/);
     expect(mcpDraftProblem("docs", "npx x")).toBeNull();
+  });
+});
+
+describe("rowControl", () => {
+  it("shows no switch for github and for an enabled scope while a scope is defined", () => {
+    expect(rowControl({ required: "always", enabled: true }, false)).toEqual({ kind: "label", text: "Built in" });
+    expect(rowControl({ required: "always", enabled: false }, true)).toEqual({ kind: "label", text: "Built in" });
+    expect(rowControl({ required: "scope-defined", enabled: true }, true)).toEqual({ kind: "label", text: "On" });
+  });
+  it("keeps the switch for scope when no scope is defined or it is already off, and for everything else", () => {
+    expect(rowControl({ required: "scope-defined", enabled: true }, false)).toEqual({ kind: "switch" });
+    expect(rowControl({ required: "scope-defined", enabled: false }, true)).toEqual({ kind: "switch" });
+    expect(rowControl({ required: null, enabled: true }, true)).toEqual({ kind: "switch" });
+    expect(rowControl({ enabled: true }, true)).toEqual({ kind: "switch" });
+  });
+  it("hides the Built in chip only when the control already says it", () => {
+    expect(showBuiltInChip({ builtin: true }, { kind: "label", text: "Built in" })).toBe(false);
+    expect(showBuiltInChip({ builtin: true }, { kind: "switch" })).toBe(true);
+    expect(showBuiltInChip({ builtin: false }, { kind: "switch" })).toBe(false);
   });
 });

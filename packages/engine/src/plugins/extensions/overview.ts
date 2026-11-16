@@ -31,6 +31,8 @@ export interface ExtensionOverviewRow {
   /** MCP servers the extension declares: approved tool hashes against what each last showed (Changed / New / Removed). */
   mcp: McpServerStatus[];
   note: string;
+  /** Built-ins only: when the page must not offer an on/off switch. */
+  required: "always" | "scope-defined" | null;
 }
 export interface ExtensionOverview { rows: ExtensionOverviewRow[]; importReport: ImportReport | null; error?: string }
 
@@ -54,7 +56,7 @@ export function extensionOverview(store: ExtensionStore, projectKey: string | nu
     return {
       name: row.name, builtin: row.kind === "built-in", kind: row.kind, version: row.version, description, status: refusal && row.status !== "unmigrated" ? "refused" : row.status,
       enabled: row.enabled, revision: row.revision, sourceLabel: sourceLabel(entry?.source ?? null), canDo, skills, connector, refusal: refusal ? { code: refusal.code, reason: refusal.reason } : null, mcp: servers,
-      note: row.kind === "built-in" ? "" : row.detail,
+      note: row.kind === "built-in" ? "" : row.detail, required: builtin?.required ?? null,
     };
   });
   return { rows, importReport: state.value.import };
