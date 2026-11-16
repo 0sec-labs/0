@@ -71,15 +71,12 @@ const publicRoots = [
   "scripts/workbench-agents",
   "scripts/ci-runner-bootstrap.sh",
   "scripts/smoke-cli.sh",
-  "scripts/smoke-source-evolution.mjs",
-  "scripts/smoke-lens-evolution.mjs",
   "scripts/config/tsconfig.base.json",
   "scripts/config/vitest.workspace-aliases.ts",
   "vendor",
   ".github/workflows/public-pr.yml",
   ".github/workflows/main.yml",
   ".github/workflows/docker-publish.yml",
-  ".github/workflows/evolution-e2e.yml",
 ];
 
 const excludedPaths = [

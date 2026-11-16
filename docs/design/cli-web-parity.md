@@ -31,8 +31,8 @@ Verified tests cover command discovery, JSON output, isolated configuration and
 history, authenticated session control, workflow templates, transport failures,
 permission and identity failures, and a real local MCP capability handshake.
 No paid model calls, external target tests, live cloud writes or actual OAuth
-connections were used in this qualification. See `scripts/cli-process-smoke.test.mjs`,
-`scripts/smoke-api-engine.mjs`, and the API command/backend suites.
+connections were used in this qualification. See `scripts/cli-process-smoke.test.mjs`
+and the API command/backend suites.
 
 ## Hosted cloud CLI
 
