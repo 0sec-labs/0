@@ -165,6 +165,7 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
   // Fix 2 (integration): npm audit on a pnpm repo records a wrong-lockfile
   // health event (redirected), never ENOLOCK.
   it("redirects `npm audit` on a pnpm repo and records a wrong-lockfile event", async () => {
+    ctx.approvals = "ask"; // the tokenised command path belongs to the ask-first policy
     writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: 9\n");
     await executor.execute({
       name: "run_command",
@@ -175,6 +176,7 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
   });
 
   it("skips a dependency audit non-fatally when no lockfile is present", async () => {
+    ctx.approvals = "ask"; // the tokenised command path belongs to the ask-first policy
     const result = await executor.execute({
       name: "run_command",
       arguments: { command: "npm audit" },
@@ -186,6 +188,7 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
 
   // Fix 4: a missing optional binary is a graceful skip, not a throw.
   it("returns a graceful skip for a missing binary and records missing-binary", async () => {
+    ctx.approvals = "ask"; // the tokenised command path belongs to the ask-first policy
     const previousPath = process.env.PATH;
     process.env.PATH = root;
     try {

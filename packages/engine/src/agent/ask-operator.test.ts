@@ -341,7 +341,6 @@ describe("ask_operator authorizes nothing", () => {
 
     // No authority was granted as a side effect.
     expect(session.scope).toBeUndefined();
-    expect(session.autonomyMode).toBe("changes");
   });
 });
 

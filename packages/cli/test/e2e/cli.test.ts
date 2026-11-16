@@ -90,6 +90,7 @@ describe("CLI E2E", () => {
       targetInfo: {},
       scopePath: projectRoot,
       persistFindings: false,
+      approvals: "ask",
     }, null);
 
     const ok = await executor.execute({
