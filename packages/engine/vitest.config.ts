@@ -7,6 +7,8 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    // Threads and scans read Memory only when a test opts in; never touch the real ~/.0/memory.
+    env: { ZERO_DISABLE_MEMORY: "1" },
     // Keep native-addon and SQLite work bounded on the shared CI runner.
     maxWorkers: 2,
     // Persistence suites perform real fsync/SQLite round trips, not mocked I/O.

@@ -23,8 +23,8 @@ describe("customer-local learning HTTP", () => {
     await service.handle("/api/console/learning/process", "POST", { limit: 10 }, query());
     const response = await service.handle("/api/console/learning", "GET", undefined, new URLSearchParams({ workflowId: workflow.id }));
     expect(response?.status).toBe(200);
-    // Completion is useful activity, but is not a reusable security lesson.
-    expect((response?.data as { knowledge: unknown[] }).knowledge).toEqual([]);
+    // Completion is useful activity, never a remembered note: lessons are not derived from events any more.
+    expect(response?.data).not.toHaveProperty("knowledge");
   });
   it("suggests an earlier successful version only after three independent failures, then restores with review and CAS", async () => {
     const { store, service } = fixture();
@@ -86,21 +86,6 @@ describe("customer-local learning HTTP", () => {
     expect(service.store.getCandidate(candidate.id)?.status).toBe("proposed");
   });
 
-  it("records chat metadata without storing messages, and scopes workflow knowledge", async () => {
-    const { store, service } = fixture();
-    service.recordChatOutcome({ id: "session:turn", project: "/workspace/b", outcome: "completed" });
-    service.recordChatOutcome({ id: "session:turn", project: "/workspace/b", outcome: "completed" });
-    expect(service.store.listEvents()).toHaveLength(1);
-    expect(JSON.stringify(service.store.listEvents())).not.toContain("/workspace/b");
-    const workflow = store.save(draft);
-    const projectId = learningProjectId(workflow.target);
-    const own = service.store.appendEvent({ idempotencyKey: "own", projectId, kind: "source-context", outcome: "current", summary: "Grounded context" });
-    service.store.putKnowledge({ projectId, summary: "Own note", evidenceEventIds: [own.id], sourceLinks: [] });
-    const foreign = service.store.listEvents().find(event => event.id !== own.id)!;
-    service.store.putKnowledge({ projectId: foreign.projectId, summary: "Other note", evidenceEventIds: [foreign.id], sourceLinks: [] });
-    const response = await service.handle("/api/console/learning", "GET", undefined, new URLSearchParams({ workflowId: workflow.id }));
-    expect((response?.data as { knowledge: { summary: string }[] }).knowledge.map(entry => entry.summary)).toEqual(["Own note"]);
-  });
   it("rejects forged evaluation, unknown mutations and invalid limits", async () => {
     const { service } = fixture();
     expect((await service.handle("/api/console/learning/evaluations", "POST", { passed: true }, query()))?.status).toBe(405);
@@ -116,88 +101,5 @@ describe("customer-local learning HTTP", () => {
       expect((await service.handle(`/api/console/learning/improvements/${mirrored.id}/${action}`, "POST", { revision: mirrored.revision }, query()))?.status).toBe(409);
     }
     expect(service.store.getCandidate(mirrored.id)?.status).toBe("proposed");
-  });
-  it("requires fresh evidence for stale knowledge and CAS for rejection", async () => {
-    const { service } = fixture();
-    const event = service.store.appendEvent({ idempotencyKey: "event", projectId: "project", kind: "source-context", outcome: "current", summary: "Context" });
-    const entry = service.store.putKnowledge({ projectId: "project", summary: "Note", evidenceEventIds: [event.id], sourceLinks: [{ path: "file.ts", hash: "sha256:old" }] });
-    service.store.invalidateKnowledge("project", {});
-    expect((await service.handle(`/api/console/learning/knowledge/${entry.id}`, "PATCH", { status: "current" }, query()))?.status).toBe(409);
-    const candidate = service.store.createCandidate({ projectId: "project", kind: "skill", targetId: "skill", baseVersion: "v1", proposal: "A bounded change", evidenceEventIds: [event.id] });
-    expect((await service.handle(`/api/console/learning/improvements/${candidate.id}/evaluate`, "POST", { revision: 1 }, query()))?.status).toBe(409);
-    expect(service.store.getCandidate(candidate.id)?.status).toBe("proposed");
-    expect((await service.handle(`/api/console/learning/improvements/${candidate.id}/reject`, "POST", { revision: 2 }, query()))?.status).toBe(409);
-    expect((await service.handle(`/api/console/learning/improvements/${candidate.id}/reject`, "POST", { revision: 1 }, query()))?.status).toBe(200);
-  });
-});
-
-describe("portable retained memories", () => {
-  const sourceLinks = [{ path: "src/routes.ts", hash: `sha256:${"a".repeat(64)}` }];
-  function seed(service: WebLearningService, projectId = "project-a") {
-    const event = service.store.appendEvent({ idempotencyKey: `lesson:${projectId}`, projectId, kind: "source-context", outcome: "observed", summary: "Raw operational event should not be exported.", evidenceStrength: "verified", sourceLinks });
-    return service.store.putKnowledge({ projectId, summary: "Tenant ownership is checked before repository access.", sourceLinks, evidenceEventIds: [event.id] });
-  }
-  async function exported(service: WebLearningService, projectId?: string) {
-    return (await service.handle("/api/console/learning/export", "GET", undefined, new URLSearchParams(projectId ? { projectId } : {})))!.data as { format: string; version: number; exportedAt: string; knowledge: Array<Record<string, unknown>> };
-  }
-  it("exports only lesson summaries and minimal provenance in the selected project", async () => {
-    const { service } = fixture();
-    const entry = seed(service); seed(service, "project-b");
-    const archive = await exported(service, "project-a");
-    expect(archive).toMatchObject({ format: "zero-memory", version: 1, knowledge: [{ id: entry.id, projectId: "project-a", sourceLinks, provenance: [{ kind: "source-context", evidenceStrength: "verified" }] }] });
-    expect(JSON.stringify(archive)).not.toContain("Raw operational event");
-    expect(JSON.stringify(archive)).not.toContain("project-b");
-    expect(archive.knowledge).toHaveLength(1);
-  });
-  it("previews without writes and imports disabled without trusting exported status or evidence", async () => {
-    const { service: source } = fixture(); seed(source);
-    const { service: target } = fixture();
-    const archive = await exported(source);
-    const preview = (await target.handle("/api/console/learning/import/preview", "POST", { archive }, query()))!;
-    expect(preview.status).toBe(200);
-    expect(preview.data).toMatchObject({ preview: { total: 1, importable: 1, duplicates: 0 } });
-    expect(target.store.listKnowledge()).toEqual([]);
-    expect(target.store.listEvents()).toEqual([]);
-    const digest = (preview.data as { preview: { digest: string } }).preview.digest;
-    const imported = await target.handle("/api/console/learning/import", "POST", { archive, digest }, query());
-    expect(imported).toMatchObject({ status: 200, data: { result: { imported: 1, duplicates: 0, disabled: true } } });
-    const [entry] = target.store.listKnowledge();
-    expect(entry).toMatchObject({ status: "disabled", projectId: "project-a", importedFrom: { id: archive.knowledge[0]!.id, evidence: [{ kind: "source-context", evidenceStrength: "verified" }] } });
-    expect(target.store.getEvent(entry!.evidenceEventIds[0]!)?.evidenceStrength).toBe("hypothesis");
-    expect((await target.handle(`/api/console/learning/knowledge/${entry!.id}`, "PATCH", { status: "current" }, query()))?.status).toBe(409);
-    expect(await exported(target)).toMatchObject({ knowledge: [{ id: archive.knowledge[0]!.id, status: "disabled", provenance: archive.knowledge[0]!.provenance }] });
-    expect(await target.handle("/api/console/learning/import", "POST", { archive, digest }, query())).toMatchObject({ data: { result: { imported: 0, duplicates: 1 } } });
-    expect(target.store.listEvents()).toHaveLength(1);
-  });
-  it("rejects modified, oversized, credential-like, unsafe-path and malformed archives without partial writes", async () => {
-    const { service: source } = fixture(); seed(source);
-    const archive = await exported(source);
-    const { service: target } = fixture();
-    const preview = (await target.handle("/api/console/learning/import/preview", "POST", { archive }, query()))!.data as { preview: { digest: string } };
-    const edited = structuredClone(archive); edited.knowledge[0]!.summary = "Different lesson";
-    expect((await target.handle("/api/console/learning/import", "POST", { archive: edited, digest: preview.preview.digest }, query()))?.status).toBe(409);
-    for (const bad of [
-      { ...archive, version: 2 },
-      { ...archive, knowledge: [...archive.knowledge, { ...archive.knowledge[0], summary: "password=extremely-secret" }] },
-      { ...archive, knowledge: [{ ...archive.knowledge[0], sourceLinks: [{ path: "../escape", hash: sourceLinks[0]!.hash }] }] },
-      { ...archive, knowledge: [{ ...archive.knowledge[0], sourceLinks: [{ path: "/etc/passwd", hash: sourceLinks[0]!.hash }] }] },
-      { ...archive, knowledge: [{ ...archive.knowledge[0], sourceLinks: [{ path: "C:\\Windows\\system.ini", hash: sourceLinks[0]!.hash }] }] },
-      { ...archive, knowledge: [{ ...archive.knowledge[0], provenance: [{ id: "foreign", kind: "source-context", createdAt: "not-a-date" }] }] },
-    ]) expect((await target.handle("/api/console/learning/import/preview", "POST", { archive: bad }, query()))?.status).toBe(400);
-    expect((await target.handle("/api/console/learning/import/preview", "POST", { archive, padding: "x".repeat(1_048_577) }, query()))?.status).toBe(413);
-    expect(target.store.listKnowledge()).toEqual([]);
-    expect(target.store.listEvents()).toEqual([]);
-  });
-  it("does not overwrite existing current lessons and isolates destination stores", async () => {
-    const { service: source } = fixture(); seed(source);
-    const archive = await exported(source);
-    const { service: target } = fixture(); const prior = seed(target);
-    const { service: otherTenant } = fixture();
-    const preview = (await target.handle("/api/console/learning/import/preview", "POST", { archive }, query()))!.data as { preview: { digest: string; duplicates: number } };
-    expect(preview.preview.duplicates).toBe(1);
-    await target.handle("/api/console/learning/import", "POST", { archive, digest: preview.preview.digest }, query());
-    expect(target.store.getKnowledge(prior.id)?.status).toBe("current");
-    expect(otherTenant.store.listKnowledge()).toEqual([]);
-    expect(otherTenant.store.listEvents()).toEqual([]);
   });
 });

@@ -476,21 +476,6 @@ describe("ConsoleGateway", () => {
     expect((await instance.search({ q: "Complete final text" })).results).toHaveLength(1);
     for (const query of [{ q: "x".repeat(201) }, { limit: 0 }, { offset: -1 }, { limit: 101 }, { offset: 10_001 }]) await expect(instance.search(query)).rejects.toMatchObject({ statusCode: 400 });
   });
-  it("shares the web lesson store with local chats without transferring its ownership", async () => {
-    const createSession = vi.fn(engine);
-    const instance = gateway(createSession);
-    const store = new LearningStore(join(homes.at(-1)!, "learning.db"));
-    try {
-      instance.attachSourceLearning(store);
-      const created = instance.create({ title: "Lessons" });
-      await instance.send(created.id, "Inspect the workspace.");
-      await idle(instance, created.id);
-      expect(createSession.mock.calls[0]?.[0].codebaseLearning).toBe(true);
-      expect(createSession.mock.calls[0]?.[0].learningStore).toBe(store);
-      await instance.closeAll();
-      expect(store.listKnowledge()).toEqual([]);
-    } finally { store.close(); }
-  });
   it("Ask before running commands is the one setting that makes a changes thread ask first, and lifts again when switched off", async () => {
     const createSession = vi.fn(engine);
     const instance = gateway(createSession);
@@ -920,23 +905,6 @@ describe("ConsoleGateway", () => {
     expect(instance.worker(chat.id, child).status).toBe("completed");
   });
 
-  it("logs only bounded learning failure codes without leaking recorder errors", async () => {
-    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const instance = gateway(); const chat = instance.create();
-      for (const code of ["SQLITE_BUSY", "SQLITE_IOERR", "secret-not-a-code"]) {
-        instance.attachLearningRecorder(() => { throw Object.assign(new Error("secret transcript /private/path"), { code }); });
-        await instance.send(chat.id, "Private operator text"); await idle(instance, chat.id);
-      }
-      expect(warning.mock.calls).toEqual([
-        ["[console] Learning activity retention failed (SQLITE_BUSY)."],
-        ["[console] Learning activity retention failed (SQLITE_IOERR)."],
-        ["[console] Learning activity retention failed (unknown)."],
-      ]);
-      expect(instance.get(chat.id).events.some(event => event.type === "notice" && event.text === "Learning activity could not be retained for this turn.")).toBe(true);
-    } finally { warning.mockRestore(); }
-  });
-
   it("retains unread notifications after failed automatic startup without looping", async () => {
     let failSummary = false;
     const delivered: string[] = [];
@@ -1209,22 +1177,6 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     await instance.send(chat.id, "Price this turn."); await idle(instance, chat.id);
     expect(instance.get(chat.id).usage).toMatchObject({ inputTokens: 1_500, outputTokens: 150, costUnavailable: false, costKind: "estimated" });
     expect(instance.get(chat.id).usage.costUsd).toBeCloseTo(estimateCost({ inputTokens: 1_500, outputTokens: 150 }, "z-ai/glm-5.3-flash"), 12);
-  });
-
-  it("passes the lesson store to the host VM adapter without opening host tool resources", async () => {
-    const { instance } = isolatedGateway(); admitFixture();
-    const store = new LearningStore(join(homes.at(-1)!, "lessons.db"));
-    try {
-      instance.attachSourceLearning(store);
-      const created = instance.create();
-      await instance.send(created.id, "Inspect source"); await idle(instance, created.id);
-      const config = isolated.localFactory.mock.calls[0]?.[0];
-      expect(config.codebaseLearning).toBe(true);
-      expect(config.learningStore).toBe(store);
-      expect(config.mcpHost).toBeUndefined();
-      await instance.closeAll();
-      expect(store.listKnowledge()).toEqual([]);
-    } finally { store.close(); }
   });
 
   it("rejects a VM model/account change after history without changing the grant or transcript", async () => {

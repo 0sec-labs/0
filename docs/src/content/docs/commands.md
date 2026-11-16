@@ -31,7 +31,7 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 | `0 threads` | Start, follow and stop threads. | `list`, `send`, `stop` |
 | `0 agents` | Agents and, with `--automation`, saved automations. | `list`, `run`, `set` |
 | `0 skills` | Skills, extensions, MCP servers and connectors. | `list`, `add`, `run` |
-| `0 memory` | What 0 remembers across threads. | `list`, `set`, `export` |
+| `0 memory` | What 0 remembers across threads. | `list`, `add`, `remove` |
 | `0 models` | Models and provider connections. | `list`, `set`, `connect` |
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
 | `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
@@ -87,25 +87,6 @@ Change a finding's status. `--status accepted` runs `findings accept`, `suppress
 | `--note <text>` | — | Why (optional) |
 | `--reason <text>` | — | Why; required with false-positive |
 | `--db-path <path>` | — | Path to SQLite database |
-
-### memory set
-
-Turn a memory on or off (`0 memory set <id> on|off`), load memories with `--import <file>`, or manage triage memories with `--add` and `--remove <id>`.
-
-```text
-0 memory set [options] [id] [on|off]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | No |  |
-| `on\|off` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--import <file>` | — | Import memories from a file |
-| `--add` | — | Add a triage memory (see findings triage) |
-| `--remove` | — | Remove a triage memory |
 
 ### models set
 
@@ -1542,8 +1523,6 @@ List all triage memories
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <scope>` | — | Filter by scope: global \| target \| package |
-| `--category <category>` | — | Filter by vulnerability category |
 | `--db-path <path>` | — | Path to SQLite database |
 
 #### findings triage memory remove
@@ -1556,7 +1535,7 @@ Delete a memory by id
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `id` | Yes | Memory ID |
+| `id` | Yes | Note ID |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -4210,27 +4189,27 @@ Remove a skill that was added from GitHub or the catalog
 
 ### memory
 
-List, disable, export and import what 0 remembers across threads
+List, add, remove, export and import what 0 remembers across threads
 
 ```text
 0 memory
 ```
 
-Memory is what 0 remembers across threads. False-positive and evaluation memories live under [findings triage memory](#findings-triage-memory).
+Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`.
 
 ```bash
 0 memory list
+0 memory add "Run tests with pnpm test" --kind command
 0 memory export -o memory.json
-0 memory import memory.json --preview
 ```
 
 Guide: Read the workflow.
 
-Subcommands: [list](#memory-list) · [set](#memory-set) · [export](#memory-export) · [disable](#memory-disable) · [enable](#memory-enable) · [import](#memory-import).
+Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
 
 #### memory list
 
-List memories
+List notes
 
 ```text
 0 memory list [options]
@@ -4238,48 +4217,93 @@ List memories
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--folder <id>` | — | Only memories for this folder id |
-| `--limit <n>` | `100` | At most this many (1-200) |
+| `--folder <path>` | — | Only notes for this folder |
+| `--global` | — | Only global notes |
+| `--search <text>` | — | Only notes containing this text |
 | `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory add
+
+Remember a note
+
+```text
+0 memory add [options] <text>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `text` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <path>` | — | Folder the note is about (default: this folder) |
+| `--global` | — | Remember it everywhere |
+| `--kind <kind>` | — | One of fix-decision, convention, command, avoid |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory remove
+
+Forget a note
+
+```text
+0 memory remove [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory clear
+
+Forget every note, or every note for one folder
+
+```text
+0 memory clear [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <path>` | — | Only this folder |
+| `--yes` | — | Confirm |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
 
 #### memory disable
 
-Stop using a memory in future threads
+Stop using notes in new threads (they stay on disk)
 
 ```text
-0 memory disable [options] <id>
+0 memory disable [options]
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
+| `--db-path <path>` | — | Engine database to import older memories from |
 
 #### memory enable
 
-Use a disabled memory again
+Use notes in new threads again
 
 ```text
-0 memory enable [options] <id>
+0 memory enable [options]
 ```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
+| `--db-path <path>` | — | Engine database to import older memories from |
 
 #### memory export
 
-Export memories as a portable archive
+Write notes to a file
 
 ```text
 0 memory export [options]
@@ -4287,14 +4311,14 @@ Export memories as a portable archive
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--folder <id>` | — | Only memories for this folder id |
+| `--folder <path>` | — | Only this folder |
 | `-o, --output <file>` | — | Write to a file instead of stdout |
 | `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
+| `--db-path <path>` | — | Engine database to import older memories from |
 
 #### memory import
 
-Import a memory archive; imported memories start disabled
+Add the notes from an export file
 
 ```text
 0 memory import [options] <file>
@@ -4306,9 +4330,8 @@ Import a memory archive; imported memories start disabled
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--preview` | — | Only show what would be imported |
 | `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Use this engine database instead of the default |
+| `--db-path <path>` | — | Engine database to import older memories from |
 
 ## Private local review checks
 

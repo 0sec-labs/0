@@ -9,49 +9,6 @@ const open = (path = ":memory:") => { const store = new LearningStore(path); sto
 const event = (key = "event-a", projectId = "project-a") => ({ idempotencyKey: key, projectId, kind: "workflow-terminal", outcome: "completed", evidenceStrength: "operational" as const, summary: "Workflow execution completed." });
 afterEach(() => { for (const store of stores.splice(0)) { try {store.close();} catch {} } for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 describe("tenant-local durable learning", () => {
-  it("keeps an identical disabled source lesson disabled across fresh run evidence", () => {
-    const store = open();
-    const first = store.appendEvent(event("first-source"));
-    const links = [{ path: "a.ts", hash: "hash-a" }, { path: "b.ts", hash: "hash-b" }];
-    const input = { projectId: "project-a", summary: "Check ownership before accessing tenant reports.", sourceLinks: links, evidenceEventIds: [first.id] };
-    const lesson = store.putKnowledge(input);
-    store.setKnowledgeStatus(lesson.id, "disabled");
-    const next = store.appendEvent(event("another-source-run"));
-    expect(store.putKnowledge({ ...input, sourceLinks: [...links].reverse(), evidenceEventIds: [next.id] })).toMatchObject({ id: lesson.id, status: "disabled" });
-    expect(store.listKnowledge()).toHaveLength(1);
-    expect(store.putKnowledge({ ...input, sourceLinks: [{ path: "a.ts", hash: "fresh-source" }], evidenceEventIds: [next.id] }).status).toBe("current");
-  });
-  it("finds disabled source knowledge by canonical links without crossing projects", () => {
-    const store = open();
-    const source = store.appendEvent(event());
-    const links = [{ path: "b.ts", hash: "b" }, { path: "a.ts", hash: "a" }];
-    const lesson = store.putKnowledge({ projectId: "project-a", summary: "Tenant ownership", sourceLinks: links, evidenceEventIds: [source.id] });
-    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, links)).toBeNull();
-    store.setKnowledgeStatus(lesson.id, "disabled");
-    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [...links].reverse())?.id).toBe(lesson.id);
-    expect(store.findDisabledSourceKnowledge("other-project", lesson.summary, links)).toBeNull();
-    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [{ path: "a.ts", hash: "fresh" }])).toBeNull();
-  });
-  it("looks up prior source admission exactly and pages current source knowledge by immutable ID", () => {
-    const store = open();
-    const source = store.appendEvent({ ...event("source-admission"), kind: "source-context" });
-    const input = { projectId: "project-a", summary: "Source knowledge", sourceLinks: [{ path: "index.ts", hash: "digest" }], evidenceEventIds: [source.id] };
-    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)).toBeNull();
-    const first = store.putKnowledge(input);
-    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)?.id).toBe(first.id);
-    store.setKnowledgeStatus(first.id, "stale");
-    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)?.status).toBe("stale");
-    expect(store.findSourceKnowledge("other-project", input.summary, input.sourceLinks, source.idempotencyKey)).toBeNull();
-    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, "fresh-admission")).toBeNull();
-    const active = Array.from({ length: 4 }, (_, index) => store.putKnowledge({ ...input, summary: `Active source ${index}` })).sort((a, b) => a.id.localeCompare(b.id));
-    const unlinked = store.putKnowledge({ ...input, summary: "No source links", sourceLinks: [] });
-    const page = store.listCurrentSourceKnowledgePage(input.projectId, undefined, 2);
-    expect(page.map(entry => entry.id)).toEqual(active.slice(0, 2).map(entry => entry.id));
-    for (const entry of page) store.setKnowledgeStatus(entry.id, "stale");
-    expect(store.listCurrentSourceKnowledgePage(input.projectId, page[1]!.id, 2).map(entry => entry.id)).toEqual(active.slice(2).map(entry => entry.id));
-    expect(store.getKnowledge(unlinked.id)?.status).toBe("current");
-    expect(store.listCurrentSourceKnowledgePage("other-project")).toEqual([]);
-  });
   it("keeps experiences and outbox after reopen; retries are idempotent and conflicts fail", () => {
     const dir = mkdtempSync(join(tmpdir(), "learning-")); directories.push(dir); const path = join(dir, "control.db");
     const first = open(path); const saved = first.recordExperience(event()); first.close(); stores.pop();
@@ -87,16 +44,6 @@ describe("tenant-local durable learning", () => {
     expect(first.claimWork("worker-c",1000,now+1400,"project-a")).toBeNull();
     const retry = first.claimWork("worker-c",1000,now+1501,"project-a")!; first.completeWork(retry.id,retry.claimToken!,now+1502);
     expect(first.queueStatus("project-a")).toEqual({pending:0,claimed:0,completed:1}); expect(first.queueStatus("project-b").pending).toBe(1);
-  });
-  it("requires same-project provenance, deduplicates knowledge, and invalidates changed or missing files", () => {
-    const store = open(); const a = store.appendEvent(event()); const b = store.appendEvent(event("b","project-b"));
-    const input = {projectId:"project-a",summary:"Handlers enforce tenant scoping.",evidenceEventIds:[a.id],sourceLinks:[{path:"src/api.ts",hash:"hash-a"}]};
-    expect(() => store.putKnowledge({...input,evidenceEventIds:[b.id]})).toThrow(/same project/);
-    const note = store.putKnowledge(input); expect(store.putKnowledge(input).id).toBe(note.id);
-    expect(store.invalidateKnowledge("project-a",{"src/api.ts":"hash-a"})).toBe(0);
-    expect(store.invalidateKnowledge("project-a",{"src/api.ts":"hash-b"})).toBe(1); expect(store.getKnowledge(note.id)?.status).toBe("stale");
-    expect(() => store.setKnowledgeStatus(note.id,"current")).toThrow(/fresh evidence/);
-    const other = store.putKnowledge({...input,summary:"New observation."}); expect(store.invalidateKnowledge("project-a",{})).toBe(1); expect(store.getKnowledge(other.id)?.status).toBe("stale");
   });
   it("gates candidate activation on matching receipts, enforces CAS, and restores previous version", () => {
     const store = open(); const source = store.appendEvent(event());

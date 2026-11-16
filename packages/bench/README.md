@@ -645,6 +645,4 @@ runner's current protocol rather than treating the old receipt as a fresh result
 
 ## Learning comparison
 
-A small, live baseline-versus-remembered-context experiment is available with `pnpm --filter @0/bench learning:paired`. Add `--live --model <deployed-model> --provider <provider> --output <path>` to make at most five tool-free model calls. Without `--live`, it runs local SQL/path validators only. The measured result and its limits are archived outside this repository: the first run showed **no lift**, with both versions finding 2/2 vulnerabilities and no false-positive candidates.
-
-A second experiment exercises real console chats: `pnpm --filter @0/bench learning:console-paired --live --model <deployed-model> --output <path>`. One development chat reads source and saves a lesson; four fresh chats investigate separate tenant-access routes with and without that lesson. Both versions share the same budgets. Host-owned authenticated ownership probes provide the labels. The console result is archived outside this repository. Run the six grading and fixture tests with `pnpm --filter @0/bench test:learning`.
+The two baseline-versus-remembered-context experiments were removed with the old hunt memory. Memory is now plain notes (`0 memory`); the archived results stay outside this repository.

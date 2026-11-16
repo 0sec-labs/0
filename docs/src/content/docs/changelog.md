@@ -22,7 +22,7 @@ Version 0.36 replaced the old plugin system with [extensions](/extensions/): one
 0 threads                 list | send | stop
 0 agents                  list | run | set
 0 skills                  list | add | run
-0 memory                  list | set | export
+0 memory                  list | add | remove
 0 models                  list | set | connect
 0 computers               list | add | stop
 0 config                  get | set | doctor
@@ -84,10 +84,10 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 findings suppress` | `0 findings update <id> --status suppressed` |
 | `0 findings reopen` | `0 findings update <id> --status open` |
 | `0 findings triage mark-fp` | `0 findings update <id> --status false-positive` |
-| `0 findings triage memory add` | `0 memory set --add` |
-| `0 findings triage memory list` | `0 memory list --triage` |
-| `0 findings triage memory remove` | `0 memory set --remove <id>` |
-| `0 findings triage memory` | `0 memory list --triage` |
+| `0 findings triage memory add` | `0 memory add <text> --kind avoid` |
+| `0 findings triage memory list` | `0 memory list` |
+| `0 findings triage memory remove` | `0 memory remove <id>` |
+| `0 findings triage memory` | `0 memory list` |
 | `0 findings triage` | `0 findings update <id> --status ...` |
 | `0 findings export` | `0 findings list --format sarif\|json\|md` |
 | `0 findings reports import` | `0 findings list --import <report>` |
@@ -217,9 +217,9 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 
 | Old | New |
 | --- | --- |
-| `0 memory enable` | `0 memory set <id> on` |
-| `0 memory disable` | `0 memory set <id> off` |
-| `0 memory import` | `0 memory set --import <file>` |
+| `0 memory enable` | still `0 memory enable` (it now turns Memory on or off for all notes) |
+| `0 memory disable` | still `0 memory disable` (it now turns Memory on or off for all notes) |
+| `0 memory import` | still `0 memory import <file>` |
 
 #### config
 

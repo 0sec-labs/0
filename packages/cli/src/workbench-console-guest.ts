@@ -2,14 +2,14 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { HuntMemoryStore, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/engine";
+import { createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/engine";
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/engine";
 import { osecDB } from "@0/engine/storage";
 import { findingFromRow } from "./state/findings-data.js";
 import { normalizeSettings } from "./state/settings.js";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createLocalConsoleSession } from "./console-session.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
 
 const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
@@ -40,9 +40,6 @@ async function runGuest(cli: boolean): Promise<number> {
   const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(scrub(frame)))) process.stdin.pause(); };
   process.stdout.on("drain", () => process.stdin.resume());
   let session: ConsoleSession | undefined;
-  const exportedSourceReferences = new Set<string>();
-  const exportedSourceLessons = new Set<string>();
-  let sourceLearningEnabled = false;
   let initialized = false;
   let closing = false;
   let turn: AbortController | undefined;
@@ -83,26 +80,6 @@ async function runGuest(cli: boolean): Promise<number> {
     emit({ type: "state", snapshot: { ...snapshot, ...(checkpoint?.harnessRoot ? { checkpoint: undefined } : {}), sourceContext: session.sourceContext } });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
-    // Only bounded source-backed notes cross the seam. Never export transcripts or the full memory log.
-    if (!sourceLearningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
-    const memory = new HuntMemoryStore({ home: "/home/zero" });
-    const roots = [...new Set(memory.all().map(note => note.codebase?.root).filter((root): root is string => !!root && (root === "/workspace" || root.startsWith("/workspace/"))))].slice(0, WORKBENCH_SOURCE_CONTEXT_LIMIT);
-    let count = 0;
-    for (const root of roots) {
-      for (const note of memory.recallCodebase(root, WORKBENCH_SOURCE_CONTEXT_LIMIT)) {
-        if (!note.codebase || count++ >= WORKBENCH_SOURCE_CONTEXT_LIMIT) break;
-        const prefix = root === "/workspace" ? "" : root.slice("/workspace/".length) + "/";
-        const artifact = { sourceLinks: note.codebase.files.map(file => ({ path: prefix + file.path, hash: file.digest })) };
-        const key = JSON.stringify(artifact);
-        if (!exportedSourceReferences.has(key)) { exportedSourceReferences.add(key); emit({ type: "source-context", artifact }); }
-        try {
-          const lesson = validateWorkbenchSourceLesson({ ...artifact, title: note.title, summary: note.summary }, "/workspace", root);
-          const lessonKey = JSON.stringify(lesson);
-          if (!exportedSourceLessons.has(lessonKey)) { exportedSourceLessons.add(lessonKey); emit({ type: "source-lesson", scopePath: root, lesson }); }
-        } catch { /* Oversized, unsafe or secret-bearing prose never leaves the guest. */ }
-      }
-      if (count >= WORKBENCH_SOURCE_CONTEXT_LIMIT) break;
-    }
   };
   const finish = async (holdTransport = false) => {
     if (closing) { if (!holdTransport) process.stdin.destroy(); return; } closing = true; turn?.abort();
@@ -146,7 +123,7 @@ async function runGuest(cli: boolean): Promise<number> {
             return;
           }
           const config = frame.config as Record<string, unknown>;
-          sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
+          config.codebaseLearning = false; // Memory lives on the host; the isolated guest neither reads nor writes notes.
           const approvedPolicy = frame.scopeEnforcement as ScopeEnforcementState;
           if (!approvedPolicy || typeof approvedPolicy.enabled !== "boolean" || typeof approvedPolicy.pluginId !== "string") throw new Error("Missing scope approval snapshot");
           policy = { ...approvedPolicy, projectPath: "/workspace" };
@@ -155,11 +132,6 @@ async function runGuest(cli: boolean): Promise<number> {
             const value = await callback(name, args);
             if (name === "requestScope" && value && typeof value === "object") { const resolution = value as { target: string; scope: ConstructorParameters<typeof ScopePolicy>[0] }; return { ...resolution, scope: new ScopePolicy(resolution.scope) }; }
             return value;
-          };
-          if (sourceLearningEnabled && (frame.callbacks as string[]).includes("sourceLessons")) callbacks.sourceLessonHints = async (root: string) => {
-            const value = await callback("sourceLessons", [root]);
-            if (!Array.isArray(value) || value.length > 6) return [];
-            return value.flatMap(note => { try { return [validateWorkbenchSourceLesson(note, "/workspace", root)]; } catch { return []; } });
           };
           if ((frame.callbacks as string[]).includes("skillRead")) callbacks.skillAuthoring = {
             read: (id: string) => callback("skillRead", [id]),

@@ -1406,7 +1406,7 @@ describe("dashboard — browser request boundaries", () => {
     const token = await getControlToken();
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/learning", headers: { "x-0-control-token": token } }));
     expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toMatchObject({ events: [], knowledge: [], improvements: [], worker: { events: 0, knowledge: 0, improvements: 0, queue: { pending: 0, claimed: 0, completed: 0 } } });
+    expect(JSON.parse(captured.body)).toMatchObject({ events: [], improvements: [], worker: { events: 0, improvements: 0, queue: { pending: 0, claimed: 0, completed: 0 } } });
   });
 
   it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(

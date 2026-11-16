@@ -61,9 +61,13 @@ A saved thread opens at `/chats/saved/<id>` read-only, with its transcript and p
 
 ## Memory
 
-**Memory** holds notes the agent saved while reading source code. Each entry records its folder and supporting files with content fingerprints. Before an entry is reused, 0 checks those files; if one changed or is missing, the entry is skipped. Open **Supporting files** to see the evidence, or press **Stop using** to keep an entry out of future context.
+**Memory** is what 0 remembers across threads: short plain notes about a folder or about your team's decisions, such as an accepted or rejected fix, a convention, how to run the tests, or something to avoid. A note is one or two sentences, either for one folder or for everywhere. Open **Memory** to list, search, add, edit and forget notes, filter by folder, export or import them, or turn Memory off for new threads.
 
-Memory entries are hints for the agent to check again, not verified findings. A finished thread does not become an entry on its own. Memory lives in the computer's private state, outside your repository, and is sent to your model as context when recalled. `ZERO_DISABLE_HUNT_MEMORY=1` turns source memory off. From the terminal, use `0 memory list`, `0 memory set <id> on|off`, `--import <file>` and `0 memory export`.
+At the start of each turn the model reads the notes for the folder and the global ones, most recently used first, up to a budget of about 2,000 tokens. The notes are labelled as untrusted context: they never override system rules or your request, and the model checks them against the code. The model can add a note or forget one with a single `memory` tool. It never saves a note on its own from tool output or from files in your repository, and a repository cannot supply notes: nothing is read from the repository.
+
+Notes are plain Markdown in the computer's private state: `~/.0/memory/MEMORY.md` for global notes and `~/.0/memory/<folder-hash>/MEMORY.md` for each folder. Nothing is written into your repository. You can edit these files by hand or search them with `grep`. `ZERO_DISABLE_MEMORY=1` turns Memory off. Memory is not available inside an isolated workbench.
+
+From the terminal: `0 memory list`, `0 memory add "<note>"`, `0 memory remove <id>`, `0 memory clear --yes`, `0 memory export -o <file>` and `0 memory import <file>`. The first time Memory opens after an update, 0 copies the older stores (source lessons, hunt memory, triage memories and lessons) into notes once, and records what it did in `~/.0/memory/import-report.json`. The older files are left in place.
 
 ## From the terminal
 

@@ -153,12 +153,6 @@ input.on('data',chunk=>{pending+=chunk;let n;while((n=pending.indexOf('\\n'))>=0
     expect(() => createHostConsoleSession({ config, launch: { command: "/nonexistent", args: [], cwd: tmpdir(), env: {} } })).toThrow(/frame exceeds/);
   });
 
-  it("marks injected custom live stores unsupported unless the caller supplies a proven backing path", () => {
-    const config = { runtime: runtime(), scanId: "custom-store", learningStore: {} as NonNullable<Parameters<typeof createHostConsoleSession>[0]["config"]["learningStore"]> };
-    expect(hostConsoleSessionSupport(config).supported).toBe(false);
-    expect(hostConsoleSessionSupport(config, { learningDbPath: join(tmpdir(), "explicit-known-backing.db") }).supported).toBe(true);
-  });
-
   it("keeps Node/WASM execution in-process rather than advertising confirmed force stop", () => {
     delete process.versions.bun;
     expect(hostConsoleSessionSupport({ runtime: runtime(), scanId: "node-wasm" })).toMatchObject({ supported: false, reason: expect.stringContaining("WASM") });

@@ -90,7 +90,7 @@ describe("guest source references", () => {
     expect(() => validateWorkbenchSourceLesson(lesson, root, scope)).toThrow("digest mismatch");
   });
   it("serializes only the learning opt-in flag, never host stores or callbacks", () => {
-    const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", codebaseLearning: true, learningStore: {} as never, huntMemoryStore: {} as never } , "/operator/repo");
+    const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", codebaseLearning: true, memoryStore: {} as never } , "/operator/repo");
     expect(serial).toEqual({ workspaceRoot: "/workspace", target: "", codebaseLearning: true });
   });
  });

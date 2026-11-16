@@ -12,6 +12,18 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- There is now one Memory: short plain notes 0 remembers across threads, per folder or everywhere. They are Markdown files under `~/.0/memory/`, and the Memory page lists every note, including the ones the old page hid. Threads read the notes at the start of each turn as untrusted context and have one `memory` tool (remember, forget).
+- `0 memory` is now `list`, `add`, `remove`, `clear`, `export` and `import`. `0 findings update --status false-positive` remembers why as an `avoid` note, and scans show `avoid` notes to the verifier. `0 findings triage memory add|list|remove` still works for one release with a `moved:` line.
+- Migration: the first time Memory opens, the older stores (source lessons in hunt memory, craft memory files, lessons and triage memories in the database) are copied into notes once. Nothing is deleted. The report is in `~/.0/memory/import-report.json`; a lesson you had switched off is not imported.
+
+### Removed
+
+- The separate memory stores: hunt memory (including recorded findings and the prior-findings count), craft memory and the CyberGym `CYBERGYM_MEMORY_DB` option, the source-lesson `remember_codebase` tool, lesson capture from chat turns, and the triage-memory repository. `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, alongside the new `ZERO_DISABLE_MEMORY`.
+- The two learning-comparison bench scripts, which measured the old hunt memory.
+- Memory is not available inside an isolated workbench for now.
+
 ### Fixed
 
 - The docs pin the current release (0.37.0) in the image tags, the GitHub Action and the compose example, and a check (`node scripts/bump-docs-pins.mjs --check`, part of `pnpm docs:check`) fails when a pin lags the CLI version.

@@ -12,5 +12,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.{ts,tsx}", "test/e2e/**/*.test.ts"],
     testTimeout: 20_000,
+    // Threads and scans read Memory only when a test opts in; never touch the real ~/.0/memory.
+    env: { ZERO_DISABLE_MEMORY: "1" },
   },
 });

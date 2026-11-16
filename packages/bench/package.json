@@ -99,10 +99,7 @@
     "test:targets": "vitest run test/",
     "test:watch": "vitest",
     "vulnerable": "tsx src/test-targets/vulnerable-server.ts",
-    "safe": "tsx src/test-targets/safe-server.ts",
-    "learning:paired": "node scripts/learning-paired.mjs",
-    "learning:console-paired": "node scripts/learning-console-paired.mjs",
-    "test:learning": "node --test scripts/learning-paired.test.mjs scripts/learning-console-paired.test.mjs"
+    "safe": "tsx src/test-targets/safe-server.ts"
   },
   "dependencies": {
     "@0/engine": "workspace:*",

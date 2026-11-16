@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningStore } from "./storage/index.js";
 import { LearningService } from "./learning-service.js";
-import { HuntMemoryStore } from "./memory/hunt-memory.js";
 import { parseEvolutionConfig } from "./improvement/config.js";
 import { evaluateEvolutionCandidate } from "./improvement/evaluation.js";
 import { snapshotEvolutionSource, createEvolutionCandidate, recordEvolutionVersion, evolutionDigest } from "./improvement/registry.js";
@@ -33,7 +32,6 @@ describe("LearningService", () => {
     expect(await service.processPending({ limit: 500 })).toMatchObject({ processed: 2, retained: 0, skipped: 2 });
     expect(service.status().queue).toEqual({ pending: 3, claimed: 0, completed: 2 });
     await service.tick(); await service.tick();
-    expect(store.listKnowledge()).toEqual([]);
     expect(store.listCandidates()).toEqual([]);
   });
 
@@ -42,7 +40,6 @@ describe("LearningService", () => {
     experience(store, "failed", "failed"); experience(store, "cancel", "cancelled"); experience(store, "unknown", "model-claims-success");
     const result = await new LearningService(store).tick();
     expect(result).toMatchObject({ retained: 0, skipped: 3 });
-    expect(store.listKnowledge()).toEqual([]);
     expect(store.listCandidates()).toEqual([]);
   });
 
@@ -50,123 +47,7 @@ describe("LearningService", () => {
     const store = open(); experience(store, "other", "completed", "other"); experience(store, "ours");
     const service = new LearningService(store);
     await service.tick({ projectId: "project" });
-    expect(store.listKnowledge({ projectId: "other" })).toEqual([]);
     expect(service.status("other").queue.pending).toBe(1);
-  });
-
-  it("imports only current source notes and invalidates them after source changes", () => {
-    const path = root(); writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl") });
-    memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Entry point", summary: "The entry point defines a.", source: "manual" });
-    const store = open(); const service = new LearningService(store);
-    const entries = service.importCodebaseNotes("project", path, memory);
-    expect(entries).toHaveLength(1);
-    expect(service.importCodebaseNotes("project", path, memory)[0].id).toBe(entries[0].id);
-    writeFileSync(join(path, "index.ts"), "export const b = 2;\n");
-    expect(service.importCodebaseNotes("project", path, memory)).toEqual([]);
-    expect(service.invalidateKnowledge("project", { "index.ts": digest })).toBe(0);
-    expect(store.getKnowledge(entries[0].id)?.status).toBe("stale");
-  });
-
-  it("does not let disabled recent lessons crowd older active lessons out of a bounded recall", () => {
-    const path = root();
-    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
-    let timestamp = 0;
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl"), now: () => ++timestamp });
-    const remember = (summary: string) => memory.rememberCodebase({ root: path, paths: ["index.ts"], title: summary, summary, source: "manual" });
-    remember("Older useful lesson");
-    remember("Newer disabled lesson");
-    const store = open();
-    const service = new LearningService(store);
-    const initial = service.importCodebaseNotes("project", path, memory, 2);
-    store.setKnowledgeStatus(initial.find(entry => entry.summary === "Newer disabled lesson")!.id, "disabled");
-    expect(service.importCodebaseNotes("project", path, memory, 1).map(entry => entry.summary)).toEqual(["Older useful lesson"]);
-    expect(store.listKnowledge().find(entry => entry.summary === "Newer disabled lesson")!.status).toBe("disabled");
-  });
-
-  it("recalls admitted source records in one pass with shared eligibility and freshness checks", () => {
-    const path = root();
-    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
-    let timestamp = 0;
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl"), now: () => ++timestamp });
-    const older = memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Entry", summary: "Older useful source lesson", source: "manual" });
-    memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Disabled", summary: "Newest source lesson", source: "manual" });
-    const store = open();
-    const service = new LearningService(store);
-    const entries = service.importCodebaseNotes("project", path, memory, 2);
-    store.setKnowledgeStatus(entries.find(entry => entry.summary === "Newest source lesson")!.id, "disabled");
-    const recall = vi.spyOn(memory, "recallCodebase");
-    expect(service.recallCodebaseNotes("project", path, memory, 1)).toEqual([older]);
-    expect(recall).toHaveBeenCalledTimes(1);
-    writeFileSync(join(path, "index.ts"), "export const a = 2;\n");
-    expect(service.recallCodebaseNotes("project", path, memory)).toEqual([]);
-    expect(store.listKnowledge().find(entry => entry.summary === older.summary)!.status).toBe("stale");
-    // Restoring the original bytes does not reactivate previously stale evidence.
-    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
-    expect(service.recallCodebaseNotes("project", path, memory)).toEqual([]);
-  });
-
-  it("does not let restored stale identities crowd older active notes out of recall", () => {
-    const path = root();
-    writeFileSync(join(path, "stable.ts"), "export const stable = true;\n");
-    const changed = join(path, "changed.ts");
-    const original = "export const route = '/tenant';\n";
-    writeFileSync(changed, original);
-    let timestamp = 0;
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl"), now: () => ++timestamp });
-    const active = memory.rememberCodebase({ root: path, paths: ["stable.ts"], title: "Stable", summary: "Older active lesson", source: "test" });
-    for (let index = 0; index < 6; index++) memory.rememberCodebase({ root: path, paths: ["changed.ts"], title: `Route ${index}`, summary: `Recent route lesson ${index}`, source: "test" });
-    const store = open(":memory:");
-    const service = new LearningService(store);
-    const entries = service.importCodebaseNotes("project", path, memory, 16);
-    writeFileSync(changed, "export const route = '/changed';\n");
-    expect(service.refreshCodebaseNotes("project", path, memory)).toBe(6);
-    writeFileSync(changed, original);
-    expect(service.recallCodebaseNotes("project", path, memory, 6)).toEqual([active]);
-    expect(entries.filter(entry => store.getKnowledge(entry.id)?.status === "stale")).toHaveLength(6);
-  });
-
-  it("refreshes source knowledge beyond 200 entries without skipping rows changed during paging", () => {
-    const path = root();
-    const source = join(path, "index.ts");
-    writeFileSync(source, "export const current = true;\n");
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl") });
-    const note = memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Entry", summary: "Source entry", source: "test" });
-    const sourceLinks = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
-    const store = open(":memory:");
-    const evidence = store.appendEvent({ projectId: "project", idempotencyKey: "source-page", kind: "source-context", outcome: "current-source", summary: "Source evidence", sourceLinks, evidenceRefs: [note.id] });
-    const entries = Array.from({ length: 205 }, (_, index) => store.putKnowledge({ projectId: "project", summary: `Source lesson ${index}`, sourceLinks, evidenceEventIds: [evidence.id] }));
-    const unrelated = store.appendEvent({ projectId: "project", idempotencyKey: "not-a-source-note", kind: "workflow-run", outcome: "completed", summary: "Workflow result" });
-    const keep = store.putKnowledge({ projectId: "project", summary: "Unrelated linked knowledge", sourceLinks, evidenceEventIds: [unrelated.id] });
-    const pages = vi.spyOn(store, "listCurrentSourceKnowledgePage");
-    writeFileSync(source, "export const current = false;\n");
-    expect(new LearningService(store).refreshCodebaseNotes("project", path, memory)).toBe(205);
-    expect(pages).toHaveBeenCalledTimes(2);
-    expect(entries.every(entry => store.getKnowledge(entry.id)?.status === "stale")).toBe(true);
-    expect(store.getKnowledge(keep.id)?.status).toBe("current");
-  });
-
-  it("excludes symlink and hardlink replacements from retained source knowledge", () => {
-    const path = root(); const source = join(path, "index.ts"); const other = join(path, "other.ts");
-    writeFileSync(source, "export const a = 1;\n"); writeFileSync(other, "export const a = 1;\n");
-    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl") });
-    memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Entry", summary: "A source fact.", source: "manual" });
-    const service = new LearningService(open()); const [entry] = service.importCodebaseNotes("project", path, memory);
-    unlinkSync(source); symlinkSync(other, source);
-    expect(service.refreshCodebaseNotes("project", path, memory)).toBe(1);
-    expect(service.store.getKnowledge(entry.id)?.status).toBe("stale");
-    expect(service.importCodebaseNotes("project", path, memory)).toEqual([]);
-    unlinkSync(source); linkSync(other, source);
-    expect(service.importCodebaseNotes("project", path, memory)).toEqual([]);
-  });
-
-  it("retains only a trusted derived diagnosis with source lineage, idempotently after lease replay", async () => {
-    const store = open(); const event = experience(store, "event", "failed");
-    const service = new LearningService(store, { deriveKnowledge: selected => ({ projectId: selected.projectId, summary: "The approved runtime was unavailable during this run.", sourceLinks: [], evidenceEventIds: [selected.id] }) });
-    await service.tick();
-    expect(store.listKnowledge()[0].evidenceEventIds).toEqual([event.id]);
-    const first = store.listKnowledge()[0];
-    expect(store.putKnowledge({ projectId: first.projectId, summary: first.summary, sourceLinks: first.sourceLinks, evidenceEventIds: first.evidenceEventIds }).id).toBe(first.id);
   });
 
   it("requires configured trusted evaluation and rejects a receipt for a different frozen artifact", async () => {

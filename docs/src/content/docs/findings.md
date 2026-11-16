@@ -68,20 +68,16 @@ Accepting a finding does not verify it, and suppressing it does not make it fals
 
 ## Teach 0 your false positives
 
-Record why a finding is a false alarm. Later scans that read the same database recall the memory as context.
+Record why a finding is a false alarm. It becomes a note in [Memory](/threads/#memory) tagged `avoid`, and later scans show the `avoid` notes to the verifier as untrusted context.
 
 ```bash
 0 findings update 3f2a --status false-positive --reason "Echo endpoint only exists in test fixtures" \
   --db-path ./engagement.db
-0 memory set --add --finding 3f2a --reason "Intentional CORS for the public API" \
-  --db-path ./engagement.db
-0 memory list --db-path ./engagement.db
-0 memory list MEMORY_ID --db-path ./engagement.db
+0 memory add "The public API allows CORS on purpose" --kind avoid --global
+0 memory list
 ```
 
-`mark-fp` suppresses the finding and creates a memory. `memory add` creates a memory without suppressing. `--scope global|target|package` sets where a memory applies (default `target`); `--scope-value` names the target URL or package.
-
-To reuse memories across runs, scan into the same database with `--db-path`. A new run database does not inherit them. Memories are treated as untrusted hints: the agents still check the current code and deployment.
+`findings update --status false-positive` suppresses the finding and remembers why. `0 memory add` remembers a note without touching any finding. The old `findings triage memory` commands (add, list, remove) still work for one release and print a `moved:` line. Notes are untrusted hints: the agents still check the current code and deployment.
 
 ## Verify and fix
 
