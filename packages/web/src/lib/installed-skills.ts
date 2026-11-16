@@ -1,5 +1,4 @@
 import { cleanSkillSummary, matchesWords, type BrowsableSkill } from "@/components/skills-model";
-import { bundledSkillIcon, type SkillIconKey } from "./skill-icons";
 
 export type InstalledSkill = BrowsableSkill & { source: string; origin?: { repo: string; sha: string; publisher?: string | null; catalogId?: string | null } };
 
@@ -29,16 +28,14 @@ export const originOwner = (skill: Pick<InstalledSkill, "origin">): string | und
 
 export type SkillTile =
   | { kind: "publisher"; owner: string; name: string }
-  | { kind: "icon"; icon: SkillIconKey }
+  | { kind: "brand" }
+  | { kind: "extension" }
   | { kind: "monogram"; name: string };
 
-/** Tile content: GitHub skills show their publisher, bundled ones a category icon, extensions the extension icon, yours a monogram. */
+/** Tile content: GitHub skills show their publisher, bundled ones the 0security mark, extensions the puzzle icon, yours a monogram. */
 export function installedTile(skill: InstalledSkill): SkillTile {
-  if (skill.scope === "builtin") return { kind: "icon", icon: bundledSkillIcon(skill) };
-  if (skill.scope === "extension") return { kind: "icon", icon: "extension" };
+  if (skill.scope === "builtin") return { kind: "brand" };
+  if (skill.scope === "extension") return { kind: "extension" };
   if (skill.origin) return { kind: "publisher", owner: originOwner(skill)!, name: skill.origin.repo.split("/")[0]! };
   return { kind: "monogram", name: skill.name };
 }
-
-/** First-party skills carry the verified check: the ones that come with 0. */
-export const isFirstParty = (skill: Pick<InstalledSkill, "scope">) => skill.scope === "builtin";

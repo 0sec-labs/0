@@ -4,6 +4,7 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
+import { SkillMarkIcon } from "@/components/skills/cells";
 import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -297,7 +298,7 @@ export function CommandPalette({
       run: () => navigate(`/agents?workflow=${encodeURIComponent(workflow.id)}`),
     });
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
-      id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: CapySparkleFourIcon,
+      id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: skill.scope === "builtin" ? SkillMarkIcon : CapySparkleFourIcon,
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
       run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
     });

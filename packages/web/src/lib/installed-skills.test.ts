@@ -28,8 +28,8 @@ describe("installedSource", () => {
 
 describe("installedTile", () => {
   it("picks the tile by origin", () => {
-    expect(installedTile(make("a", "builtin", { category: "Web" }))).toEqual({ kind: "icon", icon: "web" });
-    expect(installedTile(make("a", "extension"))).toEqual({ kind: "icon", icon: "extension" });
+    expect(installedTile(make("a", "builtin", { category: "Web" }))).toEqual({ kind: "brand" });
+    expect(installedTile(make("a", "extension"))).toEqual({ kind: "extension" });
     expect(installedTile(make("a", "workspace", { origin: { repo: "Owner/r", sha: "x" } }))).toEqual({ kind: "publisher", owner: "owner", name: "Owner" });
     expect(installedTile(make("a", "personal"))).toEqual({ kind: "monogram", name: "a" });
   });

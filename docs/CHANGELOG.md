@@ -15,6 +15,7 @@ on the GitHub Release tag.
 ### Changed
 
 - The Agents | Threads switch is a small icon toggle on the list header, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
+- Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
 
 ### Removed
 
