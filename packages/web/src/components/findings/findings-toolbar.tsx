@@ -1,7 +1,6 @@
 import { Columns3, Download, List } from "lucide-react";
 import { CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/ui/components/select";
 import { Tooltip } from "@/ui/components/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { REPORT_FORMATS, useReportDownload } from "@/components/report-export-control";
@@ -48,7 +47,7 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
           <span className="sr-only">Findings</span>
           <span className="sr-only" aria-label={`${shown} of ${total} findings`}>{`${shown} of ${total}`}</span>
         </h1>
-        <Select aria-label="Finding state" size="sm" value={preset} onValueChange={value => onPreset(value as FindingPreset)} className="w-44" options={PRESETS.map(item => ({ value: item.value, label: `${item.label} (${item.value === "all" ? total : presetCounts[item.value]})` }))} />
+        <PresetTabs preset={preset} counts={presetCounts} total={total} onPreset={onPreset} />
         <div className="ml-auto flex items-center gap-1.5">
           <label className="relative hidden sm:block">
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground-2" />
@@ -84,6 +83,28 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
       </div>
       {exporting.error ? <p role="alert" className="px-3 pb-1 text-xs text-destructive">{exporting.error}</p> : null}
       {count > 0 ? <FilterChips {...props} /> : null}
+    </div>
+  );
+}
+
+const tabClass = "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium whitespace-nowrap text-muted-foreground-1 transition-colors duration-100 outline-none hover:text-foreground focus-visible:outline-ring-inset data-[selected]:bg-secondary data-[selected]:text-foreground";
+
+/** State tabs with a count; the open-work tab carries an accent badge, the rest plain numbers. */
+function PresetTabs({ preset, counts, total, onPreset }: { preset: FindingPreset; counts: Record<FindingPreset, number>; total: number; onPreset: (preset: FindingPreset) => void }) {
+  return (
+    <div role="tablist" aria-label="Finding state" className="flex min-w-0 items-center gap-1 overflow-x-auto">
+      {PRESETS.map(item => {
+        const count = item.value === "all" ? total : counts[item.value];
+        const selected = preset === item.value;
+        return (
+          <button key={item.value} type="button" role="tab" aria-selected={selected} data-selected={selected ? "" : undefined} className={tabClass} onClick={() => onPreset(item.value)}>
+            {item.label}
+            {item.value === "review" && count > 0
+              ? <span className="grid h-4 min-w-4 place-items-center rounded-[3px] bg-primary px-1 text-[11px] leading-none tabular-nums text-primary-foreground">{count}</span>
+              : <span className="text-xs tabular-nums text-muted-foreground-2">{count}</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }

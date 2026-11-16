@@ -23,7 +23,10 @@ export function ShortcutList() {
   const [query, setQuery] = useState("");
   const groups = SHORTCUT_GROUPS.map(label => ({ label, shortcuts: SHORTCUTS.filter(item => item.group === label && shortcutMatchesQuery(item, query)) })).filter(group => group.shortcuts.length > 0);
   return <div className="min-w-0">
-    <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search shortcuts" aria-label="Search shortcuts" className="mb-2" />
+    <div className="mb-2 flex items-center gap-3">
+      <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search shortcuts" aria-label="Search shortcuts" className="max-w-xs flex-1" />
+      <span className="ml-auto text-xs text-muted-foreground-2">Keys can't be changed yet.</span>
+    </div>
     <Table aria-label="Keyboard shortcuts" className="text-xs">
       <TableHeader className="[&_tr]:border-b-[0.5px] [&_tr]:border-border-1"><TableRow className="border-b-[0.5px] border-border-1 hover:bg-transparent"><TableHead className={headClass}>Command</TableHead><TableHead className={headClass}>Keybinding</TableHead><TableHead className={`${headClass} hidden sm:table-cell`}>When</TableHead></TableRow></TableHeader>
       <TableBody>
