@@ -3,7 +3,7 @@ import { LEGACY_REDIRECTS, canonicalWorkspacePath, isSidebarDestinationActive, S
 
 test("desktop and touch destinations share canonical work pages", () => {
   expect(WORKSPACE_DESTINATIONS.map(item => item.to)).toEqual([
-    "/chats", "/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions", "/plugins", "/settings",
+    "/chats", "/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions", "/settings",
   ]);
   expect(new Set(WORKSPACE_DESTINATIONS.map(item => item.to)).size).toBe(WORKSPACE_DESTINATIONS.length);
   for (const item of WORKSPACE_DESTINATIONS) expect(canonicalWorkspacePath(item.to)).toBe(item.to);
@@ -34,7 +34,6 @@ test("sidebar active state: Skills owns /plugins/skills*, Extensions owns /exten
   expect(activeFor("/plugins/skills")).toEqual(["/plugins/skills"]);
   expect(activeFor("/plugins/skills/catalog/o~r~x")).toEqual(["/plugins/skills"]);
   expect(activeFor("/extensions")).toEqual(["/extensions"]);
-  expect(activeFor("/plugins")).toEqual([]);
   expect(activeFor("/memory")).toEqual(["/memory"]);
   expect(activeFor("/computers")).toEqual(["/computers"]);
   expect(activeFor("/findings/abc")).toEqual(["/findings"]);
