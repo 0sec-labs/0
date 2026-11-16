@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { PageHeader } from "@/components/page-shell";
 import { Navigate, useLocation } from "react-router-dom";
 import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapyPullRequestIcon, CapySettingsIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
@@ -50,10 +51,9 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : <FixControl sessionId={sessionId} />;
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
-  const wide = mode === "settings" && category === "shortcuts";
-  const subtitle = wide ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;
-  return <div className={`[&_[data-slot=badge]]:rounded-full [&_[data-slot=badge]]:border-0 mx-auto flex w-full min-w-0 flex-col gap-10 px-6 pt-6 pb-10 md:pt-16 [[data-has-topbar]_&]:md:pt-12 ${wide ? "max-w-5xl" : "max-w-3xl"}`}>
-    <header ref={headingRef} tabIndex={-1} className="flex flex-col gap-1 outline-none"><h1 className="text-xl font-medium break-words text-foreground">{title}</h1>{subtitle && <p className="text-sm font-normal text-muted-foreground-2">{subtitle}</p>}</header>
+  const subtitle = mode === "settings" && category === "shortcuts" ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;
+  return <div className="flex min-w-0 flex-col gap-10 [&_[data-slot=badge]]:rounded-full [&_[data-slot=badge]]:border-0">
+    <PageHeader ref={headingRef} tabIndex={-1} className="outline-none" title={title} summary={subtitle} />
     <section className="flex min-w-0 flex-col gap-10" aria-label={mode === "settings" ? `${title} settings` : page.label}>{content}</section>
   </div>;
 }

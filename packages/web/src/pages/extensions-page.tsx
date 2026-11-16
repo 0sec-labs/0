@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PageContent, PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { CapyPlusIcon } from "@/ui/icons/capy";
 import { AddExtensionDialog } from "@/components/extensions/add-extension-dialog";
@@ -46,7 +46,7 @@ export function ExtensionsPage() {
     void run(async () => { if (current.kind === "remove") await api.remove.mutateAsync(current.row.name); else await api.disable.mutateAsync({ name: current.row.name, confirm: true }); setConfirm(null); });
   };
 
-  return <PageContent aria-label="Extensions">
+  return <>
     <PageHeader title="Extensions" summary="Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit and never updates on its own."
       actions={<div className="flex gap-2"><Button size="sm" variant="outline" disabled={!api.canChange || busy} onClick={flow.openAddMcp}>Add MCP server</Button><Button size="sm" variant="inverse" disabled={!api.canChange || busy} onClick={flow.openAdd}><CapyPlusIcon className="size-4" />Add extension</Button></div>} />
     {!api.canChange && <p className="text-sm text-muted-foreground-1">Only owners can add or change extensions.</p>}
@@ -67,5 +67,5 @@ export function ExtensionsPage() {
     <ConfirmDialog open={confirm !== null} onOpenChange={open => { if (!open) setConfirm(null); }} pending={busy} destructive={confirm?.kind === "remove"} confirmLabel={confirm?.kind === "remove" ? "Remove" : "Turn off"} onConfirm={confirmed}
       title={confirm?.kind === "remove" ? `Remove ${confirm.row.name}?` : `Turn off ${confirm?.row.name ?? ""}?`}
       description={confirm?.kind === "remove" ? "Its files are deleted. You can add it again later." : "Commands then run without its checks."} />
-  </PageContent>;
+  </>;
 }

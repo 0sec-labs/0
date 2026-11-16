@@ -1,6 +1,6 @@
-import { PageHeader, PageContent } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { MemoryPortability } from "@/components/memory-portability";
 import { LearningPanel } from "@/components/learning-panel";
 export function LearningPage() {
-  return <PageContent><PageHeader title="Memory" actions={<MemoryPortability />} /><LearningPanel /></PageContent>;
+  return <><PageHeader title="Memory" actions={<MemoryPortability />} /><LearningPanel /></>;
 }

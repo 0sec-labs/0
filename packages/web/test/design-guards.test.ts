@@ -60,4 +60,20 @@ describe("design guards", () => {
     const stale = (pattern: RegExp, allowed: Record<string, string>) => Object.keys(allowed).filter(path => !sources.find(file => file.path === path)?.lines.some(line => pattern.test(line)));
     expect([...stale(ROUNDED, ROUNDED_ALLOWED), ...stale(STYLE, STYLE_ALLOWED)]).toEqual([]);
   });
+  test("pages get their width and padding from PageShell: no max-w-*, mx-auto or PageContent in page files", () => {
+    // Dialogs, sheets and the fixed findings panel size themselves; everything else in pages/ must not set a column.
+    const OWN = /\bmx-auto\b|\bmax-w-(?:sm|md|lg|xl|[2-7]xl|prose|screen|\[\d|\(--)|\bPageContent\b/;
+    const found = sources.filter(file => file.path.startsWith("pages/")).flatMap(file => file.lines.flatMap((line, index) => OWN.test(line) && !/Dialog|Sheet|fixed /.test(line) ? [`${file.path}:${index + 1}`] : []));
+    expect(found).toEqual([]);
+  });
+  test("every page route is wrapped by RoutedPageShell and declared in PAGE_ROUTES", () => {
+    const app = readFileSync(join(SRC, "pages", "operations-app.tsx"), "utf8");
+    expect(app).toContain("<Route element={<RoutedPageShell />}>");
+    const inside = app.slice(app.indexOf("<Route element={<RoutedPageShell />}>"));
+    const nav = readFileSync(join(SRC, "lib", "workspace-navigation.ts"), "utf8");
+    const paths = [...inside.matchAll(/<Route path="(\/[^"]+)"/g)].map(match => match[1]!);
+    expect(paths.length).toBeGreaterThan(8);
+    for (const path of paths) expect(nav, path).toContain(`path: "${path}"`);
+    for (const name of ["connections", "models", "settings", "doctor", "tools", "project", "fix"]) expect(nav).toContain(`path: "/${name}"`);
+  });
 });

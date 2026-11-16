@@ -83,7 +83,7 @@ export function FindingDetail(props: FindingDetailProps) {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PanelHeader {...props} title={latest.title} status={status} shareUrl={shareUrl} exportId={latest.id} />
       <div className={cn("no-scrollbar scroll-fade-y min-h-0 flex-1 overflow-y-auto")}>
-        <div className={cn("mx-auto flex w-full flex-col gap-8 px-4 pt-3 pb-16", variant === "page" ? "max-w-3xl" : "max-w-3xl")}>
+        <div className={cn("mx-auto flex w-full flex-col gap-8 px-4 pt-3 pb-16", variant === "page" ? "max-w-(--page-width-list)" : "max-w-3xl")}>
           <section aria-label="Summary" className="flex flex-col gap-1.5">
             <h2 className="min-w-0 text-[22px] leading-7 font-medium text-balance break-words text-foreground">{latest.title}</h2>
             <p className="text-xs text-muted-foreground-1"><span className="tabular-nums">{findingCode(fingerprint)}</span> · {ageLabel(latest.timestamp)}</p>

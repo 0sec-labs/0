@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getFindingPriority } from "@0/engine/shared/finding-priority";
 import { Button } from "@/components/ui/button";
-import { PageContent } from "@/components/page-header";
+import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { EmptyState } from "@/components/state-panel";
 import { FindingDetail } from "@/components/findings/finding-detail";
 import { FindingsBoard } from "@/components/findings/findings-board";
@@ -65,7 +65,7 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
   const root = useRef<HTMLDivElement>(null);
   const height = useFillHeight(root);
   return (
-    <PageContent width="full" className="gap-0 p-0 md:pt-0 pb-0 [[data-has-topbar]_&]:md:pt-0">
+    <>
       <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden">
         <FindingDetail
           key={fingerprint}
@@ -77,7 +77,7 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
           mutations={mutations}
         />
       </div>
-    </PageContent>
+    </>
   );
 }
 
@@ -88,6 +88,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const [stored, setStored] = usePersistentState<FindingsView>(STORAGE_KEYS.findingsView, mergeView(undefined));
   const view = useMemo(() => mergeView(stored), [stored]);
   const { display, preset, filters, collapsed } = view;
+  usePageVariant(display.layout === "board" ? "full" : "list");
   const patchView = useCallback((patch: Partial<FindingsView>) => setStored(current => ({ ...mergeView(current), ...patch })), [setStored]);
   const setDisplay = useCallback((patch: Partial<DisplayOptions>) => setStored(current => { const base = mergeView(current); return { ...base, display: { ...base.display, ...patch } }; }), [setStored]);
 
@@ -250,6 +251,8 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   ) : null;
 
   return (
+    <>
+    <PageHeader title="Findings" />
     <div ref={root} style={{ height }} className="flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace" data-search-owner="findings">
       <FindingsToolbar
         total={groups.length}
@@ -318,6 +321,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
         {panel ? (desktop ? panel : createPortal(panel, document.body)) : null}
       </div>
     </div>
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { queryKeys } from "@/queries";
-import { PageHeader, PageContent } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,12 +58,12 @@ export function TeamSettingsPage() {
   };
   const cancel = () => { setAdding(false); setPassword(""); setError(""); };
 
-  if (!team.enabled) return <PageContent>
+  if (!team.enabled) return <>
     <PageHeader title="Members" />
     {creating ? <WorkspaceChoice stacked initialMode="team" onContinue={() => setCreating(false)} /> : <Button className="self-start" onClick={() => setCreating(true)}>Create a team</Button>}
-  </PageContent>;
+  </>;
 
-  return <PageContent>
+  return <>
     <PageHeader title="Members" actions={owner && !adding ? <Button onClick={() => { setAdding(true); setMessage(""); setError(""); }}><Plus className="size-4" />Add teammate</Button> : undefined} />
     <QueryState pending={members.isPending} error={members.error} retry={members.refetch} />
     {members.data && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4">
@@ -88,5 +88,5 @@ export function TeamSettingsPage() {
     </form>}
     <Feedback message={message} />
     <Link className="inline-block text-sm underline" to="/api-access">Findings API</Link>
-  </PageContent>;
+  </>;
 }

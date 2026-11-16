@@ -1,3 +1,4 @@
+import { matchPath } from "react-router-dom";
 import { VOCAB } from "@/lib/vocabulary";
 import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
@@ -56,4 +57,42 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
 export function canonicalWorkspacePath(path: string): string {
   const row = LEGACY_REDIRECTS.find(item => item.keep === "path" && new RegExp(`^${item.from}(?=/|$)`).test(path));
   return row ? `${row.to}${path.slice(row.from.length)}` : path;
+}
+
+/** The three page layouts (components/page-shell.tsx). */
+export type PageVariant = "list" | "form" | "full";
+/** Content widths in px. styles.css publishes the same numbers as --page-width-list / --page-width-form; a test keeps them equal. */
+export const PAGE_WIDTHS = { list: 872, form: 672 } as const;
+
+/**
+ * Every page route and the layout it uses. The shell is applied centrally (RoutedPageShell), so a page never sets its own width
+ * or padding. First match wins; a path that matches nothing is the not-found page, which is `list`.
+ * Findings switches to `full` for its board (usePageVariant); every other route is fixed here.
+ */
+export const PAGE_ROUTES: readonly { readonly path: string; readonly variant: PageVariant }[] = [
+  { path: "/chats", variant: "full" },
+  { path: "/chats/saved/:savedId", variant: "full" },
+  { path: "/chats/:sessionId", variant: "full" },
+  { path: "/agents", variant: "list" },
+  { path: "/agents/:sentinelId", variant: "list" },
+  { path: "/skills", variant: "list" },
+  { path: "/skills/catalog/:id", variant: "list" },
+  { path: "/memory", variant: "list" },
+  { path: "/computers", variant: "list" },
+  { path: "/extensions", variant: "list" },
+  { path: "/findings", variant: "list" },
+  { path: "/findings/:fingerprint", variant: "full" },
+  { path: "/settings", variant: "form" },
+  { path: "/connections", variant: "list" },
+  { path: "/models", variant: "list" },
+  { path: "/doctor", variant: "list" },
+  { path: "/tools", variant: "list" },
+  { path: "/project", variant: "list" },
+  { path: "/fix", variant: "list" },
+  { path: "/team", variant: "list" },
+  { path: "/api-access", variant: "list" },
+];
+
+export function pageVariantFor(pathname: string): PageVariant {
+  return PAGE_ROUTES.find(route => matchPath({ path: route.path, end: true }, pathname))?.variant ?? "list";
 }

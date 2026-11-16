@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CapyArrowUpRightIcon as ArrowUpRight, CapyCheckIcon as Check, CapyMoreIcon as More } from "@/ui/icons/capy";
-import { PageContent } from "@/components/page-header";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -31,8 +30,8 @@ export function SkillCatalogDetailPage() {
   const [dialog, setDialog] = useState<"add" | "remove" | null>(null);
   useBreadcrumbLabel(skill?.title);
 
-  if (inventory.isPending) return <PageContent width="wide"><LoadingState label="Loading skill…" variant="cards" /></PageContent>;
-  if (!skill || !inventory.data) return <PageContent><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/skills?tab=browse" />}>Back to skills</Button>} /></PageContent>;
+  if (inventory.isPending) return <><LoadingState label="Loading skill…" variant="cards" /></>;
+  if (!skill || !inventory.data) return <><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/skills?tab=browse" />}>Back to skills</Button>} /></>;
 
   const data = preview.data;
   const installed = skill.installed;
@@ -41,13 +40,13 @@ export function SkillCatalogDetailPage() {
   const primary = installed ? <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground-1"><Check aria-hidden="true" className="size-(--icon-sm)" />Added</span>
     : !skill.installable ? <Button variant="outline" render={<a href={source} target="_blank" rel="noopener noreferrer" />}>View on GitHub<ArrowUpRight aria-hidden="true" /></Button>
     : preview.error ? null : <Button variant="inverse" disabled={!canWrite || !data} onClick={() => { install.reset(); setDialog("add"); }}>Add</Button>;
-  return <PageContent width="wide" className="gap-0">
+  return <>
     <div className="grid min-w-0 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <article className="flex min-w-0 flex-col gap-8" aria-label={skill.title}>
         <header className="flex min-w-0 flex-col gap-4">
           <div className="w-fit"><CatalogTile skill={skill} publisher={publisher} size="lg" /></div>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3"><h1 className="text-2xl font-medium tracking-tight break-words text-foreground">{skill.title}</h1><span className="text-sm text-muted-foreground-2">Skill</span></div>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3"><h1 className="text-[22px]/7 font-medium tracking-[-0.02em] break-words text-foreground">{skill.title}</h1><span className="text-sm text-muted-foreground-2">Skill</span></div>
             <div className="flex shrink-0 items-center gap-2">
               {primary}
               {installed && canWrite && <DropdownMenu>
@@ -92,5 +91,5 @@ export function SkillCatalogDetailPage() {
     {data && <AddSkillDialog open={dialog === "add"} onOpenChange={open => { if (!open) close(); }} preview={data} pending={install.isPending} error={install.error} onConfirm={() => install.mutate({ id: skill.id, sha: data.sha }, { onSuccess: close })} />}
     <ConfirmDialog open={dialog === "remove"} onOpenChange={open => { if (!open) close(); }} pending={remove.isPending} spinner destructive confirmLabel="Remove" title={`Remove ${skill.title}?`} description="The skill folder and its record are deleted from your workspace. You can add it again later." error={<Feedback error={remove.error} />}
       onConfirm={() => remove.mutate(installed!.name, { onSuccess: close })} />
-  </PageContent>;
+  </>;
 }

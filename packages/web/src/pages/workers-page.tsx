@@ -4,7 +4,7 @@ import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
 import { createChatOnExecutionHost } from "@/console/model-source";
 import { backendRouteHref } from "@/console/chat-host";
-import { PageHeader, PageContent } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Square, RefreshCw, Search } from "lucide-react";
@@ -127,7 +127,7 @@ export function WorkersPage() {
   const statusLabel = (backend: BackendDescriptor) => backend.status === "connected" ? "Connected" : backend.status === "connecting" ? "Connecting…" : "Disconnected";
 
   return (
-    <PageContent>
+    <>
       <PageHeader title="Computers" actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
 
       <section aria-label="Computers" className="space-y-3">
@@ -197,6 +197,6 @@ export function WorkersPage() {
         description="Removes the saved connection and its local credential."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         confirmLabel={busy === "remove" ? "Removing…" : "Remove connection"} onConfirm={() => void removeBackend()} />
-    </PageContent>
+    </>
   );
 }

@@ -83,7 +83,7 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
     setBase(structuredClone(workflow)); setTarget(workflow.target);
   }, [workflow.target]); // eslint-disable-line react-hooks/exhaustive-deps
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
-  return <div className="mx-auto w-full max-w-[940px]">
+  return <div className="w-full">
     <header className="sticky top-0 z-10 -mx-1 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 bg-panel px-1 py-1">
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {teamCollaboration}

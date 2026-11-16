@@ -142,6 +142,9 @@
 }
 
 :root {
+  /* Page shell widths (components/page-shell.tsx). Keep in sync with PAGE_WIDTHS in lib/workspace-navigation.ts; a test asserts it. */
+  --page-width-list: 872px;
+  --page-width-form: 672px;
   /* Shared geometry: controls nest inside menus and panel surfaces. */
   --workspace-panel: var(--card);
   --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground));

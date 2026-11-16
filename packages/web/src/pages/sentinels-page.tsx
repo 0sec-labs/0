@@ -3,7 +3,7 @@ import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { v } from "@/lib/vocabulary";
-import { PageContent } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
@@ -38,21 +38,18 @@ export function SentinelsPage() {
   // Old "Set up" links carried the owner in the query; the automation now lives in that Agent's page.
   const legacyOwner = search.get("owner");
   if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner, "automations")} replace />;
-  if (isLoading) return <PageContent><LoadingState label="Loading" /></PageContent>;
-  if (error) return <PageContent><ErrorState error={error} onRetry={() => void refetch()} /></PageContent>;
-  if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></PageContent>;
+  if (isLoading) return <><LoadingState label="Loading" /></>;
+  if (error) return <><ErrorState error={error} onRetry={() => void refetch()} /></>;
+  if (!supported) return <><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></>;
   const rows = orderSentinels(sentinels);
   const nameOf = new Map(sentinels.map(item => [item.id, item.name]));
   const hrefFor = (id: string, owner?: string | null) => owner && nameOf.has(owner) ? `${sentinelHref(owner, "automations")}&workflow=${encodeURIComponent(id)}` : `/agents?workflow=${encodeURIComponent(id)}`;
   const owners = new Map(automations.definitions.map(item => [item.id, item.ownerSentinelId]));
-  if (workflowId) return <PageContent width="wide"><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></PageContent>;
-  return <PageContent width="wide" className="gap-6">
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <h1 className="font-sans text-2xl font-medium tracking-tight">{v("{Sentinels}")}</h1>
-      {!readOnly && rows.length > 0 && <div className="flex gap-2"><Button type="button" variant="ghost" onClick={() => setNewAutomation(true)}>New automation</Button><Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button></div>}
-    </header>
+  if (workflowId) return <><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></>;
+  return <>
+    <PageHeader title={v("{Sentinels}")} actions={!readOnly && rows.length > 0 ? <><Button type="button" variant="ghost" onClick={() => setNewAutomation(true)}>New automation</Button><Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button></> : undefined} />
     {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} action={readOnly ? undefined : <Button type="button" variant="secondary" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
-      : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {rows.map(sentinel => <li key={sentinel.id} className="min-w-0"><Link to={sentinelHref(sentinel.id)} className="flex h-full min-w-0 flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none ui-row-hover focus-visible:outline-ring-inset">
           <span className="flex items-center gap-3"><SentinelAvatar sentinel={sentinel} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{sentinel.name}</span><SentinelStatusBadge sentinel={sentinel} /></span>
           <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No thread yet."}</span>
@@ -67,7 +64,7 @@ export function SentinelsPage() {
     {!readOnly && <GitHubWebhookControl />}
     <NewAutomationDialog open={newAutomation} onOpenChange={setNewAutomation} sentinels={sentinels} onCreated={(owner, id) => navigate(hrefFor(id, owner))} />
     <CreateSentinelDialog open={creating} onOpenChange={setCreating} onCreated={sentinel => navigate(sentinelHref(sentinel.id))} />
-  </PageContent>;
+  </>;
 }
 
 /** One Sentinel, laid out like a Capy Captain: profile header, then panel views. */
@@ -79,14 +76,14 @@ export function SentinelPage() {
   const query = useSentinel(sentinelId);
   useBreadcrumbLabel(query.data?.name);
   const view = parseView(search.get("view"));
-  if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
-  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</PageContent>;
+  if (query.isLoading) return <><LoadingState label="Loading" variant="detail" /></>;
+  if (query.error || !query.data) return <>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</>;
   const sentinel = query.data;
-  return <PageContent className="gap-6">
+  return <>
     <header className="flex items-center gap-4">
       <SentinelAvatar sentinel={sentinel} size="lg" />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 truncate font-sans text-2xl font-medium tracking-tight">{sentinel.name}</h1><SentinelStatusBadge sentinel={sentinel} /></div>
+        <div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 truncate font-sans text-[22px]/7 font-medium tracking-[-0.02em]">{sentinel.name}</h1><SentinelStatusBadge sentinel={sentinel} /></div>
         <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No thread yet."}</p>
       </div>
     </header>
@@ -100,5 +97,5 @@ export function SentinelPage() {
       {view === "activations" && <SentinelActivations sentinel={sentinel} />}
       {view === "settings" && <SentinelSettings key={sentinel.id} sentinel={sentinel} readOnly={readOnly} />}
     </div>
-  </PageContent>;
+  </>;
 }

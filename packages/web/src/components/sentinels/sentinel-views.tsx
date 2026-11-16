@@ -243,7 +243,7 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
   const destroy = async () => {
     try { await remove.mutateAsync({ id: sentinel.id, version: sentinel.version }); navigate("/agents"); } catch (cause) { setConfirmDelete(false); setError(errorText(cause, "Unable to delete.")); }
   };
-  return <div className="max-w-2xl space-y-8">
+  return <div className="space-y-8">
     {archived && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm"><span>Archived. It is hidden from the list, does not run and cannot be turned back on.</span></div>}
     <SentinelFields form={form} onChange={next => { setForm(next); setSaved(false); }} disabled={readOnly || archived} />
     <Section title="Memory">

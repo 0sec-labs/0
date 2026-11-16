@@ -8,7 +8,7 @@ import { Download } from "lucide-react";
 import { CapyCheckIcon as Check, CapyDocumentIcon as FileText, CapyMoreIcon as MoreHorizontal, CapyPlusIcon as Plus, CapySearchIcon as SearchIcon } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
-import { PageHeader, PageContent } from "@/components/page-header";
+import { PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,8 +116,8 @@ export function SkillsPage() {
   const exportDisabled = busy || !selectedId || !skill;
   const exportTrigger = <DropdownMenu.Trigger render={<Button variant="outline" size="sm" disabled={exportDisabled} />}><Download className="size-4" />Export</DropdownMenu.Trigger>;
   const openSource = () => { if (!skill) return; setPreviewTab("source"); if (writable) setDraft({ id: skill.id, revision: skill.revision, content: skill.writable ? skill.content : skill.content.replace(/^name:.*$/m, `name: ${JSON.stringify(`${skill.name.slice(0, 57)}-custom`)}`), copy: !skill.writable }); };
-  return <PageContent width={selectedId ? "wide" : "readable"} aria-label="Skills">
-    <PageHeader compact title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : undefined} actions={<>
+  return <>
+    <PageHeader title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : undefined} actions={<>
       {!selectedId && <div className="relative w-55"><SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-(--icon-sm) -translate-y-1/2 text-muted-foreground-2" /><Input type="search" aria-label="Search skills" className="pl-8" placeholder={tab === "browse" ? "Search the skills directory" : "Search installed skills"} autoComplete="off" data-1p-ignore data-lpignore="true" value={query} onChange={event => setQuery(event.target.value)} /></div>}
       {!selectedId && tab === "installed" && (writable || canMount) && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill actions" disabled={busy} />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end">{writable && <><DropdownMenu.Item onClick={() => markdownInput.current?.click()}>Import SKILL.md file</DropdownMenu.Item><DropdownMenu.Item onClick={() => folderInput.current?.click()}>Import skill folder</DropdownMenu.Item><DropdownMenu.Item onClick={() => bundleInput.current?.click()}>Import exported skill</DropdownMenu.Item></>}{canMount && <DropdownMenu.Item onClick={() => { setDialog("mount"); setError(""); }}>Link a folder</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu>}
       {selectedId && skill && <><span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">{skill.writable ? <><Check className="size-3.5" />Saved</> : skillSourceLabel(skill, team.enabled)}</span><DropdownMenu>{exportTrigger}<DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => void perform(() => download("markdown"))}>SKILL.md</DropdownMenu.Item><DropdownMenu.Item onClick={() => void perform(() => download("bundle"))}>All files</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill options" />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item disabled={busy} onClick={openSource}>{writable ? skill.writable ? "Edit source" : "Customize source" : "View source"}</DropdownMenu.Item>{writable && skill.writable && skill.scope === "workspace" && <DropdownMenu.Item variant="danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu></>}
@@ -160,5 +160,5 @@ export function SkillsPage() {
       submitLabel={busy ? "Saving…" : dialog === "mount" ? "Link" : "Create and refine"}>
       {dialog === "mount" ? <label className="block space-y-2 text-sm"><span>Folder on this computer</span><Input value={path} onChange={event => setPath(event.target.value)} placeholder="/path/to/skills" required disabled={busy} /></label> : <><label className="block min-w-0 space-y-2 text-sm"><span>Name</span><Input value={name} onChange={event => setName(event.target.value)} placeholder="Code review" maxLength={64} required disabled={busy} />{slug && slug !== name && <span className="block text-xs break-all text-muted-foreground-2">Saved as {slug}</span>}{name.trim() && !slug && <span className="block text-xs text-muted-foreground-2">Use letters or numbers in the name.</span>}</label><label className="block min-w-0 space-y-2 text-sm"><span>What should this skill do?</span><Textarea rows={4} value={description} onChange={event => setDescription(event.target.value)} maxLength={1024} required disabled={busy} /></label>{team.enabled && <p className="text-xs text-muted-foreground">Shared with {team.workspace?.name}.</p>}</>}
     </FormDialog>
-  </PageContent>;
+  </>;
 }

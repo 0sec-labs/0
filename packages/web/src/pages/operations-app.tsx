@@ -20,6 +20,7 @@ import {
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
 import { LEGACY_REDIRECTS } from "@/lib/workspace-navigation";
+import { RoutedPageShell } from "@/components/page-shell";
 import { usePageTitle } from "@/lib/page-title";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 
@@ -84,25 +85,27 @@ export function OperationsApp() {
         <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/chats" replace />} />
-          <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
-          <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
-          <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
-          {["connections", "models", "settings", "doctor", "tools", "project", "fix"].map((route) => (
-            <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
-          ))}
-          <Route path="/agents" element={<SentinelsPage />} />
-          <Route path="/agents/:sentinelId" element={<SentinelPage />} />
-          <Route path="/api-access" element={<FindingsApiAccessPage />} />
-          <Route path="/team" element={<TeamSettingsPage />} />
-          <Route path="/skills" element={<SkillsPage />} />
-          <Route path="/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
-          <Route path="/extensions" element={<ExtensionsPage />} />
-          <Route path="/memory" element={<LearningPage />} />
-          <Route path="/findings" element={findings} />
-          <Route path="/computers" element={<WorkersPage />} />
-          <Route path="/findings/:fingerprint" element={findings} />
-          {LEGACY_REDIRECTS.flatMap(row => row.routes.map(route => <Route key={route} path={route} element={legacyRedirect(row)} />))}
-          <Route path="*" element={<NotFoundPage />} />
+          <Route element={<RoutedPageShell />}>
+            <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
+            <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
+            <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
+            {["connections", "models", "settings", "doctor", "tools", "project", "fix"].map((route) => (
+              <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
+            ))}
+            <Route path="/agents" element={<SentinelsPage />} />
+            <Route path="/agents/:sentinelId" element={<SentinelPage />} />
+            <Route path="/api-access" element={<FindingsApiAccessPage />} />
+            <Route path="/team" element={<TeamSettingsPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
+            <Route path="/extensions" element={<ExtensionsPage />} />
+            <Route path="/memory" element={<LearningPage />} />
+            <Route path="/findings" element={findings} />
+            <Route path="/computers" element={<WorkersPage />} />
+            <Route path="/findings/:fingerprint" element={findings} />
+            {LEGACY_REDIRECTS.flatMap(row => row.routes.map(route => <Route key={route} path={route} element={legacyRedirect(row)} />))}
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Routes>
         </Suspense>
         </RouteErrorBoundary>
