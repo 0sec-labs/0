@@ -21,6 +21,7 @@ import { confirmOast, categoryToOastClass, deriveProbe, type OastClass, type Oas
 import type { ScopePolicy } from "../scope/scope.js";
 import { extractUrls } from "../scope/scope.js";
 import { runBeforeCommand } from "./before-command.js";
+import { hookInputForTool } from "./command-hook.js";
 import { classifyResponse, runEvasionCampaign, type HttpRequestParts, type WafResponseLike } from "../scope/waf-detect.js";
 import { detectScannerBinary } from "../scope/scanner-binaries.js";
 import { describeScopeGuards, scopeRequiredRefusal } from "../scope/scope-guard.js";
@@ -707,6 +708,9 @@ export class ToolExecutor {
         this._totalNonDoneToolCalls += 1;
       }
 
+      const gated = await this._beforeCommandGate(call);
+      if (gated) return gated;
+
       const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, this.checkoutKeys(), call.name) : undefined;
       let result: ToolResult;
       try { result = await this._dispatch(call); } finally { releaseMutation?.(); }
@@ -811,6 +815,24 @@ export class ToolExecutor {
     // Remember the denial so a retry of the same tool does not re-prompt.
     this._scopedAuditDenials.add(call.name);
     return denied;
+  }
+
+  /**
+   * The single `beforeCommand` decision point for the engine path. Every executing tool (see agent/command-hook.ts)
+   * passes through here before its handler runs, including repository acquisition (a bash command) and tools that a
+   * delegated agent calls. Only a deny matters here; an ask is answered by the console session before dispatch.
+   */
+  private async _beforeCommandGate(call: ToolCall): Promise<ToolResult | null> {
+    const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+    const input = hookInputForTool(call.name, (call.arguments ?? {}) as Record<string, unknown>, {
+      cwd: this.ctx.workspaceRoot ?? process.cwd(),
+      thread: { scope: networkScope, pathPrefixes: this.ctx.enforcement?.pathPolicy.snapshot(), canAskScope: false },
+    });
+    if (!input) return null;
+    const outcome = await runBeforeCommand(input);
+    if (outcome.decision !== "deny") return null;
+    this.ctx.enforcement?.noteOutOfScopeBlocked();
+    return { success: false, output: null, error: `${call.name} refused: ${outcome.reason}` };
   }
 
   private async _dispatch(call: ToolCall): Promise<ToolResult> {
@@ -3094,25 +3116,8 @@ export class ToolExecutor {
     // catches the common case (`curl https://evil.com/x`); a cleverer
     // agent that hides the URL behind base64 / DNS / a temp file is NOT
     // caught here, and that gap is documented as a follow-up.
-    // The single beforeCommand decision point. Here only a deny matters (an ask is
-    // answered by the console session's prompts, which run before dispatch).
-    const beforeCommand = await runBeforeCommand({
-      kind: "bash",
-      command,
-      argv: command.split(/\s+/).filter(Boolean),
-      cwd: this.ctx.workspaceRoot ?? process.cwd(),
-      hosts: [],
-      paths: [],
-      thread: {
-        scope: networkScope,
-        pathPrefixes: this.ctx.enforcement?.pathPolicy.snapshot(),
-        canAskScope: false,
-      },
-    });
-    if (beforeCommand.decision === "deny") {
-      this.ctx.enforcement?.noteOutOfScopeBlocked();
-      return { success: false, output: null, error: `bash refused: ${beforeCommand.reason}` };
-    }
+    // beforeCommand already ran for this call in execute() (`_beforeCommandGate`), before repository
+    // acquisition and for every executing tool, not only bash.
     if (isScopeEnforcementEnabled() && networkScope) {
       // Host and http_audit path checks on URLs in the command are decided once by
       // the beforeCommand hook above (scope/before-command.ts).

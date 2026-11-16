@@ -1231,6 +1231,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       scope: toolContext.publicNetwork ? toolContext.publicNetwork.scope : sessionScope,
       approvals, networkCapable: networkCapableTools[call.name] === true,
       readOnly: readOnlyTools[call.name] === true,
+      pathPrefixes: toolContext.enforcement?.pathPolicy.snapshot(),
       canAskScope: allowScopeExpansion && config.requestScope !== undefined && executionPolicy(approvals).scopeExpansion === "ask",
     }));
     if (hook.decision === "deny") return { success: false, output: null, error: `Tool "${call.name}" denied: ${hook.reason}` };

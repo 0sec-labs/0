@@ -1,7 +1,10 @@
 import type { BeforeCommandScope, BeforeCommandDecision, BeforeCommandInput, BeforeCommandPolicy } from "../hooks/before-command.js";
+import { isAbsolute, resolve, sep } from "node:path";
+import { realpathLoose } from "../hooks/real-path.js";
 import { SCOPE_PLUGIN_ID } from "../plugins/builtin.js";
 import { getScopeEnforcementState } from "./activation.js";
 import { PathPolicy } from "./enforcement.js";
+import { getLocalSourceBoundary } from "./local-source-boundary.js";
 import { ScopePolicy, extractUrls } from "./scope.js";
 
 function urlsOf(input: BeforeCommandInput): string[] {
@@ -10,8 +13,21 @@ function urlsOf(input: BeforeCommandInput): string[] {
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(host)) urls.add(host);
     else if (host.trim()) urls.add(`https://${host.trim()}`);
   }
-  if (input.kind === "bash") for (const url of extractUrls(input.command)) urls.add(url);
+  // Every kind carries its command text (bash, process, network, file-write); hosts are read from all of them.
+  if (input.kind !== "file-read") for (const url of extractUrls(input.command)) urls.add(url);
   return [...urls];
+}
+
+/** A path (or the working directory) outside the explicit local source folder, when one bounds this run. */
+function outsideLocalRoot(input: BeforeCommandInput): string | null {
+  const root = getLocalSourceBoundary();
+  if (!root) return null;
+  for (const candidate of [input.cwd, ...input.paths]) {
+    if (!candidate) continue;
+    const abs = realpathLoose(isAbsolute(candidate) ? resolve(candidate) : resolve(input.cwd, candidate));
+    if (abs !== root && !abs.startsWith(root + sep)) return candidate;
+  }
+  return null;
 }
 
 /** A rule in out_of_scope matches: this is an exclusion, which no approval may override. */
@@ -35,6 +51,9 @@ export const scopeBeforeCommandPolicy: BeforeCommandPolicy = {
   evaluate(input: BeforeCommandInput): BeforeCommandDecision {
     const { scope, pathPrefixes } = input.thread;
     const defined = scope !== undefined || (pathPrefixes?.length ?? 0) > 0;
+    // An explicit local source folder bounds paths and the working directory whether or not a host scope exists.
+    const outside = outsideLocalRoot(input);
+    if (outside) return { decision: "deny", reason: `path '${outside}' is outside the local source folder this run is limited to` };
     const state = getScopeEnforcementState(undefined, undefined, defined);
     if (state.denied) return { decision: "deny", reason: state.message };
     if (!defined || !state.enabled) return { decision: "allow" };

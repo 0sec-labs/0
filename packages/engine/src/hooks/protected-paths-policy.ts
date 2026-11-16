@@ -1,17 +1,7 @@
-import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, basename, join } from "node:path";
 import type { BeforeCommandDecision, BeforeCommandInput, BeforeCommandPolicy } from "./before-command.js";
+import { realpathLoose } from "./real-path.js";
 import { findApprovalCommand, findProtectedPathUse } from "./protected-paths.js";
-
-/** realpath of the deepest existing ancestor plus the not-yet-existing tail. */
-export function realpathLoose(path: string): string {
-  const tail: string[] = []; let cur = path;
-  for (;;) {
-    try { return join(realpathSync(cur), ...tail.reverse()); }
-    catch { const parent = dirname(cur); if (parent === cur) return path; tail.push(basename(cur)); cur = parent; }
-  }
-}
 
 const GUARDED_KINDS = new Set(["bash", "process", "file-write", "file-read"]);
 

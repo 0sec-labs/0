@@ -138,3 +138,30 @@ describe("scope enablement record migration", () => {
     expect(emptyEnablement(project).schema).toBe(2);
   });
 });
+
+describe("scope reads every kind of input", () => {
+  const input = (over: Partial<BeforeCommandInput>): BeforeCommandInput => ({ ...bash("x"), ...over });
+
+  it("reads hosts from the command text of process and file-write kinds, not only bash", async () => {
+    const thread = { scope: scope() };
+    for (const kind of ["process", "network", "file-write"] as const) {
+      expect((await runBeforeCommand(input({ kind, command: "curl https://evil.test/x", thread }))).decision, kind).toBe("deny");
+      expect((await runBeforeCommand(input({ kind, command: "curl https://app.example.com/x", thread }))).decision, kind).toBe("allow");
+    }
+  });
+
+  it("honours http_audit path prefixes for a process-kind command", async () => {
+    const thread = { scope: scope(), pathPrefixes: ["/api"] };
+    expect((await runBeforeCommand(input({ kind: "process", command: "node fetch.js https://app.example.com/other", thread }))).reason).toContain("out-of-path");
+  });
+
+  it("denies a path or working directory outside an explicit local source folder, scope or not", async () => {
+    const { withLocalSourceBoundary } = await import("./local-source-boundary.js");
+    const inside = join(project, "src"); mkdirSync(inside);
+    const run = (over: Partial<BeforeCommandInput>) => withLocalSourceBoundary(project, () => runBeforeCommand(input({ kind: "file-write", ...over })));
+    expect((await run({ paths: [join(inside, "a.ts")] })).decision).toBe("allow");
+    expect((await run({ paths: ["/etc/passwd"] })).decision).toBe("deny");
+    expect((await run({ paths: ["../outside.txt"] })).decision).toBe("deny");
+    expect((await run({ kind: "process", cwd: root })).decision).toBe("deny");
+  });
+});

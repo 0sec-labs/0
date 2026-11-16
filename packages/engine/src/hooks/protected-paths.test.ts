@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { BeforeCommandInput } from "./before-command.js";
 import { findApprovalCommand, findProtectedPathUse } from "./protected-paths.js";
-import { protectedPathsBeforeCommandPolicy, realpathLoose } from "./protected-paths-policy.js";
+import { protectedPathsBeforeCommandPolicy } from "./protected-paths-policy.js";
+import { realpathLoose } from "./real-path.js";
 
 const HOME = "/home/op";
 const ctx = (cwd = "/work") => ({ home: HOME, cwd });
