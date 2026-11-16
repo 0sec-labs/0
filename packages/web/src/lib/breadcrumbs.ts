@@ -43,11 +43,8 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
         if (label) return [{ label: "Skills", to: "/plugins/skills" }, { label: "Installed", to: "/plugins/skills" }, { label }];
         return [{ label: "Skills", to: "/plugins/skills" }, { label: browse ? "Browse" : "Installed" }];
       }
-      if (second === "explore") {
-        const tab = new URLSearchParams(search).get("tab");
-        return [{ label: "Explore", to: "/plugins/explore" }, { label: tab === "theme" || tab === "themes" ? "Themes" : "Plugins" }];
-      }
-      return [{ label: "Explore", to: "/plugins/explore" }, ...(second ? [{ label: "Plugins", to: "/plugins/explore" }, { label: label ?? "Plugin" }] : [{ label: "Plugins" }])];
+      return [{ label: "Plugins" }, ...(second ? [{ label: label ?? "Plugin" }] : [])];
+    case "extensions": return [{ label: "Extensions" }];
     case "computers": case "engines": return list("Computers", "/computers");
     case "memory": return list("Memory", "/memory");
     case "scope": return list("Reports", "/scope");

@@ -9,7 +9,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
 import { BackendRequestIdSchema, BackendDescriptorSchema, ScanResumeRequestSchema } from "@0/engine/shared";
-import { exportReport, isReportExportFormat, modelTransportStats } from "@0/engine";
+import { exportReport, runStartupImport, isReportExportFormat, modelTransportStats } from "@0/engine";
 import { ConsoleGateway } from "../web/console-gateway.js";
 import { closeSharedDbs } from "../web/shared-db.js";
 import { WebOperatorServices } from "../web/operator-services.js";
@@ -198,6 +198,8 @@ export function registerDashboardCommand(program: Command): void {
       // Never recover another live host's database while opening a second UI.
       assertLocalEngineAvailable(opts.dbPath);
       configureAudit(opts.dbPath);
+      const imported = runStartupImport();
+      if (imported && !imported.alreadyDone && (imported.migrated.length || imported.notMigrated.length)) process.stderr.write(`Imported ${imported.migrated.length} item(s) from your earlier setup; ${imported.notMigrated.length} could not be migrated. See the Extensions page.\n`);
       const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "provider-relay", "operator-services", "process-controls", "learning", "workflow-engine"];
       let localHandshake = createBackendHandshake(opts.dbPath, capabilities);
       let backends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake });

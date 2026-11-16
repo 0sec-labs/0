@@ -136,9 +136,9 @@ export function registerSkillsCommand(program: Command, io: CommandIo = defaultI
 
   registerExtensionCommands(skills, io);
 
-  consoleOptions(skills.command("add <source>").description("Add skills or an extension: <url|owner/repo|folder>@<full sha>, or a catalog id / owner/repo[/path]; shows one prompt first")
+  consoleOptions(skills.command("add <source>").description("Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path; shows one prompt first")
     .option("--preview", "Only show the review").option("--yes", "Install the reviewed commit").option("--enable", "Extensions: also enable it").option("--project <dir>", "Extensions: with --enable, enable for this project only"))
-    .action((source: string, options: OutputOptions & { preview?: boolean; yes?: boolean; enable?: boolean; project?: string }) => isExtensionSource(source) ? addExtension(io, source, options) : run(options, async client => {
+    .action(async (source: string, options: OutputOptions & { preview?: boolean; yes?: boolean; enable?: boolean; project?: string }) => { if (isExtensionSource(source) && await addExtension(io, source, options) === "done") return; await run(options, async client => {
       const repo = /^([^/]+\/[^/]+)(?:\/(.+))?$/.exec(source);
       const target = repo ? { repo: repo[1], path: repo[2] ?? "" } : { id: source };
       const review = record(expectOk(await client.request("POST", "/api/console/skills/catalog/preview", target)));
@@ -151,7 +151,7 @@ export function registerSkillsCommand(program: Command, io: CommandIo = defaultI
       }
       const installed = record(record(expectOk(await client.request("POST", "/api/console/skills/catalog/install", { ...target, sha: review.sha }))).skill);
       emit(io, options, { skill: installed, installed: true }, () => `Added skill ${String(installed.name)} at ${String(review.sha).slice(0, 12)}.`);
-    }));
+    }); });
 
   consoleOptions(skills.command("remove <name>").description("Remove a skill that was added from GitHub or the catalog").option("--yes", "Confirm the removal"))
     .action((name: string, options: OutputOptions & { yes?: boolean }) => run(options, async client => {

@@ -915,12 +915,12 @@ export type {
 } from "./plugins/registry-client.js";
 // Extensions: the one installable unit (store, installer, install prompt, importer). See plugins/extensions/index.ts.
 export {
-  createExtensionService, parseManifest as parseExtensionManifest, renderInstallPrompt, extensionEnv, readRepoSuggestions,
+  createExtensionService, parseManifest as parseExtensionManifest, renderInstallPrompt, extensionEnv, readRepoSuggestions, extensionSkillRoots, runStartupImport,
   BUILTIN_EXTENSIONS, FsExtensionStore, DefaultSourceResolver, ExtensionInstaller, LegacyImporter, loadable as loadableExtensions, listRows as listExtensionRows, gitTreeHash,
 } from "./plugins/extensions/index.js";
 export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,
-  ImportReport, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
+  ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
 } from "./plugins/extensions/index.js";
 // Plugin wire protocol (pure). Message shapes + total decoders shared by the
 // host, tests, and any third-party plugin SDK.

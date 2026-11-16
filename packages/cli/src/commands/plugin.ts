@@ -581,7 +581,7 @@ export function runEnable(id: string, deps: PluginCommandDeps): void {
   } else {
     d.out(chalk.bold(`  Capabilities granted: ${capSummary(capabilities)}`));
     d.out("  No plugin code has run. Loading executes this code under your account, not in an OS sandbox.");
-    d.out("  Per-call authorization still applies; scope checks apply only when the scope plugin is enabled.");
+    d.out("  Per-call authorization still applies; scope checks apply only when the scope extension is enabled.");
   }
   process.exitCode = EXIT_OK;
 }

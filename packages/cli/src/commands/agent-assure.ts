@@ -129,7 +129,7 @@ export function registerAgentAssureCommand(program: Command): void {
     .requiredOption("--mcp-endpoint <url>", "Authorized MCP tools/list endpoint")
     .requiredOption("--oracle-endpoint <url>", "Customer-owned state-observer endpoint")
     .requiredOption("--scenario <path>", "Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action")
-    .option("--scope <path>", "Engagement scope JSON; required only while the scope plugin is enabled")
+    .option("--scope <path>", "Engagement scope JSON; required only while the scope extension is enabled")
     .requiredOption("--target-version <version>", "Version or build digest of the tested agent deployment")
     .requiredOption("--policy-version <version>", "Version or digest of the agent prompt and authorization policy")
     .requiredOption("--model-version <version>", "Model deployment/version identifier")

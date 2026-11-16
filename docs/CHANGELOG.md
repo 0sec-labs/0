@@ -15,13 +15,20 @@ on the GitHub Release tag.
 ### Added
 
 - Extensions: one installable unit, a git folder pinned to a commit, that can bundle skills, scripts run through bash, MCP server definitions, a connector, a scope policy and a verifier. `0 skills add <url|folder>@<full sha>` shows one prompt (repo at commit, what it can do, the diff since the last approved version) and installs only after `--yes`. `0 skills extensions list|info|enable|disable|update|remove` manage them. Third-party extensions never update on their own, a folder that no longer matches its pinned commit refuses to load, repository `.0/` and `.claude/` folders can only suggest extensions, and scripts get a scrubbed environment with only approved names.
+- The Extensions page (`/extensions`) lists installed and built-in extensions with what each can do, its source at a commit, an on/off switch, and needs-approval, refused and import-report notes. Add shows the install prompt (repo at commit, what it can do) and installs only after an explicit confirm; Update shows the diff. Only the browser console, and only team owners, can install, update, enable or remove, and each is audited.
+- Skills inside an enabled extension appear on the Skills page, in `list_skills` and in `load_skill`, labelled with the extension's name. Disabled, refused or tampered extensions provide none. The importer now runs once when the console or dashboard starts.
 - A one-time importer carries earlier skills (with their pinned commit and approval) and custom MCP servers into extensions and reports what could not be migrated. It never deletes anything.
 
 ### Changed
 
+- `0 skills add owner/repo` goes through the extension prompt (pin it with `@<full sha>` to install); catalog ids and `owner/repo/path` keep the earlier skill flow. Help text and docs say "scope extension" instead of "scope plugin".
 - Scope is a built-in extension that is on by default. It enforces whenever a scope is set (`--scope`, a thread, Agent or automation scope, a pull request checkout) and allows everything when none is, so a fresh install no longer runs scoped work unenforced. This reverses 0.33's "scope is off until enabled" and the rule that a scope file alone never activates checks.
 - If the scope extension is turned off or errors while a scope is set, commands are denied instead of allowed. Projects that had scope enabled stay enabled, including its requirement of a scope for live targets; projects that never enabled it get the new default.
 - Bash commands, network targets and the **Ask before running commands** setting now go through one `beforeCommand` decision point: any deny wins, then any ask. A scope denial beats a prompt.
+
+### Removed
+
+- The Explore page and its Plugins and Themes tabs. Extensions takes its place in the sidebar; themes and backgrounds live in Settings > Appearance, and old Explore links open Extensions.
 
 ## [0.35.0] - 2026-11-15
 

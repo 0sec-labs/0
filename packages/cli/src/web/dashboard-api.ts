@@ -26,6 +26,8 @@ import { openSharedDb, evictSharedDb } from "./shared-db.js";
 import { invalidateReadCache, readThrough } from "./read-cache.js";
 import { handleSelfEditRequest } from "./self-edit-routes.js";
 import { SkillsCatalogService, handleSkillsCatalogRequest } from "./skills-catalog.js";
+import { createExtensionService } from "@0/engine";
+import { handleExtensionRequest } from "./extension-routes.js";
 import type { SkillsStore } from "./skills.js";
 import { WebRequestError, json, text, readJson, readJsonObject, requireControlToken } from "./dashboard-http.js";
 import { startManagedDaemon, isLiveLocalPid, stopDaemonWorkers } from "./dashboard-daemon.js";
@@ -170,6 +172,8 @@ export async function handleWebConsoleApiRequest(
       const catalog = await handleSkillsCatalogRequest(skillsCatalogFor(skills), path, method, input, { canWrite: !team?.auth.enabled || member?.role !== "viewer" });
       if (catalog) { json(res, catalog.status, catalog.data); return true; }
     }
+    const extensions = await handleExtensionRequest(createExtensionService(), path, method, input, requestUrl.searchParams);
+    if (extensions) { json(res, extensions.status, extensions.data); return true; }
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }

@@ -21,7 +21,7 @@ interface JsReconCliOptions {
 /**
  * Mine a live site's JavaScript bundles for endpoints + redacted secret hits.
  *
- * Host authorization is supplied by the optional scope plugin. Secret values
+ * Host authorization is supplied by the optional scope extension. Secret values
  * are never printed — only the redacted excerpt the library returns.
  */
 export function registerJsReconCommand(program: Command): void {
@@ -33,7 +33,7 @@ export function registerJsReconCommand(program: Command): void {
     .argument("<url>", "Target page URL whose <script> bundles are mined, e.g. https://app.example.com")
     .option(
       "--scope <file>",
-      "JSON engagement policy; required only while the scope plugin is enabled.",
+      "JSON engagement policy; required only while the scope extension is enabled.",
     )
     .option("--timeout <ms>", "Per-request fetch timeout in milliseconds", "10000")
     .option("--max-files <n>", "Maximum JS files to fetch (clamped to [0,100])")
@@ -59,7 +59,7 @@ export function registerJsReconCommand(program: Command): void {
       console.error(chalk.dim(getScopeEnforcementState().message));
       let scope: ScopePolicy | undefined;
       if (isScopeEnforcementEnabled() && !opts.scope) {
-        console.error(chalk.red("js-recon requires --scope while the scope plugin is enabled."));
+        console.error(chalk.red("js-recon requires --scope while the scope extension is enabled."));
         process.exitCode = 2;
         return;
       }

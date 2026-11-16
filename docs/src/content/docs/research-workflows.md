@@ -163,7 +163,7 @@ You provide three endpoints: an agent test adapter, the MCP server the agent use
 | `1` | `observed` |
 | `2` | `inconclusive` or `error` |
 
-`inconclusive` covers an oracle that did not finish, even if it reported a provisional observation. `not_observed` applies only to that scenario and observation window. With the scope plugin on, all three endpoints must be in `--scope`. `--baseline <manifest>` links a retest to an earlier run.
+`inconclusive` covers an oracle that did not finish, even if it reported a provisional observation. `not_observed` applies only to that scenario and observation window. With the scope extension on, all three endpoints must be in `--scope`. `--baseline <manifest>` links a retest to an earlier run.
 
 The repository also has fixture runners for MCP tool misuse, indirect prompt injection and persistence: `pnpm --filter @0/bench adversarial-tool-misuse --json` (and `adversarial-indirect-prompt-injection`, `adversarial-persistence`). They run against local fixtures with no model, and a pass means expected categories were detected.
 

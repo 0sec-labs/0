@@ -1,5 +1,5 @@
 import { VOCAB } from "@/lib/vocabulary";
-import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyGlobeIcon, CapyIssueDashedIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
+import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlugIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
@@ -9,21 +9,20 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },
   { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
-  { to: "/plugins/explore", label: "Explore", icon: CapyGlobeIcon },
+  { to: "/extensions", label: "Extensions", icon: CapyPuzzleIcon },
   { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
   { to: "/settings", label: "Settings", icon: CapySettingsIcon },
 ] as const;
 
 /**
  * The sidebar: "New thread" (an action, not a route) followed by these six destinations, in this order. There is no More menu.
- * Skills is active on /plugins/skills* (installed, browse, catalog detail); Explore on every other /plugins* page.
+ * Skills is active on /plugins/skills* (installed, browse, catalog detail); Extensions on /extensions.
  */
-export const SIDEBAR_DESTINATIONS = ["/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/plugins/explore"] as const;
+export const SIDEBAR_DESTINATIONS = ["/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions"] as const;
 
 /** Whether a sidebar destination is highlighted for the (canonical, basename-free) current path. */
 export function isSidebarDestinationActive(to: string, currentPath: string): boolean {
   const under = (base: string) => currentPath === base || currentPath.startsWith(`${base}/`);
-  if (to === "/plugins/explore") return under("/plugins") && !under("/plugins/skills");
   return under(to);
 }
 
@@ -53,6 +52,7 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/workers", routes: ["/workers", "/workers/*"], to: "/computers", keep: "path" },
   { from: "/engines", routes: ["/engines"], to: "/computers", keep: "path" },
   { from: "/engagements", routes: ["/engagements", "/engagements/*"], to: "/scope", keep: "path" },
+  { from: "/explore", routes: ["/explore", "/plugins/explore"], to: "/extensions", keep: "none" },
   { from: "/skills", routes: ["/skills", "/skills/*"], to: "/plugins/skills", keep: "path" },
 ];
 
@@ -60,15 +60,4 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
 export function canonicalWorkspacePath(path: string): string {
   const row = LEGACY_REDIRECTS.find(item => item.keep === "path" && new RegExp(`^${item.from}(?=/|$)`).test(path));
   return row ? `${row.to}${path.slice(row.from.length)}` : path;
-}
-
-/** Old Explore > Skills links (`/plugins/explore?tab=skills`) now land on Skills > Browse; null for every other Explore URL. */
-export function legacyExploreSkillsRedirect(search: string): string | null {
-  const params = new URLSearchParams(search);
-  const tab = params.get("tab");
-  if (tab !== "skills" && tab !== "skill") return null;
-  const target = new URLSearchParams({ tab: "browse" });
-  const q = params.get("q");
-  if (q) target.set("q", q);
-  return `/plugins/skills?${target}`;
 }

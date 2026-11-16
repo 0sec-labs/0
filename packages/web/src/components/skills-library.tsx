@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingState } from "@/components/state-panel";
-import { cleanSkillSummary, isBundledSkill, skillSections } from "@/components/skills-model";
+import { cleanSkillSummary, isBundledSkill, skillSections, skillSourceLabel } from "@/components/skills-model";
 
 export type SkillLibraryItem = {
   id: string;
@@ -22,13 +22,6 @@ export type SkillLibraryItem = {
   /** Present when the skill was added from GitHub: repo, path, pinned commit and licence. */
   origin?: { repo: string; sha: string };
 };
-
-const scopeLabel = (scope: string, shared: boolean) => ({
-  workspace: shared ? "Team" : "Folder",
-  personal: "Solo",
-  project: "Folder",
-  mounted: "Linked",
-})[scope] ?? "";
 
 /** Skills page body: Installed (yours first, then the ones that come with 0, grouped by topic) and Browse (the GitHub directory, passed in as `browse`). */
 export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disabled = false, shared = false, canCreate = true, onRetry, tab = "installed", onTab, browse }: {
@@ -47,7 +40,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
 }) {
   const [search, setSearch] = useState("");
   const sections = skillSections(skills, search);
-  const trailing = (skill: SkillLibraryItem) => isBundledSkill(skill) ? "" : skill.origin ? "From GitHub" : scopeLabel(skill.scope, shared);
+  const trailing = (skill: SkillLibraryItem) => isBundledSkill(skill) ? "" : skill.origin ? "From GitHub" : skillSourceLabel(skill, shared);
   const row = (skill: SkillLibraryItem) => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined} className="flex w-full min-w-0 items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ui-row-hover focus-visible:outline-ring-inset disabled:opacity-50">
     <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
     <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={skill.name}>{skill.name}</span><span className="block truncate text-xs text-muted-foreground">{cleanSkillSummary(skill)}</span></span>

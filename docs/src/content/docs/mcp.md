@@ -58,8 +58,8 @@ Host-local execution is required for local-target stdio. The SmolVM CLI bridge c
 # Source workflows in a local repository
 0 lab mcp-server --automations --workspace /absolute/path/to/repo
 
-# Live targets (needs the scope plugin and a scope file)
-0 skills list scope --enable
+# Live targets (needs the scope extension and a scope file)
+0 skills extensions enable scope
 0 lab mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```

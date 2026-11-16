@@ -16,7 +16,7 @@ Test only systems you own or are authorized to assess. You need a connected mode
 Scope enforcement is a built-in plugin, off by default. Turn it on per project so every live scan must name its allowed hosts:
 
 ```bash
-0 skills list scope --enable
+0 skills extensions enable scope
 cat > scope.json <<'EOF'
 { "in_scope": ["staging.example.com"], "out_of_scope": [] }
 EOF
@@ -144,7 +144,7 @@ docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
   -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
   --entrypoint /bin/sh ghcr.io/0sec-labs/0security:latest -c \
-  '0 skills list scope --enable && exec 0 scan https://app.example.com \
+  '0 skills extensions enable scope && exec 0 scan https://app.example.com \
   --scope /work/scope.json --runtime api --depth quick --cost-ceiling 2 --format json'
 ```
 

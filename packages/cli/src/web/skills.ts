@@ -17,7 +17,7 @@ type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
 /** Provenance of a skill added from GitHub. Written by the server beside (not inside) the skill folder, so upstream files cannot spoof it. */
 const originSchema = z.object({ repo: z.string().max(200), path: z.string().max(1024), ref: z.string().max(200).nullable(), sha: z.string().regex(/^[0-9a-f]{40}$/), licence: z.string().max(100).nullable(), licenceSource: z.string().max(100), catalogId: z.string().max(300).nullable(), publisher: z.string().max(100).nullable(), installedAt: z.string().max(40), revision: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 export type SkillOrigin = z.infer<typeof originSchema>;
-type WebSkill = { origin?: SkillOrigin; id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string; summary?: string; category?: string; internal?: boolean };
+type WebSkill = { origin?: SkillOrigin; id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin" | "extension"; revision: string; writable: boolean; fileCount: number; source: string; summary?: string; category?: string; internal?: boolean };
 function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.output<T> { const value = schema.safeParse(input); if (!value.success) throw new SkillsError("Invalid skill request."); return value.data; }
 function filePath(path: string): void {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(path)) throw new SkillsError("Invalid skill file path.");
@@ -78,9 +78,9 @@ export class SkillsStore {
     const id = skill.id;
     const files = readFiles(skill.directory); const shared = skill.root === this.#shared || skill.directory.startsWith(this.#shared + "/");
     const origin = shared ? this.origin(basename(skill.directory)) : undefined;
-    return { metadata: { id, name: skill.name, description: skill.description, scope: (shared ? "workspace" : skill.source === "mount" ? "mounted" : skill.source) as WebSkill["scope"], revision: revision(files), writable: shared, fileCount: files.length, source: shared ? "Workspace" : skill.directory, ...(origin ? { origin } : {}) }, files, directory: skill.directory };
+    return { metadata: { id, name: skill.name, description: skill.description, scope: (shared ? "workspace" : skill.source === "mount" ? "mounted" : skill.source) as WebSkill["scope"], revision: revision(files), writable: shared, fileCount: files.length, source: shared ? "Workspace" : skill.extension ?? skill.directory, ...(origin ? { origin } : {}) }, files, directory: skill.directory };
   }
-  #access(metadata: WebSkill, access: SkillAccess = {}): WebSkill { return { ...metadata, writable: access.canWrite !== false && metadata.scope !== "builtin" && (metadata.scope === "workspace" || access.allowHostEdits === true) }; }
+  #access(metadata: WebSkill, access: SkillAccess = {}): WebSkill { return { ...metadata, writable: access.canWrite !== false && metadata.scope !== "builtin" && metadata.scope !== "extension" && (metadata.scope === "workspace" || access.allowHostEdits === true) }; }
   list(access: SkillAccess = {}) {
     const found = this.#discovery(); const diagnostics = [...found.diagnostics]; const skills: WebSkill[] = [];
     for (const item of found.skills) { try { skills.push(this.#access(this.#describe(item).metadata, access)); } catch (cause) { diagnostics.push({ path: item.directory, message: cause instanceof Error ? cause.message : "Skill cannot be read." }); } }

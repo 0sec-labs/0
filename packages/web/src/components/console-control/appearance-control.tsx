@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
 import { Button } from "@/ui/components/button";
 import { SheetPanel } from "@/ui/components/sheet-panel";
@@ -75,8 +74,7 @@ function ColorThemeRow() {
     <SettingsRow id="setting-web-color-theme" label="Theme">
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} aria-haspopup="dialog" data-testid="open-theme-gallery"><SwatchChip theme={theme} mode={mode} className="mr-1.5" />{theme.name}</Button>
     </SettingsRow>
-    <SheetPanel open={open} onOpenChange={setOpen} title="Theme" className="data-[side=right]:sm:max-w-[760px]"
-      footer={<Button variant="ghost" size="sm" render={<Link to="/plugins/explore?tab=themes" onClick={() => setOpen(false)} />}>Browse in Explore</Button>}>
+    <SheetPanel open={open} onOpenChange={setOpen} title="Theme" className="data-[side=right]:sm:max-w-[760px]">
       <ThemeGallery />
     </SheetPanel>
   </>;

@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import { LEGACY_REDIRECTS, canonicalWorkspacePath, isSidebarDestinationActive, legacyExploreSkillsRedirect, SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS } from "../src/lib/workspace-navigation";
+import { LEGACY_REDIRECTS, canonicalWorkspacePath, isSidebarDestinationActive, SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS } from "../src/lib/workspace-navigation";
 
 test("desktop and touch destinations share canonical work pages", () => {
   expect(WORKSPACE_DESTINATIONS.map(item => item.to)).toEqual([
-    "/chats", "/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/plugins/explore", "/plugins", "/settings",
+    "/chats", "/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions", "/plugins", "/settings",
   ]);
   expect(new Set(WORKSPACE_DESTINATIONS.map(item => item.to)).size).toBe(WORKSPACE_DESTINATIONS.length);
   for (const item of WORKSPACE_DESTINATIONS) expect(canonicalWorkspacePath(item.to)).toBe(item.to);
@@ -24,34 +24,25 @@ test("compatibility paths preserve resource identities and only replace whole ro
 });
 
 test("the sidebar lists six destinations after New thread, in order, with no overflow menu", () => {
-  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/plugins/explore"]);
+  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions"]);
   const labels = SIDEBAR_DESTINATIONS.map(to => WORKSPACE_DESTINATIONS.find(item => item.to === to)?.label);
-  expect(labels).toEqual(["Findings", "Automations", "Skills", "Memory", "Computers", "Explore"]);
+  expect(labels).toEqual(["Findings", "Automations", "Skills", "Memory", "Computers", "Extensions"]);
 });
 
-test("sidebar active state: Skills owns /plugins/skills*, Explore the other plugin pages", () => {
+test("sidebar active state: Skills owns /plugins/skills*, Extensions owns /extensions", () => {
   const activeFor = (path: string) => SIDEBAR_DESTINATIONS.filter(to => isSidebarDestinationActive(to, path));
   expect(activeFor("/plugins/skills")).toEqual(["/plugins/skills"]);
   expect(activeFor("/plugins/skills/catalog/o~r~x")).toEqual(["/plugins/skills"]);
-  expect(activeFor("/plugins/explore")).toEqual(["/plugins/explore"]);
-  expect(activeFor("/plugins")).toEqual(["/plugins/explore"]);
-  expect(activeFor("/plugins/cloudflare")).toEqual(["/plugins/explore"]);
+  expect(activeFor("/extensions")).toEqual(["/extensions"]);
+  expect(activeFor("/plugins")).toEqual([]);
   expect(activeFor("/memory")).toEqual(["/memory"]);
   expect(activeFor("/computers")).toEqual(["/computers"]);
   expect(activeFor("/findings/abc")).toEqual(["/findings"]);
   expect(activeFor("/settings")).toEqual([]);
 });
 
-test("old Explore skills URLs redirect to Skills > Browse; other Explore URLs do not", () => {
-  expect(legacyExploreSkillsRedirect("?tab=skills")).toBe("/plugins/skills?tab=browse");
-  expect(legacyExploreSkillsRedirect("?tab=skill&q=semgrep&page=2")).toBe("/plugins/skills?tab=browse&q=semgrep");
-  expect(legacyExploreSkillsRedirect("?tab=themes")).toBeNull();
-  expect(legacyExploreSkillsRedirect("")).toBeNull();
-});
-
-test("the legacy redirect table is one row per old name, with unique routes and a current target", () => {
-  const routes = LEGACY_REDIRECTS.flatMap(row => row.routes);
-  expect(new Set(routes).size).toBe(routes.length);
-  expect(canonicalWorkspacePath("/sentinels/s1")).toBe("/agents/s1");
-  for (const row of LEGACY_REDIRECTS) expect(row.routes.every(route => route.startsWith("/"))).toBe(true);
+test("the old Explore URLs redirect to Extensions through the one legacy table", () => {
+  const row = LEGACY_REDIRECTS.find(item => item.routes.includes("/plugins/explore"));
+  expect(row).toMatchObject({ to: "/extensions", keep: "none" });
+  expect(LEGACY_REDIRECTS.find(item => item.routes.includes("/explore"))).toBe(row);
 });

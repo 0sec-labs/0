@@ -34,7 +34,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const setUpWithZero = () => { queueComposerPrefill(SETUP_PROMPT); navigate("/chats"); };
   const [filter, setFilter] = useState("");
   const [searching, setSearching] = useState(false);
-  const openExplore = () => navigate("/plugins/explore");
+  const openExplore = () => navigate("/extensions");
 
   const plugins = inventory.data?.items.filter(entry => entry.kind === "plugin") ?? [];
   const installed = plugins.filter(entry => entry.state !== "available");
@@ -61,7 +61,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>
       <button type="button" onClick={openExplore} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 ui-row-hover focus-visible:outline-ring-inset">
         <LogoTile><Store aria-hidden="true" className="size-4" /></LogoTile>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} to install` : "Registry plugins"}</span></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Browse extensions</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} to install` : "Registry plugins"}</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
     </SettingsCard>
@@ -76,7 +76,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Add" />}><Plus /></DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" sideOffset={4}>
-            <DropdownMenu.Item icon={<Store />} onClick={openExplore}>From marketplace</DropdownMenu.Item>
+            <DropdownMenu.Item icon={<Store />} onClick={openExplore}>Extensions</DropdownMenu.Item>
             {mcp.supported && <DropdownMenu.Item icon={<GitBranch />} onClick={() => setAddSheet("github")}>From GitHub repository</DropdownMenu.Item>}
             {mcp.supported ? <DropdownMenu.Item icon={<Terminal />} onClick={() => setAddSheet("mcp")}>MCP server</DropdownMenu.Item> : <DropdownMenu.Item icon={<Blocks />} disabled>MCP server (not supported by this host)</DropdownMenu.Item>}
           </DropdownMenu.Content>

@@ -99,6 +99,7 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   const path = pathname.slice("/api/console/".length);
   if (/^mcp-servers(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (/^plugins\/(?:install|install-github|enable|disable|run)(?:\/|$)/.test(path)) return method !== "GET";
+  if (/^extensions(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (/^service-plugins(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (/^github(?:\/|$)/.test(path)) return !READ_METHODS.has(method);
   if (path === "connections") return method === "POST";

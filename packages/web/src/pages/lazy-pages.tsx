@@ -18,7 +18,7 @@ const loaders = {
   controls: () => import("@/pages/console-controls-page"),
   sentinels: () => import("@/pages/sentinels-page"),
   pluginDetail: () => import("@/pages/plugin-detail-page"),
-  explore: () => import("@/pages/explore-page"),
+  extensions: () => import("@/pages/extensions-page"),
   skillCatalog: () => import("@/pages/skill-catalog-detail-page"),
 } as const;
 
@@ -54,7 +54,7 @@ export const WorkersPage = lazyRoute(() => loaders.workers().then((m) => m.Worke
 export const SentinelsPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelsPage));
 export const SentinelPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelPage));
 export const PluginDetailPage = lazyRoute(() => loaders.pluginDetail().then((m) => m.PluginDetailPage));
-export const ExplorePage = lazyRoute(() => loaders.explore().then((m) => m.ExplorePage));
+export const ExtensionsPage = lazyRoute(() => loaders.extensions().then((m) => m.ExtensionsPage));
 export const SkillCatalogDetailPage = lazyRoute(() => loaders.skillCatalog().then((m) => m.SkillCatalogDetailPage));
 export const WebConsoleControlsPage = lazyRoute(() => loaders.controls().then((m) => m.WebConsoleControlsPage));
 
@@ -70,7 +70,8 @@ export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
   if (first === "console") return second === "saved" ? "saved" : undefined;
   if (first === "chats") return second === "saved" ? "saved" : "console";
-  if (first === "plugins" && second && second !== "skills") return second === "explore" ? "explore" : "pluginDetail";
+  if (first === "plugins" && second && second !== "skills") return "pluginDetail";
+  if (first === "extensions") return "extensions";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {
     case "automations": return "workflows";

@@ -10,9 +10,12 @@ import { EXIT_FAILURE, EXIT_USAGE, UsageError, consoleOptions, emit, renderTable
 
 type Options = OutputOptions & { yes?: boolean; preview?: boolean; enable?: boolean; project?: string; to?: string; force?: boolean };
 
-/** `source@<40 hex>`, an https URL, or a path: handled here. Catalog ids and owner/repo[/path] stay on the catalog flow until the Extensions page lands. */
+/** A bare `owner/repo` (two segments, not a folder). It goes through the extension flow first; a repo with no extension layout falls back to the catalog flow. */
+export const isBareRepo = (source: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9._-]+$/.test(source) && !existsSync(resolve(source));
+
+/** `source@<40 hex>`, an https URL, a path or a bare owner/repo: handled here. Catalog ids and owner/repo/path stay on the catalog flow. */
 export function isExtensionSource(source: string): boolean {
-  return /@[0-9a-f]{40}$/.test(source) || /^https:\/\//i.test(source) || /^(\/|\.\/|\.\.\/|~\/)/.test(source) || existsSync(resolve(source));
+  return /@[0-9a-f]{40}$/.test(source) || /^https:\/\//i.test(source) || /^(\/|\.\/|\.\.\/|~\/)/.test(source) || existsSync(resolve(source)) || isBareRepo(source);
 }
 
 const fail = (io: CommandIo, options: OutputOptions, message: string, code = EXIT_FAILURE) => { io.err(options.json ? JSON.stringify({ error: message }) : message); io.setExitCode(code); };
@@ -34,25 +37,29 @@ function showPrompt(io: CommandIo, options: Options, prepared: PreparedInstall, 
   emit(io, options, { prompt: prepared.prompt, installed: false }, () => `${renderInstallPrompt(prepared.prompt)}\n${tail}`.trimEnd());
 }
 
-export async function addExtension(io: CommandIo, source: string, options: Options): Promise<void> {
+/** Returns "not-extension" (and prints nothing) when a bare owner/repo has no extension or skill layout, so the caller can try the catalog flow. */
+export async function addExtension(io: CommandIo, source: string, options: Options): Promise<"done" | "not-extension"> {
+  let outcome: "done" | "not-extension" = "done";
   await guarded(io, options, async svc => {
     const prepared = await svc.installer.prepare(source);
-    if (!prepared.ok) return fail(io, options, prepared.error.message);
+    if (!prepared.ok) { if (isBareRepo(source) && prepared.error.code === "invalid_manifest") { outcome = "not-extension"; return; } return fail(io, options, prepared.error.message); }
     const p = prepared.value;
+    const pinnedInput = /@[0-9a-f]{40}$/.test(source);
     if (options.preview) return showPrompt(io, options, p, "");
-    if (options.yes !== true) { showPrompt(io, options, p, `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
-    if (!p.prompt.pinned && p.snapshot.source.type === "git") return fail(io, options, "Refusing to install an unpinned commit with --yes. Pin it: add <source>@<full sha>.", EXIT_USAGE);
+    if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
+    if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
     const done = svc.installer.commit(p, { approvedRevision: p.prompt.revision, ...(options.enable ? { enable: options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const } } : {}) });
     if (!done.ok) return fail(io, options, done.error.message);
     emit(io, options, { installed: true, name: done.value.name, revision: done.value.revision, enabled: options.enable === true }, () => `Installed extension ${done.value.name} at ${done.value.revision.slice(0, 12)}.${options.enable ? "" : ` Not enabled: \`0 skills extensions enable ${done.value.name}\`.`}`);
   });
+  return outcome;
 }
 
 export function registerExtensionCommands(skills: Command, io: CommandIo): void {
   const ext = skills.command("extensions").description("Installed extensions: list, info, enable, disable, update, remove (install with `0 skills add`)");
 
   consoleOptions(ext.command("add <source>").description("Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`").option("--preview", "Only show the install prompt").option("--yes", "Install the exact revision shown").option("--enable", "Also enable it").option("--project <dir>", "With --enable: enable for this project only"))
-    .action((source: string, options: Options) => addExtension(io, source, options));
+    .action(async (source: string, options: Options) => { await addExtension(io, source, options); });
 
   consoleOptions(ext.command("list").description("List installed extensions and built-ins").option("--project <dir>", "Show enablement for this project"))
     .action((options: Options) => guarded(io, options, svc => {

@@ -52,6 +52,7 @@ export const queryKeys = {
   consoleLearning: key("console-learning"),
   settingsUsage: key("settings-usage"),
   settingsAuditLog: key("settings-audit-log"),
+  extensions: key("extensions"),
   skills: key("skills"),
   skill: key("skill"),
   skillsCatalog: key("skills-catalog"),

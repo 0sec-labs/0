@@ -14,7 +14,7 @@ Scope enforcement is a built-in extension. It is **on by default**, in every pro
 If the scope extension is turned off or fails while a scope is set, commands are **denied**, not allowed. To also require a scope for every live target, enable it explicitly for the project:
 
 ```bash
-0 skills list scope --enable
+0 skills extensions enable scope
 ```
 
 Save `scope.json` with your authorized hosts:

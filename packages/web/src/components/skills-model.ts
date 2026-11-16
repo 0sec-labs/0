@@ -65,3 +65,9 @@ export const skillCategories = (skills: readonly BrowsableSkill[]) => skillSecti
 export function withoutCatalogDuplicates<T extends BrowsableSkill & { origin?: unknown }>(skills: readonly T[], catalogNames: ReadonlySet<string>): T[] {
   return skills.filter(skill => !((isBundledSkill(skill) || skill.origin) && catalogNames.has(skill.name)));
 }
+
+/** Short label for where a skill comes from. An extension's skills show the extension's name. */
+export function skillSourceLabel(skill: Pick<BrowsableSkill, "scope"> & { source?: string }, shared: boolean): string {
+  if (skill.scope === "extension") return skill.source || "Extension";
+  return ({ builtin: "Included", workspace: shared ? "Team" : "Folder", personal: "Solo", project: "Folder", mounted: "Linked" } as Record<string, string>)[skill.scope] ?? "";
+}

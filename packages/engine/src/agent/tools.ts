@@ -6986,7 +6986,7 @@ export class ToolExecutor {
     });
     const folderSummaries = discovered.skills.filter((skill) => !tag || skill.tags.includes(tag)).map((skill) => ({
       id: skill.id, name: skill.name, description: skill.description, tags: skill.tags,
-      estimated_tokens: skill.estimated_tokens, suggested: false, source: skill.source,
+      estimated_tokens: skill.estimated_tokens, suggested: false, source: skill.extension ?? skill.source,
     }));
 
     // Merge cloud audit skills from env manifest if configured

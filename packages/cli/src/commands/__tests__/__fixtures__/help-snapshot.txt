@@ -1382,8 +1382,8 @@ Options:
   --format <format>          Output format: text, json, ndjson (default: "text")
   --target <url>             Engagement target the tools operate against (optional; can be named
                              in-chat)
-  --scope <file>             Initial policy for the optional scope plugin; activate with `0 skills
-                             list scope --enable`
+  --scope <file>             Initial policy for the scope extension; defining a scope turns
+                             enforcement on
   --finding <id>             Focus the chat on one persisted finding
   --finding-intent <intent>  Finding mode: investigate, verify, or draft_fix
   --db-path <path>           Persistent findings database (defaults to ZERO_DB_PATH or the local
@@ -2002,7 +2002,7 @@ Arguments:
   bucket             Bucket name(s) to probe, e.g. acme-assets
 
 Options:
-  --scope <file>     JSON engagement policy; required only while the scope plugin is enabled.
+  --scope <file>     JSON engagement policy; required only while the scope extension is enabled.
   --region <region>  Bucket home region (default us-east-1 / global endpoint)
   --max-keys <n>     Max object keys to sample from a public listing (1-100, default 10)
   --json             Emit results as machine-readable JSON
@@ -2015,7 +2015,7 @@ Validate a harvested AWS credential READ-ONLY via sts:GetCallerIdentity + read-o
 probes. No mutation, ever.
 
 Options:
-  --scope <file>             JSON engagement policy; required only while the scope plugin is
+  --scope <file>             JSON engagement policy; required only while the scope extension is
                              enabled.
   --access-key-id <id>       AWS access key id (defaults to $AWS_ACCESS_KEY_ID)
   --secret-access-key <key>  AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY)
@@ -2471,7 +2471,7 @@ Arguments:
   url              Target page URL whose <script> bundles are mined, e.g. https://app.example.com
 
 Options:
-  --scope <file>   JSON engagement policy; required only while the scope plugin is enabled.
+  --scope <file>   JSON engagement policy; required only while the scope extension is enabled.
   --timeout <ms>   Per-request fetch timeout in milliseconds (default: "10000")
   --max-files <n>  Maximum JS files to fetch (clamped to [0,100])
   --json           Emit the result as machine-readable JSON
@@ -2759,9 +2759,9 @@ Arguments:
 Options:
   --json          Emit the asset inventory as machine-readable JSON
   --timeout <ms>  Per-request probe timeout in milliseconds (default: "10000")
-  --active        Enable active DNS subdomain brute-force; the optional scope plugin enforces
+  --active        Enable active DNS subdomain brute-force; the optional scope extension enforces
                   candidate authorization.
-  --scope <file>  JSON engagement policy; required for --active only while the scope plugin is
+  --scope <file>  JSON engagement policy; required for --active only while the scope extension is
                   enabled.
   -h, --help      display help for command
 
@@ -3523,7 +3523,7 @@ Options:
   --oracle-endpoint <url>        Customer-owned state-observer endpoint
   --scenario <path>              Scenario JSON: id, title, injection_vector, benign_task, payload,
                                  prohibited_action
-  --scope <path>                 Engagement scope JSON; required only while the scope plugin is
+  --scope <path>                 Engagement scope JSON; required only while the scope extension is
                                  enabled
   --target-version <version>     Version or build digest of the tested agent deployment
   --policy-version <version>     Version or digest of the agent prompt and authorization policy
@@ -4061,11 +4061,11 @@ Options:
                                      access-control replay
   --auth <json>                      Auth credentials: JSON string or path (bearer, cookie, basic,
                                      header)
-  --scope <path>                     Path to a JSON scope policy (enable with `0 skills list scope
-                                     --enable`)
+  --scope <path>                     Path to a JSON scope policy (defining a scope turns
+                                     enforcement on)
   --allow-scanners                   Expose generic scanner tools in scope-enforced scans (default:
                                      false)
-  --require-scope                    Refuse unscoped scans while the scope plugin is enabled
+  --require-scope                    Refuse unscoped scans while the scope extension is enabled
                                      (default: false)
   --attribution-header <name=value>  Header to attach to in-scope requests (repeatable); never sent
                                      out-of-scope
@@ -4100,16 +4100,16 @@ Options:
 
 Commands:
   list [options]                List installed skills and linked folders
-  add [options] <source>        Add skills or an extension: <url|owner/repo|folder>@<full sha>, or
-                                a catalog id / owner/repo[/path]; shows one prompt first
+  add [options] <source>        Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a
+                                catalog id or owner/repo/path; shows one prompt first
   run <name> [tool] [pairs...]  Run a skill or a plugin tool
   help [command]                display help for command
 
 ### 0 skills add
 Usage: 0 skills add [options] <source>
 
-Add skills or an extension: <url|owner/repo|folder>@<full sha>, or a catalog id /
-owner/repo[/path]; shows one prompt first
+Add a skill or an extension: <url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path;
+shows one prompt first
 
 Options:
   --preview         Only show the review

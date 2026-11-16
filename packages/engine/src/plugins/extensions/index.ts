@@ -7,13 +7,13 @@
  *   adapters/  git, local folder, file-system store.
  *   import/    one-time importer for the old plugin, MCP, skill and connector stores.
  */
-import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { projectKeyOf } from "./project-key.js";
 import { DefaultSourceResolver } from "./adapters/source-resolver.js";
 import { FsExtensionStore } from "./adapters/fs-store.js";
 import { LegacyImporter } from "./import/index.js";
 import { ExtensionInstaller } from "./installer.js";
 import { listRows, loadable } from "./runtime.js";
+import { extensionOverview, type ExtensionOverview } from "./overview.js";
 import { readVerified } from "./verify.js";
 import { parseManifest } from "./core/manifest.js";
 import { capabilitiesOf } from "./core/capabilities.js";
@@ -40,12 +40,13 @@ export { LegacyImporter } from "./import/index.js";
 export { loadable, listRows, type LoadResult, type LoadedExtension, type ListRow } from "./runtime.js";
 export { readRepoSuggestions, type Suggestion } from "./suggestions.js";
 
-const projectKeyOf = (path: string): string => { try { return realpathSync(path); } catch { return resolve(path); } };
 
 export interface ExtensionService {
   store: ExtensionStore; installer: Installer; importer: Importer; sources: SourceResolver;
   list(project?: string): ReturnType<typeof listRows>;
   loadable(project?: string): ReturnType<typeof loadable>;
+  /** Everything the Extensions page lists, in one read-only call. */
+  overview(project?: string): ExtensionOverview;
   /** The install prompt for what is installed now, after checking the folder still matches its pin. */
   info(name: string): Result<{ prompt: InstallPrompt; manifest: import("./core/manifest.js").ExtensionManifest; entry: import("./core/state.js").ExtensionEntry }>;
 }
@@ -60,6 +61,7 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
     store, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
     list: project => listRows(store, project ? projectKeyOf(project) : null),
     loadable: project => loadable(store, project ? projectKeyOf(project) : null),
+    overview: project => extensionOverview(store, project ? projectKeyOf(project) : null),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
       const entry = state.value.plugins[name];
@@ -73,3 +75,6 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
     },
   };
 }
+export type { ExtensionOverview, ExtensionOverviewRow } from "./overview.js";
+export { extensionSkillRoots, type ExtensionSkillRoot } from "./skills.js";
+export { runStartupImport } from "./startup.js";

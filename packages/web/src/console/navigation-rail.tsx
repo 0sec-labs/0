@@ -100,7 +100,7 @@ export function ConsoleNavigationRail({
     refetchOnWindowFocus: true,
   });
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
-  // Seven items, no overflow menu: New thread, Findings, Automations, Skills, Memory, Computers, Explore. A "run" is just a mission, so there is no Runs destination.
+  // Seven items, no overflow menu: New thread, Findings, Automations, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
   const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const active = (to: string) => isSidebarDestinationActive(to, currentPath);
 

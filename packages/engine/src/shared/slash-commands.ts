@@ -156,9 +156,9 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     aliases: ["plugins"],
     legacy: ["plugin", "hackstore", "store", "market", "marketplace"],
   }),
-  cmd("plugin browse", "Plugins", "Explore plugins to install", {
+  cmd("plugin browse", "Plugins", "Browse extensions to add", {
     cli: "skills list --catalog",
-    destination: "/plugins/explore",
+    destination: "/extensions",
   }),
 
   // Settings

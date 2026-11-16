@@ -36,7 +36,7 @@ const FEATURE_OFF_MSG =
 
 /**
  * Live cloud-surface probes (#925). Feature enablement is independent of the
- * optional scope plugin's engagement authorization.
+ * optional scope extension's engagement authorization.
  * All probes are anonymous or read-only — nothing is mutated or exfiltrated.
  */
 export function registerCloudCommand(program: Command): void {
@@ -54,7 +54,7 @@ export function registerCloudCommand(program: Command): void {
     .argument("<bucket...>", "Bucket name(s) to probe, e.g. acme-assets")
     .option(
       "--scope <file>",
-      "JSON engagement policy; required only while the scope plugin is enabled.",
+      "JSON engagement policy; required only while the scope extension is enabled.",
     )
     .option("--region <region>", "Bucket home region (default us-east-1 / global endpoint)")
     .option("--max-keys <n>", "Max object keys to sample from a public listing (1-100, default 10)")
@@ -121,7 +121,7 @@ export function registerCloudCommand(program: Command): void {
     )
     .option(
       "--scope <file>",
-      "JSON engagement policy; required only while the scope plugin is enabled.",
+      "JSON engagement policy; required only while the scope extension is enabled.",
     )
     .option("--access-key-id <id>", "AWS access key id (defaults to $AWS_ACCESS_KEY_ID)")
     .option("--secret-access-key <key>", "AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY)")
@@ -193,7 +193,7 @@ function loadScopeOrExit(path: string | undefined): ScopePolicy | undefined {
   consolePresentationOutput.stderr(chalk.dim(getScopeEnforcementState().message), "cloud.scope.state");
   if (!path) {
     if (isScopeEnforcementEnabled()) {
-      consolePresentationOutput.stderr(chalk.red("cloud probes require --scope while the scope plugin is enabled."), "cloud.scope.required");
+      consolePresentationOutput.stderr(chalk.red("cloud probes require --scope while the scope extension is enabled."), "cloud.scope.required");
       process.exitCode = 2;
     }
     return undefined;

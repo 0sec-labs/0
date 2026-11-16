@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { extensionSkillRoots, type ExtensionSkillRoot } from "../../plugins/extensions/skills.js";
 import type { SkillDefinition } from "./types.js";
 
 export interface AgentSkillDiscoveryOptions {
@@ -11,6 +12,11 @@ export interface AgentSkillDiscoveryOptions {
   homeDir?: string | null;
   mounts?: Array<{ path: string; id?: string }>;
   includeCompatibility?: boolean;
+  /**
+   * Skill folders of enabled extensions. Undefined reads the enabled extensions under `homeDir` (none when `homeDir`
+   * is null, as in a shared workspace); pass a list to override, `[]` for none.
+   */
+  extensionRoots?: ExtensionSkillRoot[];
   /**
    * Hard allow-list of skill IDs (built-in, cloud and folder). Undefined means unrestricted; an empty list
    * allows no skills. Enforced in discovery, `list_skills` and `load_skill`, and inherited by subagents.
@@ -27,7 +33,9 @@ export interface AgentSkillMetadata {
   id: string;
   name: string;
   description: string;
-  source: "project" | "personal" | "mount";
+  source: "project" | "personal" | "mount" | "extension";
+  /** Name of the extension that provides this skill (source "extension"). */
+  extension?: string;
   directory: string;
   entrypoint: string;
   root: string;
@@ -85,7 +93,7 @@ export function validateAgentSkillContent(content: string, expectedFolderName?: 
  */
 export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): AgentSkillDiscovery {
   const result: AgentSkillDiscovery = { skills: [], diagnostics: [] };
-  const roots: Array<{ path: string; source: AgentSkillMetadata["source"]; namespace: string }> = [];
+  const roots: Array<{ path: string; source: AgentSkillMetadata["source"]; namespace: string; extension?: string }> = [];
   const addScope = (base: string, source: "project" | "personal") => {
     roots.push({ path: join(base, ".agents", "skills"), source, namespace: source });
     if (options.includeCompatibility !== false) roots.push({ path: join(base, ".claude", "skills"), source, namespace: source });
@@ -101,6 +109,8 @@ export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): A
     }
     roots.push({ path: mountPath, source: "mount", namespace: `mount/${id}` });
   }
+  const extensionRoots = options.extensionRoots ?? (options.homeDir === null ? [] : extensionSkillRoots({ ...(options.homeDir ? { home: options.homeDir } : {}), project: options.projectRoot ?? null }));
+  for (const root of extensionRoots) roots.push({ path: root.folder, source: "extension", namespace: `extension/${root.extension}`, extension: root.extension });
   const seen = new Set<string>();
   const scopedNames = new Set<string>();
   for (const spec of roots) {
@@ -119,7 +129,7 @@ export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): A
           const entrypoint = realpathSync(entry);
           if (!contained(directory, entrypoint)) throw new Error("SKILL.md points outside its skill directory.");
           const parsed = parseEntry(entrypoint);
-          if (parsed.name !== basename(directory)) result.diagnostics.push({ path: entrypoint, message: "Skill name differs from its directory name." });
+          if (!spec.extension && parsed.name !== basename(directory)) result.diagnostics.push({ path: entrypoint, message: "Skill name differs from its directory name." });
           const id = `${spec.namespace}/${parsed.name}`;
           if (seen.has(id)) {
             result.diagnostics.push({ path: entrypoint, message: `Duplicate skill ${id}; using the first location.` });
@@ -133,7 +143,7 @@ export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): A
           seen.add(id);
           if (spec.source === "project" || spec.source === "personal") scopedNames.add(parsed.name);
           result.skills.push({ id, name: parsed.name, description: parsed.description, source: spec.source,
-            directory, entrypoint, root, tags: parsed.tags, estimated_tokens: Math.max(1, Math.ceil(parsed.body.length / 4)) });
+            directory, entrypoint, root, tags: parsed.tags, ...(spec.extension ? { extension: spec.extension } : {}), estimated_tokens: Math.max(1, Math.ceil(parsed.body.length / 4)) });
         } catch (error) {
           result.diagnostics.push({ path: candidate, message: error instanceof Error ? error.message : String(error) });
         }

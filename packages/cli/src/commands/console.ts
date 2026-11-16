@@ -13,6 +13,7 @@ import {
   parseMcpConfig,
   connectMcpServers, connectServicePlugins,
   DEFAULT_MAX_TOOL_ITERATIONS,
+  runStartupImport,
 } from "@0/engine";
 import type {
   ConsoleSession,
@@ -113,7 +114,7 @@ export function registerConsoleCommand(program: Command): void {
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
-    .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 skills list scope --enable`")
+    .option("--scope <file>", "Initial policy for the scope extension; defining a scope turns enforcement on")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding mode: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
@@ -134,6 +135,7 @@ export function registerConsoleCommand(program: Command): void {
       if (!["text", "json", "ndjson"].includes(opts.format ?? "text")) {
         console.error("Format must be text, json or ndjson."); process.exitCode = 2; return;
       }
+      runStartupImport(); // one-time, idempotent; the report is on the Extensions page and in `0 skills extensions import`
       if (opts.chat || opts.engine || opts.engineUrl || opts.enginesConfig || opts.engineTokenEnv) {
         try {
           const prompt = typeof opts.print === "string" && opts.print.trim() ? opts.print : opts.print !== undefined ? await readStdinPrompt() : "";

@@ -50,6 +50,11 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   if (path === "skills/catalog/remove" && method === "POST") return { action: "skill.remove", subject: String(b.name ?? "skill"), detail: { name: b.name } };
   if (path === "plugins/install-github") return { action: "plugin.github.review", subject: String(b.repo ?? b.url ?? "github plugin"), detail: { repo: b.repo ?? b.url } };
   if (path === "plugins/install-github/approve") return { action: "plugin.github.approve", subject: "github plugin" };
+  if ((m = /^extensions\/(preview|install|update\/preview|update|enable|disable|remove)$/.exec(path)) && method === "POST") {
+    const action = { preview: "review", install: "install", "update/preview": "update.review", update: "update", enable: "enable", disable: "disable", remove: "remove" }[m[1]!]!;
+    const revision = typeof b.approvedRevision === "string" ? b.approvedRevision.slice(0, 12) : undefined;
+    return { action: `extension.${action}`, subject: String(b.name ?? b.source ?? "extension").slice(0, 200), detail: { name: b.name, source: typeof b.source === "string" ? b.source.slice(0, 200) : undefined, version: revision, approved: b.approve === true || b.confirm === true ? true : undefined } };
+  }
   if ((m = /^plugins\/(install|enable|disable|run)$/.exec(path))) return { action: `plugin.${m[1]}`, subject: String(b.id ?? b.name ?? b.plugin ?? "plugin") };
   if ((m = /^service-plugins\/([a-z0-9-]+)(\/connect)?$/.exec(path))) return { action: m[2] ? "plugin.service.connect" : method === "DELETE" ? "plugin.service.remove" : "plugin.service.update", subject: m[1]! };
   if (path === "connections" && method === "POST") {

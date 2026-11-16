@@ -20,11 +20,11 @@ export function registerReconCommand(program: Command): void {
     .option("--timeout <ms>", "Per-request probe timeout in milliseconds", "10000")
     .option(
       "--active",
-      "Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization.",
+      "Enable active DNS subdomain brute-force; the optional scope extension enforces candidate authorization.",
     )
     .option(
       "--scope <file>",
-      "JSON engagement policy; required for --active only while the scope plugin is enabled.",
+      "JSON engagement policy; required for --active only while the scope extension is enabled.",
     )
     .action(async (domain: string, opts: ReconOptions) => {
       let timeout = 10_000;

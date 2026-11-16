@@ -1011,7 +1011,7 @@ Run autonomous pentest against a URL, web app, or MCP server
 0 scan web [options]
 ```
 
-With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope and authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
+The scope extension is on by default. Once a scope is defined, live HTTP/HTTPS/MCP targets are checked against it, including when `--require-scope` is omitted; with no scope defined nothing is restricted. Turn it off with `0 skills extensions disable scope --yes`. See [Scope and authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
 Guide: [Read the workflow](/scan-web/).
 
@@ -1040,9 +1040,9 @@ Guide: [Read the workflow](/scan-web/).
 | `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
 | `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope policy (enable with `0 skills list scope --enable`) |
+| `--scope <path>` | — | Path to a JSON scope policy (defining a scope turns enforcement on) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
-| `--require-scope` | `false` | Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled. |
+| `--require-scope` | `false` | Refuse unscoped scans while the scope extension is enabled. Ordinary live targets already require policy when it is enabled. |
 | `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
 | `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic |
 | `--api-spec <path>` | — | Path to an OpenAPI/Swagger spec for endpoint knowledge |
@@ -2991,7 +2991,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--mcp-endpoint <url>` **required** | — | Authorized MCP tools/list endpoint |
 | `--oracle-endpoint <url>` **required** | — | Customer-owned state-observer endpoint |
 | `--scenario <path>` **required** | — | Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action |
-| `--scope <path>` | — | Engagement scope JSON; required only while the scope plugin is enabled |
+| `--scope <path>` | — | Engagement scope JSON; required only while the scope extension is enabled |
 | `--target-version <version>` **required** | — | Version or build digest of the tested agent deployment |
 | `--policy-version <version>` **required** | — | Version or digest of the agent prompt and authorization policy |
 | `--model-version <version>` **required** | — | Model deployment/version identifier |
@@ -3074,8 +3074,8 @@ Guide: [Read the workflow](/research-workflows/).
 | --- | --- | --- |
 | `--json` | — | Emit the asset inventory as machine-readable JSON |
 | `--timeout <ms>` | `10000` | Per-request probe timeout in milliseconds |
-| `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
-| `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
+| `--active` | — | Enable active DNS subdomain brute-force; the optional scope extension enforces candidate authorization. |
+| `--scope <file>` | — | JSON engagement policy; required for --active only while the scope extension is enabled. |
 
 ### lab research js-recon
 
@@ -3093,7 +3093,7 @@ Guide: [Read the workflow](/research-workflows/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope extension is enabled. |
 | `--timeout <ms>` | `10000` | Per-request fetch timeout in milliseconds |
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
@@ -3223,7 +3223,7 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope extension is enabled. |
 | `--region <region>` | — | Bucket home region (default us-east-1 / global endpoint) |
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
@@ -3238,7 +3238,7 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope extension is enabled. |
 | `--access-key-id <id>` | — | AWS access key id (defaults to $AWS_ACCESS_KEY_ID) |
 | `--secret-access-key <key>` | — | AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY) |
 | `--session-token <token>` | — | AWS session token (defaults to $AWS_SESSION_TOKEN) |
@@ -3542,7 +3542,7 @@ Expose selected target tools or managed workflows over MCP stdio.
 0 lab mcp-server [options]
 ```
 
-Use `--automations --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
+Use `--automations --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope extension. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
 
 Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 automation` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
 
