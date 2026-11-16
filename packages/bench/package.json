@@ -110,7 +110,7 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.25",
-    "@types/node": "^25.5.0",
+    "@types/node": "^26.6.6",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
