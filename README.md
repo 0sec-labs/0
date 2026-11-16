@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks. It is open source and runs on your own infrastructure, with the LLMs you choose. It runs on your own infrastructure, with the LLMs you choose.
+  0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks. It is open source and runs on your own infrastructure, with the LLMs you choose.
 </p>
 
 <p align="center">

@@ -610,8 +610,8 @@ Skipped, with the reason:
 - The 16 "unreachable" files (1,554 LOC; 14 files and 1,428 LOC by my regex graph,
   which also treats the `exports` map and the `0-llm` bin as entries). Not dead:
   `improvement/registry.ts` and `provenance.ts` hold their names in source-snapshot
-  allow-lists and hash them, `scripts/security-evolution-study/summary-ablation.mjs`
-  imports `development-summary` from `dist`, `docs/design/security-evolution-offline-studies.md`
+  allow-lists and hash them, the removed `scripts/security-evolution-study/` scripts
+  once imported `development-summary` from `dist`, `docs/design/security-evolution-offline-studies.md`
   documents the studies, each has a test, and the three `__fixtures__` files are child
   processes spawned by tests. `agent/tools/syscall-boundary-map.ts` is also inside the
   area another change owns. They stay until the improvement group moves in step 5.
