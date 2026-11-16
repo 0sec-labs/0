@@ -3,7 +3,7 @@
   "compilerOptions": {
     "incremental": false
   },
-  "files": ["src/index.ts"],
+  "files": ["src/index.ts", "src/commands/index.ts"],
   "include": [],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "test"]
 }

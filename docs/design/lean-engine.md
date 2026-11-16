@@ -540,3 +540,50 @@ How to prove parity:
 - Decide whether `hub` (Agents mailbox and supervisor) belongs in core.
 - `docs/design` is excluded from the public export; decide whether this document
   should be public.
+
+## Baselines (step 1, measured 2026-11-15 on `origin/main` at `f3059e0f`)
+
+Method: worktree build, `HOME` set to an empty temp dir, Apple silicon, Node, warm
+cache, 10 runs each, median reported. The bundle is the real `scripts/bundle-cli.mjs`
+output (esbuild, `splitting`, not minified: the script does not minify), so the sizes
+below are comparable between steps but not with the minified 9.09 MB in section 2.
+
+| Measurement | Before step 1 | After step 1 |
+|---|---:|---:|
+| `dist/` JS total (`0.js` plus chunks: 188 before, 293 after) | 15,831,311 B | 15,944,004 B (+112,693: manifest, more and smaller chunks) |
+| `0 --version` (bundle) | 0.721 s | 0.151 s |
+| `0 --help` (bundle) | 0.724 s | 0.157 s |
+| `0 doctor --help` (bundle) | 0.726 s | 0.665 s |
+| `0 --version` (tsc output `packages/cli/dist/index.js`) | 0.946 s | not re-measured |
+
+What changed in step 1: `index.ts` is now a thin entry that answers `--version` and the
+bare root `--help` from `@0/engine/shared` and a static manifest of the 15 top-level
+commands (`commands/manifest.ts`); everything else continues in `main.ts`, which builds
+only the invoked top-level command through `commands/lazy-tree.ts`. Every other
+top-level name is a stub (name, aliases, description) so root help, suggestions and the
+known-command check are unchanged. `commands/tree.ts` stays the eager, complete tree used
+by the docs scripts and tests. `0 doctor --help` is still about 0.67 s: the section loads
+`doctor.ts`, and `main.ts` still imports the engine barrel for telemetry and settings
+before any command runs. Moving that setup behind the command is a later step.
+
+Behaviour notes for the fast path: `0 --version` and `0 --help` no longer run the
+workbench boundary check, the startup update or the telemetry notice (they print and
+exit). Deprecated environment aliases still apply and warn once (covered by
+`scripts/cli-process-smoke.test.mjs`); `apply-env-aliases.ts` now imports the narrow
+`@0/engine/config/deprecated-env` subpath instead of the barrel.
+
+Help snapshot: `packages/cli/src/commands/__tests__/__fixtures__/help-snapshot.txt` holds
+the help of all 293 command nodes (visible and hidden, width 100). `help-snapshot.test.ts`
+compares it with the eager tree and with the lazy tree, and checks that the static root
+help equals the real root help. A step that removes a flag or command shows up as a diff
+of that fixture; regenerate with `UPDATE_HELP_SNAPSHOT=1`. The 13 argv forms
+(`--help`, `-h`, `help`, `--version`, `-V`, `help scan`, `scan --help`, `scan web --help`,
+`doctor --help`, `lab runs --help`, `automations --help`, `worker --help`, an unknown
+word) printed byte-identical output and exit codes before and after.
+
+Tool schemas: `Object.keys(TOOL_DEFINITIONS)` has 76 entries; sha256 of
+`JSON.stringify(TOOL_DEFINITIONS)` starts `6e584517029311c4`. This is recorded here and
+not as a golden test on purpose: the core toolset is being changed in parallel, and a
+golden test would fail that work without telling it anything. Stage prompt hashes are
+not recorded (no cheap single entry point; the structural proof for later steps is the
+help fixture and this tool hash).

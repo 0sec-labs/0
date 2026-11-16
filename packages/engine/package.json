@@ -22,6 +22,10 @@
       "types": "./dist/shared/*.d.ts",
       "import": "./dist/shared/*.js"
     },
+    "./config/deprecated-env": {
+      "types": "./dist/config/deprecated-env.d.ts",
+      "import": "./dist/config/deprecated-env.js"
+    },
     "./storage": {
       "types": "./dist/storage/index.d.ts",
       "import": "./dist/storage/index.js"
