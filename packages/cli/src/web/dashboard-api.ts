@@ -15,6 +15,8 @@ import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth, parseAuthMode } from "./github-auth.js";
+import { GitHubConnector } from "./github-connector.js";
+import { handleConnectorRequest } from "./connector-routes.js";
 import { handleWebhookConsoleRequest, type WebhookConsoleContext } from "./github-webhook.js";
 import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
@@ -172,7 +174,10 @@ export async function handleWebConsoleApiRequest(
       const catalog = await handleSkillsCatalogRequest(skillsCatalogFor(skills), path, method, input, { canWrite: !team?.auth.enabled || member?.role !== "viewer" });
       if (catalog) { json(res, catalog.status, catalog.data); return true; }
     }
-    const extensions = await handleExtensionRequest(createExtensionService(), path, method, input, requestUrl.searchParams);
+    const extensionService = createExtensionService();
+    const connectors = await handleConnectorRequest(extensionService, { github: new GitHubConnector(github) }, path, method, input);
+    if (connectors) { json(res, connectors.status, connectors.data); return true; }
+    const extensions = await handleExtensionRequest(extensionService, path, method, input, requestUrl.searchParams);
     if (extensions) { json(res, extensions.status, extensions.data); return true; }
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }

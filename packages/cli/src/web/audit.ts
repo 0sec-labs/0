@@ -50,6 +50,7 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   if (path === "skills/catalog/remove" && method === "POST") return { action: "skill.remove", subject: String(b.name ?? "skill"), detail: { name: b.name } };
   if (path === "plugins/install-github") return { action: "plugin.github.review", subject: String(b.repo ?? b.url ?? "github plugin"), detail: { repo: b.repo ?? b.url } };
   if (path === "plugins/install-github/approve") return { action: "plugin.github.approve", subject: "github plugin" };
+  if ((m = /^extensions\/connectors\/([a-z0-9._-]+)\/(connect|sign-in|cancel|disconnect)$/.exec(path)) && method === "POST") return { action: `extension.connector.${m[2]!.replace("-", ".")}`, subject: m[1]!, detail: { name: m[1] } };
   if ((m = /^extensions\/(preview|install|update\/preview|update|enable|disable|remove)$/.exec(path)) && method === "POST") {
     const action = { preview: "review", install: "install", "update/preview": "update.review", update: "update", enable: "enable", disable: "disable", remove: "remove" }[m[1]!]!;
     const revision = typeof b.approvedRevision === "string" ? b.approvedRevision.slice(0, 12) : undefined;
