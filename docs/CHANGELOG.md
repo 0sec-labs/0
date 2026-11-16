@@ -15,6 +15,7 @@ on the GitHub Release tag.
 ### Changed
 
 - Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
+- The thread view reads like Capy: replies are 13px text in a 660px column, the composer is 712px wide, time stamps appear only after a 30 minute gap, "Worked" rows show a red x when a call failed, and a thread waiting on you says "Needs you" in the accent colour.
 - The Agents | Threads switch is a small icon toggle on the list header, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
 - Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
 

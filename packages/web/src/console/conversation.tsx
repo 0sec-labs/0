@@ -312,7 +312,7 @@ export function Conversation({
           }}
           aria-label="Conversation"
         >
-          <div className="mx-auto grid w-full max-w-[864px] grid-cols-[minmax(0,1fr)] gap-6">
+          <div className="mx-auto grid w-full max-w-[660px] grid-cols-[minmax(0,1fr)] gap-6">
             <div ref={content} className="min-w-0 space-y-10">
               {workspace.hasEarlierMessages && !worker && (
                 <div className="flex justify-center">
@@ -363,6 +363,11 @@ export function Conversation({
                 </div>
               )}
               <QueuedMessages inline workspace={rootWorkspace} snapshot={snapshot} />
+              {snapshot.pendingDecisions.length > 0 && (
+                <p data-slot="needs-you" role="status" className="text-xs font-medium text-primary-text">
+                  Needs you
+                </p>
+              )}
               {snapshot.pendingDecisions.map((decision) => (
                 <div key={decision.id}>
                   <ApprovalPanel
@@ -911,7 +916,7 @@ export function Composer({
     );
   return (
     <div className={`shrink-0 bg-transparent ${worker || home ? "p-0" : "px-3 pb-[calc(0.25rem+env(safe-area-inset-bottom))] sm:px-6"}`}>
-      <div className={`mx-auto ${home ? "max-w-none" : "max-w-[896px]"}`}>
+      <div className={`mx-auto ${home ? "max-w-none" : "max-w-[712px]"}`}>
         {!worker &&
           feedback?.active &&
           ((feedback.waiting && !snapshot.pendingDecisions.length) ||

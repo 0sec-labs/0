@@ -223,14 +223,14 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
   const prepared = prepareMarkdown(streaming ? displayed : text);
   if (prepared.plain)
     return (
-      <div className="console-markdown min-w-0 whitespace-pre-wrap break-words wrap-anywhere text-sm leading-relaxed text-foreground">
+      <div className="console-markdown min-w-0 whitespace-pre-wrap break-words wrap-anywhere text-[13px] leading-[1.5] tracking-[-.01em] text-foreground">
         {prepared.text}
       </div>
     );
   return (
     <div
       data-streaming={streaming || undefined}
-      className="console-markdown min-w-0 break-words wrap-anywhere text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border"
+      className="console-markdown min-w-0 break-words wrap-anywhere text-[13px] leading-[1.5] tracking-[-.01em] text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border"
     >
       <StreamingContext.Provider value={streaming}>
         <ReactMarkdown

@@ -37,7 +37,7 @@ const ThreadAnswer = ({ lines }: { lines: string[] }) => <div className="flex fl
  */
 export function ComposerPlaceholder() {
   return <div aria-hidden="true" data-composer-placeholder className="shrink-0 p-3 sm:px-6">
-    <div className="mx-auto max-w-[896px]">
+    <div className="mx-auto max-w-[712px]">
       <div className="flex flex-col rounded-[var(--radius-card,8px)] bg-card p-3 opacity-70 shadow-[var(--shadow-composer)]">
         <div className="min-h-[52px] px-1 py-1 text-[15px] leading-6 text-muted-foreground-2 select-none">{v("Ask 0 to work on this {mission}…")}</div>
         <div className="flex h-8 items-center gap-1.5"><Skeleton className="size-5 bg-secondary/60" /><Skeleton className="h-3 w-16 bg-secondary/60" /><Skeleton className="h-3 w-24 bg-secondary/60" /><Skeleton className="ml-auto size-8 rounded-full bg-secondary/60" /></div>
@@ -54,7 +54,7 @@ export function ComposerPlaceholder() {
  */
 export function ConversationSkeleton() {
   return <div className="flex min-h-0 flex-1 flex-col" data-conversation-skeleton>
-    <SkeletonPanel label={v("Loading your {mission}…")} className="min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,#000_72px)]" innerClassName="mx-auto flex h-full w-full max-w-[864px] flex-col justify-end gap-10 overflow-hidden px-3 pb-6 pt-5 sm:px-6">
+    <SkeletonPanel label={v("Loading your {mission}…")} className="min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,#000_72px)]" innerClassName="mx-auto flex h-full w-full max-w-[660px] flex-col justify-end gap-10 overflow-hidden px-3 pb-6 pt-5 sm:px-6">
       <ThreadUser width="38%" />
       <ThreadAnswer lines={["92%", "100%", "64%"]} />
       <ThreadUser width="28%" />

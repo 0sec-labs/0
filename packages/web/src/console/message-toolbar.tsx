@@ -20,13 +20,6 @@ export function formatStamp(iso: string | undefined, now = new Date()): string |
   return `${date.toLocaleDateString([], { month: "short", day: "numeric", ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) })}, ${time}`;
 }
 
-export function dayKey(iso: string | undefined): string | undefined {
-  const date = new Date(iso ?? "");
-  return iso && !Number.isNaN(date.getTime())
-    ? `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-    : undefined;
-}
-
 /** Centered day/time stamp between turns. */
 export function DayStamp({ iso }: { iso?: string }) {
   const label = formatStamp(iso);
