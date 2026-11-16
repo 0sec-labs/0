@@ -192,6 +192,7 @@ export default defineConfig({
             { label: "Plugins", slug: "plugins" },
             { label: "Plugin security", slug: "plugin-trust" },
             { label: "Skills", slug: "skills" },
+            { label: "Connect a service", slug: "connect-a-service" },
           ],
         },
         {

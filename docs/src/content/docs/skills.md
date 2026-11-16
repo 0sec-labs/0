@@ -100,7 +100,7 @@ An extension is an installable folder, pinned to one git commit, that can bundle
 
 Nothing is installed until you re-run with `--yes`. Add `--enable` to turn it on right away, with `--project <dir>` to limit it to one project. Branches, tags and short SHAs are refused: only the full 40-character SHA is stored. Installs are immutable and live in `~/.0/extensions/<name>/<sha>/`. A folder source has no commit, so its content hash is its version and any change asks again.
 
-An extension can use `extension.json` (preferred), `.claude-plugin/plugin.json`, `plugin.json` with an optional `"0"` object (`connector`, `scope`, `verify`, `requires`), or just a `SKILL.md` folder. The first one found wins.
+An extension can use `extension.json` (preferred), `.claude-plugin/plugin.json`, `plugin.json` with an optional `"0"` object (`connector`, `scope`, `verify`, `requires`), or just a `SKILL.md` folder. The first one found wins. The `connector` block is described in [Connect a service](/connect-a-service/#connector-reference).
 
 ### Update, enable, remove
 

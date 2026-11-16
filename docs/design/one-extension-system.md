@@ -181,7 +181,7 @@ old data.
 | Installed GitHub plugins (`~/.0/plugins`) | Executable `plugin.js` format is not runnable. Imported as disabled entries listed "could not migrate: executable tools, re-express as scripts or MCP". Source SHA kept. |
 | Model-authored plugins (`self_extend`, `~/.0/executable-plugins`) | Reported, files left in place. `self_extend` tool and `allowModelSelfExtension` removed; the model writes a skill or script folder (`create_skill`) and the user installs it as a local plugin. |
 | Custom MCP servers | Each becomes a local plugin with one `.mcp.json`, imported as installed and enabled only for projects where it was enabled, marked "re-approve" (prompt on first use). |
-| Service connections (GitHub, Slack, Elastic) | GitHub: built-in plugin, connection and token kept. Others: listed as "connector plugin not yet available"; stored tokens untouched. |
+| Service connections (GitHub, Slack, Elastic) | GitHub: built-in plugin, connection and token kept. Token-only ones (Slack, Linear, Cloudflare, Teams): imported as connector extensions needing approval, token not copied. The rest (URL or ids needed): reported only; stored credentials untouched. (Step 5, shipped.) |
 | `scope` enablement | Enabled everywhere. Projects that had it enabled or had a scope defined stay enforced; projects with a defined scope but scope OFF become enforced and the report says so. |
 | Skills (user, project, mounted, built-in, team) | Unchanged on disk; shown as plugins of kind skills-only; provenance and pinned SHA carried over. |
 
