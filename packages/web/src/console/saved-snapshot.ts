@@ -17,9 +17,9 @@ export function savedTranscriptSnapshot(savedId: string, page: ConsoleMessagesPa
   const session: DesktopConsoleSession = {
     id: savedId,
     savedId,
+    autonomyMode: "changes",
     target: meta.target ?? "",
     role: "discovery",
-    autonomyMode: "changes",
     scopeConfigured: false,
     localScopeConfigured: false,
     status: "ready",

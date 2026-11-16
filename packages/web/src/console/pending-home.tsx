@@ -1,5 +1,4 @@
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared/desktop-console";
 import { v } from "@/lib/vocabulary";
 import { Button } from "@/components/ui/button";
 
@@ -12,7 +11,7 @@ import { Button } from "@/components/ui/button";
 export function pendingHomeSnapshot(id: string): ConsoleSessionSnapshot {
   const now = new Date(0).toISOString();
   return {
-    session: { id, target: "", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE, scopeConfigured: false, localScopeConfigured: false, status: "ready", createdAt: now, updatedAt: now, messageCount: 0 },
+    session: { id, target: "", role: "audit", autonomyMode: "changes", scopeConfigured: false, localScopeConfigured: false, status: "ready", createdAt: now, updatedAt: now, messageCount: 0 },
     title: "",
     cursor: 0,
     messages: [],

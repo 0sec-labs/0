@@ -1,19 +1,19 @@
 import { describe, expect, test } from "vitest";
 import { createSentinelClient } from "../src/sentinels/api";
 import {
-  SentinelApiError, ACCESS_OPTIONS, accessFields, accessLevelOf, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
+  SentinelApiError, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
   type Sentinel, type SentinelPreset,
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, autonomy: "observe", toolAccess: "read-web", budget: { dailyUsd: 10, maxRunsPerDay: 20 }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, budget: { dailyUsd: 10, maxRunsPerDay: 20 }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
-const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", autonomy: "observe", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], toolAccess: "read-web", instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
+const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
 describe("form model", () => {
   test("preset defaults are inert", () => {
     const form = formFromPreset(preset);
-    expect(form).toMatchObject({ name: "Pen Tester", autonomy: "observe", toolAccess: "read-web", production: false, repos: "", targets: "" });
+    expect(form).toMatchObject({ name: "Pen Tester", production: false, repos: "", targets: "" });
     const parsed = fieldsFromForm(form);
     expect(parsed.ok && parsed.fields.scope).toEqual({ repos: [], targets: [], domains: [], outOfScope: [], production: false });
     expect(parsed.ok && parsed.fields.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
@@ -99,23 +99,12 @@ describe("client", () => {
   });
 });
 
-describe("Agent access: Read-only or Can make changes", () => {
-  test("maps stored autonomy to the two choices users see", () => {
-    expect(accessLevelOf("observe")).toBe("read-only");
-    for (const stored of ["propose", "run", "act"] as const) expect(accessLevelOf(stored)).toBe("changes");
-    expect(ACCESS_OPTIONS.map(option => option.label)).toEqual(["Read-only", "Can make changes"]);
-  });
-  test("keeps web access when the level is unchanged, so editing never alters it", () => {
-    expect(accessFields("changes", { autonomy: "propose", toolAccess: "read-only" })).toEqual({ autonomy: "propose", toolAccess: "read-only" });
-    expect(accessFields("read-only", { autonomy: "observe", toolAccess: "read-web" })).toEqual({ autonomy: "observe", toolAccess: "read-web" });
-  });
-  test("new choices store only observe or act", () => {
-    expect(accessFields("changes", { autonomy: "observe", toolAccess: "read-only" })).toEqual({ autonomy: "act", toolAccess: "exec" });
-    expect(accessFields("read-only", { autonomy: "act", toolAccess: "exec" })).toEqual({ autonomy: "observe", toolAccess: "read-only" });
-  });
-  test("saving an older propose or run Agent stores act, with its web access unchanged", () => {
-    const form = { ...formFromSentinel(base as never), autonomy: "propose" as const };
-    expect(fieldsFromForm(form)).toMatchObject({ ok: true, fields: { autonomy: "act" } });
-    expect(fieldsFromForm({ ...form, autonomy: "run" })).toMatchObject({ ok: true, fields: { autonomy: "act" } });
+describe("one mode", () => {
+  test("the form carries no access fields and a save sends none", () => {
+    const form = formFromSentinel(base as never);
+    expect(form).not.toHaveProperty("autonomy");
+    expect(form).not.toHaveProperty("toolAccess");
+    const parsed = fieldsFromForm(form);
+    expect(parsed.ok && Object.keys(parsed.fields).sort()).toEqual(["budget", "mission", "name", "scope"]);
   });
 });

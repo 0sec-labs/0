@@ -197,7 +197,7 @@ export function SentinelActivations({ sentinel }: { sentinel: Sentinel }) {
       const href = chatHref(item.missionId);
       return <li key={item.id} className="flex items-center gap-3 px-4 py-3 text-sm">
         <Badge variant={ACTIVATION_TONE[item.status]}>{item.status}</Badge>
-        <span className="min-w-0 flex-1"><span className="block truncate">{activationLabel(item)}<span className="ml-2 text-xs text-muted-foreground-1">version {item.sentinelVersion}</span></span>{item.error && <span className="block truncate text-xs text-destructive">{item.error}</span>}</span>
+        <span className="min-w-0 flex-1"><span className="block truncate">{activationLabel(item)}<span className="ml-2 text-xs text-muted-foreground-1">version {item.sentinelVersion}</span></span>{item.error && <span className="block truncate text-xs text-destructive">{item.error}</span>}{item.note && <span className="block truncate text-xs text-muted-foreground-1">{item.note}</span>}</span>
         {item.costUsd !== undefined && <span className="text-xs tabular-nums text-muted-foreground-1">${item.costUsd.toFixed(2)}</span>}
         <span className="w-8 text-right text-xs tabular-nums text-muted-foreground-2">{ago(item.startedAt) || "now"}</span>
         {href && <Button size="xs" variant="ghost" render={<Link to={href} />}>Open</Button>}

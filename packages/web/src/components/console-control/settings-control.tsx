@@ -149,7 +149,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
           <AppearanceRows />
         </>}
         {!presentationOnly && section.id === "agents" && settings.data?.accessUpgradeNotice && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-          <p className="min-w-0 text-muted-foreground-2">Agents and threads that used to confirm every action now follow Ask before running commands. Turn it on to keep confirmations.</p>
+          <p className="min-w-0 text-muted-foreground-2">Threads and Agents now always have shell access; limits are scope, budget and the sandbox.</p>
           <Button type="button" variant="ghost" size="sm" disabled={dismissNotice.isPending} onClick={() => dismissNotice.mutate()}>Dismiss</Button>
         </div>}
         {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={reset.isPending} isolatedReady={isolatedReady} group={{ keys: settingGroup(def.key).filter(key => settings.data!.definitions.some(item => item.key === key)), values: settings.data!.settings }} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}

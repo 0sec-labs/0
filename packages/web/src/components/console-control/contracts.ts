@@ -44,7 +44,7 @@ export interface PluginResult { ok: boolean; message: string; state?: string; ca
 export interface CheckItem { id: string; name: string; prompt: string; revision: number; enabled: boolean; approvedRevision: number | null }
 export interface ChecksResponse { project: string; checks: CheckItem[] }
 export interface ProjectResponse { path: string; name: string; git: { branch: string | null; dirty: boolean; root: string | null; error: string | null } }
-export interface SessionSummary { id: string; title?: string; parentSessionId?: string; skillAllowList?: string[]; titleSource?: "default" | "auto" | "user"; target: string; role: string; autonomyMode: string; status: string; runtime?: RuntimeInfo; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown }
+export interface SessionSummary { id: string; title?: string; parentSessionId?: string; skillAllowList?: string[]; titleSource?: "default" | "auto" | "user"; target: string; role: string; status: string; runtime?: RuntimeInfo; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown }
 export interface SessionSnapshot { session: SessionSummary; runtime?: RuntimeInfo | null; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown; harness?: HarnessSnapshot | null; scope: { in_scope?: string[]; out_of_scope?: string[] } | null; scopeEnforcement: { enabled: boolean; message: string }; localScopePath?: string; tools: { name: string; description: string; inputSchema: unknown }[] }
 export interface Workflow {
   id: string; sessionId: string; kind: string; status: string; createdAt: string; updatedAt: string;

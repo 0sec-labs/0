@@ -86,7 +86,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
     if (duplicate) { setError("This schedule already exists."); return; }
     void run(async () => {
       const title = `Schedule: ${workflow.name}`;
-      const sessionId = owners.find(session => session.title === title)?.id ?? (await createConsoleSession({ title, target: workflow.target, autonomyMode: "changes" })).id;
+      const sessionId = owners.find(session => session.title === title)?.id ?? (await createConsoleSession({ title, target: workflow.target })).id;
       const fields: ScheduleInput = { workflowId: workflow.id, workflowRevision: workflow.revision, sessionId, cadence, startAt: start.toISOString(), timezone };
       await webFetchJson(PATH, { method: "POST", body: JSON.stringify({ ...fields, enabled, ...(enabled ? { approval: "enable-reviewed-trigger" } : {}) }) });
       await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggerSessions() });

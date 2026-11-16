@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/ui/components/select";
-import { ACCESS_OPTIONS, accessFields, accessLevelOf, SENTINEL_LIMITS, type SentinelFormState } from "@/sentinels/model";
+import { SENTINEL_LIMITS, type SentinelFormState } from "@/sentinels/model";
 
 function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {
   return <div className="space-y-1.5">
@@ -27,8 +27,6 @@ export function SentinelFields({ form, onChange, disabled = false }: { form: Sen
       <Switch aria-labelledby="sentinel-production-label" checked={form.production} disabled={disabled} onCheckedChange={value => set("production", value)} />
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Access"><Select aria-label="Access" disabled={disabled} value={accessLevelOf(form.autonomy)} onValueChange={value => { onChange({ ...form, ...accessFields(value as ReturnType<typeof accessLevelOf>, form) }); }} options={ACCESS_OPTIONS.map(option => ({ value: option.value, label: option.label }))} /></Field>
-      <p className="text-xs text-muted-foreground-1 sm:self-end">{ACCESS_OPTIONS.find(option => option.value === accessLevelOf(form.autonomy))?.hint}</p>
       <Field label="Daily budget (USD)" htmlFor="sentinel-daily"><Input id="sentinel-daily" inputMode="decimal" value={form.dailyUsd} disabled={disabled} onChange={event => set("dailyUsd", event.target.value)} /></Field>
       <Field label="Runs per day" htmlFor="sentinel-runs"><Input id="sentinel-runs" inputMode="numeric" value={form.maxRunsPerDay} disabled={disabled} onChange={event => set("maxRunsPerDay", event.target.value)} /></Field>
     </div>

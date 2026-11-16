@@ -3,7 +3,6 @@ import { v } from "@/lib/vocabulary";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { autonomyModeLabel } from "@/console/autonomy-options";
 import { ScanResumeRequestSchema } from "@0/engine/shared/scan-resume";
 import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
@@ -46,7 +45,7 @@ export function ScanResumeControl({ scan }: { scan: { id: string; target: string
         <fieldset disabled={resume.isPending || Boolean(resume.data)} className="space-y-4">
         <Select label={v("Execution {mission}")} disabled={resume.isPending || Boolean(resume.data)} value={sessionId} onValueChange={value => change(() => setSessionId(value))} options={[{ value: "", label: v("Choose {a mission}") }, ...(sessions.data ?? []).filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` }))]} />
         <Button type="button" size="sm" variant="outline" disabled={create.isPending || resume.isPending} onClick={() => create.mutate()}>{create.isPending ? "Creating…" : v("New execution {mission}")}</Button>
-        {snapshot.data && <p className="text-xs text-muted-foreground">{snapshot.data.runtime?.model ?? "Configured model"} · {autonomyModeLabel(snapshot.data.session.autonomyMode)}</p>}
+        {snapshot.data && <p className="text-xs text-muted-foreground">{snapshot.data.runtime?.model ?? "Configured model"}</p>}
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1 text-sm">Time limit (minutes)<Input type="number" min={0.01} max={1440} step="any" required value={minutes} onChange={event => change(() => setMinutes(event.target.value))} /></label>
           <label className="space-y-1 text-sm">Cost limit (USD)<Input type="number" min={0.01} max={1000} step="any" required value={cost} onChange={event => change(() => setCost(event.target.value))} /></label>

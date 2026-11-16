@@ -7,7 +7,6 @@ import type {
   DesktopConsoleOperatorAnswer,
   DesktopConsoleOperatorQuestion,
 } from "@0/engine/shared";
-import { autonomyModeLabel } from "./autonomy-options";
 import { Button } from "@/components/ui/button";
 import { Popover } from "@/ui/components/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -312,7 +311,6 @@ function DecisionDetails({ decision }: { decision: DesktopConsoleDecision }) {
         <dl className="grid gap-1.5 sm:grid-cols-[max-content_minmax(0,1fr)]">
           <dt className="text-muted-foreground">Target</dt><dd className="whitespace-pre-wrap break-all">{context.target}</dd>
           <dt className="text-muted-foreground">Role</dt><dd>{context.role}</dd>
-          <dt className="text-muted-foreground">Access</dt><dd>{autonomyModeLabel(context.autonomyMode)}</dd>
         </dl>
       )}
       {decision.currentScope !== undefined && <DetailBlock label="Allowed targets" value={decision.currentScope ?? "None set."} />}

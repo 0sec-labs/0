@@ -9,7 +9,6 @@ import { ContextRing } from "@/components/ui/context-ring";
 import { TaskProgressList } from "../../task-progress";
 import { executionLabel } from "../../execution-status";
 import { formatTokens } from "../../format-tokens";
-import { autonomyModeLabel } from "../../autonomy-options";
 import { agentViewId, findingViewId, type PanelViewComponent } from "../types";
 import {
   formatCost,
@@ -142,7 +141,6 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
         <div className="flex items-center gap-2 text-sm font-medium">
           <span aria-hidden="true" className={`size-2 rounded-full ${toneDot[status.tone]}`} />
           {status.label}
-          {snapshot.session.autonomyMode && <Pill>{autonomyModeLabel(snapshot.session.autonomyMode)}</Pill>}
         </div>
         {status.detail && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{status.detail}</p>}
         <p className="mt-1 truncate text-2xs text-muted-foreground-2">

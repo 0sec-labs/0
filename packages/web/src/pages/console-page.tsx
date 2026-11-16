@@ -45,7 +45,6 @@ import type {
   HarnessSnapshot,
   ConsoleCreateSessionInput,
 } from "@0/engine/shared";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared/desktop-console";
 import { Download, Menu, Trash2, Pencil, Eraser } from "lucide-react";
 import {
   CapyCopyIcon as Copy,
@@ -376,10 +375,10 @@ function ConsolePageContent({
       // supplies an authoritative roster entry. Never wait for a host handshake here.
       const session: DesktopConsoleSession = {
         id,
+        autonomyMode: "changes",
         title,
         target: "",
         role: "audit",
-        autonomyMode: DEFAULT_AUTONOMY_MODE,
         status: "ready",
         scopeConfigured: false,
         localScopeConfigured: false,
@@ -476,7 +475,6 @@ function ConsolePageContent({
       const created = await createChatOnExecutionHost(backendId, {
         title: v("New {mission}"),
         role: "audit",
-        autonomyMode: DEFAULT_AUTONOMY_MODE,
       });
       setHostRosters((previous) => ({
         ...previous,
@@ -782,8 +780,7 @@ function ConsolePageContent({
           created: await createOwnedSession({
             title: v("New {mission}"),
             role: "audit",
-            autonomyMode: DEFAULT_AUTONOMY_MODE,
-          }),
+              }),
         };
       }).then((result) => {
         if (result.reused) {

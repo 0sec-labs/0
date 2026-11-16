@@ -2,7 +2,6 @@ import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared/desktop-console";
 import { createChatOnExecutionHost } from "@/console/model-source";
 import { backendRouteHref } from "@/console/chat-host";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -70,7 +69,7 @@ export function WorkersPage() {
     if (busy) return;
     setBusy(`open:${backendId}`); setError("");
     try {
-      const created = await createChatOnExecutionHost(backendId, { title: v("New {mission}"), role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
+      const created = await createChatOnExecutionHost(backendId, { title: v("New {mission}"), role: "audit" });
       navigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(created.id)}`));
     } catch (cause) { setError(errorText(cause, v("Couldn’t create {a mission} on this computer."))); }
     finally { setBusy(null); }

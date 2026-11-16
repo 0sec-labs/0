@@ -8,9 +8,6 @@
  * (type-only, so nothing from the engine enters the bundle). Keep new fields in sync by hand until then.
  */
 export type SentinelStatus = "active" | "paused" | "archived";
-export type SentinelAutonomy = "observe" | "propose" | "act" | "run";
-export type SentinelAccessLevel = "read-only" | "changes";
-export type SentinelToolAccess = "read-only" | "read-web" | "exec";
 
 export interface SentinelScope { repos: string[]; targets: string[]; domains: string[]; outOfScope: string[]; production: boolean }
 export interface SentinelBudget { dailyUsd: number; maxRunsPerDay: number }
@@ -33,8 +30,6 @@ export interface Sentinel {
   role: string;
   skills: string[];
   scope: SentinelScope;
-  autonomy: SentinelAutonomy;
-  toolAccess: SentinelToolAccess;
   hostId?: string | null;
   model?: SentinelModelChoice | null;
   budget: SentinelBudget;
@@ -65,10 +60,9 @@ export interface SentinelPreset {
   /** One-line card description. */
   description: string;
   job: string;
-  autonomy: SentinelAutonomy;
   requiredInputs: string[];
   expectedOutputs: string[];
-  sentinel: { skills: string[]; toolAccess: SentinelToolAccess; instructions: string };
+  sentinel: { skills: string[]; instructions: string };
   suggestedAutomations: SentinelPresetAutomation[];
 }
 
@@ -85,6 +79,8 @@ export interface SentinelActivation {
   skills: string[];
   costUsd?: number;
   error?: string;
+  /** One line on how a pull request run executes (sandbox or host, and its scope). */
+  note?: string;
   startedAt: string;
   finishedAt?: string;
 }
@@ -129,23 +125,6 @@ export const DEFAULT_FILES = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 
-/** What an Agent can do: two choices. Mirrors the engine's `sentinelAccessLevel`: observe is Read-only, every other stored value is Can make changes. */
-export const ACCESS_OPTIONS: ReadonlyArray<{ value: SentinelAccessLevel; label: string; hint: string }> = [
-  { value: "read-only", label: "Read-only", hint: "Reads and reports. Runs nothing and changes nothing." },
-  { value: "changes", label: "Can make changes", hint: "Runs commands and opens pull requests. Whether it needs your approval follows the Ask before running commands setting in Settings." },
-];
-export function accessLevelOf(autonomy: SentinelAutonomy): SentinelAccessLevel {
-  return autonomy === "observe" ? "read-only" : "changes";
-}
-export function accessLabel(autonomy: SentinelAutonomy): string {
-  return ACCESS_OPTIONS.find(option => option.value === accessLevelOf(autonomy))?.label ?? "Read-only";
-}
-/** The stored fields for a level. An Agent already able to make changes keeps its web access; older propose and run are written as act when saved. */
-export function accessFields(level: SentinelAccessLevel, current: { autonomy: SentinelAutonomy; toolAccess: SentinelToolAccess }): { autonomy: SentinelAutonomy; toolAccess: SentinelToolAccess } {
-  if (level === "read-only") return current.autonomy === "observe" ? { autonomy: current.autonomy, toolAccess: current.toolAccess } : { autonomy: "observe", toolAccess: "read-only" };
-  return current.autonomy === "observe" ? { autonomy: "act", toolAccess: "exec" } : { autonomy: current.autonomy, toolAccess: current.toolAccess };
-}
-
 /** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production, finite daily budget. */
 export const DEFAULT_BUDGET: SentinelBudget = { dailyUsd: 10, maxRunsPerDay: 20 };
 
@@ -156,8 +135,6 @@ export interface SentinelFormState {
   targets: string;
   outOfScope: string;
   production: boolean;
-  autonomy: SentinelAutonomy;
-  toolAccess: SentinelToolAccess;
   dailyUsd: string;
   maxRunsPerDay: string;
 }
@@ -169,7 +146,6 @@ export function formFromPreset(preset: SentinelPreset | undefined): SentinelForm
   return {
     name: preset?.name ?? "", mission: (preset?.job ?? "").slice(0, SENTINEL_LIMITS.mission),
     repos: "", targets: "", outOfScope: "", production: false,
-    autonomy: preset?.autonomy ?? "act", toolAccess: preset?.sentinel.toolAccess ?? "read-only",
     dailyUsd: String(DEFAULT_BUDGET.dailyUsd), maxRunsPerDay: String(DEFAULT_BUDGET.maxRunsPerDay),
   };
 }
@@ -177,12 +153,11 @@ export function formFromSentinel(sentinel: Sentinel): SentinelFormState {
   return {
     name: sentinel.name, mission: sentinel.mission,
     repos: formatLines(sentinel.scope.repos), targets: formatLines([...sentinel.scope.targets, ...sentinel.scope.domains]), outOfScope: formatLines(sentinel.scope.outOfScope), production: sentinel.scope.production,
-    autonomy: sentinel.autonomy, toolAccess: sentinel.toolAccess,
     dailyUsd: String(sentinel.budget.dailyUsd), maxRunsPerDay: String(sentinel.budget.maxRunsPerDay),
   };
 }
 
-export type FormFields = Pick<Sentinel, "name" | "mission" | "scope" | "autonomy" | "toolAccess" | "budget">;
+export type FormFields = Pick<Sentinel, "name" | "mission" | "scope" | "budget">;
 /** Validate the form and shape it for the API. Returns an error string for the first problem. */
 export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: FormFields } | { ok: false; error: string } {
   const name = form.name.trim();
@@ -199,8 +174,6 @@ export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: For
     fields: {
       name, mission: form.mission.trim(),
       scope: { repos: parseLines(form.repos), targets: lines.filter(item => !isDomain(item)), domains: lines.filter(isDomain), outOfScope: parseLines(form.outOfScope), production: form.production },
-      // New writes store only observe or act; asking first is the global "Ask before running commands" setting.
-      autonomy: form.autonomy === "observe" ? "observe" : "act", toolAccess: form.toolAccess,
       budget: { dailyUsd, maxRunsPerDay },
     },
   };

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import { statusSummary } from "./overview-model";
-import { autonomyModeLabel } from "../../autonomy-options";
 
 const snapshot = (status: string, error?: string) => ({ session: { status }, pendingDecisions: [], lastOutcome: error ? { error } : null }) as unknown as ConsoleSessionSnapshot;
 
@@ -17,12 +16,5 @@ describe("statusSummary", () => {
   });
   it("ignores cancellations", () => {
     expect(statusSummary(snapshot("ready", "Turn cancelled by operator")).label).toBe("Ready");
-  });
-});
-
-describe("autonomyModeLabel", () => {
-  it("shows only Read-only or Can make changes, reading older stored values", () => {
-    for (const stored of ["changes", "yolo", "standard", "copilot"]) expect(autonomyModeLabel(stored)).toBe("Can make changes");
-    for (const stored of ["read-only", "recon", "observe"]) expect(autonomyModeLabel(stored)).toBe("Read-only");
   });
 });
