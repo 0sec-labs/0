@@ -18,7 +18,7 @@
 
 import { execFileSync } from "node:child_process";
 import { agenticScan } from "../agentic-scanner.js";
-import { packageAudit } from "../audit.js";
+import { packageAudit } from "../legacy-bench/index.js";
 import type { ScanReport, RuntimeMode, AuditReport, ScanDepth } from "../shared/index.js";
 import type { BenchCase } from "./manifest.js";
 import type { BenchScanResult, BenchTargetProvenance } from "./oracle.js";

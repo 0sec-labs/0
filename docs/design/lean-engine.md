@@ -1,7 +1,9 @@
 # Lean engine: audit and deletion plan
 
-Status: audit only. No source was changed to produce this document. It records
-what to cut, with measurements, so the cuts can be done in six reviewable steps.
+Status: audit, plus steps 1, 2 and 6a done (see the result sections at the end).
+It records what to cut, with measurements, so the cuts can be done in six
+reviewable steps. Open: steps 3 to 5, the rest of 6 (the XBOW re-run that unblocks
+removing `legacy-bench`), and the single-run-path items listed under 6a.
 
 Direction (owner, 2026-11): "lean down a ton; it can all be skills; clean up;
 having all this isn't helping."
@@ -626,3 +628,34 @@ Skipped, with the reason:
   command reference and covered by `scan.test.ts`; `--review-subsystem-fixture` is used by
   `scripts/kernel-validator-e2e.sh`. `--mode`, `--yolo`, `--autonomy`, `--tool-access`
   untouched (the plan keeps `--yolo` and `--mode` one release).
+
+## Step 6a results (one run path: what is done, what is not)
+
+Done:
+
+| What | Proof |
+|---|---|
+| Deleted `sourceReview`, `SourceReviewOptions`, `resolveRepo`, `runReviewAgent` (about 540 LOC of `review.ts`) and its kernel-seeds test (about 130 LOC); removed the `sourceReview` barrel export and README row | Re-grepped `packages`, `scripts`, `docs`, `.github`: no importer outside its own two tests. Not in the engine `exports` map. The prompt builders `buildCliReviewPrompt` and `buildTargetHistoryPreseedBlock` stay with their tests (`review.kernel-prompt-recipes`, `review.target-history-preseed`); they are now only test-reached and are candidates for step 3 with the kernel profiles. |
+| Moved legacy `scan()` (`scanner.ts`) and the `packageAudit` family (`audit.ts`) with their tests to `engine/src/legacy-bench/`, one entry (`legacy-bench/index.ts`), marked `@deprecated`. Root barrel names `scan` and `packageAudit` still work | Pure move plus import-path rewrite: `tsc` clean for engine, bench and cli; the moved test files (audit, per-file loop) pass unchanged. |
+
+Not done, with the reason:
+
+- `executeAssessmentRun` keeps its one-node workflow. It is not a no-op wrapper:
+  `executeWorkflow` is what enforces the run deadline, the cost ceiling (including
+  unpriced-usage abort), cancellation, the `time_cap_exceeded` / `cost_ceiling_exceeded`
+  exit reasons and the `withWorkflowAuditExecutionPolicy` scope, and its
+  `WorkflowRunResult` plus `onStart`/`onComplete` lifecycle feed the retained
+  execution record that `commands/run.ts` writes (`workflowRunId` in the report).
+  Calling `executeAssessment` directly would drop those. Folding needs `run.ts` to own
+  persistence, which is in the CLI collapse.
+- `runSourceFix` is already one function. Its three callers (`commands/fix.ts`,
+  `web/workflows.ts`, Thread tool `generate_fix`) differ in runtime wrapping (budget and
+  policy), progress, `keepWorktree` and scope authorization, not in how the fix runs.
+  Two of them sit in areas under concurrent change; merge after the CLI collapse.
+- `runDeepReview` stays in `cli/commands/deep-review.ts` (about 1,050 lines of loop plus
+  CLI formatting). Moving it into the engine is not small, and the file is being edited.
+- Bench runners still call `scan()` and `packageAudit`. `scan()` is a different staged
+  pipeline (own prompts, stage runtimes and tool sets) from `agenticScan`, so no no-LLM test
+  can show equal ScanConfig, prompt hashes and tool lists. Removal is blocked on re-running
+  the XBOW subset and the npm bench through `executeAssessment` and accepting the new
+  baselines.

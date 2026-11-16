@@ -9,24 +9,24 @@ import type {
   Finding,
   ScanConfig,
   Severity,
-} from "./shared/index.js";
-import type { osecDB } from "./storage/index.js";
-import type { ScanEvent, ScanListener } from "./events/scan-event.js";
-import { auditAgentPrompt } from "./analysis-prompts.js";
-import { runAnalysisAgent } from "./agent-runner.js";
-import { runSelectedStaticScan, selectedStaticScanner } from "./shared-analysis.js";
+} from "../shared/index.js";
+import type { osecDB } from "../storage/index.js";
+import type { ScanEvent, ScanListener } from "../events/scan-event.js";
+import { auditAgentPrompt } from "../analysis-prompts.js";
+import { runAnalysisAgent } from "../agent-runner.js";
+import { runSelectedStaticScan, selectedStaticScanner } from "../shared-analysis.js";
 import {
   scanForMaliciousPatterns,
   scanTransitiveDependencies,
   checkDependencyConfusion,
   isInternalPackageName,
-} from "./malicious-detector.js";
-import { scanForCryptoMisuse } from "./crypto-misuse-detector.js";
-import { scanForUnsafeDeser } from "./unsafe-deser-detector.js";
-import { postProcessPackageAuditFindings } from "./package-audit-suppressor.js";
-import { collectScopeFiles } from "./source-files.js";
-import { features as agentFeatures } from "./agent/features.js";
-import { researchPromptSingleFile } from "./agent/prompts.js";
+} from "../malicious-detector.js";
+import { scanForCryptoMisuse } from "../crypto-misuse-detector.js";
+import { scanForUnsafeDeser } from "../unsafe-deser-detector.js";
+import { postProcessPackageAuditFindings } from "../package-audit-suppressor.js";
+import { collectScopeFiles } from "../source-files.js";
+import { features as agentFeatures } from "../agent/features.js";
+import { researchPromptSingleFile } from "../agent/prompts.js";
 import {
   installPackageForEcosystem,
   normalizeSeverity,
@@ -35,7 +35,7 @@ import {
   walkInstalledNpmTree,
   probePublicNpmRegistry,
   type InstalledPackage,
-} from "./package-ecosystems.js";
+} from "../package-ecosystems.js";
 
 export interface PackageAuditOptions {
   config: AuditConfig;
@@ -842,6 +842,7 @@ export async function runSupplyChainScan(
  * 4. Generate report with severity and PoC suggestions
  * 5. Persist to 0 DB
  */
+/** @deprecated Bench-only legacy package audit; see legacy-bench/index.ts. */
 export async function packageAudit(
   opts: PackageAuditOptions,
 ): Promise<AuditReport & { usage?: { inputTokens: number; outputTokens: number }; estimatedCostUsd?: number }> {
@@ -860,7 +861,7 @@ export async function packageAudit(
         osecDB,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("./storage/index.js");
+      } = await import("../storage/index.js");
       const storage = resolveOsecRunStorage({ dbPath: config.dbPath });
       return {
         db: new osecDB(storage.dbPath),

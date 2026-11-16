@@ -1,17 +1,17 @@
-import type { ScanConfig, ScanContext, ScanReport, PipelineStage } from "./shared/index.js";
-import type { osecDB } from "./storage/index.js";
-import { loadTemplates } from "./templates/index.js";
-import { createScanContext, finalize } from "./context.js";
-import { createRuntime } from "./runtime/index.js";
-import type { Runtime, RuntimeType } from "./runtime/index.js";
-import { pickRuntimeForStage, detectAvailableRuntimes } from "./runtime/registry.js";
-import { runDiscovery } from "./stages/discovery.js";
-import { runSourceAnalysis } from "./stages/source-analysis.js";
-import { runAttacks } from "./stages/attack.js";
-import { runVerification } from "./stages/blind-reexploit.js";
-import { generateReport } from "./stages/report.js";
-import { eventBus } from "./events/bus.js";
-import type { ScanEvent, ScanListener } from "./events/scan-event.js";
+import type { ScanConfig, ScanContext, ScanReport, PipelineStage } from "../shared/index.js";
+import type { osecDB } from "../storage/index.js";
+import { loadTemplates } from "../templates/index.js";
+import { createScanContext, finalize } from "../context.js";
+import { createRuntime } from "../runtime/index.js";
+import type { Runtime, RuntimeType } from "../runtime/index.js";
+import { pickRuntimeForStage, detectAvailableRuntimes } from "../runtime/registry.js";
+import { runDiscovery } from "../stages/discovery.js";
+import { runSourceAnalysis } from "../stages/source-analysis.js";
+import { runAttacks } from "../stages/attack.js";
+import { runVerification } from "../stages/blind-reexploit.js";
+import { generateReport } from "../stages/report.js";
+import { eventBus } from "../events/bus.js";
+import type { ScanEvent, ScanListener } from "../events/scan-event.js";
 
 
 function isRepairableDbError(error: unknown): boolean {
@@ -33,7 +33,7 @@ async function openRunDatabase(dbPath?: string): Promise<LocalRunDatabase> {
       repairOsecDatabase,
       resolveOsecRunStorage,
       writeOsecRunReport,
-    } = await import("./storage/index.js");
+    } = await import("../storage/index.js");
     const storage = resolveOsecRunStorage({ dbPath });
     try {
       return {
@@ -60,6 +60,7 @@ async function openRunDatabase(dbPath?: string): Promise<LocalRunDatabase> {
   }
 }
 
+/** @deprecated Bench-only legacy staged scanner; see legacy-bench/index.ts. */
 export async function scan(
   config: ScanConfig,
   onEvent?: ScanListener,

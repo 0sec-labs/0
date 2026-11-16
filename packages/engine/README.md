@@ -34,7 +34,6 @@ Selected exports from `src/index.ts`:
 | Entry point | Purpose |
 | --- | --- |
 | `scan`, `agenticScan` | Target scanning |
-| `sourceReview` | Source review |
 | `packageAudit` | Package auditing |
 | `createRuntime` | Runtime construction |
 | `loadScope`, `matchUrl`, `ScopePolicy` | Scope ingestion and matching |

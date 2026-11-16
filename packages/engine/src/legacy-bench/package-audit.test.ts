@@ -2,14 +2,14 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { AuditConfig } from "./shared/index.js";
+import type { AuditConfig } from "../shared/index.js";
 import {
   parseOsvAdvisories,
   queryOsvAdvisories,
   summarizeKnownAdvisoriesFinding,
   runSupplyChainScan,
-} from "./audit.js";
-import type { InstalledPackage } from "./package-ecosystems.js";
+} from "./package-audit.js";
+import type { InstalledPackage } from "../package-ecosystems.js";
 
 describe("parseOsvAdvisories", () => {
   it("maps OSV vulnerabilities into NpmAuditFinding shape", () => {

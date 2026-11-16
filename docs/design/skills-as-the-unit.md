@@ -41,7 +41,7 @@ jobs with verifiable outcomes need that gate everywhere.
 | 8 | Thread turn engine (chat loop with the tool registry; start_run queues workflows) | `engine/src/console/turn-engine/session.ts`, `console-tools.ts:49` | `0 threads start` (`cli/commands/missions.ts:86`), web, Agent activations |
 | L1 | legacy `scan()` (staged, `--runtime auto` per stage) | `engine/src/scanner.ts:63` | only bench: `bench/src/runner.ts:199`, `xbow-runner.ts:519` (non-agentic arm), `bench-integrations/xbow.ts:160` |
 | L2 | `packageAudit` / `runPerFileAudit` / `runSupplyChainScan` | `engine/src/audit.ts:845`, :558, :749 | only bench: `bench/src/npm-bench.ts:236`, `engine/src/bench/adapters.ts:190` (CLI `scan package` goes through path 3) |
-| L3 | `sourceReview` | `engine/src/review.ts:456` | no production caller; two tests only |
+| L3 | `sourceReview` (deleted in step 6a) | was `engine/src/review.ts:456` | no production caller; two tests only |
 
 Plus about 22 `research` subcommands (hunt, memsafety, kernel, cve, ...) each with
 its own engine, and `campaign`, `orchestrate`, `verify`, `deps`, `eval`.

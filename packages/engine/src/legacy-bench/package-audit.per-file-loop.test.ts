@@ -2,13 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding } from "./shared/index.js";
+import type { Finding } from "../shared/index.js";
 import {
   runPerFileAudit,
   buildDirectApiAuditPromptForFile,
   type PerFileAuditOptions,
-} from "./audit.js";
-import type { InstalledPackage } from "./package-ecosystems.js";
+} from "./package-audit.js";
+import type { InstalledPackage } from "../package-ecosystems.js";
 
 // ── Helpers ──
 

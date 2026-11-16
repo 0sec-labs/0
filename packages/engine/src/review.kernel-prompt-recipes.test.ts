@@ -8,7 +8,7 @@ import { kernelReviewAgentPrompt } from "./review/linux-kernel-profile.js";
  *     system prompt.
  *   - `buildCliReviewPrompt(..., "linux-kernel", ...)` (review.ts) — the CLI
  *     prompt.
- * Both flow through `sourceReview()`, so both reach local + 0cloud scans. These
+ * Both flow through the review prompt builders, so both reach local + 0cloud scans. These
  * tests guard against the two copies drifting apart after a methodology edit:
  * the playbook recipes (Step 2a backward-from-primitive, Step 2b page-cache /
  * release-work / write-before-validate) must appear in BOTH.

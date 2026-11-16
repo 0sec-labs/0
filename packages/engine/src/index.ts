@@ -51,7 +51,8 @@ export type {
   EngagementProfileInputs,
 } from "./scope/engagement-profile.js";
 
-export { scan } from "./scanner.js";
+/** @deprecated legacy-bench entry: bench runners only. Use executeAssessment. */
+export { scan } from "./legacy-bench/index.js";
 export type { ScanEvent } from "./events/scan-event.js";
 export { agenticScan } from "./agentic-scanner.js";
 export {
@@ -110,10 +111,10 @@ export {
 export { runAnalysisAgent } from "./agent-runner.js";
 
 // Package audit
-export { packageAudit } from "./audit.js";
+/** @deprecated legacy-bench entry: bench runners only. Use executeAssessment. */
+export { packageAudit } from "./legacy-bench/index.js";
 
 // Source code review
-export { sourceReview } from "./review.js";
 export { huntAppFixVariants, appFixVariantsToSeedFindings } from "./review/app-fix-variants.js";
 export { checkAlreadyFixed } from "./kernel/fix-commit-intel.js";
 export type {
