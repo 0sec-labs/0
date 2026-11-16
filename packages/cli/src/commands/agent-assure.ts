@@ -106,7 +106,7 @@ function assertInScope(scope: ScopePolicy | undefined, endpoint: string, label: 
     if (isScopeEnforcementEnabled()) throw new Error("agent-assure requires --scope while the scope extension is enabled");
     return;
   }
-  const match = scope.enforce(endpoint);
+  const match = scope.match(endpoint);
   if (!match.allowed) {
     throw new Error(`agent-assure: ${label} is ${match.reason}`);
   }
