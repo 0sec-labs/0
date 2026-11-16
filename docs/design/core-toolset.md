@@ -222,17 +222,13 @@ against it). Scans keep `full` until `web-pentest` is wrapped as a pipeline skil
 (skills-as-the-unit.md section 8.4). Not measured: a stronger model, other task classes
 (web, source review, fix with tests), pack-using tasks. Do not read this as proof for other work.
 
-### Engine failure seen during the A/B (unresolved, not tool-list specific)
+### Engine failure seen during the A/B (resolved)
 
-A long-lived headless engine began failing every model call with
-`OpenAI transport failure [unknown]: fetch failed` and then never recovered. In the first
-batch the core engine failed after about four heavy threads (12 of 16 core runs lost) and the
-full engine failed on its last two runs (semver-2, yq-2). It reproduced on a fresh core engine
-after six real threads (the seventh, `just`, died mid-run at 190k input tokens), while that
-engine had made only seven outbound connections (`NODE_DEBUG=net`). A fresh engine answers trivial
-prompts every time (eight in a row), so it is not a payload problem, and the error carries no code.
-So a long-lived engine appears to keep a broken connection and not replace it; it showed up sooner in
-the core arm in my runs, which I cannot explain (the tool list does not touch the HTTP client).
-I did not find the cause. To keep the comparison clean the final batch used one fresh engine per
-run; of the 32 final runs 2 (one per arm) needed one retry on transport failure. If Threads die with
-this error after a few turns of work, look at the engine's HTTP client reuse, not at the tool list.
+Cause: under Node, global `fetch` negotiates HTTP/2 and keeps one multiplexed TLS session per
+origin. After concurrent large inference requests the provider closed it with a TLS `bad_record_mac`
+alert (`ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC`, `http2ErrorCode` 2) and every later call reused the
+dead session, failing instantly with `fetch failed`. The code was reported as `unknown` because it
+contains a `/` and the classifier only accepted `[A-Za-z0-9_]`. It is not tool-list specific; the core
+arm only hit it sooner because it ran more requests per minute. Fix: model calls use a dedicated
+HTTP/1.1 dispatcher recreated after any connection failure (`runtime/llm-api/transport.ts`), the cause
+code is shown, and `/healthz` reports the failure counters.

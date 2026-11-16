@@ -217,6 +217,11 @@ describe("health endpoints", () => {
     expect(JSON.parse(probe("/readyz", "draining").body)).toEqual({ status: "draining" });
     expect(probe("/readyz", "ready", false).status).toBe(503);
   });
+  it("healthz reports model-call failure counters when given a source", () => {
+    const { res, state } = fakeRes();
+    handleHealth({ url: "/healthz" }, res, { phase: () => "ready", dbOk: () => true, model: () => ({ consecutiveFailures: 3 }) });
+    expect(JSON.parse(state.body)).toEqual({ status: "ok", modelTransport: { consecutiveFailures: 3 } });
+  });
   it("exposes nothing but a status word", () => {
     expect(Object.keys(JSON.parse(probe("/readyz", "ready").body))).toEqual(["status"]);
   });

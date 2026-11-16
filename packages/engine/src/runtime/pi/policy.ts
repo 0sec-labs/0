@@ -19,6 +19,7 @@
  * so typed outcomes are recorded on a per-call {@link PolicyState} that the
  * runtime reads after the stream ends.
  */
+import { modelFetch } from "../llm-api/transport.js";
 import { diag } from "../../diagnostics/channel.js";
 import {
   QuotaExhaustedError,
@@ -93,7 +94,7 @@ async function gatewayAdmission(
   const identity = JSON.stringify([origin, model]);
   let pending = options.admissionCache.get(identity);
   if (!pending) {
-    const base = options.baseFetch ?? fetch;
+    const base = options.baseFetch ?? modelFetch;
     const catalogUrl = `${options.baseUrl.replace(/\/+$/, "")}/models`;
     const authHeaders = headersOf(init);
     authHeaders.delete("content-length");
@@ -121,7 +122,7 @@ export function createPolicyFetch(options: PolicyFetchOptions): typeof fetch {
   const fail = (error: Error): never => { state.failure ??= error; throw error; };
 
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const base = options.baseFetch ?? fetch;
+    const base = options.baseFetch ?? modelFetch;
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     // Only the inference POST is policy-managed; anything else passes straight through.
     if (method !== "POST") return base(input, init);

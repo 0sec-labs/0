@@ -12,6 +12,7 @@ import { type CodexCatalogModel } from "../codex-models.js";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
 import { completionTokenLimit, isWireBlockArray, parseResponsesFunctionCall, readChatUsage, readGoogleUsage, readResponsesCachedTokens, readResponsesUsage, safeParseJson } from "./usage-parsing.js";
 import { appendNativeTrace, logProviderStartup } from "./startup-log.js";
+import { modelFetch } from "./transport.js";
 import { OperatorAbortError, QuotaExhaustedError, classifyTransportFailure, composeCallAbort, delayWithAbort, isPolicyRefusalResult, isRetryableHttpStatus, llm429MaxRetries, llm429MaxRetryWaitMs, llmMaxRetries, llmMaxRetryWaitMs, llmStreamEventIdleTimeoutMs, llmStreamIdleTimeoutMs, llmStreamMaxAttempts, mergeRuntimeUsage, parseRetryAfterMs, parseUsageLimitReached, retryAfterMsFromHeaders, retryBackoffMs, retryNoticeFor, notifyRetry, withRetryListener, shouldRetryNativeStream, sleepWithAbort, streamRetryBackoffMs, type CallAbort, unknownTransportOutcome } from "./retry.js";
 import { CODEX_API_ENDPOINT, CODEX_PROTOCOL_HEADERS, FREE_OPENROUTER_MODEL, PROCESS_SESSION_ID, defaultReasoningEffort, normalizeModelForProvider, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi, zaiThinkingBudget } from "./provider-config.js";
 import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, type FallbackEntry } from "./fallback.js";
@@ -1351,7 +1352,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         res = this.grantedProviderTransport ? await this.grantedProviderTransport.request({ provider: "chatgpt-codex", model: this.model, body }, signal) : this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
           method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
-        }) : await fetch(this.buildUrl(), {
+        }) : await modelFetch(this.buildUrl(), {
           method: "POST",
           // Bun's pooled sockets can close between inference calls. A fresh
           // OpenRouter connection avoids reusing one without replaying a POST.

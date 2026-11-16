@@ -33,6 +33,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- A long-running engine no longer stops answering after a few heavy Threads. Under Node the model connection was one shared HTTP/2 session that, after concurrent large requests, was closed by the provider with a TLS `bad_record_mac` alert and then reused by every later call, which all failed with `fetch failed` until restart. Model calls now use their own HTTP/1.1 connections that are replaced after any connection failure, and the error names the real cause (for example `ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC`) instead of `unknown`. `/healthz` reports consecutive and total model-call connection failures.
 - `0 threads start` no longer fails with "Console thread is already processing a turn" when you pass `--folder`. It creates the thread and runs exactly one turn with your prompt, and no longer leaves an empty thread behind.
 - `0 threads start --wait` now prints the reply with its tokens and cost, prints the error when the turn failed, and exits non-zero. Add `--cost-ceiling <usd>` to stop a thread at a spend limit; `0 threads show <id> --json` shows its usage.
 - `0 threads` commands now fail with "No console running. Start one with: 0 web --headless" and a non-zero exit when no console is running, instead of printing `[]` or "Console thread was not found".

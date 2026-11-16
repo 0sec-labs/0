@@ -41,10 +41,10 @@ export function isHealthRequest(req: Pick<IncomingMessage, "method" | "url">): b
   return path === "/healthz" || path === "/readyz";
 }
 
-/** Liveness and readiness. No authentication, no secrets: only a status word. */
-export function handleHealth(req: Pick<IncomingMessage, "url">, res: ServerResponse, state: { phase: () => ServerPhase; dbOk: () => boolean }): void {
+/** Liveness and readiness. No authentication, no secrets: a status word and, on /healthz, model-call failure counters. */
+export function handleHealth(req: Pick<IncomingMessage, "url">, res: ServerResponse, state: { phase: () => ServerPhase; dbOk: () => boolean; model?: () => unknown }): void {
   const path = (req.url ?? "").split("?")[0];
-  if (path === "/healthz") { json(res, 200, { status: "ok" }); return; }
+  if (path === "/healthz") { json(res, 200, state.model ? { status: "ok", modelTransport: state.model() } : { status: "ok" }); return; }
   const phase = state.phase();
   if (phase !== "ready") { json(res, 503, { status: phase }); return; }
   if (!state.dbOk()) { json(res, 503, { status: "unavailable" }); return; }

@@ -95,6 +95,8 @@ export {
 } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
 export { DEFAULT_OPENAI_MODEL } from "./runtime/llm-api/provider-config.js";
+export { modelTransportStats } from "./runtime/llm-api/transport.js";
+export type { ModelTransportStats } from "./runtime/llm-api/transport.js";
 export { snapshotSmolvmWorkspace } from "./runtime/smolvm-workspace.js";
 export { runSmolvmWorkbench } from "./runtime/smolvm-workbench.js";
 export type { SmolvmWorkbenchOptions, SmolvmWorkbenchResult, SmolvmWorkbenchApprovedImage } from "./runtime/smolvm-workbench.js";

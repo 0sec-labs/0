@@ -9,7 +9,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
 import { BackendRequestIdSchema, BackendDescriptorSchema, ScanResumeRequestSchema } from "@0/engine/shared";
-import { exportReport, isReportExportFormat } from "@0/engine";
+import { exportReport, isReportExportFormat, modelTransportStats } from "@0/engine";
 import { ConsoleGateway } from "../web/console-gateway.js";
 import { closeSharedDbs } from "../web/shared-db.js";
 import { WebOperatorServices } from "../web/operator-services.js";
@@ -297,7 +297,7 @@ export function registerDashboardCommand(program: Command): void {
         const server = createServer(async (req, res) => {
           activeResponses.add(res); const releaseResponse = () => activeResponses.delete(res); res.once("close", releaseResponse); res.once("finish", releaseResponse);
           // Orchestrator probes carry arbitrary Host values and read nothing but a status word.
-          if (serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk }); return; }
+          if (serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk, model: modelTransportStats }); return; }
           let serverContext: ServerRequestContext | undefined;
           try { if (serverGuard) serverContext = serverGuard.authorize(req); else authorizeWebRequest(req, origin); }
           catch (error) {
@@ -305,7 +305,7 @@ export function registerDashboardCommand(program: Command): void {
             json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
             return;
           }
-          if (!serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk }); return; }
+          if (!serverGuard && isHealthRequest(req)) { handleHealth(req, res, { phase: () => phase, dbOk, model: modelTransportStats }); return; }
           let requestUrl = new URL(req.url ?? "/", origin);
           const requestId = BackendRequestIdSchema.safeParse(req.headers["x-0-request-id"]);
           res.setHeader("X-0-Request-ID", requestId.success ? requestId.data : randomUUID());

@@ -183,10 +183,13 @@ export function classifyTransportFailure(error: unknown): TransportFailure {
   }
   const knownCodes = ["EAI_AGAIN", "ENOTFOUND", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT",
     "ETIMEDOUT", "ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED", "ConnectionClosed", "ERR_SOCKET_CLOSED"];
-  const candidates = chain.filter(entry => typeof entry.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(entry.code));
+  const candidates = chain.filter(entry => typeof entry.code === "string" && /^[\w./:-]{1,96}$/.test(entry.code));
   const metadata = candidates.find(entry => knownCodes.includes(entry.code as string)) ?? candidates[0] ?? {};
   let code = typeof metadata.code === "string" ? metadata.code : "unknown";
-  const message = error instanceof Error ? error.message : String(error);
+  let message = error instanceof Error ? error.message : String(error);
+  // undici's top-level message is the uninformative "fetch failed"; the cause says why.
+  const causeMessage = chain.slice(1).map(entry => entry.message).find((m): m is string => typeof m === "string" && m.length > 0);
+  if (message === "fetch failed" && causeMessage) message = `${message}: ${causeMessage.replace(/^[0-9A-F]{8,}:error:[0-9A-F]+:/i, "").replace(/\s+/g, " ").trim().slice(0, 200)}`;
   const closedMessage = chain.some(entry => typeof entry.message === "string" && /socket(?: connection)? (?:was )?closed|other side closed|socket hang up/i.test(entry.message));
   if (code === "ConnectionClosed" || code === "ERR_SOCKET_CLOSED" || (code === "unknown" && closedMessage)) code = "CONNECTION_CLOSED";
   // DNS resolution, refused/unreachable connects and explicit connect timeouts
