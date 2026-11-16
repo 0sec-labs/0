@@ -158,6 +158,8 @@ function exitWithCommandError(err: unknown): never {
 }
 
 // ── Entry point ──
+// `0 ... | head` closes the pipe while we still write: leave quietly like other Unix tools, not with a stack trace.
+for (const stream of [process.stdout, process.stderr]) stream.on("error", (error: NodeJS.ErrnoException) => { if (error.code === "EPIPE") process.exit(0); throw error; });
 let userArgs = process.argv.slice(2);
 // Hidden A/B switch for the model-visible tool list: `--toolset core|full` (same as ZERO_TOOLSET).
 {
