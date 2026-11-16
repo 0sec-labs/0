@@ -12,6 +12,14 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Security
+
+- Extensions: an agent can no longer approve its own extensions by flag. Approval commands refuse from an agent
+  session and without a terminal, a built-in `beforeCommand` decider denies agent commands that touch approval,
+  enablement and settings files, every executing tool (monitor, pty_session, python_exec, run_command, file tools)
+  now goes through `beforeCommand`, approvals are sealed, and built-in enablement has one store. The agent runs as the
+  same OS user, so these are layers; the sandbox is the boundary. See `docs/design/extension-architecture.md`.
+
 ### Added
 
 - Extensions: one installable unit, a git folder pinned to a commit, that can bundle skills, scripts run through bash, MCP server definitions, a connector, a scope policy and a verifier. `0 skills add <url|folder>@<full sha>` shows one prompt (repo at commit, what it can do, the diff since the last approved version) and installs only after `--yes`. `0 skills extensions list|info|enable|disable|update|remove` manage them. Third-party extensions never update on their own, a folder that no longer matches its pinned commit refuses to load, repository `.0/` and `.claude/` folders can only suggest extensions, and scripts get a scrubbed environment with only approved names.
