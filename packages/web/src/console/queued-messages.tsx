@@ -17,8 +17,8 @@ export function QueuedMessages({
 }) {
   const { removeConsoleQueuedMessage } = useBackendApi();
   const count = snapshot.queuedMessages.length;
-  // Stopping a turn pauses the queue on purpose; "after the current response" would then wait forever.
-  const paused = snapshot.session.status === "stopped" || snapshot.session.status === "failed";
+  // An idle thread with queued messages is paused (Stop does this on purpose), so "after the current response" would wait forever.
+  const paused = snapshot.session.status === "ready" || snapshot.session.status === "failed";
   const remove = (id?: string) =>
     void workspace.perform(() => removeConsoleQueuedMessage(snapshot.session.id, id), snapshot.session.id);
 

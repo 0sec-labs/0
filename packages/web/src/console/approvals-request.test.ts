@@ -12,7 +12,7 @@ describe("waitingRequest for tool decisions", () => {
     expect(waitingRequest(tool({ name: "web_fetch", arguments: { url: "https://a.test" } }))).toBe("Use web fetch");
   });
   it("keeps the outcome in the closed summary", () => {
-    expect(resolvedSummary({ ...tool({ name: "bash", arguments: { command: "ls" } }), approved: false })).toBe("Run ls · declined");
+    expect(resolvedSummary({ ...(tool({ name: "bash", arguments: { command: "ls" } }) as object), approved: false } as never)).toBe("Run ls · declined");
   });
   it("falls back to the title without a call", () => {
     expect(waitingRequest({ id: "d2", kind: "tool", title: "Confirm tool action", detail: "" } as never)).toBe("Confirm tool action");

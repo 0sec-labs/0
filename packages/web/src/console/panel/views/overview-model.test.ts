@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
-import { statusSummary } from "./overview-model";
+import { formatCost, statusSummary } from "./overview-model";
 
 const snapshot = (status: string, error?: string) => ({ session: { status }, pendingDecisions: [], lastOutcome: error ? { error } : null }) as unknown as ConsoleSessionSnapshot;
 
@@ -16,5 +16,14 @@ describe("statusSummary", () => {
   });
   it("ignores cancellations", () => {
     expect(statusSummary(snapshot("ready", "Turn cancelled by operator")).label).toBe("Ready");
+  });
+});
+
+describe("formatCost", () => {
+  it("never shows real sub-cent spend as $0.00", () => {
+    expect(formatCost(0.0008)).toBe("<$0.01");
+    expect(formatCost(0)).toBe("$0.00");
+    expect(formatCost(1.234)).toBe("$1.23");
+    expect(formatCost(undefined)).toBeUndefined();
   });
 });

@@ -141,7 +141,7 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
       href={safeHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary-text underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-ring-inset"
+      className="underline decoration-foreground/35 underline-offset-4 hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-ring-inset"
     >
       {children}
     </a>
@@ -158,7 +158,7 @@ const components: Components = {
   ),
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
-      <table className="w-full border-collapse text-sm [&_td]:border-b [&_td]:border-border/60 [&_td]:px-3 [&_td]:py-3 [&_td]:text-left [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2.5 [&_th]:text-left [&_th]:font-semibold">
+      <table className="w-full border-collapse text-sm [&_td]:border-b [&_td]:border-border/60 [&_td]:px-3 [&_td]:py-3 [&_td]:text-left [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2.5 [&_th]:text-left [&_th]:font-semibold [&_th]:wrap-normal">
         {children}
       </table>
     </div>

@@ -736,7 +736,7 @@ export function Composer({
   const catalogLoaded = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
   const emptyThread = !worker && !snapshot.messages.length && !snapshot.session.messageCount && !snapshot.queuedMessages.length;
   // A bound model the catalog no longer lists. An empty thread re-resolves (healthy provider first); one with history keeps it and says so.
-  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread });
+  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread, discoveryFailed: new Set(modelDiagnostics.map((item) => item.providerId)) });
   const rebindStale = bindingStale && emptyThread;
   const shownRuntime = rebindStale
     ? startModel ? ({ providerId: startModel.providerId, model: startModel.model } as typeof snapshot.runtime) : undefined

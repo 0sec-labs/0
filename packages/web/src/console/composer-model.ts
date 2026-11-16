@@ -153,9 +153,11 @@ export function modelButtonLabel(
 export function boundModelStale(
   runtime: { providerId?: string; model?: string; modelSource?: string } | null | undefined,
   models: readonly { id: string; provider: string; enabled?: boolean }[] | undefined,
-  options: { unusable?: ReadonlySet<string>; emptyThread?: boolean } = {},
+  options: { unusable?: ReadonlySet<string>; emptyThread?: boolean; discoveryFailed?: ReadonlySet<string> } = {},
 ): boolean {
   if (!runtime?.model || !models || runtime.modelSource === "local") return false;
+  // A provider whose model list could not be read (offline, rate limited) says nothing about this model.
+  if (runtime.providerId && options.discoveryFailed?.has(runtime.providerId)) return false;
   const listed = models.some((item) => item.provider === runtime.providerId && item.id === runtime.model && item.enabled !== false);
   if (!listed) return true;
   return Boolean(options.emptyThread && runtime.providerId && options.unusable?.has(runtime.providerId));

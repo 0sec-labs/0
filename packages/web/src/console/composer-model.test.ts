@@ -125,6 +125,11 @@ describe("boundModelStale", () => {
     expect(boundModelStale(undefined, models)).toBe(false);
     expect(boundModelStale({ providerId: "xai", model: "x", modelSource: "local" }, models)).toBe(false);
   });
+  it("does not call a model gone while its provider's model list failed to load", () => {
+    const failed = new Set(["xai"]);
+    expect(boundModelStale({ providerId: "xai", model: "gpt-xai-pro" }, models, { discoveryFailed: failed })).toBe(false);
+    expect(boundModelStale({ providerId: "xai", model: "gpt-xai-pro" }, models, { discoveryFailed: new Set(["mock"]) })).toBe(true);
+  });
   it("treats an unhealthy provider as stale only for an empty thread", () => {
     const unusable = new Set(["mock"]);
     expect(boundModelStale({ providerId: "mock", model: "m1" }, models, { unusable, emptyThread: true })).toBe(true);
