@@ -7,6 +7,8 @@ export interface Scene {
   ink: Rgb3; dark: boolean; dpr: number
   /** True when the canvas is already the low-resolution cell grid (`Sketch.cell`) that CSS scales up; the sketch then paints it 1:1. */
   lowres?: boolean
+  /** True for a frozen thumbnail (`renderStill`): a sketch may enlarge its marks and strengthen its tone so the look reads at 160px. The live backdrop never sets it. */
+  still?: boolean
 }
 
 export interface Sketch {

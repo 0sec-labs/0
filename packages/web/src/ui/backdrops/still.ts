@@ -14,7 +14,7 @@ export interface StillTheme { ink: string; rgb?: Rgb3; dark?: boolean; dpr?: num
 export function renderStill(c: CanvasRenderingContext2D, kind: BackdropKind, width: number, height: number, theme: StillTheme, time?: number): void {
   if (kind === "none" || width <= 0 || height <= 0) return
   const sketch = SKETCHES[kind]()
-  const scene = makeScene(theme.rgb ?? parseInk(theme.ink) ?? [128, 128, 128], theme.dpr ?? 1, theme.dark)
+  const scene = makeScene(theme.rgb ?? parseInk(theme.ink) ?? [128, 128, 128], theme.dpr ?? 1, theme.dark, true)
   c.save()
   c.globalAlpha = 1; c.fillStyle = theme.ink; c.strokeStyle = theme.ink
   sketch.resize(width, height)

@@ -8,6 +8,8 @@ const ACCENT = { dark: "#e4663f", light: "#c23a16" }
 /** Brightest-glyph alpha relative to the layer opacity (the lab used 0.5 of a grey ink; the page ink here is lighter on dark). */
 const TONE = { dark: 0.57, light: 1 }
 const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+/** A still (the Appearance tile) is read at 160px, so its glyphs are drawn at least this large (as a scale of the 10x18 cell) and at full tone. */
+const STILL_UNIT = 0.8
 const alphaOf = (k: number, tone: number) => tone * (0.28 + 0.72 * Math.pow(k / (NL - 1), 1.1))
 
 /** Glyph contours: monospace punctuation chosen from a density ramp by drifting, domain-warped noise, densest along its ridges. */
@@ -15,8 +17,9 @@ export function createGlyph(): Sketch {
   let width = 0, height = 0, cols = 0, rows = 0, prev = new Int16Array(0), key = ""
   let atlas: HTMLCanvasElement[] = []
   let sx = 0, sy = 0
+  const scale = (scene: Scene) => (scene.still ? Math.max(unit(width), STILL_UNIT) : unit(width))
   const build = (c: CanvasRenderingContext2D, scene: Scene) => {
-    const u = unit(width), s = u * scene.dpr, doc = (c.canvas as HTMLCanvasElement | undefined)?.ownerDocument
+    const u = scale(scene), s = u * scene.dpr, doc = (c.canvas as HTMLCanvasElement | undefined)?.ownerDocument
     cols = Math.ceil(width / u / CELL_W) + 1; rows = Math.ceil(height / u / CELL_H) + 1; prev = new Int16Array(cols * rows)
     atlas = []
     if (!doc) return
@@ -25,7 +28,7 @@ export function createGlyph(): Sketch {
       const cv = doc.createElement("canvas"); cv.width = aw * NL; cv.height = ah
       const g = cv.getContext("2d")!
       g.font = `${FONT * s}px ${MONO}`; g.textAlign = "center"; g.textBaseline = "middle"
-      for (let k = 1; k < NL; k++) { g.fillStyle = rgbaCss(color, alphaOf(k, scene.dark ? TONE.dark : TONE.light)); g.fillText(RAMP[k]!, (k + 0.5) * aw, ah / 2 + scene.dpr) }
+      for (let k = 1; k < NL; k++) { g.fillStyle = rgbaCss(color, alphaOf(k, scene.still ? 1 : scene.dark ? TONE.dark : TONE.light)); g.fillText(RAMP[k]!, (k + 0.5) * aw, ah / 2 + scene.dpr) }
       atlas.push(cv)
     }
   }
@@ -33,9 +36,9 @@ export function createGlyph(): Sketch {
     fps: FPS, still: 6, pointer: true, retained: true,
     resize(w, h) { width = w; height = h; key = "" },
     frame(c, _w, _h, seconds, pointer: Pointer, scene) {
-      const next = `${scene.ink.join()}|${scene.dark}|${scene.dpr}|${width}x${height}`
+      const next = `${scene.ink.join()}|${scene.dark}|${scene.still ?? false}|${scene.dpr}|${width}x${height}`
       if (next !== key) { key = next; build(c, scene) }
-      const u = unit(width), s = u * scene.dpr, vw = width / u, vh = height / u, tone = scene.dark ? TONE.dark : TONE.light
+      const u = scale(scene), s = u * scene.dpr, vw = width / u, vh = height / u, tone = scene.still ? 1 : scene.dark ? TONE.dark : TONE.light
       const tx = pointer.fresh ? clamp(pointer.x / width * 2 - 1, -1, 1) : 0, ty = pointer.fresh ? clamp(pointer.y / height * 2 - 1, -1, 1) : 0
       sx += (tx - sx) * 0.06; sy += (ty - sy) * 0.06
       const tt = seconds * SPEED, aw = Math.ceil(CELL_W * s), ah = Math.ceil(CELL_H * s), accentInk = hexRgb(scene.dark ? ACCENT.dark : ACCENT.light)

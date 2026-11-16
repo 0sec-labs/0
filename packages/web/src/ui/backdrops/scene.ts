@@ -12,4 +12,4 @@ export function parseInk(css: string): Rgb3 | undefined {
 /** Whether `ink` belongs to a dark page: the ink of a dark theme is the light one. */
 export const isDarkInk = (ink: Rgb3) => 0.2126 * ink[0] + 0.7152 * ink[1] + 0.0722 * ink[2] > 140
 
-export function makeScene(ink: Rgb3, dpr: number, dark = isDarkInk(ink)): Scene { return { ink, dark, dpr } }
+export function makeScene(ink: Rgb3, dpr: number, dark = isDarkInk(ink), still = false): Scene { return { ink, dark, dpr, ...(still ? { still } : {}) } }

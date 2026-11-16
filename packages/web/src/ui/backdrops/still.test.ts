@@ -59,3 +59,28 @@ describe("renderStill", () => {
     for (const kind of kinds) { expect(tileOpacity(kind)).toBeGreaterThan(0.3); expect(tileOpacity(kind)).toBeLessThanOrEqual(0.75) }
   })
 })
+
+/** Glyphs the glyph still paints, with how far each differs from the page in luminance once the tile opacity is applied. */
+function glyphMarks(ink: string, rgb: [number, number, number], page: number, width = 160, height = 100) {
+  const marks: number[] = []
+  const lum = (c: number[]) => (0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!) / 255
+  const style = { value: "" }
+  const ctx = new Proxy({} as Record<string, unknown>, {
+    get: (target, key: string) => {
+      if (key === "fillText") return () => { const a = Number(/,\s*([\d.]+)\)$/.exec(style.value)?.[1] ?? 1); marks.push(a * tileOpacity("glyph") * Math.abs(lum(rgb) - page)) }
+      if (key === "canvas") return undefined
+      return key in target ? target[key] : () => {}
+    },
+    set: (target, key: string, value) => { if (key === "fillStyle") style.value = String(value); target[key] = value; return true },
+  }) as unknown as CanvasRenderingContext2D
+  renderStill(ctx, "glyph", width, height, { ink, rgb })
+  return marks
+}
+
+describe("glyph tile", () => {
+  const MIN_MARKS = 60, MIN_DIFF = 0.25
+  it.each([["light", "rgb(82, 82, 91)", [82, 82, 91] as [number, number, number], 1], ["dark", "rgb(212, 212, 216)", [212, 212, 216] as [number, number, number], 0.04]])("has visible structure at 160x100 in %s", (_name, ink, rgb, page) => {
+    const strong = glyphMarks(ink, rgb, page).filter(diff => diff >= MIN_DIFF)
+    expect(strong.length).toBeGreaterThanOrEqual(MIN_MARKS)
+  })
+})
