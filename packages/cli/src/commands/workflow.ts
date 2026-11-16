@@ -1,4 +1,5 @@
 import { chatOption, engineOptions } from "./shared-options.js";
+import { renderTable } from "./console-support.js";
 import type { Command } from "commander";
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -227,7 +228,20 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     }, true);
   };
   inspectOptions(sessions.command("list").description("List live engine threads").option("--saved", "List retained thread snapshots"))
-    .action(async (options: WorkflowOptions & { saved?: boolean }) => sessionAction(options, options.saved ? "listSavedSessions" : "listSessions"));
+    .action(async (options: WorkflowOptions & { saved?: boolean }) => {
+      if (options.format !== "text") return sessionAction(options, options.saved ? "listSavedSessions" : "listSessions");
+      // Text is a table of the columns people scan for; --format json keeps every field.
+      await withRuntime(options, deps, async runtime => {
+        const operation = options.saved ? runtime.listSavedSessions : runtime.listSessions;
+        if (!operation) throw new Error("The selected engine does not support thread lifecycle operations.");
+        const threads = await (operation as () => Promise<unknown>).call(runtime);
+        if (!Array.isArray(threads)) return output(deps, threads, "text");
+        const cell = (value: unknown): string => typeof value === "string" ? value.replaceAll(/\s+/g, " ") : "";
+        deps.out(threads.length
+          ? renderTable(["ID", "STATUS", "TITLE", "FOLDER"], threads.map((row: Record<string, unknown>) => [cell(row.id), cell(row.status), cell(row.title) || "Untitled", cell(row.workspacePath)]))
+          : "No threads.");
+      }, true);
+    });
   inspectOptions(sessions.command("show <id>").description("Read a live thread, including its usage and cost, without recreating it").option("--json", "Print JSON (the default)"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "getSession", [id]));
   inspectOptions(sessions.command("create").description("Create a thread within the engine's admission grants").option("--config <path>", "Thread configuration JSON object"))

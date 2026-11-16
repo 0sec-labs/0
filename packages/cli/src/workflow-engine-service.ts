@@ -99,7 +99,7 @@ export class WorkflowEngineService {
     const key = JSON.stringify([request.target, this.options.model, this.options.scopePath]);
     let pending = this.#sessions.get(key);
     if (!pending) {
-      pending = this.#createSession({ target: request.target, title: `Workflow: ${request.target}` }).then(created => created.id);
+      pending = this.#createSession({ target: request.target, title: `Scan: ${request.target}` }).then(created => created.id);
       this.#sessions.set(key, pending);
       void pending.catch(() => this.#sessions.delete(key));
     }
