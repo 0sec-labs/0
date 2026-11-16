@@ -9,6 +9,7 @@ import { homeStateDir } from "../shared/index.js";
 import { gateFlagsFor, type PluginManifest } from "./manifest.js";
 import {
   buildPluginEnv,
+  buildSandboxArgs,
   ensurePluginsRoot,
   isSafePluginId,
   listInstalledPluginIds,
@@ -1375,3 +1376,203 @@ describe("integration — real child over real stdio", () => {
     host.shutdown();
   }, 30_000);
 });
+
+describe("buildSandboxArgs", () => {
+  const mockManifest = (caps: string[]): PluginManifest => ({
+    id: "test-plugin",
+    version: "1.0.0",
+    name: "Test",
+    tools: [{ name: "tool1", description: "", parameters: {}, capabilities: caps as any }],
+  });
+
+  it("always includes --permission and allows reading its own directory", () => {
+    const args = buildSandboxArgs(mockManifest([]), "/plugin/dir");
+    expect(args).toContain("--permission");
+    expect(args).toContain("--allow-fs-read=/plugin/dir");
+    expect(args).not.toContain("--allow-child-process");
+  });
+
+  it("scopes workspace read access without wildcards when filesystem-read is present", () => {
+    const args = buildSandboxArgs(mockManifest(["filesystem-read"]), "/plugin/dir", "/workspace/dir");
+    expect(args).toContain("--allow-fs-read=/workspace/dir");
+    expect(args).not.toContain("--allow-fs-read=*"); // Security check!
+  });
+
+  it("does not grant workspace read if filesystem-read is missing", () => {
+    const args = buildSandboxArgs(mockManifest(["compute"]), "/plugin/dir", "/workspace/dir");
+    expect(args).not.toContain("--allow-fs-read=/workspace/dir");
+  });
+
+  it("allows child processes only if process-exec is declared", () => {
+    const args = buildSandboxArgs(mockManifest(["process-exec"]), "/plugin/dir");
+    expect(args).toContain("--allow-child-process");
+  });
+
+  const pluginDir = "/opt/plugins/my-plugin";
+  const workspaceDir = "/home/user/workspace";
+
+  it("grants scoped workspace filesystem read and write permissions when requested", () => {
+    const m = manifest({
+      id: "fs-plugin",
+      tools: [
+        {
+          name: "fs_reader",
+          description: "reads fs",
+          parameters: {},
+          capabilities: ["filesystem-read"],
+        },
+        {
+          name: "fs_writer",
+          description: "writes fs",
+          parameters: {},
+          capabilities: ["filesystem-write"],
+        },
+      ],
+    });
+
+    const args = buildSandboxArgs(m, pluginDir, workspaceDir);
+
+    expect(args).toEqual([
+      "--permission",
+      `--allow-fs-read=${pluginDir}`,
+      `--allow-fs-read=${workspaceDir}`,
+      `--allow-fs-write=${workspaceDir}`,
+    ]);
+  });
+
+  it("does not grant workspace read/write if workspaceDir is not provided", () => {
+    const m = manifest({
+      id: "fs-plugin-no-dir",
+      tools: [
+        {
+          name: "fs_both",
+          description: "both",
+          parameters: {},
+          capabilities: ["filesystem-read", "filesystem-write"],
+        },
+      ],
+    });
+
+    const args = buildSandboxArgs(m, pluginDir);
+
+    expect(args).toEqual(["--permission", `--allow-fs-read=${pluginDir}`]);
+  });
+});
+
+describe("PluginHost sandbox rollout modes", () => {
+  let root: string;
+  let capturedSpecs: PluginSpawnSpec[] = [];
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "0-test-sandbox-"));
+    capturedSpecs = [];
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function mockSpawner(): PluginSpawner {
+    return (spec, handlers) => {
+      capturedSpecs.push(spec);
+      return {
+        write: () => true,
+        kill: () => {},
+        ref: () => {},
+        unref: () => {},
+      };
+    };
+  }
+
+  it("does not add permission flags when sandboxMode is 'off'", async () => {
+    const m = manifest({
+      id: "test.plugin",
+      tools: [{ name: "t", description: "d", parameters: {}, capabilities: ["filesystem-read"] }],
+    });
+    const dir = join(root, "test.plugin");
+    mkdirSync(dir, { recursive: true, mode: PLUGIN_DIR_MODE });
+    writeFileSync(join(dir, PLUGIN_MANIFEST_FILE), JSON.stringify(m), { mode: 0o600 });
+    writeFileSync(join(dir, PLUGIN_ENTRY_FILE), "", { mode: 0o600 });
+
+    const host = new PluginHost({
+      pluginsDir: root,
+      enabled: ["test.plugin"],
+      spawner: mockSpawner(),
+      sandboxMode: "off",
+      workspaceDir: "/workspace",
+      handshakeTimeoutMs: 50,
+    });
+
+    await host.load("test.plugin");
+    expect(capturedSpecs.length).toBe(1);
+    expect(capturedSpecs[0].args).toEqual([join(dir, PLUGIN_ENTRY_FILE)]);
+    host.shutdown();
+  });
+
+  it("logs warning and does not enforce flags when sandboxMode is 'warn'", async () => {
+    const m = manifest({
+      id: "test.plugin",
+      tools: [{ name: "t", description: "d", parameters: {}, capabilities: ["filesystem-read"] }],
+    });
+    const dir = join(root, "test.plugin");
+    mkdirSync(dir, { recursive: true, mode: PLUGIN_DIR_MODE });
+    writeFileSync(join(dir, PLUGIN_MANIFEST_FILE), JSON.stringify(m), { mode: 0o600 });
+    writeFileSync(join(dir, PLUGIN_ENTRY_FILE), "", { mode: 0o600 });
+
+    const originalWarn = console.warn;
+    const warnMessages: string[] = [];
+    console.warn = (msg: string) => {
+      warnMessages.push(msg);
+    };
+
+    try {
+      const host = new PluginHost({
+        pluginsDir: root,
+        enabled: ["test.plugin"],
+        spawner: mockSpawner(),
+        sandboxMode: "warn",
+        workspaceDir: "/workspace",
+        handshakeTimeoutMs: 50,
+      });
+
+      await host.load("test.plugin");
+      expect(warnMessages.some((msg) => msg.includes("[Sandbox:WARN]"))).toBe(true);
+      expect(capturedSpecs.length).toBe(1);
+      expect(capturedSpecs[0].args).toEqual([join(dir, PLUGIN_ENTRY_FILE)]);
+      host.shutdown();
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it("appends permission flags to spawnArgs when sandboxMode is 'enforce'", async () => {
+    const m = manifest({
+      id: "test.plugin",
+      tools: [{ name: "t", description: "d", parameters: {}, capabilities: ["filesystem-read"] }],
+    });
+    const dir = join(root, "test.plugin");
+    mkdirSync(dir, { recursive: true, mode: PLUGIN_DIR_MODE });
+    writeFileSync(join(dir, PLUGIN_MANIFEST_FILE), JSON.stringify(m), { mode: 0o600 });
+    writeFileSync(join(dir, PLUGIN_ENTRY_FILE), "", { mode: 0o600 });
+
+    const host = new PluginHost({
+      pluginsDir: root,
+      enabled: ["test.plugin"],
+      spawner: mockSpawner(),
+      sandboxMode: "enforce",
+      workspaceDir: "/workspace",
+      handshakeTimeoutMs: 50,
+    });
+
+    await host.load("test.plugin");
+    expect(capturedSpecs.length).toBe(1);
+    expect(capturedSpecs[0].args).toEqual([
+      "--permission",
+      `--allow-fs-read=${dir}`,
+      "--allow-fs-read=/workspace",
+      join(dir, PLUGIN_ENTRY_FILE),
+    ]);
+    host.shutdown();
+  });
+});
+

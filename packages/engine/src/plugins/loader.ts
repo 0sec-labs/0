@@ -535,6 +535,8 @@ interface LivePlugin {
   onHandshake?: (msg: PluginMessage | null, failure?: string) => void;
 }
 
+export type SandboxMode = "off" | "warn" | "enforce";
+
 export interface PluginHostOptions {
   /**
    * Absolute plugin root. Defaults to `<homeStateDir>/plugins`. An explicit
@@ -562,6 +564,61 @@ export interface PluginHostOptions {
   callTimeoutMs?: number;
   env?: NodeJS.ProcessEnv;
   onEvent?: (event: PluginHostEvent) => void;
+  sandboxMode?: SandboxMode;
+  workspaceDir?: string;
+}
+
+/**
+ * Builds Node.js CLI permission arguments based on the plugin manifest declarations.
+ *
+ * NOTE: The Node.js Permission Model (--permission) restricts filesystem access,
+ * worker threads, and child processes, but DOES NOT natively restrict network access.
+ * Network sandboxing and strict process isolation will be handled by OS-specific
+ * sandboxes (SmolVM) in the future.
+ */
+export function buildSandboxArgs(
+  manifest: PluginManifest,
+  pluginDir: string,
+  workspaceDir?: string,
+): string[] {
+  const args: string[] = ["--permission"];
+
+  // Always allow reading the plugin's own directory so it can load its own code
+  args.push(`--allow-fs-read=${pluginDir}`);
+
+  // Collect union of capabilities across all declared tools or manifest level
+  const capSet = new Set<string>();
+  if (Array.isArray(manifest.tools)) {
+    for (const tool of manifest.tools) {
+      if (Array.isArray(tool.capabilities)) {
+        for (const cap of tool.capabilities) {
+          capSet.add(cap);
+        }
+      }
+    }
+  }
+  if (Array.isArray((manifest as any).capabilities)) {
+    for (const cap of (manifest as any).capabilities) {
+      capSet.add(cap);
+    }
+  }
+
+  // Scoped read access to workspace if declared (never wildcard)
+  if (capSet.has("filesystem-read") && workspaceDir) {
+    args.push(`--allow-fs-read=${workspaceDir}`);
+  }
+
+  // Scoped write access to workspace if declared
+  if (capSet.has("filesystem-write") && workspaceDir) {
+    args.push(`--allow-fs-write=${workspaceDir}`);
+  }
+
+  // Child process execution
+  if (capSet.has("process-exec")) {
+    args.push("--allow-child-process");
+  }
+
+  return args;
 }
 
 /**
@@ -581,6 +638,8 @@ export class PluginHost {
   private readonly env: NodeJS.ProcessEnv;
   private readonly coreVersion: string | undefined;
   private readonly onEvent: ((event: PluginHostEvent) => void) | undefined;
+  readonly #sandboxMode: SandboxMode;
+  readonly #workspaceDir?: string;
   private generation = 0;
   private callSeq = 0;
 
@@ -594,6 +653,8 @@ export class PluginHost {
     this.env = opts.env ?? process.env;
     this.coreVersion = opts.coreVersion;
     this.onEvent = opts.onEvent;
+    this.#sandboxMode = opts.sandboxMode ?? "off";
+    this.#workspaceDir = opts.workspaceDir;
   }
 
   // ── Registry reads ─────────────────────────────────────────────────────────
@@ -729,9 +790,23 @@ export class PluginHost {
     // Compiled Bun must run its embedded interpreter, not re-enter the 0 CLI.
     const env = buildPluginEnv(pluginId, this.env);
     if (process.versions.bun) env.BUN_BE_BUN = "1";
+
+    const spawnArgs: string[] = [];
+    if (this.#sandboxMode !== "off") {
+      const sandboxArgs = buildSandboxArgs(manifest, dir, this.#workspaceDir);
+      if (this.#sandboxMode === "warn") {
+        console.warn(
+          `[Sandbox:WARN] Sandbox is in warning mode. Plugin "${pluginId}" would be executed with: ${sandboxArgs.join(" ")}`,
+        );
+      } else if (this.#sandboxMode === "enforce") {
+        spawnArgs.push(...sandboxArgs);
+      }
+    }
+    spawnArgs.push(entryPath);
+
     const spec: PluginSpawnSpec = {
       command: process.execPath,
-      args: [entryPath],
+      args: spawnArgs,
       cwd: dir,
       env,
     };
