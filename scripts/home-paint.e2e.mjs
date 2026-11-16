@@ -43,6 +43,11 @@ try {
     });
     const page = await context.newPage();
     if (delay) await page.route('**/api/console/**', async route => { await wait(delay); route.continue().catch(() => {}); });
+    // Track the API in flight: a skeleton is honest only while the host has not answered (it fades in after 250 ms by design).
+    let inflight = 0, lastSettled = Date.now();
+    const settle = request => { if (request.url().includes('/api/console/')) { inflight = Math.max(0, inflight - 1); lastSettled = Date.now(); } };
+    page.on('request', request => { if (request.url().includes('/api/console/')) inflight++; });
+    page.on('requestfinished', settle); page.on('requestfailed', settle);
     if (setup) await setup(page);
     await page.goto(new URL(target, origin).href, { waitUntil: 'commit' });
     const frames = [];
@@ -51,7 +56,7 @@ try {
         const panel = document.querySelector('[data-conversation-skeleton][data-slot="skeleton-panel"], [data-conversation-skeleton] [data-slot="skeleton-panel"]');
         return { t: performance.now(), path: location.pathname, composer: !!document.querySelector('textarea[aria-autocomplete="list"]'), skeleton: !!panel && Number(getComputedStyle(panel).opacity) > 0.05, error: !!document.querySelector('[data-chat-load-error]'), mutations: window.__mutations };
       }).catch(() => null);
-      if (frame) frames.push(frame);
+      if (frame) frames.push({ ...frame, inflight, idleMs: Date.now() - lastSettled });
       await wait(50);
     }
     const nav = await page.evaluate(() => window.__nav);
@@ -64,7 +69,14 @@ try {
     assert.ok(first >= 0, `${name}: the composer never appeared\n${describe(frames)}`);
     const lost = frames.slice(first).filter(f => !f.composer);
     assert.equal(lost.length, 0, `${name}: the composer disappeared after it first painted (flicker)\n${describe(frames)}`);
-    if (!skeletonAllowed) assert.equal(frames.filter(f => f.skeleton).length, 0, `${name}: Home showed a transcript skeleton\n${describe(frames)}`);
+    // Home never shows a transcript skeleton. An unknown id may show one only while the host is still answering (a slow
+    // runner can take longer than the 250 ms delay); once every request is back it must be gone within a render or two.
+    const shown = frames.filter(f => f.skeleton);
+    assert.equal(shown.filter(f => f.t < 250).length, 0, `${name}: a skeleton showed inside the first 250 ms\n${describe(frames)}`);
+    const stale = shown.filter(f => !skeletonAllowed ? true : f.inflight === 0 && f.idleMs > 500);
+    assert.equal(stale.length, 0, `${name}: Home showed a transcript skeleton${skeletonAllowed ? ' after the host had answered' : ''}\n${describe(frames)}`);
+    const end = frames.at(-1);
+    assert.ok(end.composer && !end.skeleton && !end.error, `${name}: did not settle on Home: ${end.path}\n${describe(frames)}`);
     assert.ok(nav.length <= 3, `${name}: route thrash: ${nav.join(', ')}`);
     const last = frames.at(-1), settled = frames.find(f => f.t >= last.t - 1000);
     assert.ok(last.mutations - settled.mutations <= 40, `${name}: the DOM kept mutating after settling (${last.mutations - settled.mutations} in 1s)`);
@@ -72,7 +84,7 @@ try {
 
   for (const delay of [0, 700]) {
     assertSteady(`cold /chats (api +${delay}ms)`, await watch('/chats', { delay }), { skeletonAllowed: false });
-    assertSteady(`unknown mission id (api +${delay}ms)`, await watch('/chats/3948769d-129d-4ae0-b4da-d487c358f2d9', { delay }), { skeletonAllowed: delay > 0 });
+    assertSteady(`unknown mission id (api +${delay}ms)`, await watch('/chats/3948769d-129d-4ae0-b4da-d487c358f2d9', { delay }), { skeletonAllowed: true });
   }
 
   // A mission whose snapshot never arrives must end in an error with Retry, with the composer's slot kept.
