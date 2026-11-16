@@ -14,7 +14,9 @@ const GHOST = "bg-transparent text-[color:var(--intent-text,var(--muted-foregrou
 const OUTLINE = "border-[color:var(--intent-border,var(--border-2))] bg-[var(--button)] text-[color:var(--intent-text,var(--foreground))] hover:bg-[color:var(--intent-bg-hover,var(--button-hover))] aria-expanded:bg-[color:var(--intent-bg-hover,var(--button-hover))]"
 const LINK = "text-[color:var(--text-link)] underline-offset-2 hover:underline"
 const BARE = "bg-transparent text-[color:var(--intent-text,var(--muted-foreground-1))] hover:text-[color:var(--intent-text-hover,var(--foreground))] data-[popup-open]:text-[color:var(--intent-text-hover,var(--foreground))]"
-const INVERSE = "bg-[color:var(--intent-bg,var(--inverse))] text-[color:var(--intent-text-on-bg,var(--inverse-text))] [--focus-ring:var(--intent-text-on-bg,var(--inverse-text))] active:brightness-95"
+const INVERSE = "bg-[color:var(--intent-bg,var(--inverse))] text-[color:var(--intent-text-on-bg,var(--inverse-text))] [--focus-ring:var(--intent-text-on-bg,var(--inverse-text))]"
+/* Suggestion chip: ghost, 28px, one 14px icon, 0.8px border, hover wash; rounded-md, never a pill. */
+const CHIP = `${GHOST} border-[color:var(--border-2)] text-[13px] font-[450]`
 const SEGMENTED = `${GHOST} data-[selected]:bg-[color:var(--intent-bg,var(--card))] data-[selected]:shadow-card`
 
 const INTENT = {
@@ -31,7 +33,7 @@ const INTENT = {
  * solid/soft/bare/inverse/segmented are exposed for direct use.
  */
 const buttonVariants = cva(
-  "group/button relative inline-flex w-fit shrink-0 cursor-pointer items-center justify-center rounded-[var(--ui-button-radius,var(--radius-button))] border-[0.5px] border-transparent font-medium text-nowrap whitespace-nowrap [text-box-trim:trim-both] press outline-none select-none focus-visible:outline-ring-inset pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:size-full pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 pointer-coarse:after:content-[''] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-55 aria-invalid:border-destructive data-[selected]:bg-secondary data-[selected]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--icon-base)",
+  "group/button relative inline-flex w-fit shrink-0 cursor-pointer items-center justify-center rounded-[var(--ui-button-radius,var(--radius-button))] border-[0.8px] border-transparent font-medium text-nowrap whitespace-nowrap [text-box-trim:trim-both] press outline-none select-none focus-visible:outline-ring-inset pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:size-full pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 pointer-coarse:after:content-[''] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-55 aria-invalid:border-destructive data-[selected]:bg-secondary data-[selected]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--icon-sm)",
   {
     variants: {
       variant: {
@@ -39,7 +41,7 @@ const buttonVariants = cva(
         accent: `${SOLID} ${INTENT.accent}`,
         secondary: SOLID,
         outline: OUTLINE,
-        row: "bg-transparent text-inherit hover:bg-transparent hover:text-foreground [--press-brightness:1]",
+        row: "bg-transparent text-inherit hover:bg-transparent hover:text-foreground",
         ghost: GHOST,
         success: `${SOFT} ${INTENT.success}`,
         warning: `${SOFT} ${INTENT.warning}`,
@@ -51,13 +53,14 @@ const buttonVariants = cva(
         bare: BARE,
         inverse: INVERSE,
         segmented: SEGMENTED,
+        chip: CHIP,
       },
       size: {
-        default: "h-(--h-control-base) gap-2 px-3 text-sm md:px-2.5 [&_svg:not([class*='size-'])]:size-(--icon-base) has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        default: "h-(--h-control-base) gap-2 px-3 text-sm md:px-2.5 [&_svg:not([class*='size-'])]:size-(--icon-sm) has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
         xs: "h-(--h-control-xs) gap-1.5 px-2 text-xs [&_svg:not([class*='size-'])]:size-(--icon-xs) has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
         sm: "h-(--h-control-sm) gap-1.5 px-2.5 text-xs md:px-2 [&_svg:not([class*='size-'])]:size-(--icon-sm) has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-(--h-control-lg) gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-(--icon-base) has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        icon: "size-(--h-control-base) [&_svg:not([class*='size-'])]:size-(--icon-base)",
+        lg: "h-(--h-control-lg) gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-(--icon-sm) has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        icon: "size-(--h-control-base) [&_svg:not([class*='size-'])]:size-(--icon-sm)",
         "icon-xs": "size-(--h-control-xs) [&_svg:not([class*='size-'])]:size-(--icon-xs)",
         "icon-sm": "size-(--h-control-sm) [&_svg:not([class*='size-'])]:size-(--icon-sm)",
         "icon-lg": "size-(--h-control-lg) [&_svg:not([class*='size-'])]:size-(--icon-lg)",

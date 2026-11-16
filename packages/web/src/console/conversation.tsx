@@ -527,11 +527,12 @@ function ContextSuggestions({
           <Tooltip key={suggestion.label} content={suggestion.hint}>
             <Button
               type="button"
-              variant="ghost"
-              className="h-8 max-w-full gap-2 rounded-md border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
+              variant="chip"
+              size="sm"
+              className="max-w-full !px-2.5"
               onClick={() => onChoose(suggestion.prompt)}
             >
-              <Icon aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
+              <Icon aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />
               <span className="truncate">{suggestion.label}</span>
             </Button>
           </Tooltip>

@@ -4,15 +4,15 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export type ResolvedTheme = "light" | "dark";
 
 export const ACCENTS = [
+  { id: "blue", label: "Blue" },
   { id: "neutral", label: "Neutral" },
   { id: "orange", label: "Orange" },
-  { id: "blue", label: "Blue" },
   { id: "green", label: "Green" },
   { id: "violet", label: "Violet" },
   { id: "rose", label: "Rose" },
 ] as const;
 export type Accent = (typeof ACCENTS)[number]["id"];
-export const DEFAULT_ACCENT: Accent = "neutral";
+export const DEFAULT_ACCENT: Accent = "blue";
 
 /** Scales are mirrored by `html[data-font-size]` in styles.css (default text 14px becomes about 13/14/16px). */
 export const FONT_SIZES = [
