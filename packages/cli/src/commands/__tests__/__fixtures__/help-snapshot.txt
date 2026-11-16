@@ -4096,23 +4096,26 @@ Usage: 0 skills [options] [command]
 Skills, plugins and connectors: list, add, run
 
 Options:
-  -h, --help                          display help for command
+  -h, --help                    display help for command
 
 Commands:
-  list [options]                      List installed skills and linked folders
-  add [options] <catalog-id-or-repo>  Add a skill from the catalog or GitHub (owner/repo[/path]);
-                                      shows a review first
-  run <name> [tool] [pairs...]        Run a skill or a plugin tool
-  help [command]                      display help for command
+  list [options]                List installed skills and linked folders
+  add [options] <source>        Add skills or an extension: <url|owner/repo|folder>@<full sha>, or
+                                a catalog id / owner/repo[/path]; shows one prompt first
+  run <name> [tool] [pairs...]  Run a skill or a plugin tool
+  help [command]                display help for command
 
 ### 0 skills add
-Usage: 0 skills add [options] <catalog-id-or-repo>
+Usage: 0 skills add [options] <source>
 
-Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
+Add skills or an extension: <url|owner/repo|folder>@<full sha>, or a catalog id /
+owner/repo[/path]; shows one prompt first
 
 Options:
   --preview         Only show the review
   --yes             Install the reviewed commit
+  --enable          Extensions: also enable it
+  --project <dir>   Extensions: with --enable, enable for this project only
   --json            Print machine-readable JSON
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
@@ -4171,6 +4174,111 @@ Options:
   --json               Print machine-readable JSON
   --db-path <path>     Use this engine database instead of the default
   -h, --help           display help for command
+
+### 0 skills extensions (hidden)
+Usage: 0 skills extensions [options] [command]
+
+Installed extensions: list, info, enable, disable, update, remove (install with `0 skills add`)
+
+Options:
+  -h, --help      display help for command
+
+Commands:
+  help [command]  display help for command
+
+### 0 skills extensions add (hidden)
+Usage: 0 skills extensions add [options] <source>
+
+Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
+
+Options:
+  --preview         Only show the install prompt
+  --yes             Install the exact revision shown
+  --enable          Also enable it
+  --project <dir>   With --enable: enable for this project only
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions disable (hidden)
+Usage: 0 skills extensions disable [options] <name>
+
+Disable globally, or for one project with --project
+
+Options:
+  --project <dir>   Disable for this project only
+  --yes             Confirm disabling a built-in
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions enable (hidden)
+Usage: 0 skills extensions enable [options] <name>
+
+Enable globally, or for one project with --project
+
+Options:
+  --project <dir>   Enable for this project only
+  --yes             Approve an unapproved revision (for example an imported one)
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions import (hidden)
+Usage: 0 skills extensions import [options]
+
+Import earlier plugins, MCP servers and skills (runs once automatically); shows what could not be
+migrated
+
+Options:
+  --force           Run the importer again
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions info (hidden)
+Usage: 0 skills extensions info [options] <name>
+
+Show the install prompt for an installed extension
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions list (hidden)
+Usage: 0 skills extensions list [options]
+
+List installed extensions and built-ins
+
+Options:
+  --project <dir>   Show enablement for this project
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions remove (hidden)
+Usage: 0 skills extensions remove [options] <name>
+
+Remove an installed extension and its stored revisions
+
+Options:
+  --yes             Confirm the removal
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
+
+### 0 skills extensions update (hidden)
+Usage: 0 skills extensions update [options] <name>
+
+Show the diff and install prompt for a newer revision; --yes --to <sha> approves it
+
+Options:
+  --to <sha>        Full commit SHA to update to (default: the remote HEAD)
+  --yes             Approve the revision given by --to
+  --json            Print machine-readable JSON
+  --db-path <path>  Use this engine database instead of the default
+  -h, --help        display help for command
 
 ### 0 skills import (hidden)
 Usage: 0 skills import [options] <bundle>
