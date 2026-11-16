@@ -3428,12 +3428,12 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
 
   it("lazy extension MCP servers: one index line, no schema until loaded, byte-stable tools, untrusted results", async () => {
     const tools = [{ name: "echo", description: "Echo.", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }];
-    const connector: McpConnector = { connect: async () => ({ tools: async () => tools, call: async (_n, args) => ({ text: `echo:${String(args["text"])}`, isError: false }), close: async () => undefined }) };
+    const connector: McpConnector = { connect: async () => ({ tools: async () => tools, call: async (_n, args) => ({ text: `echo:${String(args["text"])}`, isError: false }), close: async () => undefined, onToolsChanged: () => undefined, onClosed: () => undefined }) };
     const host = new ExtensionMcpHost({ extensions: [stdioExtension("docs", "v1")], connector, pins: new MemoryPins(), observed: new MemoryObserved(), gate: allow, parentEnv: {} });
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "c1", name: "list_tools", input: {} }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "c2", name: "load_tool", input: { names: ["mcp__docs-fake"] } }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "c3", name: "mcp__docs-fake__echo", input: { text: "hi" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c2", name: "load_tool", input: { names: ["mcp__x-docs-fake"] } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c3", name: "mcp__x-docs-fake__echo", input: { text: "hi" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("done"),
     ]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3441,11 +3441,11 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
     const outcome = await session.send("use docs");
     const names = (round: number) => runtime.calls[round].tools.map(t => t.name);
     expect(names(0).some(n => n.startsWith("mcp__"))).toBe(false);
-    expect(String(outcome.toolCalls[0].result.output)).toContain('MCP server "docs-fake"');
+    expect(String(outcome.toolCalls[0].result.output)).toContain('MCP server "x-docs-fake"');
     expect(JSON.stringify(runtime.calls[0].tools)).toBe(JSON.stringify(runtime.calls[1].tools));
     expect(String(outcome.toolCalls[1].result.output)).toContain("loaded");
-    expect(names(2)).toContain("mcp__docs-fake__echo");
-    expect(names(2).filter(n => n.startsWith("mcp__"))).toEqual(["mcp__docs-fake__echo"]);
+    expect(names(2)).toContain("mcp__x-docs-fake__echo");
+    expect(names(2).filter(n => n.startsWith("mcp__"))).toEqual(["mcp__x-docs-fake__echo"]);
     expect(JSON.stringify(runtime.calls[2].tools)).toBe(JSON.stringify(runtime.calls[3].tools));
     expect(String(outcome.toolCalls[2].result.output ? JSON.stringify(outcome.toolCalls[2].result.output) : "")).toContain("Untrusted data from MCP tool echo");
   });
