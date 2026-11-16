@@ -102,10 +102,11 @@ Releases are gated on the release commit's own green `Main` and Release dry run 
 1. Bump `version` in `packages/cli/package.json`.
 2. Move the `[Unreleased]` entries in `docs/CHANGELOG.md` into a `## [x.y.z] - date` section (Added/Changed/Fixed/Security).
 3. Add the matching entry to `packages/web/src/lib/releases.ts` (once it exists) for the in-app What's new.
-4. `pnpm check:release-notes` must pass; preview with `node scripts/release-notes.mjs`.
-5. Tag `vx.y.z`. The Release workflow publishes the binaries and uses the generated notes.
-6. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled. `Main` always runs every group on a code commit and on the `vX.Y.Z` tag itself; the Release dry run triggers on release-related paths and nightly, so for a release commit that touches none of them run it by hand (`Release` workflow, `dry_run: true`) before tagging.
-7. After the tag, `Main` re-runs on it; its success publishes `:X.Y.Z`, `:X.Y` and `:latest` (highest version only), and the nightly Release run re-checks the documented install paths (binary, source, container). The `Release` workflow itself publishes nothing until its `main-gate` job sees a green `Main` run for the tag on the tag commit.
+4. Run `node scripts/bump-docs-pins.mjs x.y.z` so the docs pins (image tags, the Action `version:`, the compose example) match the release; `pnpm docs:check` and `pnpm check:release-notes` fail when one lags.
+5. `pnpm check:release-notes` must pass; preview with `node scripts/release-notes.mjs`.
+6. Tag `vx.y.z`. The Release workflow publishes the binaries and uses the generated notes.
+7. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled. `Main` always runs every group on a code commit and on the `vX.Y.Z` tag itself; the Release dry run triggers on release-related paths and nightly, so for a release commit that touches none of them run it by hand (`Release` workflow, `dry_run: true`) before tagging.
+8. After the tag, `Main` re-runs on it; its success publishes `:X.Y.Z`, `:X.Y` and `:latest` (highest version only), and the nightly Release run re-checks the documented install paths (binary, source, container). The `Release` workflow itself publishes nothing until its `main-gate` job sees a green `Main` run for the tag on the tag commit.
 
 ## Attack templates
 

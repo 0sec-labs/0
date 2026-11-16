@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cliVersion, generate, parseReleasesTs } from "./release-notes.mjs";
+import { findStale } from "./bump-docs-pins.mjs";
 
 export function checkRelease(root) {
   const version = cliVersion(root);
@@ -12,6 +13,9 @@ export function checkRelease(root) {
   const rp = join(root, "packages/web/src/lib/releases.ts");
   if (existsSync(rp) && !parseReleasesTs(readFileSync(rp, "utf8"), version)) {
     errors.push(`packages/web/src/lib/releases.ts has no entry for version ${version}.`);
+  }
+  if (existsSync(join(root, "docs/src/content/docs"))) {
+    for (const line of findStale(root, version)) errors.push(`docs pin lags behind ${version} (run node scripts/bump-docs-pins.mjs ${version}): ${line}`);
   }
   return { version, errors };
 }
