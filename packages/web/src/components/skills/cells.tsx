@@ -4,7 +4,7 @@ import { CapyCheckIcon as Check, CapyPuzzleIcon } from "@/ui/icons/capy";
 import { EntryLogo } from "@/components/console-control/entry-logo";
 import { LogoTile } from "@/ui/components/logo-tile";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandGlyph } from "@/components/brand-glyph";
 import type { SkillTile } from "@/lib/installed-skills";
 import { safeLogo } from "@/components/console-control/connections-model";
 
@@ -28,7 +28,7 @@ export function Tile({ logo, avatar, icon, name, verified, verifiedLabel, verifi
 }
 
 /** The 0security mark as an icon component (follows the theme), for lists that take an icon. */
-export const SkillMarkIcon = ({ className }: { className?: string }) => <BrandMark compact className={className} />;
+export const SkillMarkIcon = ({ className }: { className?: string }) => <BrandGlyph className={className} />;
 
 /** The one place that decides how an installed skill looks: built-in = 0security mark, extension = puzzle, GitHub = publisher avatar, yours = initials. */
 export function InstalledTile({ tile, publisher }: { tile: SkillTile; publisher?: { name: string; avatar: string } }) {
