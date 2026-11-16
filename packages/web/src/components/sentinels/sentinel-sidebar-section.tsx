@@ -22,12 +22,15 @@ export function SentinelSidebarSection() {
   const [creating, setCreating] = useState(false);
   const [sort, setSort] = useAgentSort();
   const [density, setDensity] = useSidebarDensity();
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
   if (!supported) return null;
   const now = Date.now();
-  const items = sortAgents(orderSentinels(sentinels), sort).map(agent => ({ agent, row: agentRow(agent, now) }));
+  const items = sortAgents(orderSentinels(sentinels), sort).map(agent => ({ agent, row: agentRow(agent, now) })).filter(({ row, agent }) => !searching || !query.trim() || `${row.name} ${agent.mission}`.toLowerCase().includes(query.trim().toLowerCase()));
   const compact = density === "compact";
   return <>
-    <SidebarListHeader title={v("{Sentinels}")} newLabel={v("New {sentinel}")} onNew={() => setCreating(true)} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity} />
+    <SidebarListHeader title={v("{Sentinels}")} newLabel={v("New {sentinel}")} onNew={() => setCreating(true)} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity} searchLabel={v("Search {sentinels}")} searchActive={searching} onSearch={() => { setSearching(!searching); setQuery(""); }} />
+    {searching && <div className="shrink-0 px-2 pb-1"><input autoFocus aria-label={v("Search {sentinels}")} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") { setSearching(false); setQuery(""); } }} placeholder="Filter by name" className="h-7 w-full rounded-md bg-secondary px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground-1 focus-visible:outline-ring-inset" /></div>}
     {/* Loading rule: nothing is drawn while the first list is in flight. */}
     <SidebarScroll id="navigation-agents" onKeyDown={rowNavigation}>
     <SidebarGroup aria-label={v("{Sentinels}")} className="gap-0 px-0.5 py-0">

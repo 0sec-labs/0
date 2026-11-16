@@ -38,6 +38,7 @@
     "hooks:install": "node scripts/install-git-hooks.mjs",
     "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
     "test:home-paint": "node scripts/home-paint.e2e.mjs",
+    "test:sidebar-layout": "node scripts/sidebar-layout.e2e.mjs",
     "test:web-cli-parity": "node scripts/web-cli-parity.e2e.mjs",
     "test:pr-agent-e2e": "node scripts/pr-agent.e2e.mjs",
     "test:webhook-e2e": "node scripts/webhook.e2e.mjs",

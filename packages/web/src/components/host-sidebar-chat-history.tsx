@@ -5,13 +5,13 @@ import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Search, Trash2 } from "lucide-react";
+import { LaptopIcon, ServerIcon } from "@/ui/icons/device";
+import { ChevronRight, Trash2 } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared/backend-protocol";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { useBackendSelection } from "@/backend-context";
 import { useTeamAccess } from "./team-access";
-import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { SidebarLabel } from "@/ui/components/sidebar";
 import { SidebarListHeader } from "./sidebar/sidebar-list-header";
@@ -143,12 +143,15 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
           : <RowAge className={cn(!readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</RowAge>}
       </span>} />
-      {density === "comfortable" && (subline.kind === "needs-you"
-        ? <RowSubline className="text-primary-ink">{subline.text}</RowSubline>
-        : <span className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground-1">
-          {subline.folder && <><span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center rounded-sm bg-secondary text-[9px] leading-none font-semibold">{folderMonogram(subline.folder)}</span><SidebarLabel className="flex-initial">{subline.folder}</SidebarLabel></>}
-          <SidebarLabel className="max-w-[60%] flex-none text-right ml-auto">{subline.computer}</SidebarLabel>
-        </span>)}
+      {density === "comfortable" && <span data-slot="thread-line2" className="flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground-1">
+          {subline.folder && <span aria-hidden="true" data-slot="thread-folder-tile" className="flex size-4 shrink-0 items-center justify-center rounded-sm bg-secondary text-[9px] leading-none font-semibold">{folderMonogram(subline.folder)}</span>}
+          {subline.kind === "needs-you"
+            ? <SidebarLabel className="text-primary-ink">{subline.text}</SidebarLabel>
+            : <>
+              <SidebarLabel data-slot="thread-folder" className="flex-1">{subline.folder}</SidebarLabel>
+              <span data-slot="thread-computer" className="ml-auto flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap">{host.id === "local" ? <LaptopIcon aria-hidden="true" className="size-3.5 shrink-0" /> : <ServerIcon aria-hidden="true" className="size-3.5 shrink-0" />}{subline.computer}</span>
+            </>}
+        </span>}
     </a>
     {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute inset-y-0 right-0 flex items-center rounded-r-md bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
       <Button variant="ghost" size="icon-xs" disabled={slice.busy || slice.unavailable} tooltip={`Delete ${VOCAB.mission.singular}`} className="size-5.5 p-1 text-muted-foreground hover:bg-transparent hover:text-destructive" aria-label={`Delete ${title}`} onClick={() => slice.actions.requestDelete(session.id, title, isSaved)}><Trash2 className="size-(--icon-sm)" /></Button>
@@ -156,9 +159,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   </div>;
         };
   return <div className="flex h-full min-h-0 flex-col">
-    <SidebarListHeader title={v("{Missions}")} newLabel={v("New {mission}")} onNew={() => props.onCreate ? props.onCreate(hostId) : navigate(backendRouteHref(hostId, "/chats?new=1"))} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity}>
-      <Tooltip content={v("Search {missions}")} side="bottom"><Button variant="ghost" size="icon-sm" aria-label={v("Search {missions}")} onClick={event => openAppSearch("chats", event.currentTarget)} className="text-muted-foreground-1"><Search className="size-(--icon-sm)" /></Button></Tooltip>
-    </SidebarListHeader>
+    <SidebarListHeader title={v("{Missions}")} newLabel={v("New {mission}")} onNew={() => props.onCreate ? props.onCreate(hostId) : navigate(backendRouteHref(hostId, "/chats?new=1"))} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity} searchLabel={v("Search {missions}")} onSearch={trigger => openAppSearch("chats", trigger)} />
     {hosts.map(host => <HostChatSource key={host.id} host={host} publish={publish} navigationVersion={navigationVersion} selectedId={props.selectedId} selectedBackendId={hostId} onSelect={select} onPendingChatChange={pendingChatChange} isPendingChatCurrent={pendingChatCurrent} onOpenDockChat={props.onOpenDockChat ? openDockChat : undefined} sort={sort} filter="" />)}
     {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
     <div onKeyDown={rowNavigation} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scroll-fade-y px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

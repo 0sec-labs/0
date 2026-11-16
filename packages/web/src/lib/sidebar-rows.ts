@@ -54,11 +54,11 @@ export function folderName(path: string | undefined): string {
 
 export const folderMonogram = (name: string): string => (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "").toUpperCase();
 
-export type ThreadSubline = { kind: "needs-you"; text: string } | { kind: "place"; folder: string; computer: string };
+export type ThreadSubline = { kind: "needs-you"; text: string; folder: string } | { kind: "place"; folder: string; computer: string };
 
 /** Line 2 of a thread: the accent attention text when waiting on the operator, else its folder and computer. */
 export function threadSubline(input: { attention?: string; workspacePath?: string; computer: string }): ThreadSubline {
-  if (input.attention) return { kind: "needs-you", text: input.attention };
+  if (input.attention) return { kind: "needs-you", text: input.attention, folder: folderName(input.workspacePath) };
   return { kind: "place", folder: folderName(input.workspacePath), computer: input.computer };
 }
 

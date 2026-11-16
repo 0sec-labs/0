@@ -53,7 +53,7 @@ describe("agent badge and subtitle", () => {
 
 describe("thread subline", () => {
   test("attention wins, else folder and computer", () => {
-    expect(threadSubline({ attention: "Waiting for you", workspacePath: "/x/app", computer: "Mac" })).toEqual({ kind: "needs-you", text: "Waiting for you" });
+    expect(threadSubline({ attention: "Waiting for you", workspacePath: "/x/app", computer: "Mac" })).toEqual({ kind: "needs-you", text: "Waiting for you", folder: "app" });
     expect(threadSubline({ workspacePath: "/x/app/", computer: "Mac" })).toEqual({ kind: "place", folder: "app", computer: "Mac" });
     expect(threadSubline({ computer: "Mac" })).toEqual({ kind: "place", folder: "", computer: "Mac" });
     expect(folderName("C:\\a\\b")).toBe("b");
