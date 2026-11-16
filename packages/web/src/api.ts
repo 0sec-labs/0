@@ -141,27 +141,13 @@ function getRuns(): Promise<RunRecord[]> {
   return coalesced("/api/work");
 }
 
-async function getScans(): Promise<ScanRecord[]> {
-  const data = await webFetchJson<{ scans: ScanRecord[] }>("/api/scans");
-  return data.scans;
-}
 
-async function getScan(scanId: string): Promise<ScanRecord> {
-  const data = await webFetchJson<{ scan: ScanRecord }>(`/api/scans/${encodeURIComponent(scanId)}`);
-  return data.scan;
-}
 
 function getScanEvents(scanId: string): Promise<ScanEventsResponse> {
   return webFetchJson(`/api/scans/${encodeURIComponent(scanId)}/events`);
 }
 
-function getRecentEvents(limit = 20): Promise<RecentEventsResponse> {
-  return webFetchJson(`/api/events/recent?limit=${encodeURIComponent(String(limit))}`);
-}
 
-function getScanFindings(scanId: string): Promise<ScanFindingsResponse> {
-  return webFetchJson(`/api/scans/${encodeURIComponent(scanId)}/findings`);
-}
 
 function getFindingFamily(fingerprint: string): Promise<FindingFamilyResponse> {
   return webFetchJson(`/api/finding-family/${encodeURIComponent(fingerprint)}`);
@@ -196,61 +182,11 @@ function updateFindingFamilyWorkflow(
   });
 }
 
-function recoverStaleWorkers(staleAfterMs = 30_000): Promise<{ ok: true; recovered: number }> {
-  return webFetchJson("/api/control/recover-stale-workers", {
-    method: "POST",
-    body: JSON.stringify({ staleAfterMs }),
-  });
-}
 
-function pruneStoppedWorkers(): Promise<{ ok: true; deleted: number }> {
-  return webFetchJson("/api/control/prune-stopped-workers", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-}
 
-function resetDatabase(seed: "verification" | "empty"): Promise<{
-  ok: true;
-  path: string;
-  seed: "verification" | "empty";
-  scans: number;
-  families: number;
-  workers: number;
-}> {
-  return webFetchJson("/api/control/reset-database", {
-    method: "POST",
-    body: JSON.stringify({ seed }),
-  });
-}
 
-function startDaemon(args?: {
-  label?: string;
-  pollIntervalMs?: number;
-}): Promise<{ ok: true; pid: number | null; label: string }> {
-  return webFetchJson("/api/control/start-daemon", {
-    method: "POST",
-    body: JSON.stringify(args ?? {}),
-  });
-}
 
-function stopDaemon(): Promise<{ ok: true; stopped: number }> {
-  return webFetchJson("/api/control/stop-daemon", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-}
 
-function launchRun(args: {
-  target: string;
-  depth: "quick" | "default" | "deep";
-  runtime?: "api" | "auto";
-}): Promise<{ ok: true; engineOwned: true; sessionId: string; runId: string; jobId?: string }> {
-  return webFetchJson("/api/control/launch-run", {
-    method: "POST",
-    body: JSON.stringify(args),
-  });
-}
 
 async function listConsoleSessions(signal?: AbortSignal): Promise<DesktopConsoleSession[]> {
   const result = await coalesced<{ sessions: DesktopConsoleSession[] }>("/api/console/sessions", signal);
@@ -366,6 +302,6 @@ function archiveConsoleSession(id: string, saved = false, archived = true): Prom
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
 
-  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, getConsoleTools, getConsoleWorker, getConsoleMessagesPage, getSavedTranscript, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getScanEvents, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, getConsoleTools, getConsoleWorker, getConsoleMessagesPage, getSavedTranscript, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
 }
 export type BackendApi = ReturnType<typeof createBackendApi>;

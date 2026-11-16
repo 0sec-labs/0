@@ -24,7 +24,7 @@ export const categoriesOfPage = (page: SettingsPageId): SettingsCategory[] => se
 const removedSections: Record<string, string> = {
   conversation: "threads", transcript: "threads", telemetry: "threads", privacy: "general", missions: "threads", agents: "helpers",
   profile: "appearance", experiments: "general", activity: "usage", repositories: "git",
-  "finding-states": "/findings", integrations: "/plugins", skills: "/skills", members: "/team",
+  "finding-states": "/findings", integrations: "/extensions", skills: "/skills", members: "/team",
 };
 /** Where `/settings?section=<section>` should go instead, when the section was removed or merged; undefined otherwise. */
 export function settingsRedirect(section: string | null): string | undefined {

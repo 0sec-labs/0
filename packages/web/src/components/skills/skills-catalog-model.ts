@@ -1,4 +1,4 @@
-/** View model for the Skills directory in Explore: a curated GitHub catalog, pinned to commits by the server. */
+/** View model for the Skills directory: a curated GitHub catalog, pinned to commits by the server. */
 export type CatalogSkill = {
   id: string; name: string; title: string; summary: string; repo: string; path: string; ref: string; commit: string; publisher: string; verified: boolean;
   stars: number; pushedAt: string; licence: string | null; licenceSource: string; installable: boolean; security: boolean; files: number; bytes: number; hasScripts: boolean;

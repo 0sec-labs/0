@@ -64,7 +64,7 @@ function BackgroundPicker({ value, onValueChange }: { value: BackdropKind; onVal
   </div>;
 }
 
-/** The Theme row: current palette and a sheet with the full gallery (the same one Explore shows). */
+/** The Theme row: current palette and a sheet with the full gallery. */
 function ColorThemeRow() {
   const [id] = useColorTheme();
   const [open, setOpen] = useState(false);

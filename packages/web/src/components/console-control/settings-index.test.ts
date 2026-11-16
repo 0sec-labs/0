@@ -8,7 +8,7 @@ describe("settings pages", () => {
     expect(settingsRedirect("privacy")).toBe("/settings?section=general");
     expect(settingsRedirect("repositories")).toBe("/settings?section=git");
     expect(settingsRedirect("finding-states")).toBe("/findings");
-    expect(settingsRedirect("integrations")).toBe("/plugins");
+    expect(settingsRedirect("integrations")).toBe("/extensions");
     expect(settingsRedirect("skills")).toBe("/skills");
     expect(settingsRedirect("members")).toBe("/team");
     expect(settingsRedirect("git")).toBeUndefined();

@@ -1,4 +1,4 @@
-/** Browse model shared by Explore and the skills library: plain summaries and category groups. */
+/** Browse model shared by Skills Browse and the skills library: plain summaries and category groups. */
 export type BrowsableSkill = { id: string; name: string; description: string; scope: string; summary?: string; category?: string; internal?: boolean };
 
 export const YOURS = "Your skills";
