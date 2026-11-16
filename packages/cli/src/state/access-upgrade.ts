@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir, legacyAskedFirst } from "@0/engine/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 /**
- * One-time upgrade note for the move to two access states (Read-only, Can make changes).
- * Agents saved as `propose` and threads saved as `standard` or `copilot` used to ask before
- * every action; they now follow only the global "Ask before running commands" setting.
- * The first start after upgrade records how many were affected (one audit entry) and shows
- * ONE dismissible notice next to the setting. Nothing stored is rewritten here.
+ * One-time upgrade note for the move to one mode. Threads and Agents always have shell access;
+ * limits are scope, budget and the sandbox. The first start after upgrade records how many
+ * Agents and threads already existed (one audit entry) and shows ONE dismissible notice next
+ * to the setting. Nothing stored is rewritten here.
  */
 export interface AccessUpgradeState { recordedAt: string; agents: number; threads: number; dismissed: boolean }
 export type AccessUpgradeNotice = Pick<AccessUpgradeState, "agents" | "threads">;
@@ -23,9 +22,6 @@ export function readAccessUpgrade(home?: string): AccessUpgradeState | undefined
 function write(state: AccessUpgradeState, home?: string): void {
   try { mkdirSync(dirname(file(home)), { recursive: true }); writeFileSync(file(home), JSON.stringify(state), { mode: 0o600 }); } catch { /* The note is advisory; never block startup. */ }
 }
-
-/** True for stored values that used to ask before every action. */
-export const askedFirstBefore = (stored: unknown): boolean => legacyAskedFirst(stored) || stored === "copilot";
 
 /** First start only: record the counts. Returns true when this call recorded them (and the caller should audit). */
 export function recordAccessUpgrade(counts: AccessUpgradeNotice, home?: string, now: () => Date = () => new Date()): boolean {

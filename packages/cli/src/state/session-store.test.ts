@@ -696,3 +696,13 @@ describe("archiveIdleSessions", () => {
     expect(archiveIdleSessions(30, home, { now, protectedIds: new Set(["console-held"]) })).toBe(0);
   });
 });
+
+describe("older stored access values", () => {
+  it("every value an older release stored loads without error and is left as written", () => {
+    const home = makeHome();
+    const legacy = ["observe", "recon", "read-only", "act", "run", "propose", "yolo", "copilot", "standard", "changes"];
+    legacy.forEach((mode, index) => expect(saveSession(makeSession({ id: `console-legacy${index}`, mode }), home)).toBe(true));
+    legacy.forEach((mode, index) => expect(loadSession(`console-legacy${index}`, home)?.mode).toBe(mode));
+    expect(listSessions(home)).toHaveLength(legacy.length);
+  });
+});

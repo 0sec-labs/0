@@ -44,8 +44,8 @@ describe("agent API", () => {
     const f = fixture();
     const created = await f.call("POST", P, { preset: "pen-tester", scope: { targets: ["https://staging.example.com"] } });
     expect(created.status).toBe(201);
-    const data = created.data as { sentinel: { id: string; status: string; role: string; autonomy: string; attention: unknown; scope: { production: boolean } }; suggestedAutomations: unknown[] };
-    expect(data.sentinel).toMatchObject({ status: "paused", role: "pen-tester", autonomy: "observe", attention: { needsYou: false, pendingDecisions: 0 } });
+    const data = created.data as { sentinel: { id: string; status: string; role: string; attention: unknown; scope: { production: boolean } }; suggestedAutomations: unknown[] };
+    expect(data.sentinel).toMatchObject({ status: "paused", role: "pen-tester", attention: { needsYou: false, pendingDecisions: 0 } });
     expect(data.sentinel.scope.production).toBe(false);
     expect(data.suggestedAutomations.length).toBeGreaterThan(0);
     expect((await f.call("POST", P, { preset: "nope" })).status).toBe(400);
@@ -82,7 +82,9 @@ describe("agent API", () => {
     expect(run.status).toBe(202);
     expect(f.missions.create).toHaveBeenCalledTimes(2);
     const config = f.missions.create.mock.calls[1]![0];
-    expect(config).toMatchObject({ autonomyMode: "read-only", target: "https://a.example", workerPolicy: { allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] }, scope: { in_scope: ["https://a.example"], out_of_scope: ["https://a.example/admin"] } });
+    expect(config).toMatchObject({ target: "https://a.example", scope: { in_scope: ["https://a.example"], out_of_scope: ["https://a.example/admin"] } });
+    expect(config).not.toHaveProperty("autonomyMode");
+    expect(config).not.toHaveProperty("workerPolicy");
     const [, text] = f.missions.send.mock.calls[0]!;
     expect(text).toContain("Watch deps.");
     expect(text).toContain("Skills allow-list for this run: scoped-fix");

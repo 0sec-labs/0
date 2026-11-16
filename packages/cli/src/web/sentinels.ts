@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { askedFirstBefore, recordAccessUpgrade } from "../state/access-upgrade.js";
+import { recordAccessUpgrade } from "../state/access-upgrade.js";
 import { listSessions } from "../state/session-store.js";
 import { audit } from "./audit.js";
 import { SecurityWorkflowStore, SentinelStore, SentinelStoreError } from "@0/engine/storage";
-import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelAccessLevel, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
+import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
 import { SentinelRunError, SentinelRunner, type SentinelActor, type SentinelGhClient, type SentinelMissionRuntime } from "./sentinel-runner.js";
 
 const PREFIX = "/api/console/";
@@ -32,21 +32,21 @@ export class WebSentinelService {
    * `scheduler` starts the background tick (schedules, GitHub PR polling, run tracking). Off by default so tests and
    * tools that only need the HTTP surface do not run autonomous work; the dashboard turns it on.
    */
-  constructor(options: { dbPath?: string; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient }) {
+  constructor(options: { dbPath?: string; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient; executionProfile?: () => "local" | "smolvm"; checkout?: (repo: string) => Promise<string | undefined> }) {
     this.#store = new SentinelStore(options.dbPath);
     this.#workflows = new SecurityWorkflowStore(options.dbPath);
     this.#missions = options.missions;
     this.#now = options.now ?? Date.now;
-    this.#runner = new SentinelRunner({ store: this.#store, workflows: this.#workflows, missions: options.missions, now: this.#now, ...(options.gh ? { gh: options.gh } : {}) });
+    this.#runner = new SentinelRunner({ store: this.#store, workflows: this.#workflows, missions: options.missions, now: this.#now, ...(options.gh ? { gh: options.gh } : {}), ...(options.executionProfile ? { executionProfile: options.executionProfile } : {}), ...(options.checkout ? { checkout: options.checkout } : {}) });
     if (options.scheduler) this.#noteAccessUpgrade();
     if (options.scheduler) this.#runner.start(typeof options.scheduler === "object" ? options.scheduler.pollIntervalMs : undefined);
   }
-  /** First start after the move to two access states: count what used to ask first, audit it once, and leave a notice next to the setting. */
+  /** First start after access collapsed to one mode: record how many Agents and threads already existed (one audit entry) and leave one dismissible notice next to the setting. */
   #noteAccessUpgrade(): void {
     try {
-      const agents = this.#store.list().filter(item => item.autonomy === "propose").length;
-      const threads = listSessions().filter(item => askedFirstBefore(item.mode)).length;
-      if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.ask-first", subject: "access", outcome: "ok", detail: { agents, threads, note: "Agents and threads that used Ask first now follow the global Ask before running commands setting." } });
+      const agents = this.#store.list().length;
+      const threads = listSessions().length;
+      if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.one-mode", subject: "access", outcome: "ok", detail: { agents, threads, note: "Threads and Agents now always have shell access; limits are scope, budget and the sandbox." } });
     } catch { /* Advisory only. */ }
   }
   /** Webhook acceleration: the triggers a delivery for this repository and base branch may check. */
@@ -88,7 +88,7 @@ export class WebSentinelService {
     const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : undefined);
     return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
-  #view(sentinel: Sentinel) { return { ...sentinel, access: sentinelAccessLevel(sentinel.autonomy), accessLevel: sentinelAccessLevel(sentinel.autonomy), attention: this.#attention(sentinel) }; }
+  #view(sentinel: Sentinel) { return { ...sentinel, attention: this.#attention(sentinel) }; }
   #automations(id: string) { return this.#workflows.list().filter(workflow => workflow.ownerSentinelId === id); }
 
   async #route(path: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {

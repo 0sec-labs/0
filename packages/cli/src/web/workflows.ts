@@ -511,7 +511,6 @@ export class WebWorkflowService {
     // Reject a background launch before creating an execution when a fresh
     // approval is needed. Each audit checks it again immediately before work.
     const context = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: resolved.plan.kind === "package" ? definition.target : resolved.plan.target, kind: resolved.plan.kind }, undefined, undefined, { interactive: false });
-    if (context.autonomyMode === "read-only") throw new WorkflowError("Read-only threads cannot authorize scheduled automation operations.", 403);
     for (const node of audits) if (node.execution) withWorkflowAuditExecutionPolicy(node.execution, () => assertWorkflowNativeRuntime(context.runtime));
     return context;
   }
@@ -543,7 +542,6 @@ export class WebWorkflowService {
     if (!Number.isFinite(limits.timeCapMs) || !Number.isFinite(limits.costCapUsd)) throw new WorkflowError("Automation limits must be finite.", 400);
     const context = await this.#gateway.getExecutionContext(request.sessionId);
     if (this.#disposing) throw new WorkflowError("Automation service is shutting down.", 503);
-    if (context.autonomyMode === "read-only") throw new WorkflowError("This thread is read-only; switch it to Can make changes before approving automation operations.", 403);
     const inputs = options.inputs ?? {};
     const typed = auditNodes.filter(node => node.type !== "audit");
     let registry: WorkflowExecutorRegistry = {};
@@ -551,7 +549,6 @@ export class WebWorkflowService {
     if (typed.length) {
       if (target.plan.kind !== "source" || /^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) || target.plan.target.startsWith("git@")) throw new WorkflowError("Typed automation operations require an authorized local source workspace.", 400);
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, undefined, undefined, { interactive });
-      if (authorized.autonomyMode === "read-only") throw new WorkflowError("Read-only threads cannot authorize automation operations.", 403);
       if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Thread model or routing changed while authorizing automation inputs.");
       if (isApiRuntime(authorized.runtime) && isApiRuntime(context.runtime) && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Thread connection changed while authorizing automation inputs.");
       canonicalTarget = await realpath(target.plan.target);
@@ -588,7 +585,6 @@ export class WebWorkflowService {
         costCapUsd: options.costCapUsd ?? limits.costCapUsd,
         executors: Object.fromEntries(Object.entries(registry).map(([operation, executor]) => [operation, async (step: WorkflowAssessmentContext) => {
           const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, step.signal, parent.view.id, { interactive });
-          if (authorized.autonomyMode === "read-only") throw new WorkflowError("Read-only threads cannot authorize automation operations.", 403);
           if (identity(selection(authorized)) !== identity(parent.view.runtime)) throw new WorkflowError("Thread model or routing changed during automation authorization.");
           if (isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Thread connection changed during automation authorization.");
           const canonical = await realpath(target.plan.target);
@@ -702,7 +698,6 @@ export class WebWorkflowService {
     if (execution) withWorkflowAuditExecutionPolicy(execution, () => assertWorkflowNativeRuntime(context.runtime));
     if (owningGraphId && identity(selection(context)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Thread model or routing changed during this automation. Review the selection and run it again.");
     if (owningGraphId && isApiRuntime(context.runtime) && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Thread connection changed during this automation. Review it and run again.");
-    if (context.autonomyMode === "read-only") throw new WorkflowError("This thread is read-only; switch it to Can make changes before approving an effectful bounded scan.", 403);
     const resolved = snapshot(resolution.plan);
     const job = this.#createJob("run", request.sessionId, { ...request, resolved, ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry } : {}) }, context, owningGraphId);
     const cancelFromGraph = () => this.#cancel(job, graphSignal?.reason);
@@ -714,7 +709,6 @@ export class WebWorkflowService {
       if (resume && (identity(selection(authorized)) !== identity(selection(context)) || (authorized.dbPath ?? this.#dbPath) !== resume.dbPath)) throw new WorkflowError("Thread runtime or storage changed during resume authorization. Review it and launch again.");
       if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Thread model or routing changed during automation authorization. Review it and run again.");
       if (owningGraphId && isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Thread connection changed during automation authorization. Review it and run again.");
-      if (authorized.autonomyMode === "read-only") throw new WorkflowError("Read-only threads cannot authorize an effectful bounded scan.", 403);
       if (resolved.kind === "source" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resolved.target) && !resolved.target.startsWith("git@")) {
         const path = await realpath(resolved.target);
         if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), path))) {
@@ -818,10 +812,7 @@ export class WebWorkflowService {
     if (!fix || fix.view.sessionId !== request.sessionId) throw new WorkflowError("Source-fix review was not found for this thread.", 404);
     if (fix.view.activeWorkflowId) throw new WorkflowError("This source-fix review already has an active operation.");
     if (fix.view.published) throw new WorkflowError("This source-fix candidate was already published.");
-    const currentContext = await this.#gateway.getExecutionContext(request.sessionId);
-    if (currentContext.autonomyMode === "read-only" && !(action === "publish" && request.approval === undefined)) {
-      throw new WorkflowError("This thread is read-only; source-fix command execution, application and publication are blocked.", 403);
-    }
+    await this.#gateway.getExecutionContext(request.sessionId);
     await this.#assertFixCurrent(fix);
     const view = fix.view;
     if (action === "propose") {
@@ -855,7 +846,6 @@ export class WebWorkflowService {
     this.#repositoryJobs.set(view.repoRoot, job.view.id);
     this.#start(job, async () => {
         const authorized = await this.#gateway.authorizeWorkflowTarget(view.sessionId, { target: view.repoRoot, kind: "source" }, job.controller.signal, job.view.id);
-        if (authorized.autonomyMode === "read-only") throw new WorkflowError("Read-only threads cannot authorize source-fix effects.", 403);
         if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), view.repoRoot))) {
           throw new WorkflowError("Source fix is outside the explicitly approved local scope.", 403);
         }

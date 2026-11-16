@@ -45,22 +45,21 @@ async function options() {
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
 }
 describe("host console VM controller", () => {
-  it("preserves explicit autonomy before startup and forwards later changes to the guest", async () => {
+  it("preserves the explicit ask-first setting before startup and forwards later changes to the guest", async () => {
     const input = await options();
-    const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "changes" } });
+    const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, approvals: "ask" } });
     try {
-      expect(session.autonomyMode).toBe("changes");
-      session.setAutonomyMode("read-only");
-      expect(session.autonomyMode).toBe("read-only");
-      await session.send("Inspect passively");
+      expect(session.approvals).toBe("ask");
+      session.setApprovals("auto");
+      expect(session.approvals).toBe("auto");
+      await session.send("Inspect");
       const launch = mock.launches[0] as { transport: { initialInput: string } };
-      expect(JSON.parse(launch.transport.initialInput).config.autonomyMode).toBe("read-only");
-      expect(session.autonomyMode).toBe("read-only");
-      await session.setAutonomyMode("changes");
-      expect(session.autonomyMode).toBe("changes");
-      await session.send("Continue under the new mode");
+      expect(JSON.parse(launch.transport.initialInput).config.approvals).toBe("auto");
+      await session.setApprovals("ask");
+      expect(session.approvals).toBe("ask");
+      await session.send("Continue under the new setting");
       const change = mock.requests.findIndex(frame => frame.op === "autonomy");
-      expect(mock.requests[change]).toMatchObject({ op: "autonomy", value: "changes" });
+      expect(mock.requests[change]).toMatchObject({ op: "autonomy", approvals: "ask" });
       expect(mock.requests.slice(change + 1).some(frame => frame.op === "send")).toBe(true);
     } finally { await session.cleanup(); }
   });
@@ -340,7 +339,7 @@ it.each(["explicit-yolo", "implicit-yolo", "explicit-standard", "explicit-mode-s
  const persist = vi.fn(async (_lesson: unknown, _context: unknown) => {}); const read = vi.fn(async () => [lesson]);
  const workbench = { ...input.workbench, ...(mode === "implicit-yolo" ? { workspaceRoot: undefined } : {}) };
  const session = createWorkbenchConsoleSession({ ...input, workbench, config: { ...input.config, codebaseLearning: true, autonomyMode: mode === "explicit-standard" || mode === "explicit-mode-switch" ? "standard" : "yolo" }, onSourceLesson: persist, readSourceLessons: read });
- if (mode === "explicit-mode-switch") session.setAutonomyMode("yolo");
+ if (mode === "explicit-mode-switch") session.setApprovals("auto");
  const authorized = mode === "explicit-yolo";
  await session.send("Inspect child");
  mock.output!(JSON.stringify({ type: "decision", id: "child-query", name: "sourceLessons", args: ["/workspace/child"] }) + "\n");
@@ -373,20 +372,20 @@ it("uses the selected plugin home for both host source authority and the forward
 it.each([false, true])("confirms guest policy before publishing an active mode change (rejected=%s)", async rejected => {
   const input = await options(); mock.holdSend = true; mock.holdAutonomy = true;
   mock.autonomyError = rejected ? "Guest refused mode" : undefined;
-  const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "read-only" } }), abort = new AbortController();
+  const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, approvals: "ask" } }), abort = new AbortController();
   const turn = session.send("Waiting in guest", {}, { signal: abort.signal });
   try {
     await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
-    const change = Promise.resolve(session.setAutonomyMode("changes"));
+    const change = Promise.resolve(session.setApprovals("auto"));
     const checked = rejected ? expect(change).rejects.toThrow("Guest refused mode") : change;
     await vi.waitFor(() => expect(mock.releaseAutonomy).toBeTypeOf("function"));
     const init = JSON.parse((mock.launches[0] as { transport: { initialInput: string } }).transport.initialInput);
-    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "changes" } }) + "\n");
-    expect(session.autonomyMode).toBe("read-only");
+    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", approvals: "auto" } }) + "\n");
+    expect(session.approvals).toBe("ask");
     mock.releaseAutonomy!(); await checked;
-    expect(session.autonomyMode).toBe(rejected ? "read-only" : "changes");
-    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "read-only" } }) + "\n");
-    expect(session.autonomyMode).toBe(rejected ? "read-only" : "changes");
+    expect(session.approvals).toBe(rejected ? "ask" : "auto");
+    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", approvals: "ask" } }) + "\n");
+    expect(session.approvals).toBe(rejected ? "ask" : "auto");
     expect(mock.launches).toHaveLength(1);
   } finally {
     abort.abort(); await turn; await session.cleanup();
@@ -409,8 +408,8 @@ it.each([false, true])("does not widen source-learning authority after an active
   try {
     await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
     if (approvedSubtree) await ask("directory-grant", "requestLocalScope", [{ requestedPath: "/workspace/child", call: { name: "read_file", arguments: {} } }]);
-    await session.setAutonomyMode("changes", "auto");
-    expect(session.autonomyMode).toBe("changes");
+    await session.setApprovals("auto");
+    expect(session.approvals).toBe("auto");
     expect((await ask("workspace-lessons", "sourceLessons", ["/workspace"])).value).toEqual([]);
     expect((await ask("other-lessons", "sourceLessons", ["/workspace/other"])).value).toEqual([]);
     expect(read).not.toHaveBeenCalled();

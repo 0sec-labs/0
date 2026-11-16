@@ -109,21 +109,21 @@ import { createReadStream, createWriteStream } from 'node:fs';
 const input=createReadStream(null,{fd:3}),output=createWriteStream(null,{fd:4});
 const emit=frame=>output.write(JSON.stringify(frame)+'\\n');let pending='',snapshot;
 input.on('data',chunk=>{pending+=chunk;let n;while((n=pending.indexOf('\\n'))>=0){const frame=JSON.parse(pending.slice(0,n));pending=pending.slice(n+1);
- if(frame.type==='init'){snapshot={scanId:frame.value.sessionId,systemPrompt:'fixture',tools:[],messages:[],autonomyMode:'read-only',bindingIdentity:frame.value.runtime.binding.identity};emit({type:'snapshot',value:snapshot});emit({type:'ready'});}
- if(frame.op==='autonomy')setTimeout(()=>{snapshot.autonomyMode=frame.value;emit({type:'snapshot',value:snapshot});if(${rejected})emit({type:'error',id:frame.id,error:'Worker refused mode'});else emit({type:'result',id:frame.id});},30);
+ if(frame.type==='init'){snapshot={scanId:frame.value.sessionId,systemPrompt:'fixture',tools:[],messages:[],approvals:'auto',bindingIdentity:frame.value.runtime.binding.identity};emit({type:'snapshot',value:snapshot});emit({type:'ready'});}
+ if(frame.op==='autonomy')setTimeout(()=>{snapshot.approvals=frame.approvals;emit({type:'snapshot',value:snapshot});if(${rejected})emit({type:'error',id:frame.id,error:'Worker refused mode'});else emit({type:'result',id:frame.id});},30);
  if(frame.op==='close'){emit({type:'result',id:frame.id});process.exit(0);}
 }});
 `);
-    const session = createHostConsoleSession({ config: { runtime: runtime(), scanId: "mode-fixture", autonomyMode: "read-only" }, launch: { command: process.execPath, args: [script], cwd: root, env: { PATH: process.env.PATH }, graceMs: 30 } });
+    const session = createHostConsoleSession({ config: { runtime: runtime(), scanId: "mode-fixture", approvals: "auto" }, launch: { command: process.execPath, args: [script], cwd: root, env: { PATH: process.env.PATH }, graceMs: 30 } });
     try {
       await session.ready;
-      const change = Promise.resolve(session.setAutonomyMode("changes"));
-      expect(session.autonomyMode).toBe("read-only");
+      const change = Promise.resolve(session.setApprovals("ask"));
+      expect(session.approvals).toBe("auto");
       if (rejected) {
         await expect(change).rejects.toThrow("Worker refused mode");
-        expect(session.autonomyMode).toBe("read-only");
+        expect(session.approvals).toBe("auto");
         await expect(session.send("Cannot start after a failed policy mutation")).rejects.toThrow("Worker refused mode");
-      } else { await change; expect(session.autonomyMode).toBe("changes"); }
+      } else { await change; expect(session.approvals).toBe("ask"); }
     } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
   });
 

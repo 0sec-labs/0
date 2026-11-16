@@ -83,7 +83,6 @@ Create an Agent from a preset or a JSON definition
 Options:
   --preset <id>     Start from a preset (see `0 agents list --presets`)
   --name <name>     Name
-  --access <level>  Access: read-only | changes
   --file <path>     Agent JSON object (overrides preset fields)
   --json            Print machine-readable JSON
   --db-path <path>  Control database (default: the user database)
@@ -216,7 +215,6 @@ Change an Agent's settings
 Options:
   --name <name>      Name
   --mission <text>   One-line purpose
-  --access <level>   Access: read-only | changes
   --daily-usd <usd>  Daily budget in USD
   --max-runs <n>     Maximum runs per day
   --file <path>      Patch JSON object
@@ -261,8 +259,8 @@ Options:
   --base-branch <branch>  github-pr: only pull requests into this branch
   --comment               github-pr: comment on each pull request with one short summary, edited in
                           place on later pushes (default: off)
-  --include-forks         github-pr: also review pull requests from forks, read-only and marked
-                          untrusted (default: skipped)
+  --include-forks         github-pr: also review pull requests from forks, marked untrusted
+                          (default: skipped)
   --json                  Print machine-readable JSON
   --db-path <path>        Control database (default: the user database)
   -h, --help              display help for command
@@ -1393,7 +1391,6 @@ Options:
   -m, --model <id>           Override the LLM model id (else provider default)
   --role <role>              Tool set to expose: audit|review|discovery|attack|verify (default
                              audit = every tool)
-  --access <level>           Access: read-only | changes (default changes)
   --approvals <ask|auto>     Ask before running commands, or run them automatically (default auto).
                              Credential, private-network and sandbox protections apply either way.
   --max-tool-calls <n>       Optional tool-call round limit per message (unlimited by default)
@@ -4516,12 +4513,11 @@ Options:
 ### 0 threads set (hidden)
 Usage: 0 threads set [options] <id>
 
-Change a thread's model, effort, access or folder
+Change a thread's model, effort or folder
 
 Options:
   --model <model>            Model
   --effort <level>           Reasoning effort: minimal, low, medium, high, xhigh
-  --access <level>           Access: read-only | changes (default changes)
   --folder <path>            Folder the thread works in
   --engine-url <url>         Attach directly to a running trusted engine
   --engine-token-env <name>  Environment variable holding the attached engine token
@@ -4555,7 +4551,6 @@ Create a thread, send the first prompt and print its ID
 Options:
   --model <model>            Model for this thread
   --effort <level>           Reasoning effort: minimal, low, medium, high, xhigh
-  --access <level>           Access: read-only | changes (default changes)
   --folder <path>            Folder the thread works in
   --target <target>          Authorized target
   --scope <path>             Scope policy JSON file

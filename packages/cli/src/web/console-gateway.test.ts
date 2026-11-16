@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConsoleSession, eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/engine";
 import { LearningStore, SecurityWorkflowStore } from "@0/engine/storage";
-import { estimateCost, normalizeAccess } from "@0/engine/shared";
+import { estimateCost } from "@0/engine/shared";
 import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../state/session-store.js";
@@ -47,7 +47,6 @@ function outcome(text = "Finished."): ConsoleTurnOutcome {
 }
 function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
   const messages: NativeMessage[] = structuredClone(input.initialMessages ?? []);
-  let currentMode = input.autonomyMode;
   let currentApprovals = input.approvals ?? "auto";
   let currentSearch = input.webSearchEnabled;
   let currentWorkerPolicy = input.workerPolicy;
@@ -58,12 +57,12 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
     get workerPolicy() { return currentWorkerPolicy; },
     setWorkerPolicy: policy => { currentWorkerPolicy = structuredClone(policy); },
     scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages,
-    get autonomyMode() { return currentMode; }, get approvals() { return currentApprovals; }, get target() { return currentTarget; }, get scope() { return currentScope; },
+    get approvals() { return currentApprovals; }, get target() { return currentTarget; }, get scope() { return currentScope; },
     scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
     configureWorkspace: path => { currentFolder = path; },
     get webSearchEnabled() { return currentSearch; },
     setWebSearchEnabled: (enabled) => { currentSearch = enabled; },
-    setAutonomyMode: (mode, approvals) => { currentMode = normalizeAccess(mode, "changes"); if (approvals) currentApprovals = approvals; }, reconfigureRuntime: () => undefined,
+    setApprovals: approvals => { currentApprovals = approvals; }, reconfigureRuntime: () => undefined,
     configureEngagement: (selection) => {
       if (selection.target !== undefined) currentTarget = selection.target;
       if (selection.scope !== undefined) currentScope = selection.scope ?? undefined;
@@ -506,14 +505,14 @@ describe("ConsoleGateway", () => {
       await instance.send(created.id, "Run the tests.");
       await idle(instance, created.id);
       expect(createSession.mock.calls[0]?.[0]).toMatchObject({ autonomyMode: "changes", approvals: "ask" });
-      expect(createSession.mock.results[0]!.value).toMatchObject({ autonomyMode: "changes", approvals: "ask" });
+      expect(createSession.mock.results[0]!.value).toMatchObject({ approvals: "ask" });
       previewSetting("approvals", "auto");
       await instance.send(created.id, "Again.");
       await idle(instance, created.id);
-      expect(createSession.mock.results[0]!.value).toMatchObject({ autonomyMode: "changes", approvals: "auto" });
+      expect(createSession.mock.results[0]!.value).toMatchObject({ approvals: "auto" });
     } finally { reloadSettings(); }
   });
-  it("starts new web chats as Can make changes, reads older values as one of the two states, and never asks first on its own", async () => {
+  it("starts new web chats with shell access, accepts and ignores every older access value, and never asks first on its own", async () => {
     const createSession = vi.fn(engine);
     const instance = gateway(createSession);
     const created = instance.create({ title: "New chat", role: "audit" });
@@ -521,12 +520,11 @@ describe("ConsoleGateway", () => {
     await instance.send(created.id, "Inspect the workspace.");
     await idle(instance, created.id);
     expect(createSession.mock.calls[0]?.[0]).toMatchObject({ autonomyMode: "changes", approvals: "auto" });
-    await instance.configure(created.id, { autonomyMode: "recon" });
-    expect(instance.get(created.id).session.autonomyMode).toBe("read-only");
-    await instance.configure(created.id, { autonomyMode: "copilot" });
-    expect(instance.get(created.id).session.autonomyMode).toBe("changes");
+    for (const legacy of ["recon", "read-only", "observe", "copilot", "act", "run", "propose", "standard", "changes", "chaos"]) {
+      await instance.configure(created.id, { autonomyMode: legacy as never });
+      expect(instance.get(created.id).session.autonomyMode).toBe("changes");
+    }
     expect(instance.get(created.id).pendingDecisions).toEqual([]);
-    await expect(instance.configure(created.id, { autonomyMode: "chaos" })).rejects.toThrow("Access must be read-only or changes");
   });
   it("reopens scheduled working context once without restoring authorization or sending messages", async () => {
     const createSession = vi.fn(engine);
@@ -948,9 +946,10 @@ describe("ConsoleGateway", () => {
     const delivered: string[] = [];
     const instance = gateway(input => {
       const session = engine(input);
-      Object.defineProperty(session, "autonomyMode", { get() {
+      const approvalsNow = session.approvals;
+      Object.defineProperty(session, "approvals", { get() {
         if (failSummary) { failSummary = false; throw new Error("Temporary startup failure"); }
-        return input.autonomyMode;
+        return approvalsNow;
       } });
       session.send = async text => { delivered.push(text); return outcome(); };
       return session;
@@ -1062,7 +1061,7 @@ describe("ConsoleGateway", () => {
     const gate = Promise.withResolvers<void>(); const delivered: string[] = []; const observedModes: string[] = [];
     const instance = gateway((input) => {
       const session = engine(input);
-      session.send = async (text) => { delivered.push(text); observedModes.push(session.autonomyMode); if (delivered.length === 1) await gate.promise; return outcome(); };
+      session.send = async (text) => { delivered.push(text); observedModes.push(session.approvals); if (delivered.length === 1) await gate.promise; return outcome(); };
       return session;
     });
     const created = instance.create({ autonomyMode: asking() }); await instance.send(created.id, "First instruction.");
@@ -1070,9 +1069,9 @@ describe("ConsoleGateway", () => {
     await instance.send(created.id, { text: "Withdraw this queued instruction.", mode: "queue" });
     const withdrawal = instance.get(created.id).queuedMessages.find((message) => message.text === "Withdraw this queued instruction.")!;
     instance.removeQueued(created.id, withdrawal.id);
-    expect(instance.get(created.id).session.autonomyMode).toBe("read-only"); expect(instance.get(created.id).pendingConfiguration?.autonomyMode).toBeUndefined();
+    expect(instance.get(created.id).session.autonomyMode).toBe("changes"); expect(instance.get(created.id).pendingConfiguration?.autonomyMode).toBeUndefined();
     gate.resolve(); await vi.waitFor(() => expect(delivered).toEqual(["First instruction.", "Second instruction."])); await idle(instance, created.id);
-    expect(observedModes).toEqual(["changes", "read-only"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
+    expect(observedModes).toEqual(["ask", "ask"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
   });
 
   it("applies turning off Ask before running commands to an outstanding approval exactly once", async () => {
@@ -1090,7 +1089,7 @@ describe("ConsoleGateway", () => {
     await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
     const decision = instance.get(created.id).pendingDecisions[0]!;
     await instance.configure(created.id, { autonomyMode: lifted() });
-    expect(session!.autonomyMode).toBe("changes");
+    expect(session!.approvals).toBe("auto");
     expect(instance.get(created.id).session.autonomyMode).toBe("changes");
     expect(instance.get(created.id).pendingDecisions).toEqual([]);
     expect(instance.get(created.id).events.filter(event => event.type === "decision-resolved" && event.decisionId === decision.id)).toEqual([expect.objectContaining({ approved: true })]);
@@ -1123,7 +1122,7 @@ describe("ConsoleGateway", () => {
   });
 
   it("rejects malformed raw inputs and corrupt saved messages rather than silently truncating a resume", async () => {
-    const instance = gateway(); expect(() => instance.create({ autonomyMode: "unsafe" })).toThrow(ConsoleGatewayError);
+    const instance = gateway(); expect(() => instance.create({ autonomyMode: "unsafe" })).not.toThrow();
     expect(() => instance.create({ scope: { in_scope: "*" } })).toThrow(ConsoleGatewayError);
     const created = instance.create(); await expect(instance.send(created.id, " ")).rejects.toBeInstanceOf(ConsoleGatewayError);
     expect(() => instance.eventsAfter(created.id, NaN)).toThrow(ConsoleGatewayError);
@@ -2027,8 +2026,8 @@ describe("confirmed mode changes and pending tool actions", () => {
     const ack = Promise.withResolvers<void>();
     let allowed: boolean | undefined;
     const instance = gateway(input => {
-      const session = engine(input), apply = session.setAutonomyMode.bind(session);
-      session.setAutonomyMode = async (mode, approvals) => { await ack.promise; await apply(mode, approvals); };
+      const session = engine(input), apply = session.setApprovals.bind(session);
+      session.setApprovals = async approvals => { await ack.promise; await apply(approvals); };
       session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } }); return outcome(); };
       return session;
     });
@@ -2045,8 +2044,8 @@ describe("confirmed mode changes and pending tool actions", () => {
     const ack = Promise.withResolvers<void>();
     let allowed: boolean | undefined;
     const instance = gateway(input => {
-      const session = engine(input), apply = session.setAutonomyMode.bind(session);
-      session.setAutonomyMode = async (mode, approvals) => { await ack.promise; await apply(mode, approvals); };
+      const session = engine(input), apply = session.setApprovals.bind(session);
+      session.setApprovals = async approvals => { await ack.promise; await apply(approvals); };
       session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } }); return outcome(); };
       return session;
     });
@@ -2071,8 +2070,8 @@ describe("confirmed mode changes and pending tool actions", () => {
   it("does not let an invalid mixed request supersede a valid mode acknowledgement", async () => {
     const ack = Promise.withResolvers<void>(); let allowed: boolean | undefined;
     const instance = gateway(input => {
-      const session = engine(input), apply = session.setAutonomyMode.bind(session);
-      session.setAutonomyMode = async (mode, approvals) => { await ack.promise; await apply(mode, approvals); };
+      const session = engine(input), apply = session.setApprovals.bind(session);
+      session.setApprovals = async approvals => { await ack.promise; await apply(approvals); };
       session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); };
       return session;
     });
@@ -2089,8 +2088,8 @@ describe("confirmed mode changes and pending tool actions", () => {
     const yolo = Promise.withResolvers<void>(), standard = Promise.withResolvers<void>();
     let allowed: boolean | undefined;
     const instance = gateway(input => {
-      const session = engine(input), apply = session.setAutonomyMode.bind(session);
-      session.setAutonomyMode = async (mode, approvals) => { await (approvals === "auto" ? yolo.promise : standard.promise); await apply(mode, approvals); };
+      const session = engine(input), apply = session.setApprovals.bind(session);
+      session.setApprovals = async approvals => { await (approvals === "auto" ? yolo.promise : standard.promise); await apply(approvals); };
       session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); };
       return session;
     });

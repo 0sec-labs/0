@@ -312,12 +312,10 @@ describe("manual security workflow execution", () => {
     expect((await instance.handle(`/api/console/workflow-definitions/${workflow.id}/executions`, "GET", undefined, new URLSearchParams()))?.data).toEqual({ executions: [] });
   });
 
-  it("rejects stale reviewed revisions and read-only threads before dispatch", async () => {
+  it("rejects stale reviewed revisions before dispatch", async () => {
     const { instance } = service();
     const workflow = await save(instance);
     expect((await run(instance, { ...workflow, revision: 2 }))?.status).toBe(409);
-    const readonlyService = service(":memory:", { autonomyMode: "read-only" }).instance;
-    expect((await run(readonlyService, await save(readonlyService)))?.status).toBe(403);
     expect(runner).not.toHaveBeenCalled();
   });
 

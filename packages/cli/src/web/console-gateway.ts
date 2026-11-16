@@ -23,7 +23,7 @@ import {
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
-  DEFAULT_AUTONOMY_MODE, parseAccess, executionPolicy, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
+  DEFAULT_AUTONOMY_MODE, executionPolicy, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleWorkerPolicy, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
@@ -170,11 +170,9 @@ function text(value: unknown, label: string, max: number, empty = false): string
   if ((!empty && !result) || result.length > max || result.includes("\u0000")) throw new ConsoleGatewayError(`${label} ${!result ? "cannot be empty" : `must be at most ${max} characters and contain no NUL`}.`, 400);
   return result;
 }
-/** Read-only or Can make changes; an older stored value is accepted and read as one of the two. */
-function mode(value: unknown): DesktopConsoleAutonomyMode {
-  const access = parseAccess(value);
-  if (!access) throw new ConsoleGatewayError("Access must be read-only or changes.", 400);
-  return access;
+/** The retired access field: any value is accepted and ignored; there is one mode. */
+function mode(_value: unknown): DesktopConsoleAutonomyMode {
+  return "changes";
 }
 function role(value: unknown): DesktopConsoleRole {
   if (typeof value !== "string" || !Object.hasOwn(ROLES, value)) throw new ConsoleGatewayError("Unsupported console role.", 400);
@@ -670,7 +668,7 @@ export class ConsoleGateway {
         await initialization?.catch(() => undefined);
         await turn;
         managed.initialMessages = structuredClone(session.messages);
-        managed.target = session.target; managed.scope = session.scope; managed.autonomyMode = session.autonomyMode;
+        managed.target = session.target; managed.scope = session.scope;
         for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) {
           worker.status = "stopped"; worker.summary = "Owned execution process was force-stopped.";
           this.#denyDecisions(managed, worker.id);
@@ -826,7 +824,7 @@ export class ConsoleGateway {
     const stagedRestrictions = managed.pendingConfiguration && Object.keys(managed.pendingConfiguration).some(key => key !== "autonomyMode");
     if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
       const session = managed.session;
-      await session?.setAutonomyMode(input.autonomyMode, approvalsAtRequest);
+      await session?.setApprovals(approvalsAtRequest);
       if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The thread changed while applying its mode.", 409);
       if (managed.autonomyRevision === autonomyRevision) {
         managed.autonomyMode = input.autonomyMode;
@@ -1109,7 +1107,7 @@ export class ConsoleGateway {
     const info = describeWebConsoleRuntime(runtime); const fork = await runtime.forkForSubagent(900_000);
     this.#assertIdle(managed);
     if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner thread changed while preparing this automation. Retry with the current configuration.", 409);
-    return { runtime: fork, model: info.model, providerId: info.providerId, agentModels: { ...info.agentModels }, singleModel: info.singleModel, autoRoute: info.autoRoute, target: session.target, scope: session.scope ? ScopePolicy.fromJson(structuredClone(session.scope.raw)) : undefined, scopeEnforcement: getScopeEnforcementState(this.#projectPath, this.#options.homeDir), localScopePath: session.localScopePath, status: managed.status, role: managed.role, autonomyMode: session.autonomyMode, settings: { ...getSettings() }, dbPath: this.#options.dbPath,
+    return { runtime: fork, model: info.model, providerId: info.providerId, agentModels: { ...info.agentModels }, singleModel: info.singleModel, autoRoute: info.autoRoute, target: session.target, scope: session.scope ? ScopePolicy.fromJson(structuredClone(session.scope.raw)) : undefined, scopeEnforcement: getScopeEnforcementState(this.#projectPath, this.#options.homeDir), localScopePath: session.localScopePath, status: managed.status, role: managed.role, autonomyMode: "changes", settings: { ...getSettings() }, dbPath: this.#options.dbPath,
       authorization: { deniedHosts: [...checkpoint.deniedHosts], deniedLocalPaths: [...checkpoint.deniedLocalPaths], scopedAuditGrants: [...checkpoint.executor.scopedAuditGrants], scopedAuditDenials: [...checkpoint.executor.scopedAuditDenials] },
     };
   }
@@ -1413,7 +1411,7 @@ export class ConsoleGateway {
       },
       requestLocalScope: async (request) => {
         // Auto means "don't ask": allow the directory, except the filesystem/home root.
-        if (executionPolicy(managed.session?.autonomyMode ?? managed.autonomyMode, managed.session?.approvals ?? getSettings().approvals).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
+        if (executionPolicy(managed.session?.approvals ?? getSettings().approvals).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this thread only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
@@ -1446,7 +1444,7 @@ export class ConsoleGateway {
     // "Ask before running commands" is the one global setting; it applies to every thread that can make changes and is lifted again when switched off.
     {
       const approvals = getSettings().approvals;
-      if (session.autonomyMode !== managed.autonomyMode || session.approvals !== approvals) await session.setAutonomyMode(managed.autonomyMode, approvals);
+      if (session.approvals !== approvals) await session.setApprovals(approvals);
     }
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
@@ -1603,7 +1601,6 @@ export class ConsoleGateway {
       if (SCHEDULE_TOOL_NAMES.has(name)) {
         const schedules=this.#scheduleLifecycle;
         if (!schedules) throw new ConsoleGatewayError("Scheduling is unavailable on this engine.",409);
-        if (name !== "list_schedules" && managed.autonomyMode === "read-only") throw new ConsoleGatewayError("Read-only threads cannot edit schedules.",403);
         const context={workflowId:managed.workflowId};
         let approved=false;
         let request={...args};
@@ -1633,7 +1630,6 @@ export class ConsoleGateway {
         const epoch = managed.executionEpoch;
         const turnOwner = managed.turnOwner ?? undefined;
         const turnSignal = managed.abort?.signal;
-        if (managed.autonomyMode === "read-only") throw new ConsoleGatewayError("Read-only threads cannot start automations.", 403);
         const request = workflowLaunchSchema.parse(args);
         if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new ConsoleGatewayError("Select exactly one template or saved automation.", 400);
         if (request.workflowId && !request.revision) throw new ConsoleGatewayError("Saved automation runs require a pinned revision.", 400);
@@ -1867,7 +1863,7 @@ export class ConsoleGateway {
         await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
         managed.webSearchEnabled = input.webSearchEnabled;
       }
-      if (input.autonomyMode) { await managed.session?.setAutonomyMode(input.autonomyMode, getSettings().approvals); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
+      if (input.autonomyMode) { await managed.session?.setApprovals(getSettings().approvals); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
       if (managed.pendingConfiguration === input) managed.pendingConfiguration = undefined;
       if (managed.status !== "closed" && !managed.turn) managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -1880,14 +1876,14 @@ export class ConsoleGateway {
     // A worker may have requested Standard approval just before the policy ack.
     if (modeBasedToolApproval && this.#canApproveModeDecision(managed, ownerId, signal)) return Promise.resolve({ approve: true });
     const deferred = Promise.withResolvers<DesktopConsoleDecisionResponse>();
-    const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeEnforcement: { ...(ownerId === managed.turnOwner && managed.session ? managed.session.scopeEnforcement : getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) }, ...(managed.session?.localScopePath ? { localScopePath: managed.session.localScopePath } : {}) } };
+    const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: "changes", scopeEnforcement: { ...(ownerId === managed.turnOwner && managed.session ? managed.session.scopeEnforcement : getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) }, ...(managed.session?.localScopePath ? { localScopePath: managed.session.localScopePath } : {}) } };
     const onAbort = () => { const pending = managed.pending.get(decision.id); if (!pending) return; managed.pending.delete(decision.id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: decision.id, approved: false }); this.#refreshStatus(managed); };
     managed.pending.set(decision.id, { decision, modeBasedToolApproval, signal, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
     signal?.addEventListener("abort", onAbort, { once: true }); managed.status = "waiting"; this.#emitSession(managed); this.#emit(managed, { type: "decision", decision });
     return deferred.promise;
   }
   #canApproveModeDecision(managed: ManagedSession, ownerId: string | undefined, signal?: AbortSignal): boolean {
-    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.autonomyMode === "changes" && managed.session?.autonomyMode === "changes" && managed.session?.approvals !== "ask" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
+    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.session?.approvals !== "ask" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
   }
   #approveModeDecisions(managed: ManagedSession): void {
     for (const [id, pending] of managed.pending) {
@@ -2020,7 +2016,7 @@ export class ConsoleGateway {
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
+    return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: "changes", messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   /** Emits `tool-result`; a successful `visualize` also emits an additive `visual` event (spec kept out of the tool-result copy). */
@@ -2034,7 +2030,7 @@ export class ConsoleGateway {
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error || managed.costCeilingExceeded ? { lastTurnFailed: true } : {}), ...(managed.costCeilingUsd !== undefined ? { costCeilingUsd: managed.costCeilingUsd } : {}), ...(managed.costCeilingExceeded ? { costCeilingExceeded: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: "changes", webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error || managed.costCeilingExceeded ? { lastTurnFailed: true } : {}), ...(managed.costCeilingUsd !== undefined ? { costCeilingUsd: managed.costCeilingUsd } : {}), ...(managed.costCeilingExceeded ? { costCeilingExceeded: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

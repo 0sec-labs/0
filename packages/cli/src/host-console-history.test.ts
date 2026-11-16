@@ -59,7 +59,7 @@ it.skipIf(process.platform === "win32")("keeps the last drained user/tool histor
   expect(f.session.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "pending-tool", is_error: true }] });
   expect(f.snapshots).toHaveBeenCalledTimes(count); expect(f.callback).not.toHaveBeenCalled();
   expect(f.runtime.connectionIdentity()).toBe(f.identity); expect(f.session.scope).toBe(f.scope);
-  expect(f.session.target).toBe("https://fixture.invalid"); expect(f.session.autonomyMode).toBe("standard");
+  expect(f.session.target).toBe("https://fixture.invalid"); expect(f.session.approvals).toBe("ask");
   expect(() => f.session.exportCheckpoint()).toThrow(/fenced/);
 });
 it.skipIf(process.platform === "win32")("does not undo a clear whose worker acknowledgement is still pending", async () => {

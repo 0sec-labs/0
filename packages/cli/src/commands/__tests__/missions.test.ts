@@ -38,11 +38,11 @@ describe("0 threads (console actions)", () => {
     expect(group.commands.map(c => c.name())).toEqual(expect.arrayContaining(["archive", "clear", "close", "delete", "export", "rename", "retry", "set", "start", "stop", "list"]));
   });
 
-  it("start creates, configures the folder, sends the prompt and prints the id", async () => {
+  it("start creates, configures the folder, sends the prompt and prints the id (the retired --access is accepted and ignored)", async () => {
     const h = harness({ "POST /api/console/sessions": { session: { id: "m1", status: "ready" } } });
     await h.run("start", "map the login flow", "--model", "gpt-x", "--effort", "high", "--access", "read-only", "--folder", "/work");
     expect(h.calls).toEqual([
-      { method: "POST", path: "/api/console/sessions", body: { runtime: { model: "gpt-x", reasoningEffort: "high" }, autonomyMode: "read-only" } },
+      { method: "POST", path: "/api/console/sessions", body: { runtime: { model: "gpt-x", reasoningEffort: "high" } } },
       { method: "PATCH", path: "/api/console/sessions/m1/configuration", body: { workspacePath: "/work" } },
       { method: "POST", path: "/api/console/sessions/m1/messages", body: { text: "map the login flow" } },
     ]);
@@ -83,10 +83,23 @@ describe("0 threads (console actions)", () => {
     expect(process.exitCode).toBe(2); expect(bad.opened()).toBe(0);
   });
 
-  it("rejects bad usage with exit 2 before connecting", async () => {
-    const h = harness();
-    await h.run("start", "hi", "--mode", "chaos");
-    expect(process.exitCode).toBe(2); expect(h.err[0]).toContain("--mode"); expect(h.opened()).toBe(0);
+  it("accepts every retired access flag, sends no access field and does not touch the exit code", async () => {
+    for (const flags of [["--access", "read-only"], ["--mode", "chaos"], ["--autonomy", "observe"], ["--tool-access", "read-only"], ["--yolo"]]) {
+      const h = harness();
+      await h.run("start", "hi", ...flags);
+      expect(process.exitCode).toBe(0); expect(h.err).toEqual([]);
+      expect(h.calls[0]).toEqual({ method: "POST", path: "/api/console/sessions", body: {} });
+      expect(JSON.stringify(h.calls)).not.toMatch(/autonomyMode|access/);
+    }
+  });
+
+  it("does not list the retired access flags in help", () => {
+    const program = new Command(); registerCommandTree(program);
+    const group = program.commands.find(c => c.name() === "threads")!;
+    for (const name of ["start", "set"]) {
+      const help = group.commands.find(c => c.name() === name)!.helpInformation();
+      for (const flag of ["--access", "--mode", "--autonomy", "--tool-access", "--yolo"]) expect(help).not.toMatch(new RegExp(`${flag}(?![\\w-])`));
+    }
   });
 
   it("points --approvals at the global setting instead of a per-thread choice", async () => {
@@ -104,13 +117,13 @@ describe("0 threads (console actions)", () => {
   it("retry, rename, regenerate and set map onto the console routes", async () => {
     const h = harness();
     await h.run("retry", "m1"); await h.run("rename", "m1", "New name"); await h.run("rename", "m1", "--regenerate");
-    await h.run("set", "m1", "--model", "m", "--effort", "low", "--access", "changes", "--folder", "/f");
+    await h.run("set", "m1", "--model", "m", "--effort", "low", "--access", "read-only", "--folder", "/f");
     expect(h.calls.map(c => `${c.method} ${c.path}`)).toEqual([
       "POST /api/console/sessions/m1/retry", "PATCH /api/console/sessions/m1/configuration",
       "POST /api/console/sessions/m1/title/regenerate", "PATCH /api/console/sessions/m1/configuration",
     ]);
     expect(h.calls[1]!.body).toEqual({ title: "New name" });
-    expect(h.calls[3]!.body).toEqual({ runtime: { model: "m", reasoningEffort: "low" }, autonomyMode: "changes", workspacePath: "/f" });
+    expect(h.calls[3]!.body).toEqual({ runtime: { model: "m", reasoningEffort: "low" }, workspacePath: "/f" });
   });
 
   it("set and rename need something to change", async () => {

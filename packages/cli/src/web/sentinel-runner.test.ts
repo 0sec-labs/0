@@ -12,7 +12,7 @@ const MIN = 60_000;
 const dirs: string[] = [];
 const P = "/api/console/sentinels";
 
-function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: string }> } } = {}) {
+function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: string }> }; profile?: "local" | "smolvm"; checkouts?: Record<string, string> } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "zero-sentinel-run-"));
   dirs.push(dir);
   const dbPath = join(dir, "control.db");
@@ -31,7 +31,7 @@ function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: st
     exists: vi.fn((id: string) => live.has(id)),
     reopen: undefined as undefined | ((id: string) => Promise<{ id: string }>),
   };
-  const service = new WebSentinelService({ dbPath, missions, ...(options.gh ? { gh: options.gh } : {}) });
+  const service = new WebSentinelService({ dbPath, missions, executionProfile: () => options.profile ?? "local", checkout: async repo => options.checkouts?.[repo], ...(options.gh ? { gh: options.gh } : {}) });
   const workflows = new SecurityWorkflowStore(dbPath);
   const store = new SentinelStore(dbPath);
   const call = async (method: string, path: string, body?: unknown, actor?: SentinelActor) => {
@@ -379,7 +379,7 @@ describe("GitHub pull request polling", () => {
     expect((await f.activations(id)).filter(activation => activation.trigger.event.pr === 3 && activation.status === "running")).toHaveLength(1);
   });
 
-  it("reviews a re-pushed pull request again, and a fork only when the trigger opts in, read-only and marked untrusted", async () => {
+  it("reviews a re-pushed pull request again, and a fork only when the trigger opts in, marked untrusted", async () => {
     let listing = [pr(1, "aaa"), pr(2, "bbb", { isCrossRepository: true })];
     const { f, id } = await armedPr(gh(() => listing), { includeForks: true });
     await poll(f, 0);
@@ -389,12 +389,39 @@ describe("GitHub pull request polling", () => {
     expect(runs.map(activation => activation.status)).toEqual(expect.arrayContaining(["running", "running"]));
     expect(runs).toHaveLength(2);
     const fork = runs.find(activation => activation.trigger.event.pr === 2)!;
-    const forkCreate = f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer") && input.autonomyMode === "read-only");
-    expect(forkCreate).toMatchObject({ autonomyMode: "read-only", workerPolicy: { allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] } });
+    for (const input of f.missions.create.mock.calls.map(call => call[0])) {
+      expect(input).not.toHaveProperty("autonomyMode");
+      expect(input).not.toHaveProperty("workerPolicy");
+    }
     const seed = f.missions.send.mock.calls.map(call => call[1]).find(text => text.includes("UNTRUSTED FORK PULL REQUEST"));
     expect(seed).toContain("<pull-request-diff>");
     expect(fork.trigger.event).toMatchObject({ fork: "yes" });
     expect(f.missions.send.mock.calls.filter(call => call[1].includes("UNTRUSTED FORK PULL REQUEST"))).toHaveLength(1);
+  });
+
+  it("runs pull request reviews scoped to the repository checkout, with no access setting, and says where it runs", async () => {
+    let listing = [pr(1, "aaa")];
+    const { f, id } = await armedPr(gh(() => listing), {}, { checkouts: { "o/r": "/work/o-r" } });
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    const create = f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer:"));
+    expect(create).toMatchObject({ workspacePath: "/work/o-r" });
+    expect(create).not.toHaveProperty("autonomyMode");
+    expect(create).not.toHaveProperty("workerPolicy");
+    const [run] = await f.activations(id);
+    expect(run?.note).toBe("Runs on this host: no sandbox is enabled. Scope: the checked-out folder /work/o-r.");
+  });
+
+  it("notes the sandbox when the SmolVM execution profile is on, and a missing checkout", async () => {
+    let listing = [pr(1, "aaa")];
+    const { f, id } = await armedPr(gh(() => listing), {}, { profile: "smolvm" });
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    const [run] = await f.activations(id);
+    expect(run?.note).toBe("Runs in the SmolVM sandbox. No local checkout of this repository was found, so the run only sees the pull request diff.");
+    expect(f.missions.create.mock.calls.map(call => call[0]).find(input => String(input.title).includes("Reviewer:"))).not.toHaveProperty("workspacePath");
   });
 
   it("never runs gh checkout, clone or any command that fetches pull request code", async () => {

@@ -3,7 +3,6 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  CONSOLE_AUTONOMY_MODES,
   resolveConsoleAutonomyMode,
   registerConsoleCommand,
 } from "../console.js";
@@ -74,7 +73,7 @@ describe("console launch authorization", () => {
     expect(startup.showConsole).not.toHaveBeenCalled();
   });
 
-  it.each(["--prompt", "--autonomy"])("rejects retired %s spelling instead of silently ignoring it", async flag => {
+  it.each(["--prompt"])("rejects retired %s spelling instead of silently ignoring it", async flag => {
     const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
     registerConsoleCommand(program);
     await expect(program.parseAsync(["console", flag, "value"], { from: "user" })).rejects.toMatchObject({ code: "commander.unknownOption" });
@@ -119,7 +118,7 @@ describe("headless console completion status", () => {
     startup.createSession.mockReturnValue({ send, cleanup });
     const program = new Command();
     registerConsoleCommand(program);
-    await program.parseAsync([command, "--mode", "standard", "--model", "requested-model", promptFlag, "verify the selected target"], { from: "user" });
+    await program.parseAsync([command, "--approvals", "ask", "--model", "requested-model", promptFlag, "verify the selected target"], { from: "user" });
 
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0][0]).toBe("verify the selected target");
@@ -147,7 +146,7 @@ describe("headless machine output", () => {
     const cleanup = vi.fn(async () => {});
     startup.createSession.mockReturnValue({ cleanup, send: vi.fn(async (_text, callbacks) => { callbacks.onAssistantDelta("Answer"); return outcome; }) });
     const program = new Command(); registerConsoleCommand(program);
-    await program.parseAsync(["console", "--mode", "standard", "--format", format, "--print", "Inspect"], { from: "user" });
+    await program.parseAsync(["console", "--approvals", "ask", "--format", format, "--print", "Inspect"], { from: "user" });
     const rows = stdout.mock.calls.map(([text]) => JSON.parse(String(text)));
     expect(rows.map(row => row.type)).toEqual(format === "json" ? ["result"] : ["assistant-delta", "result"]);
     expect(rows.at(-1).outcome).toEqual(outcome);
@@ -157,59 +156,42 @@ describe("headless machine output", () => {
 });
 
 describe("resolveConsoleAutonomyMode", () => {
-  const changes = (approvals: "ask" | "auto") => ({ ok: true, mode: "changes", approvals });
+  const resolved = (approvals: "ask" | "auto") => ({ ok: true, approvals });
 
-  it("defaults to Can make changes without asking when nothing is set", () => {
-    expect(resolveConsoleAutonomyMode({ settingApprovals: "auto" })).toEqual(changes("auto"));
-    expect(resolveConsoleAutonomyMode({})).toEqual(changes("auto"));
+  it("runs without asking when nothing is set", () => {
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "auto" })).toEqual(resolved("auto"));
+    expect(resolveConsoleAutonomyMode({})).toEqual(resolved("auto"));
   });
 
   it("honours --approvals and the saved approvals setting, flags first", () => {
-    expect(resolveConsoleAutonomyMode({ approvals: "ask" })).toEqual(changes("ask"));
-    expect(resolveConsoleAutonomyMode({ approvals: "auto" })).toEqual(changes("auto"));
-    expect(resolveConsoleAutonomyMode({ settingApprovals: "ask" })).toEqual(changes("ask"));
-    expect(resolveConsoleAutonomyMode({ approvals: "auto", settingApprovals: "ask" })).toEqual(changes("auto"));
+    expect(resolveConsoleAutonomyMode({ approvals: "ask" })).toEqual(resolved("ask"));
+    expect(resolveConsoleAutonomyMode({ approvals: "auto" })).toEqual(resolved("auto"));
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "ask" })).toEqual(resolved("ask"));
+    expect(resolveConsoleAutonomyMode({ approvals: "auto", settingApprovals: "ask" })).toEqual(resolved("auto"));
   });
 
-  it("rejects an invalid --approvals and conflicts with the hidden aliases", () => {
+  it("rejects an invalid --approvals", () => {
     expect(resolveConsoleAutonomyMode({ approvals: "maybe" })).toMatchObject({ ok: false });
-    expect(resolveConsoleAutonomyMode({ approvals: "ask", yolo: true })).toMatchObject({ ok: false });
-    expect(resolveConsoleAutonomyMode({ approvals: "ask", mode: "yolo" })).toMatchObject({ ok: false });
-    expect(resolveConsoleAutonomyMode({ approvals: "auto", mode: "copilot" })).toEqual(changes("auto"));
   });
+});
 
-  it("accepts every valid --mode value and reads older ones as one of the two states", () => {
-    for (const mode of CONSOLE_AUTONOMY_MODES) expect(resolveConsoleAutonomyMode({ mode })).toMatchObject({ ok: true });
-    expect(resolveConsoleAutonomyMode({ mode: "read-only" })).toMatchObject({ ok: true, mode: "read-only" });
-    expect(resolveConsoleAutonomyMode({ mode: "recon" })).toMatchObject({ ok: true, mode: "read-only" });
-    expect(resolveConsoleAutonomyMode({ mode: "standard" })).toEqual(changes("ask"));
-    expect(resolveConsoleAutonomyMode({ mode: "yolo" })).toEqual(changes("auto"));
+describe("retired access flags on console", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  it.each([["--access", "read-only"], ["--mode", "recon"], ["--autonomy", "observe"], ["--tool-access", "read-only"], ["--yolo"]])("accepts %s and ignores it", async (...flag) => {
+    startup.stdout.mockReset(); startup.stderr.mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.spyOn(await import("@0/engine"), "createConsoleRuntime").mockReturnValue({ resolvedModel: () => "model" } as ReturnType<typeof Core.createConsoleRuntime>);
+    const send = vi.fn(async () => ({ stopReason: "end_turn", assistantText: "ok", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } }));
+    startup.createSession.mockReturnValue({ cleanup: vi.fn(async () => {}), send });
+    const program = new Command(); registerConsoleCommand(program);
+    await program.parseAsync(["console", ...flag, "--approvals", "ask", "--format", "json", "--print", "Inspect"], { from: "user" });
+    expect(send).toHaveBeenCalledOnce();
+    expect(startup.createSession.mock.calls.at(-1)?.[0]).not.toHaveProperty("autonomyMode");
   });
-
-  it("maps --yolo to changes without asking", () => {
-    expect(resolveConsoleAutonomyMode({ yolo: true })).toEqual(changes("auto"));
-  });
-
-  it("rejects an invalid --mode with a message listing the choices", () => {
-    const result = resolveConsoleAutonomyMode({ mode: "foo" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Invalid --mode 'foo'");
-      expect(result.error).toContain("--approvals ask or --approvals auto");
-      expect(result.error.toLowerCase()).not.toContain("yolo");
-    }
-  });
-
-  it("allows the redundant but non-conflicting --mode yolo --yolo", () => {
-    expect(resolveConsoleAutonomyMode({ mode: "yolo", yolo: true })).toEqual(changes("auto"));
-  });
-
-  it("errors when --mode conflicts with --yolo", () => {
-    const result = resolveConsoleAutonomyMode({ mode: "standard", yolo: true });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Conflicting approval options");
-      expect(result.error.toLowerCase()).not.toContain("yolo");
-    }
+  it("does not list them in help", () => {
+    const program = new Command(); registerConsoleCommand(program);
+    const help = program.commands.find(command => command.name() === "console")!.helpInformation();
+    for (const flag of ["--access", "--mode", "--autonomy", "--tool-access", "--yolo"]) expect(help).not.toMatch(new RegExp(`${flag}(?![\\w-])`));
   });
 });

@@ -6,7 +6,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { eventBus } from "@0/engine";
-import type { ConsoleAutonomyMode, ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
+import type { ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
 import type { HarnessSnapshot } from "@0/engine/shared";
 import { getSettings } from "./state/settings-store.js";
 

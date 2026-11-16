@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { Option, type Command } from "commander";
-import { normalizeAccess } from "@0/engine/shared";
+import { givenAccessOption, noteIgnoredAccessFlags } from "../ignored-access-flags.js";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import { finishWithError, renderTable, UsageError } from "./output.js";
 
@@ -22,16 +22,13 @@ const defaults: MissionsDeps = {
 };
 
 type Options = ConsoleTransportOptions & { json?: boolean; saved?: boolean; yes?: boolean };
-const MODES = ["read-only", "changes", "standard", "recon", "copilot", "yolo"];
 /**
- * `--access read-only|changes` is the documented option; the hidden `--mode` alias also takes an older stored value.
+ * There is one mode. --access, --mode, --yolo, --autonomy and --tool-access are accepted and ignored (hidden from help).
  * Whether commands ask first is only the global "Ask before running commands" setting, never a per-thread choice.
  */
-function autonomyFlag(flags: { mode?: string; access?: string; approvals?: string }): string | undefined {
+function autonomyFlag(flags: { approvals?: string }, json?: boolean): void {
   if (flags.approvals !== undefined) throw new UsageError("Ask before running commands is a global setting. Change it with `0 config set approvals ask` (or `auto`).");
-  if (flags.access !== undefined && flags.access !== "read-only" && flags.access !== "changes") throw new UsageError("--access must be read-only or changes.");
-  const value = flags.access ?? flags.mode;
-  return value === undefined ? undefined : normalizeAccess(value);
+  noteIgnoredAccessFlags(givenAccessOption(flags as Record<string, unknown>), { json });
 }
 const EFFORTS = ["minimal", "low", "medium", "high", "xhigh"];
 type Json = Record<string, unknown>;
@@ -85,16 +82,16 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
 
   action(transport(threads.command("start <prompt>").description("Create a thread, send the first prompt and print its ID")
     .option("--model <model>", "Model for this thread").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
-    .option("--access <level>", "Access: read-only | changes (default changes)").addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).addOption(new Option("--mode <mode>", "Alias for --access, also accepts older stored values").hideHelp()).option("--folder <path>", "Folder the thread works in")
+    .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp()).addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--yolo").hideHelp()).addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).option("--folder <path>", "Folder the thread works in")
     .option("--target <target>", "Authorized target").option("--scope <path>", "Scope policy JSON file")
     .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
     .option("--cost-ceiling <usd>", "Stop the thread when its estimated spend reaches this many USD")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
+      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const config = {
-        ...(Object.keys(runtime).length ? { runtime } : {}), ...(autonomyFlag(flags) ? { autonomyMode: autonomyFlag(flags) } : {}),
+        ...(Object.keys(runtime).length ? { runtime } : {}),
         ...(flags.target ? { target: flags.target } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
         ...(flags.scope ? { scope: JSON.parse(deps.readFile(flags.scope)) as unknown } : {}),
       };
@@ -128,9 +125,9 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
         if (Date.now() > deadline) throw new Error(`Timed out after ${flags.timeout}s; thread ${id} is still ${String(session.status)}.`);
       }
     }, (options, [prompt]) => {
-      const flags = options as Options & { effort?: string; mode?: string; access?: string; approvals?: string; timeout?: string };
+      const flags = options as Options & { effort?: string; approvals?: string; timeout?: string };
       if (!prompt?.trim()) throw new UsageError("Supply a prompt.");
-      choice(flags.mode, MODES, "--mode"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
+      autonomyFlag(flags, options.json); choice(flags.effort, EFFORTS, "--effort");
       const seconds = Number(flags.timeout);
       if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError("--timeout must be a positive number of seconds.");
       const ceiling = (options as { costCeiling?: string }).costCeiling;
@@ -145,19 +142,19 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
     guarded(async (client, options, [id]) => sessionPrint(options, await client.request("POST", `/api/console/sessions/${missionId(id!)}/retry`, {})),
       (_options, [id]) => { missionId(id!); }));
 
-  action(transport(threads.command("set <id>").description("Change a thread's model, effort, access or folder")
+  action(transport(threads.command("set <id>").description("Change a thread's model, effort or folder")
     .option("--model <model>", "Model").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
-    .option("--access <level>", "Access: read-only | changes (default changes)").addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).addOption(new Option("--mode <mode>", "Alias for --access, also accepts older stored values").hideHelp()).option("--folder <path>", "Folder the thread works in")),
+    .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp()).addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--yolo").hideHelp()).addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).option("--folder <path>", "Folder the thread works in")),
     guarded(async (client, options, [id]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string };
+      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
-      const body = { ...(Object.keys(runtime).length ? { runtime } : {}), ...(autonomyFlag(flags) ? { autonomyMode: autonomyFlag(flags) } : {}), ...(flags.folder ? { workspacePath: flags.folder } : {}) };
+      const body = { ...(Object.keys(runtime).length ? { runtime } : {}), ...(flags.folder ? { workspacePath: flags.folder } : {}) };
       sessionPrint(options, await client.request("PATCH", `/api/console/sessions/${missionId(id!)}/configuration`, body));
     }, (options, [id]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string };
+      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string };
       missionId(id!);
-      if (!flags.model && !flags.effort && !flags.mode && !flags.access && !flags.approvals && !flags.folder) throw new UsageError("Choose at least one of --model, --effort, --access, --folder.");
-      choice(flags.mode, MODES, "--mode"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
+      if (!flags.model && !flags.effort && !flags.approvals && !flags.folder) throw new UsageError("Choose at least one of --model, --effort, --folder.");
+      autonomyFlag(flags, options.json); choice(flags.effort, EFFORTS, "--effort");
     }));
 
   action(transport(threads.command("rename <id> [title]").description("Rename a thread, or regenerate its title").option("--regenerate", "Generate a new title from the conversation")),
