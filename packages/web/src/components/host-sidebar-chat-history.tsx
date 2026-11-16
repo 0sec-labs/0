@@ -167,7 +167,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
         {main.map(renderRow)}
         <ThreadShelfList label="Settled" rows={settled} render={renderRow} />
         <ThreadShelfList label="Automations" rows={automations} render={renderRow} />
-        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{v("No {missions} yet.")}</p>}
+        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{published.some(slice => slice.offline) ? "Can\u2019t reach this computer. Your threads are safe and will show again once it reconnects." : v("No {missions} yet.")}</p>}
         {failedHosts.map(slice => <Button key={slice.host.id} size="xs" variant="ghost" className="justify-start text-muted-foreground" onClick={slice.actions.retry}>{multiHost ? `Retry loading ${VOCAB.mission.plural} from ${slice.host.name}` : v("Retry loading {missions}")}</Button>)}
       </div>}
     </div>
