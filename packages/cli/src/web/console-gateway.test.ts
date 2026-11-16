@@ -633,6 +633,44 @@ describe("ConsoleGateway", () => {
     expect(instance.get(created.id).session.workspaceError).toBeUndefined();
   });
 
+  it("runs the first prompt sent right after a folder change instead of refusing it as busy", async () => {
+    const turns: string[] = [];
+    const instance = gateway(input => { const session = engine(input); const send = session.send.bind(session); session.send = async (text, ...rest) => { turns.push(text); return send(text, ...rest); }; return session; });
+    const created = instance.create(); const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-ws-first "))); homes.push(directory);
+    await instance.configure(created.id, { workspacePath: directory }); // returns before the change is applied
+    await instance.send(created.id, "first prompt");
+    await vi.waitFor(() => expect(instance.get(created.id).session.status).toBe("ready"));
+    expect(turns).toEqual(["first prompt"]);
+    expect(instance.get(created.id).workspacePath).toBe(directory);
+  });
+
+  it("does not run the first prompt in the old folder when the folder change failed", async () => {
+    const turns: string[] = [];
+    const instance = gateway(input => { const session = engine(input); session.configureWorkspace = () => { throw new Error("mcp init failed"); }; const send = session.send.bind(session); session.send = async (text, ...rest) => { turns.push(text); return send(text, ...rest); }; return session; });
+    const created = instance.create(); const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-ws-bad "))); homes.push(directory);
+    await instance.configure(created.id, { workspacePath: directory });
+    await expect(instance.send(created.id, "first prompt")).rejects.toThrow(/could not be applied/);
+    expect(turns).toEqual([]);
+  });
+
+  it("stops a thread at its cost ceiling and reports the turn as failed", async () => {
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async (_text, callbacks) => {
+        callbacks?.onUsage?.({ inputTokens: 1_000_000, outputTokens: 1_000_000, kind: "planner", model: "gpt-4o", turnTokensUsed: 2_000_000, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        return outcome("done");
+      };
+      return session;
+    });
+    const created = instance.create({ costCeilingUsd: 0.01 });
+    expect(created.costCeilingUsd).toBe(0.01);
+    await instance.send(created.id, "spend");
+    await vi.waitFor(() => expect(instance.get(created.id).session.costCeilingExceeded).toBe(true));
+    await vi.waitFor(() => expect(instance.get(created.id).session.status).not.toBe("working"));
+    expect(instance.get(created.id).session.lastTurnFailed).toBe(true);
+    expect(() => instance.create({ costCeilingUsd: -1 })).toThrow();
+  });
+
   it("applies a folder the operator picked without a second confirmation", async () => {
     const instance = gateway(); const created = instance.create();
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-workspace-"))); homes.push(directory);

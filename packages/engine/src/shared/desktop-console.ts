@@ -86,6 +86,9 @@ export interface DesktopConsoleSession {
   messageCount?: number;
   /** The most recent turn ended with an error (for example a rejected key or a rate limit). */
   lastTurnFailed?: boolean;
+  /** Per-thread spend limit in USD set when the thread was created, and whether a turn was stopped at it. */
+  costCeilingUsd?: number;
+  costCeilingExceeded?: boolean;
   /** The most recent turn finished without a visible answer (empty reply, cut off, blocked or dropped). */
   lastTurnIncomplete?: boolean;
   runtime?: ConsoleRuntimeSnapshot;

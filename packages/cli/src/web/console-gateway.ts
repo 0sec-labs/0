@@ -149,6 +149,7 @@ type ManagedSession = {
   busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
   pendingConfiguration?: ConsoleSessionConfiguration; configuration: Promise<void> | null;
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
+  costCeilingUsd?: number; costCeilingExceeded?: boolean;
   lastOutcome: ConsoleTurnOutcome | null; /** The last turn made a successful tool call: a silent finish is then completed work, not a missing reply. Unknown after a restore. */ lastTurnSilentWork?: boolean; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
   workflowRequests: Map<string, QueuedWorkflowRequest>; workflowDraining: boolean;
@@ -434,7 +435,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId", "costCeilingUsd"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated thread ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -498,6 +499,7 @@ export class ConsoleGateway {
       queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, harness: null, objective: "", todos: null,
       workflowRequests: new Map(), workflowDraining: false,
       executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
+      ...(raw.costCeilingUsd !== undefined ? { costCeilingUsd: z.number().positive().max(1000).parse(raw.costCeilingUsd) } : {}),
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
     if (raw.modelSource !== undefined) {
@@ -588,6 +590,16 @@ export class ConsoleGateway {
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
     if (input.workerId && input.attachments?.some(item => item.kind === "image")) throw new ConsoleGatewayError("Image attachments are not supported in agent messages yet.", 400);
     if (input.workerId) return this.sendWorker(id, input.workerId, input.text, attribution);
+    const settling = () => (managed.configuration || managed.initialization) && !managed.turn && !managed.pending.size && managed.status === "ready";
+    if (settling()) {
+      // A folder change applies in the background after its reply (it starts the engine session, then switches folders). A first prompt sent
+      // right behind it waits for that instead of being refused as busy, and is not run in the old folder if the change failed.
+      // The slots are cleared by the applying call's `finally`, a few microtasks after it settles, so wait for the slots themselves.
+      let failed: unknown;
+      while (settling()) await Promise.allSettled([managed.configuration, managed.initialization]).then(results => { for (const r of results) if (r.status === "rejected") failed ??= r.reason; });
+      if (failed !== undefined) throw new ConsoleGatewayError(`The pending change could not be applied: ${errorMessage(failed)}`, 409);
+      this.#requireOpen(id);
+    }
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
       if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console thread is already processing a turn; choose queue or steer.", 409);
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
@@ -1470,6 +1482,11 @@ export class ConsoleGateway {
               managed.usage.costUsd ??= 0;
             }
             if (usage.kind === "planner") managed.contextInputTokens = usage.inputTokens;
+            if (managed.costCeilingUsd !== undefined && (managed.usage.costUsd ?? 0) >= managed.costCeilingUsd && !abort.signal.aborted) {
+              managed.costCeilingExceeded = true;
+              this.#emit(managed, { type: "notice", text: `Stopped at the $${managed.costCeilingUsd} cost ceiling.` });
+              this.#cancelTurn(managed);
+            }
             this.#emit(managed, { type: "usage", usage: { ...usage, turnTokenBudget: Number.isFinite(usage.turnTokenBudget) ? usage.turnTokenBudget : null, maxToolIterations: Number.isFinite(usage.maxToolIterations) ? usage.maxToolIterations : null } });
           },
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
@@ -2017,7 +2034,7 @@ export class ConsoleGateway {
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error ? { lastTurnFailed: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error || managed.costCeilingExceeded ? { lastTurnFailed: true } : {}), ...(managed.costCeilingUsd !== undefined ? { costCeilingUsd: managed.costCeilingUsd } : {}), ...(managed.costCeilingExceeded ? { costCeilingExceeded: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {
