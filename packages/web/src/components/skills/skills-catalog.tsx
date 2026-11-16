@@ -52,17 +52,16 @@ export function CatalogRow({ skill, publishers }: { skill: CatalogSkill; publish
     trailing={<span className="flex flex-col items-end gap-0.5 text-sm"><StarCount count={skill.stars} /><span className="inline-flex max-w-32 items-center gap-1 text-muted-foreground-2">{skill.installed && <Check role="img" aria-label="Added" className="size-3.5 shrink-0 text-muted-foreground-1" />}<span className="truncate">{publisher?.name ?? skill.publisher}</span></span></span>} />;
 }
 
-/** The ranked "From GitHub" list in two columns of rows. */
+/** The ranked "From GitHub" list in two columns of rows. Loading shows nothing for 250 ms; an empty view is one line. */
 export function GithubSkillsSection({ query }: { query: string }) {
   const { inventory } = useSkillsCatalog();
   const data = inventory.data;
   const rows = data ? rankCatalog(data.skills, data.publishers, query, "all") : [];
   return <section aria-label="From GitHub" className="flex flex-col gap-3">
-    <h2 className="text-sm font-medium text-foreground">From GitHub</h2>
-    {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
+    {inventory.isPending && <LoadingState label="Loading skills…" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
-    {data && rows.length === 0 && !query.trim() && <p className="text-sm text-muted-foreground-2">No skills are listed in this view.</p>}
-    {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
+    {data && rows.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "No matching skills." : "No skills are listed in this view."}</p>}
+    {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
   </section>;
 }
 

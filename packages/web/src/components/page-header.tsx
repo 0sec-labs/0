@@ -7,6 +7,7 @@ export function PageHeader({
   actions,
   className,
   illustration,
+  compact,
 }: {
   eyebrow?: string;
   title: string;
@@ -14,12 +15,14 @@ export function PageHeader({
   actions?: ReactNode;
   className?: string;
   illustration?: ReactNode;
+  /** List pages: a 22px title instead of the page-level 26px. */
+  compact?: boolean;
 }) {
   return (
     <header className={cn("flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", className)}>
       <div className="min-w-0 space-y-1.5">
         <div>
-          <h1 className="break-words font-sans text-2xl font-medium tracking-tight text-foreground">{title}</h1>
+          <h1 className={cn("break-words font-sans font-medium tracking-tight text-foreground", compact ? "text-xl" : "text-2xl")}>{title}</h1>
           {summary ? <p className="mt-1 max-w-3xl text-sm break-words leading-6 text-muted-foreground">{summary}</p> : null}
         </div>
       </div>
