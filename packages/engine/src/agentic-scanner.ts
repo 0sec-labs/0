@@ -175,7 +175,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     }
   }
 
-  // The active scope plugin retains fail-closed live-target admission.
+  // The active scope extension retains fail-closed live-target admission.
   // Disabled authorization is surfaced explicitly in the run's guard status.
   const scopeGuards = describeScopeGuards(!!resolveScopeForConfig(config));
   if (scopeGuards.pluginEnabled && !scopeGuards.active && targetRequiresScope(config.target)) {

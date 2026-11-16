@@ -6,6 +6,7 @@ import { type ExecutablePluginConfiguration } from "../../agent/executable-plugi
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
 import type { EvolutionConfig } from "../../improvement/types.js";
 import type { McpToolHost } from "../../agent/mcp-host.js";
+import type { ExtensionRunPort } from "../../agent/types.js";
 import { LearningStore, type osecDB } from "../../storage/index.js";
 import { HuntMemoryStore } from "../../memory/hunt-memory.js";
 import type { PluginHost } from "../../plugins/loader.js";
@@ -116,7 +117,7 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
  * (`ApprovalsChoice`). An older stored access value is accepted and ignored, except that the two
  * values that used to ask first (standard, propose) keep asking.
  *
- * The scope behavior applies only while the scope plugin is enabled; turning that plugin off
+ * The scope behavior applies only while the scope extension is enabled; turning that extension off
  * skips host/path/local-scope authorization. Credential, private-network, sandbox and resource
  * controls remain independent.
  */
@@ -540,6 +541,11 @@ export interface ConsoleSessionConfig {
    * it via the executor, and closes it on cleanup. Absent = no MCP tools.
    */
   mcpHost?: McpToolHost;
+  /**
+   * Decides what a script of an enabled, approved extension may receive when the bash tool runs it (the declared and
+   * approved variables, a connector's stored token included). Absent = bash adds nothing for extensions.
+   */
+  extensionRuns?: ExtensionRunPort;
   /**
    * Read-only access to persisted console session transcripts. When supplied,
    * the model-facing tools `list_conversations` and `read_conversation` are

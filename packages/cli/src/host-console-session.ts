@@ -12,7 +12,7 @@ interface Mirror {
   localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
 const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "sourceLessonHints"] as const;
-const UNSUPPORTED = ["pluginHost", "mcpHost", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
+const UNSUPPORTED = ["pluginHost", "mcpHost", "extensionRuns", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
 const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", "onHarnessUpdate", ...DIRECT_CALLBACKS]);
 
 function executionEnvironment(): Record<string, string> {

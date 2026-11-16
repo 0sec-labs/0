@@ -446,6 +446,7 @@ export {
   type McpServerConfig,
   type McpToolHost,
 } from "./agent/mcp-host.js";
+export type { ExtensionRunPort } from "./agent/types.js";
 // Named bundles of ZERO_FEATURE_* vars — the documented way to enable the
 // full FP moat for an A/B run. See `agent/feature-presets.ts`.
 export {

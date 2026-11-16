@@ -3243,7 +3243,11 @@ export class ToolExecutor {
     const requestedMs = Math.max(1, ((args.timeout as number) ?? 30) * 1000);
     const timeoutMs = Math.min(requestedMs, ceilingMs);
 
-    const env = { ...sanitizedEnv(), TARGET: this.ctx.target, ...this.buildAuthEnvVars() };
+    // A script of an enabled, approved extension gets its declared and approved variables (a connector's stored token
+    // included) and nothing else; the value never comes back (see runBashWithWallclock `redact`).
+    const extensionRun = this.ctx.extensionRuns?.prepare(command);
+    if (extensionRun && !extensionRun.ok) return { success: false, output: null, error: `bash refused: ${extensionRun.error}` };
+    const env = { ...sanitizedEnv(), TARGET: this.ctx.target, ...this.buildAuthEnvVars(), ...(extensionRun?.env ?? {}) };
 
     // The command the OPERATOR asked for (the value may have been rewritten by
     // auth-header injection above; the card shows the model's original intent).
@@ -3251,6 +3255,7 @@ export class ToolExecutor {
     const startedAt = Date.now();
     const outcome = await runBashWithWallclock(command, {
       timeoutMs, ceilingMs, env, cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot, signal: this._executionContext.getStore()?.signal,
+      ...(extensionRun?.secrets.length ? { redact: extensionRun.secrets } : {}),
     });
     const durationMs = Date.now() - startedAt;
 

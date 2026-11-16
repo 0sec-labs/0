@@ -20,6 +20,9 @@ import { StdioMcpConnector } from "./mcp/adapters/stdio.js";
 import { SdkMcpConnector } from "./mcp/adapters/http.js";
 import { StatePinStore } from "./mcp/adapters/pins.js";
 import { FileObservationLog } from "./mcp/adapters/observed.js";
+import { FileSnapshotStore } from "./mcp/adapters/snapshots.js";
+import { createScriptRuns } from "./script-runs.js";
+import type { ExtensionRunPort } from "../../agent/types.js";
 import { mcpServerStatuses, type McpServerStatus } from "./mcp/status.js";
 import type { McpConnector, McpGate } from "./mcp/ports.js";
 import type { McpToolHost } from "../../agent/mcp-host.js";
@@ -69,6 +72,8 @@ export interface ExtensionService {
   mcpStatus(name: string): Result<McpServerStatus[]>;
   /** A lazy host for the MCP servers of the extensions enabled for `project`. `base` keeps the operator's own servers working. */
   mcpHost(options: { project?: string; gate: McpGate; base?: McpToolHost; connector?: McpConnector; parentEnv?: Record<string, string | undefined> }): ExtensionMcpHost;
+  /** The port the bash tool asks before it runs a command: what an enabled, approved extension's script may receive. */
+  scriptRuns(project?: string): ExtensionRunPort;
   info(name: string): Result<{ prompt: InstallPrompt; manifest: import("./core/manifest.js").ExtensionManifest; entry: import("./core/state.js").ExtensionEntry }>;
 }
 
@@ -79,14 +84,15 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
   const sources = options.sources ?? new DefaultSourceResolver(options.home);
   const secrets = new FsConnectionSecrets(options.home);
   const installer = new ExtensionInstaller({ store, sources, clock, projectKey: projectKeyOf });
-  const pins = new StatePinStore(store, clock); const observed = new FileObservationLog(extensionsRoot(options.home));
+  const pins = new StatePinStore(store, clock); const observed = new FileObservationLog(extensionsRoot(options.home)); const snapshots = new FileSnapshotStore(extensionsRoot(options.home));
   const service: ExtensionService = {
     store, secrets, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
     list: project => listRows(store, project ? projectKeyOf(project) : null),
     loadable: project => loadable(store, project ? projectKeyOf(project) : null, secrets),
     overview: project => extensionOverview(store, project ? projectKeyOf(project) : null, { pins, observed }),
     mcpStatus(name) { const r = service.info(name); return r.ok ? ok(mcpServerStatuses(r.value.manifest, pins.pins(name, r.value.entry.active!), observed.read(name, r.value.entry.active!))) : r; },
-    mcpHost: o => new ExtensionMcpHost({ extensions: loadable(store, o.project ? projectKeyOf(o.project) : null, secrets).extensions, connector: o.connector ?? new SdkMcpConnector(new StdioMcpConnector()), pins, observed, gate: o.gate, ...(o.base ? { base: o.base } : {}), ...(o.parentEnv ? { parentEnv: o.parentEnv } : {}) }),
+    mcpHost: o => new ExtensionMcpHost({ extensions: loadable(store, o.project ? projectKeyOf(o.project) : null, secrets).extensions, snapshots, connector: o.connector ?? new SdkMcpConnector(new StdioMcpConnector()), pins, observed, gate: o.gate, ...(o.base ? { base: o.base } : {}), ...(o.parentEnv ? { parentEnv: o.parentEnv } : {}) }),
+    scriptRuns: project => createScriptRuns({ store, secrets, projectKey: project ? projectKeyOf(project) : null }),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
       const entry = state.value.extensions[name];

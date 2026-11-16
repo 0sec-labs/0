@@ -42,7 +42,20 @@ export interface BashRunOptions {
   ceilingMs: number;
   env: Record<string, string>;
   signal?: AbortSignal;
+  /** Secret values that were put in `env` for this run. They are masked in everything that comes back. */
+  redact?: readonly string[];
 }
+
+/** Replace every occurrence of each secret value (4+ characters) with a marker. */
+export function redactSecrets(text: string, secrets: readonly string[] | undefined): string {
+  let out = text;
+  for (const secret of secrets ?? []) if (secret.length >= 4) out = out.split(secret).join("[redacted]");
+  return out;
+}
+const redactOutcome = (o: BashOutcome, secrets: readonly string[] | undefined): BashOutcome => {
+  if (!secrets?.length) return o;
+  return o.kind === "exit" ? { ...o, combined: redactSecrets(o.combined, secrets) } : o.kind === "timeout" ? { ...o, partial: redactSecrets(o.partial, secrets) } : { ...o, message: redactSecrets(o.message, secrets) };
+};
 
 /**
  * Run a shell command with a hard wallclock ceiling. The child is its own
@@ -142,7 +155,7 @@ export async function runBashWithWallclock(
       clearTimeout(timer);
       clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
-      resolvePromise(outcome);
+      resolvePromise(redactOutcome(outcome, opts.redact));
     };
 
     child.on("error", (err: Error) => {

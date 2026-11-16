@@ -6,7 +6,7 @@ import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
-import { connectExtensionMcp } from "./console-extension-mcp.js";
+import { connectExtensionMcp, connectExtensionRuns } from "./console-extension-mcp.js";
 import { loadServicePluginConnections } from "./web/service-plugins.js";
 import { connectCustomMcpServers } from "./web/custom-mcp.js";
 import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
@@ -142,7 +142,7 @@ export async function runHostConsoleWorker(): Promise<void> {
         plugins = await createSessionPluginHostManager({ projectPath: config.workspaceRoot, reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
         mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd())), config.workspaceRoot ?? process.cwd()), config.workspaceRoot ?? process.cwd());
         const lease = plugins.acquire(); releasePlugins = lease.release;
-        config.pluginHost = lease.host; config.mcpHost = mcpHost;
+        config.pluginHost = lease.host; config.mcpHost = mcpHost; config.extensionRuns = connectExtensionRuns(config.workspaceRoot ?? process.cwd());
         config.onHarnessUpdate = value => { emit({ type: "harness", value }); snapshot(); };
         session = withScopeEnforcement(bootstrap.scopeEnforcement, () => createHostLocalConsoleSession(config, bootstrap.dbPath));
         await session.ready; snapshot(); emit({ type: "ready" }); return;

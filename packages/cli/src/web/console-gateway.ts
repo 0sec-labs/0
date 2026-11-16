@@ -1,7 +1,7 @@
 import { loadOperatorInstructions } from "./operator-instructions.js";
 import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { connectConsoleMcp } from "../console-mcp.js";
-import { connectExtensionMcp } from "../console-extension-mcp.js";
+import { connectExtensionMcp, connectExtensionRuns } from "../console-extension-mcp.js";
 import { loadServicePluginConnections } from "./service-plugins.js";
 import { connectCustomMcpServers } from "./custom-mcp.js";
 import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
@@ -1299,7 +1299,8 @@ export class ConsoleGateway {
             let mcpHost: McpToolHost | undefined;
             try {
               mcpHost = connectExtensionMcp(await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath)), managed.workspacePath ?? this.#projectPath), managed.workspacePath ?? this.#projectPath);
-              session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}) }, this.#options.dbPath);
+              const extensionRuns = connectExtensionRuns(managed.workspacePath ?? this.#projectPath);
+              session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}), ...(extensionRuns ? { extensionRuns } : {}) }, this.#options.dbPath);
             } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
             const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
             session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());

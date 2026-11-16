@@ -290,6 +290,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let retirement: Promise<{ warnings?: string[] }> | undefined;
   let cleanupPromise: Promise<void> | undefined;
 
+  if (config.extensionRuns) toolContext.extensionRuns = config.extensionRuns;
   if (config.mcpHost) {
     // Same cast pattern: the executor's _dispatch resolves mcp__ tool calls to
     // THIS session's connected host.

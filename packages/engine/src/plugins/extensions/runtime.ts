@@ -15,6 +15,10 @@ export interface LoadedExtension {
   name: string; revision: string; dir: string; manifest: ExtensionManifest; capabilities: Capabilities; approvedEnv: readonly string[];
   /** Scrubbed environment for a process this extension starts. Provider keys only if declared and approved. */
   env(parent?: Readonly<Record<string, string | undefined>>): Record<string, string>;
+  /** `parent` plus the connection's stored secret for each connector variable that is declared AND approved. Never read from anywhere else. */
+  connected(parent?: Readonly<Record<string, string | undefined>>): Record<string, string | undefined>;
+  /** Declared variable names the operator's approval does not cover. A script or server of this extension must not run while any exist. */
+  unapprovedEnv: readonly string[];
 }
 export type RefusalCode = "tampered" | "capabilities_changed" | "not_approved" | "missing" | "legacy" | "state";
 export interface LoadResult { extensions: LoadedExtension[]; builtins: string[]; refused: Array<{ name: string; code: RefusalCode; reason: string }> }
@@ -23,10 +27,10 @@ export interface LoadResult { extensions: LoadedExtension[]; builtins: string[];
  * The connection's secret for the variables this extension's connector declared, and nothing else. It is only a source:
  * `extensionEnv` still passes a name only if it is declared AND approved. An explicit variable in the parent wins.
  */
-function connectionFill(extension: string, declared: readonly string[], secrets: ConnectionSecrets | undefined, parent: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+function connectionFill(extension: string, declared: readonly string[], approved: readonly string[], secrets: ConnectionSecrets | undefined, parent: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
   if (!secrets || !declared.length) return parent;
   const fill: Record<string, string | undefined> = { ...parent };
-  for (const name of declared) if (typeof parent[name] !== "string") { const v = secrets.read(extension, name); if (v !== undefined) fill[name] = v; }
+  for (const name of declared) if (approved.includes(name) && typeof parent[name] !== "string") { const v = secrets.read(extension, name); if (v !== undefined) fill[name] = v; }
   return fill;
 }
 
@@ -47,7 +51,8 @@ export function loadable(store: ExtensionStore, projectKey: string | null, secre
     const capabilities = capabilitiesOf(manifest.value);
     if (capabilityKey(capabilities) !== record.approvedCapabilityKey) { out.refused.push({ name: entry.name, code: "capabilities_changed", reason: "its capabilities differ from what was approved" }); continue; }
     const dir = store.revisionPath(entry.name, entry.active, record.location); const approvedEnv = record.approvedEnv;
-    out.extensions.push({ name: entry.name, revision: entry.active, dir, manifest: manifest.value, capabilities, approvedEnv, env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: approvedEnv, parent: connectionFill(entry.name, manifest.value.connector?.env ?? [], secrets, parent), extra: { ZERO_EXTENSION_NAME: entry.name, ZERO_EXTENSION_DIR: dir } }) });
+    const connected = (parent: Readonly<Record<string, string | undefined>> = process.env) => connectionFill(entry.name, manifest.value.connector?.env ?? [], approvedEnv, secrets, parent);
+    out.extensions.push({ name: entry.name, revision: entry.active, dir, manifest: manifest.value, capabilities, approvedEnv, connected, unapprovedEnv: capabilities.env.filter(n => !approvedEnv.includes(n)), env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: approvedEnv, parent: connected(parent), extra: { ZERO_EXTENSION_NAME: entry.name, ZERO_EXTENSION_DIR: dir } }) });
   }
   return out;
 }

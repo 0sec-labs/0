@@ -493,7 +493,17 @@ export type DelegatedFindingUpdateResult =
   | { success: true; message: string }
   | { success: false; error: string };
 
+/**
+ * What the bash tool asks before it runs a command: is this a script of an enabled, approved extension, and which
+ * variables does it get? `null` means the command is not an extension's. Implemented by the extension runtime.
+ */
+export interface ExtensionRunPort {
+  prepare(command: string): { ok: true; env: Record<string, string>; secrets: readonly string[] } | { ok: false; error: string } | null;
+}
+
 export interface ToolContext {
+  /** Set by the host when extensions may run scripts. Absent: no extension variables are ever added. */
+  extensionRuns?: ExtensionRunPort;
   /** Operator-owned ceiling; task prose and tool arguments cannot expand it. */
   workerPolicy?: WorkerPolicy;
   target: string;
