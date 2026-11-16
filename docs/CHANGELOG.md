@@ -12,48 +12,50 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
-### Removed
+## [0.36.0] - 2026-11-15
 
-The old plugin system is gone; extensions replace it. Installed plugins are kept on disk and imported once as disabled entries marked "could not migrate"; nothing is deleted.
-
-- The executable plugin runtime (`plugin.js` with tools, the loader, the wire protocol, capability manifests and the per-tool approvals for GitHub-installed executable plugins; first shipped in 0.16.3, review UI in 0.34.0). Installed plugins are imported disabled and listed with a note; re-express them as scripts run through bash or as MCP servers. MCP tool pins stay and are stronger (a changed tool blocks its server).
-- `self_extend`, the live harness (agent drivers and plugin views, the workspace harness trust grant) and the `allowModelSelfExtension` setting (0.14.0 to 0.16.3). The model writes a skill or script folder with bash; you install it as a local extension through the install prompt. Model-authored plugins in `~/.0/executable-plugins` are reported by the importer only and left in place. An old `allowModelSelfExtension` value in a settings file is ignored.
-- The plugin registry: `registry-client`, the hackstore index, `ZERO_REGISTRY_URL`, and plugin registry submit (`plugin submit`, `skills add --submit`) (0.14.0). Extensions are installed from git: `0 skills add <repo>@<sha>`.
-- `ZERO_REGISTRY_PUBLIC_KEY_FILE` and Ed25519 verification of registry entries (0.30.0). The 0.34.0 note that it stays no longer holds. Signatures and publisher identity are not offered; the defence is the install prompt, the commit pin, scope and the sandbox.
-- Custom MCP servers added in the browser (the MCP sheets, `custom-mcp`, `mcp-servers.json`; 0.29.0), service plugins (GitHub, Slack, Linear, Cloudflare, Teams, Elastic, Semgrep, Snyk and Jira adapters connected through an in-process MCP server and `service-plugins.json`), and their routes (`/api/console/plugins`, `/api/console/mcp-servers`, `/api/console/service-plugins`). Add an MCP server from the Extensions page (**Add MCP server**) or `0 skills extensions mcp`; token connections are extensions with a `connector`. The importer turns custom MCP servers into local extensions that need approval, and token-only connections into connector extensions without copying the token; Elastic, Semgrep, Snyk and Jira connections are reported and their stored credentials are untouched.
-- The Plugins page, plugin detail page and Explore plugin entries (0.29.0 to 0.32.0). `/plugins` and `/plugins/:id` redirect to `/extensions`.
-- The `0 plugin` commands. The group stays hidden as aliases: `plugin list|search|info|enable|disable|install` and `plugin mcp add|list|remove` run the matching `0 skills extensions` command and print `moved: use ...`; `run`, `init`, `validate`, `connect`, `connectors`, `disconnect` and `mcp test` print `removed: ...`; `submit` prints `removed: extensions are installed from git: 0 skills add <repo>@<sha>`. `0 skills run` is gone with them.
-- Connector brand logo data and its generator script.
-
-### Security
-
-- Extensions: a connector's stored token now reaches the scripts (through bash) and MCP servers of the extension that declared and was approved for that variable, and is masked in what comes back. The approval prompt for MCP tools shows sanitised plain text with an old-versus-new description and schema diff. Extension server ids are namespaced (`x-`) and cannot shadow your own servers. Tool output fences use a per-call random code and neutralise look-alikes; responses and nested schema descriptions are bounded. A changed tool list, a dead process or a hung call blocks the server, and the pin is re-checked before each call. `npx`, `uvx`, `pip` and similar launchers must pin an exact version. Remote MCP hosts are resolved and refused when they point at private, loopback, link-local or metadata addresses.
-
-- Extensions: an agent can no longer approve its own extensions by flag. Approval commands refuse from an agent
-  session and without a terminal, a built-in `beforeCommand` decider denies agent commands that touch approval,
-  enablement and settings files, every executing tool (monitor, pty_session, python_exec, run_command, file tools)
-  now goes through `beforeCommand`, approvals are sealed, and built-in enablement has one store. The agent runs as the
-  same OS user, so these are layers; the sandbox is the boundary. See `docs/design/extension-architecture.md`.
+This release replaces the old plugin system with extensions: one installable, commit-pinned unit for skills, scripts, MCP servers, connectors and scope policies, with one decision point before every command.
 
 ### Added
 
-- Extensions: one installable unit, a git folder pinned to a commit, that can bundle skills, scripts run through bash, MCP server definitions, a connector, a scope policy and a verifier. `0 skills add <url|folder>@<full sha>` shows one prompt (repo at commit, what it can do, the diff since the last approved version) and installs only after `--yes`. `0 skills extensions list|info|enable|disable|update|remove` manage them. Third-party extensions never update on their own, a folder that no longer matches its pinned commit refuses to load, repository `.0/` and `.claude/` folders can only suggest extensions, and scripts get a scrubbed environment with only approved names.
-- The Extensions page (`/extensions`) lists installed and built-in extensions with what each can do, its source at a commit, an on/off switch, and needs-approval, refused and import-report notes. Add shows the install prompt (repo at commit, what it can do) and installs only after an explicit confirm; Update shows the diff. Only the browser console, and only team owners, can install, update, enable or remove, and each is audited.
-- Skills inside an enabled extension appear on the Skills page, in `list_skills` and in `load_skill`, labelled with the extension's name. Disabled, refused or tampered extensions provide none. The importer now runs once when the console or dashboard starts.
-- A one-time importer carries earlier skills (with their pinned commit and approval) and custom MCP servers into extensions and reports what could not be migrated. It never deletes anything.
+- Extensions are installable git folders pinned to a commit that can bundle skills, scripts, MCP servers, a connector and a scope policy. Install one with `0 skills add <repo>@<sha>`. A prompt shows what it can do and, on update, the diff since the last approved version; nothing updates on its own.
+- `0 skills extensions list|info|enable|disable|update|remove` manage extensions from the CLI. A folder that no longer matches its pinned commit refuses to load, and scripts get a scrubbed environment with only the names you approved.
+- The Extensions page (`/extensions`) lists installed and built-in extensions, what each can do, its source at a commit and an on/off switch. Add shows the install prompt and Update shows the diff. Only team owners in the browser console can install, update, enable or remove, and each is audited.
+- MCP servers now live inside extensions and start on demand. A thread's default tool list carries one line per server and no MCP schema; tool schemas load only when the model asks for a server. Add one from the Extensions page (**Add MCP server**) or `0 skills extensions mcp`.
+- Skills inside an enabled extension appear on the Skills page, in `list_skills` and in `load_skill`, labelled with the extension's name. Disabled, refused or tampered extensions provide none.
+- Connectors are extensions. A connector declares how it connects, what it may read and write, the hosts it may reach and a health check, and the Extensions page shows one Connect card each. GitHub is a built-in connector. See [Connect a service](/connect-a-service/).
+- A one-time importer carries earlier skills and custom MCP servers into extensions, reports what it could not migrate and never deletes anything.
 
 ### Changed
 
-- MCP servers now live inside extensions (`0.mcp` in `extension.json`, or a Claude-style `.mcp.json`). An enabled extension's servers start only when the model loads one from the tool index, so a thread's default tool list carries one line per server and no MCP schema. Each tool is pinned by a sha256 over its name, description, input schema and annotations; if a server changes, adds or removes a tool, the server stays blocked until you approve it again, and `0 skills extensions info <name>` and the Extensions page show Changed, New and Removed. Server launches and remote URLs go through `beforeCommand`, stdio servers get only the environment names they declared, and tool output is labelled untrusted and capped at 32 KB. Custom MCP servers that the importer already adopted as extensions are no longer started a second time by the old path.
-- `0 skills add owner/repo` goes through the extension prompt (pin it with `@<full sha>` to install); catalog ids and `owner/repo/path` keep the earlier skill flow. Help text and docs say "scope extension" instead of "scope plugin".
-- Scope is a built-in extension that is on by default. It enforces whenever a scope is set (`--scope`, a thread, Agent or automation scope, a pull request checkout) and allows everything when none is, so a fresh install no longer runs scoped work unenforced. This reverses 0.33's "scope is off until enabled" and the rule that a scope file alone never activates checks.
-- If the scope extension is turned off or errors while a scope is set, commands are denied instead of allowed. Projects that had scope enabled stay enabled, including its requirement of a scope for live targets; projects that never enabled it get the new default.
-- Bash commands, network targets and the **Ask before running commands** setting now go through one `beforeCommand` decision point: any deny wins, then any ask. A scope denial beats a prompt.
-- Connections are extensions. A connector extension declares `connector` in its manifest: how it connects (`token`, `oauth-device`, `cli-login`, `none`), the variable its token fills, what it may read and write, the hosts it may reach, a health check and its Connect button. The install prompt shows that read/write list, and a script only receives the connection's token when the extension declared the variable and you approved it. GitHub is now a built-in extension (not removable, updates with the binary) with the same contract, and **Extensions** shows one Connect card per connector. Token-only service connections (such as Slack or Linear) are imported once as connector extensions without copying the token; the rest are reported only. See [Connect a service](/connect-a-service/).
+- Every command now goes through one decision point (`beforeCommand`) covering bash, network targets and the **Ask before running commands** setting. Any deny wins, then any ask, and a scope denial beats a prompt.
+- Scope is a built-in extension that is on by default whenever a scope is set (`--scope`, a thread, Agent or automation scope, a pull request checkout). With no scope set everything is allowed. This reverses the 0.30 to 0.33 rule that a scope file alone never activates checks.
+- If the scope extension is off or errors while a scope is set, commands are denied instead of allowed. Projects that already enabled scope keep it enabled.
+- Every MCP tool is pinned by a hash of its name, description, schema and annotations. If a server changes, adds or removes a tool, the server stays blocked until you approve it again, and `0 skills extensions info <name>` shows Changed, New and Removed.
+- MCP tool results are treated as untrusted: they are labelled, fenced and capped at 32 KB. Launchers such as `npx`, `uvx` and `pip` must pin an exact version, and remote hosts that resolve to private, loopback or metadata addresses are refused.
+- `0 skills add owner/repo` goes through the extension prompt (pin it with `@<full sha>` to install). Catalog ids and `owner/repo/path` keep the earlier skill flow.
 
 ### Removed
 
-- The Explore page and its Plugins and Themes tabs. Extensions takes its place in the sidebar; themes and backgrounds live in Settings > Appearance, and old Explore links open Extensions.
+- The old plugin system is gone. Installed plugins are kept on disk, imported once as disabled entries marked "could not migrate" and never deleted. Re-express them as scripts run through bash or as MCP servers.
+- Executable plugins: the `plugin.js` runtime, loader, wire protocol and the per-tool approvals for them (first shipped in 0.16.3, review UI in 0.34.0).
+- `self_extend`, the live harness (agent drivers, plugin views and harness trust) and the `allowModelSelfExtension` setting (0.14.0 to 0.16.3). The model writes a skill or script folder with bash and you install it through the install prompt.
+- The plugin registry, the hackstore index, `ZERO_REGISTRY_URL`, plugin submit (0.14.0), and `ZERO_REGISTRY_PUBLIC_KEY_FILE` with Ed25519 registry signatures (0.30.0). Signatures and publisher identity are not offered; the defence is the install prompt, the commit pin, scope and the sandbox.
+- The Plugins page, plugin detail page and Explore plugin entries (0.29.0 to 0.32.0), the browser MCP sheets and service plugin adapters (0.29.0), and their `/api/console` routes. `/plugins` redirects to `/extensions`; Elastic, Semgrep, Snyk and Jira connections are reported by the importer and their credentials are untouched.
+- The Explore page and its Plugins and Themes tabs. Themes and backgrounds live in Settings > Appearance, and old Explore links open Extensions.
+- `0 skills run` and the `0 plugin` commands. `plugin list|search|info|enable|disable|install` and `plugin mcp add|list|remove` stay as hidden aliases that print `moved: use ...`; the rest print `removed: ...`.
+
+### Fixed
+
+- A malformed glob in a command no longer fails the protected-paths check.
+- Extension folder checks, update diffs, imports and git fetches are stricter, and built-in enablement has one store that is locked and audited.
+
+### Security
+
+- An agent can no longer approve its own extensions by flag. Approval commands refuse from an agent session and without a terminal, and commands from an agent that touch approval, enablement or settings files are denied. These are layers; the sandbox is the boundary (see `docs/design/extension-architecture.md`).
+- Every executing tool (monitor, pty_session, python_exec, run_command and file tools) now goes through `beforeCommand`, and extension approvals are sealed.
+- A connector's stored token reaches only the scripts and MCP servers of the extension that declared and was approved for it, and is masked in what comes back.
+- MCP approval prompts show sanitised plain text with an old versus new description and schema diff. Extension server ids are namespaced (`x-`), and a dead process or hung call blocks the server.
 
 ## [0.35.0] - 2026-11-15
 

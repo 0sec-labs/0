@@ -8,6 +8,18 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.36.0",
+    date: "2026-11-15",
+    title: "Extensions",
+    summary: "Extensions replace plugins: one installable, commit-pinned unit for Skills, scripts, MCP servers and connectors, with one decision point before every command.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "Puzzle", title: "Extensions", text: "Install a git folder pinned to a commit with 0 skills add <repo>@<sha>. A prompt shows what it can do and the diff on update, and the new Extensions page replaces Explore." },
+      { icon: "ShieldCheck", title: "Safer MCP servers and scope", text: "MCP servers live inside extensions and start on demand, every tool is pinned and blocked until you approve a change, and scope is on by default whenever a scope is set." },
+      { icon: "Plug", title: "Plugins are gone", text: "The old plugin system, its registry and self_extend are removed. Installed plugins are kept disabled and imported once, and GitHub is now a built-in connector." },
+    ],
+  },
+  {
     version: "0.35.0",
     date: "2026-11-15",
     title: "Nine commands, one mode",
