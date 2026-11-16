@@ -20,6 +20,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- A thread can no longer install or approve an extension by wrapping the command (`env -u ZERO_AGENT_SESSION node ... skills extensions add --yes`); the approval-command check now sees through `env` and `sudo` options and a `node <script>` prefix.
 - An extension's own MCP server now starts: loading it was refused with "touches ~/.0/extensions" because the server runs in the extension's folder. Other paths under the 0 state folder are still protected.
 - A changed or first-seen MCP tool list is no longer approved automatically when commands run without asking; the thread waits for you, as documented.
 - Server mode with an explicit port now stops with a clear error when the port is busy instead of silently listening on a random one that a container port mapping or proxy cannot reach.

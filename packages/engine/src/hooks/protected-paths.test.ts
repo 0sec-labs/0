@@ -66,6 +66,7 @@ describe("protected paths: text analysis", () => {
       "0 skills add github.com/x/y@" + "a".repeat(40) + " --yes --enable",
       "0 skills extensions enable x --yes", "0 skills extensions update x --yes --to abc", "0 skills extensions import --force",
       "FOO=1 0 skills extensions disable scope --yes", "cd /tmp && 0 plugin enable scope", "env 0 skills list foo --yes", "sudo 0 plugin disable scope",
+      "env -u ZERO_AGENT_SESSION node /x/index.js skills extensions add y --yes", "env -i 0 skills add x --yes", "sudo -u root 0 plugin enable x", "env --unset=ZERO_AGENT_SESSION 0 skills extensions enable x",
     ]) expect(findApprovalCommand(command), command).not.toBeNull();
     for (const command of ["0 skills list", "0 skills extensions list", "0 skills extensions info x", "echo 0 skills add", "ls"]) expect(findApprovalCommand(command), command).toBeNull();
   });

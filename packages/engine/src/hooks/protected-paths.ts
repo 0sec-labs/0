@@ -143,16 +143,28 @@ export function findProtectedPathUse(command: string, extraPaths: readonly strin
 /** Commands that grant an approval or change enablement. An agent must never run these; the operator does. */
 const APPROVAL_SUBCOMMANDS = new Set(["add", "enable", "disable", "update", "import", "remove", "install", "uninstall"]);
 
+const WRAPPERS = new Set(["env", "sudo", "command", "exec", "nohup", "time"]);
+/** Options of env/sudo that consume the next word (`env -u NAME`, `sudo -u user`). */
+const WRAPPER_FLAG_VALUE = new Set(["-u", "--unset", "-C", "--chdir", "-g", "--group", "-h", "--host", "-p", "--prompt", "-r", "--role", "-t", "--type", "-U", "--other-user", "-S", "--split-string"]);
+
 export function findApprovalCommand(command: string): string | null {
   const segments: string[][] = []; let cur: string[] = [];
   for (const t of tokenize(command)) { if ("op" in t) { if (cur.length) segments.push(cur); cur = []; } else cur.push(t.word); }
   if (cur.length) segments.push(cur);
   for (const raw of segments) {
     let words = raw;
-    while (words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!) || ["env", "sudo", "command", "exec", "nohup", "time"].includes(words[0]!))) words = words.slice(1);
+    while (words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!) || WRAPPERS.has(words[0]!))) {
+      const wrapper = words[0]!; words = words.slice(1);
+      // `env -u ZERO_AGENT_SESSION node ...`: skip the wrapper's own options (and the value an option takes) too.
+      if (wrapper === "env" || wrapper === "sudo" || wrapper === "command" || wrapper === "nohup" || wrapper === "time") {
+        while (words.length && words[0]!.startsWith("-") && words[0] !== "--") { const flag = words[0]!; words = words.slice(1); if (WRAPPER_FLAG_VALUE.has(flag) && words.length) words = words.slice(1); }
+        if (words[0] === "--") words = words.slice(1);
+      }
+    }
     const exe = (words[0] ?? "").replace(/^.*\//, "");
     if (!["0", "zero", "node"].includes(exe) && !/^0(\.js)?$/.test(exe)) continue;
-    const rest = words.slice(1).filter(w => !w.startsWith("-"));
+    // `node /path/to/index.js skills ...`: the first plain word is the script, not the command group.
+    const rest = words.slice(1).filter(w => !w.startsWith("-")).slice(exe === "node" ? 1 : 0);
     const [group, sub, sub2] = rest;
     if (group === "skills" && (sub === "add" || (sub === "extensions" && sub2 && APPROVAL_SUBCOMMANDS.has(sub2)))) return `0 skills ${sub}${sub === "extensions" ? ` ${sub2}` : ""}`;
     if (group === "skills" && words.includes("--yes")) return "0 skills ... --yes";
