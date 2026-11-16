@@ -32,6 +32,11 @@ on the GitHub Release tag.
 - `0 memory set --import` on a file that is not a memory archive says so instead of printing validation JSON; `0 scan ./missing` and `0 scan . --module bogus` give a plain message; `0 config doctor bogus` is refused; `0 ... | head` no longer ends with an EPIPE stack trace.
 - `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`, and `--preview`, `--yes`, `--enable` and `--project` work before or after the source. At a terminal a bare add asks to confirm. `--yes` installs without a terminal (CI, scripts) unless the command runs in an agent session, which still refuses.
 - The Extensions page no longer shows two sign-in controls on the GitHub card (the method selector appears only when methods need different input, and the button reads Connect), uses squared chips instead of pills, and has shorter intro copy. GitHub shows "Built in" and scope shows "On" without an on/off switch while a scope is defined.
+- The slash menu lists `/extensions list` (the old `/plugin list` and `/plugins` still work), and links to Skills no longer bounce through a retired address.
+- The audit log reads "Agent create" and "Automation create" instead of "Sentinel create", and a built-in extension says "Built in" once instead of three times.
+- Opening a page while the server is down shows "Couldn't load this page. It will retry when the connection returns." instead of a raw `reading 'SentinelsPage'` error.
+- The "Finish setting up" card no longer asks you to start your first thread after a restart when you already have saved threads.
+- A saved-thread link whose thread was deleted returns Home with a note, like a stale live-thread link, instead of a "Couldn't open this thread" retry loop; the fix page's button says "New thread" instead of "New session"; the link on a failing connection says "Show connection".
 
 ### Changed
 
