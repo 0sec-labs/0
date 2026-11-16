@@ -17,6 +17,16 @@ on the GitHub Release tag.
 - `0 skills add <path-or-url>@<sha>` shows the install prompt instead of `Cannot read`, and `--preview`, `--yes`, `--enable` and `--project` work before or after the source. At a terminal a bare add asks to confirm. `--yes` installs without a terminal (CI, scripts) unless the command runs in an agent session, which still refuses.
 - The Extensions page no longer shows two sign-in controls on the GitHub card (the method selector appears only when methods need different input, and the button reads Connect), uses squared chips instead of pills, and has shorter intro copy. GitHub shows "Built in" and scope shows "On" without an on/off switch while a scope is defined.
 
+### Changed
+
+- Automations are created and edited inside Agents. The sidebar lists New thread, Findings, Agents, Skills, Memory, Computers and Extensions; the Agents page has New automation, and an Agent's Automations view holds its templates, triggers and runs. `/automations` and its old aliases open Agents.
+- Skills now live at `/skills`; `/plugins/skills` redirects there.
+
+### Removed
+
+- The Reports page (`/runs/:id`), the scans list and the Engagements page (`/scope`). Findings and Threads carry the same findings, evidence and exports; the old addresses open Findings. The scan, report and engagement APIs are unchanged.
+- The Automations page and its list, the Agents group in the sidebar, the Findings board layout, and unused web code (dead API client functions, imports and components).
+
 ## [0.36.0] - 2026-11-15
 
 This release replaces the old plugin system with extensions: one installable, commit-pinned unit for skills, scripts, MCP servers, connectors and scope policies, with one decision point before every command.
