@@ -25,6 +25,8 @@ import { assertTeamConsoleMutation } from "./team-web.js";
 import { handleBrowserLiveRequest } from "./browser-live-routes.js";
 import { MAX_SNAPSHOT_WINDOW, MAX_EVENTS_WAIT_SECONDS, parseSnapshotWindow, parseMessagePage, summarizeConsoleWorker } from "./console-snapshot-window.js";
 import { openSharedDb, evictSharedDb } from "./shared-db.js";
+import { findingsServiceFor } from "./findings-service.js";
+import { handleFindingFamilyRequest } from "./finding-family-routes.js";
 import { invalidateReadCache, readThrough } from "./read-cache.js";
 import { handleSelfEditRequest } from "./self-edit-routes.js";
 import { SkillsCatalogService, handleSkillsCatalogRequest } from "./skills-catalog.js";
@@ -52,22 +54,7 @@ function parseRecentEventsPath(pathname: string): boolean {
   return pathname === "/api/events/recent";
 }
 
-const SETTABLE_WORKFLOW_STATUSES = ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"] as const;
-
-/**
- * Mirrors the board's drop rules (web `resolveDrop`): only people-settable statuses are accepted, and a finding that
- * waits for the operator's review can only be closed. Unknown statuses used to be silently stored as backlog.
- */
-export function workflowTransitionRejection(requested: unknown, persisted: string | null | undefined): { status: number; error: string } | null {
-  if (typeof requested !== "string" || !(SETTABLE_WORKFLOW_STATUSES as readonly string[]).includes(requested)) {
-    const review = requested === "agent_review" || requested === "human_review";
-    return { status: 400, error: review ? "Review stages are set by 0, not by hand." : `Unsupported workflow status. Use one of: ${SETTABLE_WORKFLOW_STATUSES.join(", ")}.` };
-  }
-  if (persisted === "human_review" && requested !== "done" && requested !== "cancelled") {
-    return { status: 409, error: "Needs review: confirm it first. Only Done or Cancelled can be set until then." };
-  }
-  return null;
-}
+export { workflowTransitionRejection } from "./workflow-transition.js";
 
 function parseFindingFamilyPath(pathname: string): { fingerprint: string; action?: "triage" | "workflow" } | null {
   const match = pathname.match(/^\/api\/finding-family\/([^/]+)(?:\/(triage|workflow))?$/);
@@ -573,14 +560,13 @@ export async function handleApiRequest(
     const body = await readThrough(`dashboard:${dbPath ?? process.env["ZERO_DB_PATH"] ?? ""}`, async () => {
       const db = await openSharedDb(dbPath);
       try {
-        const scans = db.listScans(100) as DBScanRow[];
-        // Rank current family assessments globally before fetching bounded evidence bodies.
-        // Historical verdicts and running roles still determine the same review gates.
-        const families = db.listFindingFamiliesByBusinessPriority({ limit: 5000 });
-        const groups = families.map(family => {
+        // Findings live in the shared database and in one database per `0 scan` run: show them as one list.
+        const merged = await findingsServiceFor(dbPath).list();
+        const scans = merged.scans.slice(0, 100) as DBScanRow[];
+        const groups = merged.families.map(family => {
           const latest = normalizeFinding(family.latest as DBFindingRow);
           return { fingerprint: family.key, latest, count: family.count, scanCount: family.scanCount, sourceScanIds: family.sourceScanIds,
-            workflow: buildWorkflowSummary([latest], [], family.activeSessions, family.verdictCounts) };
+            provenance: family.provenance, workflow: buildWorkflowSummary([latest], [], family.activeSessions, family.verdictCounts) };
         });
         const workItems = (db.listWorkItems?.({ limit: 5000 }) ?? []) as DBWorkItemRow[];
         const workers = (db.listWorkers?.(50) ?? []) as DBWorkerRow[];
@@ -618,13 +604,8 @@ export async function handleApiRequest(
   }
 
   if (pathname === "/api/scans") {
-    const db = await openSharedDb(dbPath);
-    try {
-      const scans = db.listScans(100) as DBScanRow[];
-      json(res, 200, { scans: scans.map(summarizeScan) }, { conditional: true });
-    } finally {
-      db.close();
-    }
+    const scans = (await findingsServiceFor(dbPath).list()).scans.slice(0, 100) as DBScanRow[];
+    json(res, 200, { scans: scans.map(summarizeScan) }, { conditional: true });
     return true;
   }
 
@@ -667,7 +648,8 @@ export async function handleApiRequest(
 
   const scanPath = parseScanPath(pathname);
   if (scanPath) {
-    const db = await openSharedDb(resolveScanDatabase?.(scanPath.scanId) ?? dbPath);
+    const scanDb = resolveScanDatabase?.(scanPath.scanId) ?? (await findingsServiceFor(dbPath).sourceOfScan(scanPath.scanId))?.id ?? dbPath;
+    const db = await openSharedDb(scanDb);
     try {
       const scan = db.getScan(scanPath.scanId) as DBScanRow | undefined;
       if (!scan) {
@@ -712,138 +694,7 @@ export async function handleApiRequest(
 
   const familyPath = parseFindingFamilyPath(pathname);
   if (familyPath) {
-    const db = await openSharedDb(dbPath);
-    try {
-      if (req.method === "POST" && familyPath.action === "triage") {
-        if (!requireControlToken(req, res, controlToken, engineBearer)) {
-          return true;
-        }
-        const body = await readJsonObject<{ triageStatus?: string; triageNote?: string }>(req);
-        db.updateFindingTriageByFingerprint(
-          familyPath.fingerprint,
-          normalizeTriageStatus(body.triageStatus),
-          typeof body.triageNote === "string" ? body.triageNote : undefined,
-        );
-        audit({ actor: auditActor({ engineRequest: false }), action: "finding.triage", subject: familyPath.fingerprint, detail: { fingerprint: familyPath.fingerprint, decision: normalizeTriageStatus(body.triageStatus) } });
-        json(res, 200, { ok: true });
-        return true;
-      }
-
-      if (req.method === "POST" && familyPath.action === "workflow") {
-        if (!requireControlToken(req, res, controlToken, engineBearer)) {
-          return true;
-        }
-        const body = await readJsonObject<{ workflowStatus?: string; workflowAssignee?: string }>(req);
-        const current = db.getLatestFindingByFingerprint(familyPath.fingerprint);
-        if (!current) {
-          json(res, 404, { error: "Not found" });
-          return true;
-        }
-        const rejection = workflowTransitionRejection(body.workflowStatus, current.workflowStatus);
-        if (rejection) {
-          json(res, rejection.status, { error: rejection.error });
-          return true;
-        }
-        db.updateFindingWorkflowByFingerprint(
-          familyPath.fingerprint,
-          normalizeWorkflowStatus(body.workflowStatus),
-          typeof body.workflowAssignee === "string" ? body.workflowAssignee.trim() : null,
-        );
-        json(res, 200, { ok: true });
-        return true;
-      }
-
-      const rows = (db.getRelatedFindings(familyPath.fingerprint) as DBFindingRow[]).map(normalizeFinding);
-      if (rows.length === 0) {
-        json(res, 404, { error: "Not found" });
-        return true;
-      }
-
-      const verdicts = db.listVerdicts(rows.map((row) => row.id)) as DBVerdictRow[];
-      const sessions = db.listSessions({
-        scanIds: [...new Set(rows.map((row) => row.scanId))],
-        status: "running",
-      }) as DBSessionRow[];
-      const scans = [...new Map(
-        rows
-          .map((row) => db.getScan(row.scanId) as DBScanRow | undefined)
-          .filter(Boolean)
-          .map((scan) => [scan!.id, scan!] as const),
-      ).values()];
-      const allEvents = scans.flatMap((scan) => (db.getEvents(scan.id) as DBEventRow[]));
-      const workflow = buildWorkflowSummary(
-        rows,
-        verdicts,
-        sessions,
-      );
-      const familyCase = buildCases(
-        scans,
-        [{
-          fingerprint: familyPath.fingerprint,
-          latest: rows[0],
-          count: rows.length,
-          scanCount: new Set(rows.map((row) => row.scanId)).size,
-          sourceScanIds: [...new Set(rows.map((row) => row.scanId))].sort(),
-          workflow,
-        }],
-      )[0] ?? null;
-      const persistedWorkItems = (db.listWorkItems?.({ findingFingerprint: familyPath.fingerprint, limit: 50 }) ?? []) as Array<{
-        id: string;
-        kind: string;
-        title: string;
-        owner?: string | null;
-        status: string;
-        summary?: string | null;
-      }>;
-      const persistedArtifacts = (db.listArtifacts?.({ findingFingerprint: familyPath.fingerprint, limit: 100 }) ?? []) as Array<{
-        id: string;
-        kind: string;
-        label: string;
-        content?: string | null;
-      }>;
-      const derivedWorkItems = buildWorkItems({
-        fingerprint: familyPath.fingerprint,
-        workflow,
-        rows,
-        verdicts,
-      });
-      const derivedArtifacts = buildArtifacts({
-        fingerprint: familyPath.fingerprint,
-        latest: rows[0],
-        verdicts,
-        sessions,
-        events: allEvents,
-      });
-
-      json(res, 200, {
-        consoleCommand: buildFindingConsoleCommand(rows[0]!, dbPath),
-        fingerprint: familyPath.fingerprint,
-        case: familyCase,
-        latest: rows[0],
-        rows,
-        workflow,
-        workItems: persistedWorkItems.length > 0
-          ? persistedWorkItems.map((item) => ({
-              id: item.id,
-              kind: item.kind,
-              title: item.title,
-              owner: item.owner ?? null,
-              status: item.status,
-              summary: item.summary ?? "",
-            }))
-          : derivedWorkItems,
-        artifacts: persistedArtifacts.length > 0
-          ? persistedArtifacts.map((artifact) => ({
-              id: artifact.id,
-              kind: artifact.kind,
-              label: artifact.label,
-              summary: artifact.content ? `${artifact.content.length} chars captured` : "Persisted artifact",
-            }))
-          : derivedArtifacts,
-      });
-    } finally {
-      db.close();
-    }
+    await handleFindingFamilyRequest(req, res, familyPath.fingerprint, familyPath.action, dbPath, controlToken, engineBearer);
     return true;
   }
 

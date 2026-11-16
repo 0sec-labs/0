@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import type { Finding } from "@0/engine/shared";
 import {
-  listOsecRunDatabasePaths,
+  discoverRunDatabases,
   osecDB,
   resolveOsecDbPath,
 } from "@0/engine/storage";
@@ -35,8 +35,9 @@ function parseJson(value: unknown): unknown {
 export function findingDatabasePaths(dbPath?: string): string[] {
   if (dbPath?.trim()) return [resolve(dbPath)];
 
+  // Bounded and newest first, like the web Findings page.
   return [...new Set([
-    ...listOsecRunDatabasePaths(),
+    ...discoverRunDatabases().paths,
     resolveOsecDbPath(),
   ].filter((path): path is string => Boolean(path)).map((path) => resolve(path)))];
 }

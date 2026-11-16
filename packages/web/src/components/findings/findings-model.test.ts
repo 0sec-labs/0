@@ -65,3 +65,13 @@ describe("optimistic board moves", () => {
     expect(findingStatus(before.groups[0]!)).toBe("todo");
   });
 });
+
+describe("findings merged from scan runs", () => {
+  it("keeps where a finding came from when the board moves it", () => {
+    const fromScan = { ...group("run-a", "backlog"), provenance: { kind: "scan", target: "https://a.example", startedAt: "2026-03-04T10:00:00Z", scanId: "run-a" } } as FindingGroup;
+    const next = patchDashboardWorkflow(dashboard(fromScan, group("shared", "backlog")), { fingerprint: "run-a", workflowStatus: "in_progress", workflowAssignee: "", optimisticStatus: "in_progress" });
+    expect(next.groups[0]!.provenance).toMatchObject({ kind: "scan", scanId: "run-a" });
+    expect(next.groups[0]!.workflow.status).toBe("in_progress");
+    expect(next.groups[1]!.workflow.status).toBe("backlog");
+  });
+});

@@ -432,7 +432,20 @@ vi.mock("@0/engine/storage", () => {
       dbState.closes += 1;
     }
   }
+  // The merged findings service, backed by the fake shared database only (no run databases in these tests).
+  class FakeFindingsService {
+    constructor(private readonly options: { openShared: (mode: "read" | "write") => Promise<FakeOsecDB> }) {}
+    async list() {
+      const db = await this.options.openShared("read");
+      try { return { families: db.listFindingFamiliesByBusinessPriority().map(family => ({ ...family, owners: [], provenance: null })), scans: db.listScans(), skippedRuns: 0 }; } finally { db.close(); }
+    }
+    async readFamily<T>(_fp: string, fn: (db: FakeOsecDB) => T): Promise<T[]> { const db = await this.options.openShared("read"); try { return [fn(db)]; } finally { db.close(); } }
+    async writeFamily(_fp: string, fn: (db: FakeOsecDB) => void): Promise<number> { const db = await this.options.openShared("write"); try { fn(db); return 1; } finally { db.close(); } }
+    async sourceOfScan() { return undefined; }
+    async sourceOfFinding() { return undefined; }
+  }
   return {
+    FindingsService: FakeFindingsService,
     findingStatuses: ["discovered", "verified", "confirmed", "scored", "reported", "fixed", "false-positive"],
     osecDB: FakeOsecDB,
     // Identity persistence is covered by the real registry suite; this fake DB

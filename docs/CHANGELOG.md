@@ -19,6 +19,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- The web Findings page now lists every finding: results of `0 scan` runs (one database per run) appear next to findings from threads and Agents, de-duplicated by fingerprint. Moving a finding on the board, accepting or dismissing it, notes, impact assessments and exports are saved in the database that holds it, and a finding's detail says where it came from (a scan and its date, an Agent, a thread). `0 findings` uses the same merged view. Older runs beyond 300 databases or 2 GB are skipped, newest kept.
 - Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
 - `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
 - When the computer behind the console stops answering without closing the connection, the page now shows Reconnecting after about a minute and recovers when it answers again. Before, it looked frozen with no notice.

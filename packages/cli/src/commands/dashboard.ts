@@ -23,7 +23,9 @@ import { LocalProviderSessions, LocalProviderSessionError } from "../web/local-p
 import { handleRemoteProviderRelayRequest } from "../web/remote-provider-relay.js";
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
-import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
+import { retainedScanSnapshot } from "../web/report-artifacts.js";
+import { findingsServiceFor } from "../web/findings-service.js";
+import { retainedFindingsAcrossDatabases } from "../web/findings-export.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { FindingsAccessError, FindingsAccessTokenStore, handleFindingsAccessTokenRequest } from "../web/findings-access-tokens.js";
 import { FindingsReadApi, handleFindingsReadRequest } from "../web/findings-read-api.js";
@@ -556,7 +558,9 @@ export function registerDashboardCommand(program: Command): void {
               }
               if (/^\/api\/findings\/[^/]+\/impact-assessment$/.test(requestUrl.pathname)) {
                 const input = req.method === "POST" || req.method === "DELETE" ? await readJson(req) : undefined;
-                const result = handleFindingImpactRequest(requestUrl.pathname, req.method ?? "GET", input, { dbPath: opts.dbPath });
+                const impactId = decodeURIComponent(requestUrl.pathname.split("/")[3] ?? "");
+                const owner = await findingsServiceFor(opts.dbPath).sourceOfFinding(impactId);
+                const result = handleFindingImpactRequest(requestUrl.pathname, req.method ?? "GET", input, { dbPath: owner?.id ?? opts.dbPath });
                 if (result) { json(res, result.status, result.data); return; }
               }
               const exportScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/export$/);
@@ -566,8 +570,8 @@ export function registerDashboardCommand(program: Command): void {
                 const format = requestedFormat === "md" ? "markdown" : requestedFormat;
                 if (!isReportExportFormat(format)) throw new WebRequestError("Unsupported report export format.", 400);
                 const report = exportScan
-                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
-                  : retainedFindingSnapshot((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
+                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? (await findingsServiceFor(opts.dbPath).sourceOfScan(decodeURIComponent(exportScan[1]!)))?.id ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
+                  : await retainedFindingsAcrossDatabases((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
                 const artifact = await exportReport(report, format, exportScan ? `0-scan-${decodeURIComponent(exportScan[1]!)}` : "0-findings");
                 res.writeHead(200, { "Content-Type": artifact.contentType, "Content-Disposition": `attachment; filename="${artifact.filename}"`, "Content-Length": artifact.body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
                 res.end(artifact.body);
