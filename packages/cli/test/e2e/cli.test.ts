@@ -71,9 +71,10 @@ describe("CLI E2E", () => {
     const result = run(["--help"]);
     expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
-    for (const cmd of ["scan", "findings", "threads", "agents", "automation", "models", "computers", "skills", "plugin", "memory", "config", "web", "doctor", "api"]) {
-      expect(result.stdout).toContain(cmd);
+    for (const cmd of ["scan", "findings", "threads", "agents", "skills", "memory", "models", "computers", "config"]) {
+      expect(result.stdout).toMatch(new RegExp(`^  ${cmd}\\b`, "m"));
     }
+    for (const hidden of ["lab", "web", "doctor", "plugin", "automation", "api"]) expect(result.stdout).not.toMatch(new RegExp(`^  ${hidden}\\b`, "m"));
   });
 
   it("auto-routes an existing bare relative path to deep source review", () => {

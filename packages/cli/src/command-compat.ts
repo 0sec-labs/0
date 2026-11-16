@@ -86,6 +86,8 @@ function threads(a: Args): string[] | undefined {
 
 /** `agents ... --automation`: the saved automations that Agents absorb, with the arguments they always had. */
 function automations(a: Args): string[] | undefined {
+  // `agents set <id> --trigger add --automation <automation-id>` uses --automation as a value, not as the switch.
+  if (a.includes("--trigger") || a.includes("--files") || a.includes("--state")) return undefined;
   const flagged = pull(a.slice(2), "--automation", false);
   if (!flagged.found) return undefined;
   const rest = flagged.rest;
