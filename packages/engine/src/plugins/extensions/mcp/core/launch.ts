@@ -36,7 +36,7 @@ export function launchFor(server: McpServerDecl, context: LaunchContext): Launch
 export function launchHookInput(launch: McpLaunch, thread: BeforeCommandThread, cwd: string): BeforeCommandInput {
   if (launch.kind === "stdio") {
     const argv = [launch.command, ...launch.args];
-    return { kind: "process", command: argv.join(" "), argv, cwd: launch.cwd, hosts: [...(inspectLauncher(launch.command, launch.args)?.hosts ?? [])], paths: [], thread, effectful: true };
+    return { kind: "process", command: argv.join(" "), argv, cwd: launch.cwd, hosts: [...(inspectLauncher(launch.command, launch.args)?.hosts ?? [])], paths: [], thread, effectful: true, extensionDir: launch.cwd };
   }
   return { kind: "network", command: `connect MCP server ${launch.url}`, argv: [launch.url], cwd, hosts: [launch.url], paths: [], thread, effectful: true };
 }

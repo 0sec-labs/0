@@ -18,7 +18,7 @@ export const protectedPathsBeforeCommandPolicy: BeforeCommandPolicy = {
     const approval = input.kind === "bash" || input.kind === "process" ? findApprovalCommand(input.command) : null;
     if (approval) return { decision: "deny", reason: `\`${approval}\` grants approvals or changes extension enablement, and an agent session may not run it. Ask the operator to run it in their own terminal or approve it on the Extensions page.` };
     const home = process.env["HOME"] || homedir();
-    const hit = findProtectedPathUse(input.kind === "file-write" || input.kind === "file-read" ? "" : input.command, input.paths, { home, cwd: input.cwd, real: realpathLoose });
+    const hit = findProtectedPathUse(input.kind === "file-write" || input.kind === "file-read" ? "" : input.command, input.paths, { home, cwd: input.cwd, real: realpathLoose, ...(input.kind === "process" && input.extensionDir ? { exemptDir: input.extensionDir } : {}) });
     if (hit) return { decision: "deny", reason: `${hit.reason}. Approvals, enablement, grants, audit, settings and database files are protected from agent commands; ask the operator to make this change.` };
     return { decision: "allow" };
   },

@@ -47,6 +47,8 @@ export interface BeforeCommandInput {
   readonly thread: BeforeCommandThread;
   /** False for reads and other calls that never need operator approval (default true). */
   readonly effectful?: boolean;
+  /** Set when an approved extension's own MCP server is being started: its folder is where it runs, so naming files in it is not touching approval state. */
+  readonly extensionDir?: string;
 }
 
 export type BeforeCommandDecision =

@@ -104,3 +104,20 @@ describe("protected paths: symlinks and the policy", () => {
     expect(await protectedPathsBeforeCommandPolicy.evaluate(input({ kind: "network", command: "curl ~/.0/extensions" }))).toEqual({ decision: "allow" });
   });
 });
+
+describe("protected paths: an extension starting its own server", () => {
+  const dir = "/home/op/.0/extensions/demo/abc123";
+  const input = (command: string): BeforeCommandInput => ({ kind: "process", command, argv: command.split(" "), cwd: dir, hosts: [], paths: [], thread: {}, effectful: true, extensionDir: dir });
+  const withHome = (fn: () => void) => { const old = process.env["HOME"]; process.env["HOME"] = HOME; try { fn(); } finally { if (old === undefined) delete process.env["HOME"]; else process.env["HOME"] = old; } };
+  it("allows naming files inside its own folder", () => withHome(() => {
+    expect(protectedPathsBeforeCommandPolicy.evaluate(input("node server.mjs")).decision).toBe("allow");
+    expect(protectedPathsBeforeCommandPolicy.evaluate({ ...input("node server.mjs"), extensionDir: undefined })).toMatchObject({ decision: "deny" });
+  }));
+  it("still refuses state outside that folder", () => withHome(() => {
+    {
+      expect(protectedPathsBeforeCommandPolicy.evaluate(input("node ../../state.json"))).toMatchObject({ decision: "deny" });
+      expect(protectedPathsBeforeCommandPolicy.evaluate(input("node server.mjs ~/.0/extensions/state.json"))).toMatchObject({ decision: "deny" });
+      expect(protectedPathsBeforeCommandPolicy.evaluate(input("node server.mjs"))).toMatchObject({ decision: "allow" });
+    }
+  }));
+});

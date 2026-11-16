@@ -25,6 +25,8 @@ export interface ProtectedPathContext {
   readonly cwd: string;
   /** Resolve symlinks of the deepest existing ancestor; identity in pure tests. */
   readonly real?: (path: string) => string;
+  /** One extension's own folder (an approved extension starting its own server): paths inside it, symlinks resolved, are not state. */
+  readonly exemptDir?: string;
 }
 
 export interface ProtectedHit { readonly path: string; readonly reason: string }
@@ -97,10 +99,13 @@ const DESTRUCTIVE = /^(rm|mv|chmod|chown|ln|cp|rsync|tar|find|truncate|shred|unl
 export function findProtectedPathUse(command: string, extraPaths: readonly string[], ctx: ProtectedPathContext): ProtectedHit | null {
   const real = ctx.real ?? (p => p);
   const states = [...new Set([join(ctx.home, ".0"), realOf(join(ctx.home, ".0"), real)])];
+  const exempt = ctx.exemptDir ? [...new Set([resolve(ctx.exemptDir), realOf(resolve(ctx.exemptDir), real)])] : [];
+  const inside = (path: string, dir: string) => path === dir || path.startsWith(dir + sep);
   const check = (candidate: string, cwd: string): ProtectedHit | null => {
     if (!candidate) return null;
     const expanded = expandHome(candidate, ctx.home);
     const abs = isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
+    if (exempt.length && exempt.some(dir => inside(abs, dir)) && exempt.some(dir => inside(realOf(abs, real), dir))) return null;
     for (const variant of new Set([abs, realOf(abs, real)])) {
       const why = protectedReason(variant, states);
       if (why) return { path: abs, reason: `touches ${why}` };
