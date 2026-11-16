@@ -112,6 +112,17 @@ describe("Agent scheduler", () => {
     expect((await f.activations(id))[0]).toMatchObject({ status: "failed", error: "Stopped: max turn tokens." });
   });
 
+  it("records the model error on a failed activation instead of a bare 'error'", async () => {
+    const f = fixture();
+    const { id } = await f.armed({}, "sentinel-home");
+    vi.setSystemTime(T0 + 5 * MIN + 1_000);
+    f.missions.send.mockImplementationOnce(async () => ({ queuedMessageId: "q" }));
+    await f.service.tick();
+    f.emit("mission-1", { type: "user", text: f.missions.send.mock.calls[0]![1] });
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "API error: 401 invalid key" });
+    expect((await f.activations(id))[0]).toMatchObject({ status: "failed", error: "Stopped: API error: 401 invalid key" });
+  });
+
   it("resolves runIn: sentinel-home reuses the standing thread and queues behind it", async () => {
     const f = fixture();
     const { id } = await f.armed({}, "sentinel-home");

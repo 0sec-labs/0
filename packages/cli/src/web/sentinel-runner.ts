@@ -424,7 +424,7 @@ export class SentinelRunner {
         const reason = typeof event.stopReason === "string" ? event.stopReason : "end_turn";
         if (reason === "end_turn") finish("completed");
         else if (reason === "cancelled") finish("cancelled", stopping ?? "Cancelled.");
-        else finish("failed", `Stopped: ${reason.replaceAll("_", " ")}.`);
+        else finish("failed", reason === "error" && typeof event.error === "string" && event.error.trim() ? `Stopped: ${event.error.trim().slice(0, 500)}` : `Stopped: ${reason.replaceAll("_", " ")}.`);
       } else if (event.type === "error") finish("failed", typeof event.message === "string" ? event.message.slice(0, 2_000) : "The run failed.");
     };
     if (this.#missions.subscribe) {
