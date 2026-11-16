@@ -7,7 +7,7 @@ import { todoInputSchema, MAX_TODOS } from "../todos.js";
 import { z } from "zod";
 
 export const memoryArgsSchema = z.object({
-  action: z.enum(["remember", "forget"]),
+  action: z.enum(["remember", "update", "forget"]),
   note: z.string().trim().max(2000).optional(),
   kind: z.string().max(40).optional(),
   scope: z.enum(["folder", "global"]).optional(),

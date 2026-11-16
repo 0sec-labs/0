@@ -1,7 +1,11 @@
 export * from "./core.js";
+export * from "./guard.js";
+export * from "./rank.js";
+export * from "./taint.js";
+export * from "./identity.js";
 export * from "./store.js";
+export * from "./export.js";
 export * from "./migrate.js";
-
 import { createFileNoteStore, type FileStoreOptions, type NoteStore } from "./store.js";
 import { migrateOldMemory, type MigrationOptions } from "./migrate.js";
 

@@ -2,13 +2,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanText, parseNotes, rankNotes, renderPrompt, selectForPrompt, type Note } from "./core.js";
+import { cleanText, parseNotes, type Note } from "./core.js";
+import { rankNotes, renderPrompt, selectForPrompt } from "./rank.js";
 import { createFileNoteStore, memoryDir } from "./store.js";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "notes-")); });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
-const note = (over: Partial<Note>): Note => ({ id: "m_aaaaaaaa", text: "x", scope: "global", source: "you", created: "2026-01-01T00:00:00.000Z", ...over });
+const note = (over: Partial<Note>): Note => ({ id: "m_aaaaaaaa", text: "x", scope: "global", source: "user", status: "live", created: "2026-01-01T00:00:00.000Z", ...over });
 
 describe("core", () => {
   it("keeps notes to one clean line and hides comment markers", () => {
@@ -16,16 +17,16 @@ describe("core", () => {
     expect(cleanText("y".repeat(900))).toHaveLength(500);
   });
   it("parses hand-written lines, assigns stable ids and keeps metadata", () => {
-    const md = "# Memory\n\n- Run tests with `pnpm test`\n- Avoid npm <!-- id=m_deadbeef kind=avoid source=0 created=2026-02-01T00:00:00.000Z used=2026-03-01T00:00:00.000Z -->\nnot a note\n";
+    const md = "# Memory\n\n- Run tests with `pnpm test`\n- Avoid npm <!-- id=m_deadbeef kind=avoid source=0 created=2026-02-01T00:00:00.000Z used=2026-03-01 -->\nnot a note\n";
     const a = parseNotes(md, "global", undefined, "2026-01-01T00:00:00.000Z");
     expect(a.map(n => n.text)).toEqual(["Run tests with `pnpm test`", "Avoid npm"]);
-    expect(a[1]).toMatchObject({ id: "m_deadbeef", kind: "avoid", source: "0", lastUsed: "2026-03-01T00:00:00.000Z" });
+    expect(a[1]).toMatchObject({ id: "m_deadbeef", kind: "avoid", source: "model", lastInjected: "2026-03-01" });
     expect(parseNotes(md, "global", undefined, "z")[0]!.id).toBe(a[0]!.id);
   });
   it("ranks the current folder first, then recency, and drops other folders", () => {
     const ranked = rankNotes([note({ id: "m_g1", created: "2026-05-01T00:00:00.000Z" }), note({ id: "m_f1", scope: "folder", folder: "/a", created: "2026-01-01T00:00:00.000Z" }),
-      note({ id: "m_f2", scope: "folder", folder: "/b" }), note({ id: "m_g2", created: "2026-01-01T00:00:00.000Z", lastUsed: "2026-06-01T00:00:00.000Z" })], "/a");
-    expect(ranked.map(n => n.id)).toEqual(["m_f1", "m_g2", "m_g1"]);
+      note({ id: "m_f2", scope: "folder", folder: "/b" }), note({ id: "m_g2", created: "2026-01-01T00:00:00.000Z", lastInjected: "2026-06-01" }), note({ id: "m_p", status: "proposed" })], "/a");
+    expect(ranked.map(n => n.id)).toEqual(["m_f1", "m_g1", "m_g2"]); // never by last shown, and proposals are not ranked
   });
   it("fits the budget without truncating a note", () => {
     const notes = [note({ id: "m_1", text: "a".repeat(400), created: "2026-03-01T00:00:00.000Z" }), note({ id: "m_2", text: "b".repeat(40), created: "2026-02-01T00:00:00.000Z" })];
@@ -50,13 +51,13 @@ describe("file store", () => {
     expect(store.clear()).toBe(1);
     expect(store.list()).toEqual([]);
   });
-  it("picks up hand edits and tracks last use", () => {
+  it("picks up hand edits and records the last time a note was shown", () => {
     const store = createFileNoteStore({ home });
     const n = store.add({ text: "one" });
     writeFileSync(join(memoryDir(home), "MEMORY.md"), `${readFileSync(join(memoryDir(home), "MEMORY.md"), "utf8")}- typed by hand\n`);
     expect(store.list().map(x => x.text).sort()).toEqual(["one", "typed by hand"]);
-    store.markUsed([n.id], "2026-04-01T00:00:00.000Z");
-    expect(store.list().find(x => x.id === n.id)?.lastUsed).toBe("2026-04-01T00:00:00.000Z");
+    store.markInjected([n.id], "2026-04-01T10:00:00.000Z");
+    expect(store.list().find(x => x.id === n.id)?.lastInjected).toBe("2026-04-01");
   });
   it("disables and re-enables all notes", () => {
     const store = createFileNoteStore({ home });

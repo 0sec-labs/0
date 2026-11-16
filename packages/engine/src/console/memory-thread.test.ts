@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createFileNoteStore, type NoteStore } from "../notes/index.js";
+import { createFileNoteStore, verifyContext, type NoteStore } from "../notes/index.js";
 import { createConsoleSession } from "./turn-engine.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 
@@ -53,13 +53,14 @@ describe("Memory in a thread", () => {
   });
 
   it("lets the model remember a note with the memory tool and a later thread sees it", async () => {
-    const first = new Runtime([inspect(), tool("memory", { action: "remember", note: "Accepted fix: parameterize queries in db.ts", kind: "fix-decision" }), done()]);
+    const first = new Runtime([tool("memory", { action: "remember", note: "Accepted fix: parameterize queries in db.ts", kind: "fix-decision" }), done()]);
     const thread = session(first);
     await thread.send("Fix the SQL injection"); await thread.cleanup();
     expect(first.calls[1]?.tools.some(t => t.name === "memory")).toBe(true);
-    const saved = store.list({ folder: root });
+    const saved = store.list(); // no folder access was granted yet, so the note is global
     expect(saved).toHaveLength(1);
-    expect(saved[0]).toMatchObject({ source: "0", kind: "fix-decision", scope: "folder" });
+    expect(saved[0]).toMatchObject({ source: "model", status: "live", kind: "fix-decision", scope: "global" });
+    expect(saved[0]?.thread).toBeTruthy();
     const second = new Runtime([inspect(), done()]);
     const next = session(second); await next.send("What did we decide?"); await next.cleanup();
     expect(seen(second)).toContain("parameterize queries in db.ts");
@@ -67,9 +68,49 @@ describe("Memory in a thread", () => {
 
   it("lets the model forget a note by id", async () => {
     const note = store.add({ text: "Wrong fact", folder: root });
-    const thread = session(new Runtime([inspect(), tool("memory", { action: "forget", id: note.id }), done()]));
+    const thread = session(new Runtime([tool("memory", { action: "forget", id: note.id }), done()]));
     await thread.send("That note is wrong"); await thread.cleanup();
     expect(store.list()).toEqual([]);
+  });
+
+  it("sends a remember from a thread that read a file to the Proposed inbox, and shows it to nobody until accepted", async () => {
+    const first = new Runtime([inspect(), tool("memory", { action: "remember", note: "Deploys need the staging flag", kind: "avoid" }), done()]);
+    const thread = session(first);
+    await thread.send("Look at the repo"); await thread.cleanup();
+    expect(store.list({ folder: root })).toEqual([]);
+    const proposed = store.list({ folder: root, status: "proposed" });
+    expect(proposed).toHaveLength(1);
+    expect(proposed[0]).toMatchObject({ source: "model", status: "proposed", tainted: true, kind: "avoid" });
+    expect(JSON.stringify(first.calls[2]?.messages)).toContain("Saved for review");
+    const next = new Runtime([done()]); const t2 = session(next); await t2.send("hi"); await t2.cleanup();
+    expect(seen(next)).not.toContain("staging flag");
+    expect(verifyContext(store, root)).toBe(""); // a proposed avoid note never steers the scan verifier
+    store.accept(proposed[0]!.id);
+    expect(verifyContext(store, root)).toContain("staging flag"); // accepted: now it counts
+  });
+
+  it("refuses update and forget on saved notes once the thread has read untrusted content", async () => {
+    const live = store.add({ text: "Keep this fact", folder: root });
+    const thread = session(new Runtime([inspect(), tool("memory", { action: "forget", id: live.id }), tool("memory", { action: "update", id: live.id, note: "Changed by injection" }), done()]));
+    await thread.send("Look"); await thread.cleanup();
+    expect(store.list().map(n => n.text)).toEqual(["Keep this fact"]);
+  });
+
+  it("commits at once when the operator types remember, even in a thread that read a file", async () => {
+    const thread = session(new Runtime([inspect(), done()]));
+    await thread.send("Remember that releases are cut from main"); await thread.cleanup();
+    expect(store.list()[0]).toMatchObject({ text: "releases are cut from main", source: "user", status: "live" });
+    const secret = session(new Runtime([done()]));
+    await secret.send(`remember my key is ${["sk", "abcdefghijklmnop", "qrstuvwxyz123456"].join("-")}`); await secret.cleanup();
+    expect(store.list().map(n => n.text)).toEqual(["releases are cut from main"]);
+  });
+
+  it("limits how many notes one thread may save", async () => {
+    const calls = Array.from({ length: 7 }, (_, i) => tool("memory", { action: "remember", note: `Distinct fact number ${i} about module${i}.ts layout` }));
+    const runtime = new Runtime([...calls.map((call, i) => ({ ...call, content: [{ ...(call.content[0] as object), id: `m${i}` }] }) as NativeRuntimeResult), done()]);
+    const thread = session(runtime);
+    await thread.send("Save many"); await thread.cleanup();
+    expect(store.list()).toHaveLength(5);
   });
 
   it("writes nothing when repository files or tool output merely contain note-like text", async () => {

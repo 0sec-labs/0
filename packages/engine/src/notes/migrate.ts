@@ -1,5 +1,5 @@
 // One-time, idempotent import of every older memory store into the one Memory. Old data is only
-// read, never changed or deleted. Notes from old stores are marked source "0".
+// read, never changed or deleted. Notes from old stores are marked source "import" (triage notes, which people wrote, are also marked reviewed).
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homeStateDir } from "../shared/index.js";
@@ -85,7 +85,7 @@ export function migrateOldMemory(store: NoteStore, options: MigrationOptions = {
   const dbPath = options.dbPath ?? resolveOsecDbPath();
   const roots = new Map<string, string>();
   const seen = new Set<string>();
-  const run = (candidates: Candidate[]): SourceReport => {
+  const run = (candidates: Candidate[], reviewed = false): SourceReport => {
     const report: SourceReport = { found: candidates.length, imported: 0, duplicates: 0, skipped: 0 };
     for (const item of candidates) {
       const key = `${item.folder ?? ""}\0${item.text.toLowerCase()}`;
@@ -95,14 +95,15 @@ export function migrateOldMemory(store: NoteStore, options: MigrationOptions = {
       if (seen.has(key)) { report.duplicates++; continue; }
       seen.add(key);
       const before = store.list({ query: item.text }).some(note => note.text === item.text && note.folder === (item.folder ?? undefined));
-      store.add({ text: item.text, scope: item.folder ? "folder" : "global", folder: item.folder, kind: item.kind, source: "0", created: item.created });
+      try { store.add({ text: item.text, scope: item.folder ? "folder" : "global", folder: item.folder, kind: item.kind, source: "import", created: item.created, ...(reviewed ? { reviewed } : {}) }); }
+      catch { report.skipped++; continue; } // a secret-looking or empty note is not imported
       if (before) report.duplicates++; else report.imported++;
     }
     return report;
   };
   const hunt = run(fromHunt(options.home, roots));
   const lessons = run(fromLessons(dbPath, roots));
-  const triage = run(fromTriage(dbPath));
+  const triage = run(fromTriage(dbPath), true);
   const craft = run(fromCraft([...(options.craftPaths ?? []), ...(process.env["CYBERGYM_MEMORY_DB"] ? [process.env["CYBERGYM_MEMORY_DB"]] : [])]));
   const sources = { hunt, craft, lessons, triage };
   const report: MigrationReport = { version: 1, importedAt: (options.now?.() ?? new Date()).toISOString(), sources, total: Object.values(sources).reduce((sum, s) => sum + s.imported, 0) };

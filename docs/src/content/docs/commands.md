@@ -4195,17 +4195,19 @@ List, add, remove, export and import what 0 remembers across threads
 0 memory
 ```
 
-Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`.
+Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note you add here is saved at once. A note 0 wants to keep after reading web pages, files or tool output waits in the proposed inbox until you accept it. Secrets are never saved.
 
 ```bash
 0 memory list
 0 memory add "Run tests with pnpm test" --kind command
-0 memory export -o memory.json
+0 memory proposed list
+0 memory proposed accept m_1a2b3c4d
+0 memory export --to AGENTS.md
 ```
 
 Guide: Read the workflow.
 
-Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
+Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [proposed](#memory-proposed) · [export](#memory-export) · [import](#memory-import).
 
 #### memory list
 
@@ -4301,9 +4303,67 @@ Use notes in new threads again
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
 
+#### memory proposed
+
+Review notes 0 proposed after reading web pages, files or tool output (they are not used until accepted)
+
+```text
+0 memory proposed
+```
+
+Subcommands: [list](#memory-proposed-list) · [accept](#memory-proposed-accept) · [reject](#memory-proposed-reject).
+
+#### memory proposed list
+
+List proposed notes
+
+```text
+0 memory proposed list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory proposed accept
+
+Accept a proposed note so it is used in new threads. `--text` corrects the wording while accepting.
+
+```text
+0 memory proposed accept [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--text <text>` | — | Correct the wording while accepting |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory proposed reject
+
+Discard a proposed note
+
+```text
+0 memory proposed reject [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
 #### memory export
 
-Write notes to a file
+Write notes to a file: JSON for 0 by default, or with `--to` an AGENTS.md section for a person to review and commit. Only notes you wrote or accepted are exported. 0 never imports notes from a repository.
 
 ```text
 0 memory export [options]
@@ -4311,8 +4371,10 @@ Write notes to a file
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--folder <path>` | — | Only this folder |
-| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--folder <path>` | — | Only this folder (default for --to: this folder) |
+| `-o, --output <file>` | — | Write the JSON export to a file instead of stdout |
+| `--to <file>` | — | Add accepted notes to this markdown file (for example AGENTS.md) as a section you review and commit |
+| `--markdown` | — | Print the markdown section instead of JSON |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
 

@@ -37,7 +37,7 @@ import { eventBus } from "../../events/bus.js";
 import { diag } from "../../diagnostics/channel.js";
 import { reduceCoordinatorState, superviseCoordinator, formatFindingTailLine, type CoordinatorState, type CoordinatorIntervention } from "../coordinator-rails.js";
 import { sendOperatorMessage, type MessagingRuntime } from "../agent-messaging.js";
-import { memoryContext, memoryDisabledByEnv, openMemory, runMemoryTool, type NoteStore } from "../../notes/index.js";
+import { createThreadGuard, memoryContext, memoryDisabledByEnv, openMemory, runMemoryTool, type NoteStore } from "../../notes/index.js";
 import { toolCallPreview } from "../tool-preview.js";
 import { newCorrelationId, buildToolCallLogEntry, buildToolCallsPayload, type ToolCallLogEntry } from "../action-log.js";
 import { registerSignalCleanup } from "../signal-cleanup.js";
@@ -328,7 +328,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         (config.role === "attack" || config.role === "discovery")));
   if (memoryActive) {
     const store = getMemory();
-    if (store) toolCtx.memory = (args) => runMemoryTool(store, config.scopePath, args);
+    if (store) {
+      // An autonomous loop reads repository files and target output all the time: its notes are proposals for a person to review.
+      const guard = createThreadGuard(config.scanId, { tainted: true });
+      toolCtx.memory = (args) => runMemoryTool(store, config.scopePath, args, { guard });
+    }
   }
 
   const tools: ToolDefinition[] = (() => {
