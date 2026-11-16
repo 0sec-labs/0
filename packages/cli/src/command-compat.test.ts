@@ -95,6 +95,7 @@ describe("alias table: every 0.34 command still resolves", () => {
 describe("the notice", () => {
   it("is one dim line, only on a TTY and never with --json", () => {
     expect(formatMovedNotice(legacyNotice(["web"]), true)).toBe("\u001b[2mmoved: use `0`\u001b[22m\n");
+    expect(legacyNotice(["web", "--headless", "--port", "0"])).toBe("moved: use `0 --headless --port 0`");
     expect(formatMovedNotice("moved: use `0 x`", false)).toBe("moved: use `0 x`\n");
     expect(shouldPrintMovedNotice(["findings", "accept", "x"], false)).toBe(false);
     expect(shouldPrintMovedNotice(["findings", "accept", "x", "--json"], true)).toBe(false);

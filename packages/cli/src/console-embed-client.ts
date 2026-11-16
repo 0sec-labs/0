@@ -75,7 +75,7 @@ function embed(options: ConsoleClientOptions): ConsoleClient {
       return { handle: (p, m, i, q) => workflows.handle(p, m, i, q), dispose: async () => { try { await workflows.dispose(); } finally { await gateway.closeAll(); } } };
     }
     const { WebSentinelService } = await import("./web/sentinels.js");
-    const offline = (): never => { throw new ConsoleRequestError("Missions are only available while the engine is running. Start it with `0 dashboard`.", 409); };
+    const offline = (): never => { throw new ConsoleRequestError("Sentinels are only available while the engine is running. Start it with `0 --headless`.", 409); };
     const sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: { create: offline, send: async () => offline(), pendingDecisions: () => 0 } });
     return { handle: (p, m, i, q) => sentinels.handle(p, m, i, q), dispose: () => sentinels.dispose() };
   };
@@ -86,7 +86,7 @@ function embed(options: ConsoleClientOptions): ConsoleClient {
       const url = new URL(path, "http://embedded.invalid");
       const kind = /^\/api\/console\/sentinel(?:s|-presets)(?:\/|$)/.test(url.pathname) ? "sentinels"
         : /^\/api\/console\/workflow-(?:definitions|executions)(?:\/|$)/.test(url.pathname) ? "workflows" : undefined;
-      if (!kind) throw new ConsoleRequestError("This action needs a running engine. Start it with `0 dashboard`.", 409);
+      if (!kind) throw new ConsoleRequestError("This action needs a running engine. Start it with `0 --headless`.", 409);
       const result = await (await service(kind)).handle(url.pathname, method, body, url.searchParams);
       if (!result) throw new ConsoleRequestError("Unknown route.", 404);
       if (result.status >= 400) throw failure(result.status, result.data);
@@ -103,7 +103,7 @@ function embed(options: ConsoleClientOptions): ConsoleClient {
 export async function openConsoleClient(options: ConsoleClientOptions = {}, deps: { fetch?: typeof fetch } = {}): Promise<ConsoleClient> {
   const descriptor = discoverLocalEngine(options);
   if (descriptor) return attach(descriptor, deps.fetch ?? fetch);
-  if (options.requireHost) throw new ConsoleRequestError(`${options.requireHost} needs a running engine. Start it with \`0 dashboard\`.`, 409);
+  if (options.requireHost) throw new ConsoleRequestError(`${options.requireHost} needs a running engine. Start it with \`0 --headless\`.`, 409);
   assertLocalEngineAvailable(options.dbPath, options.homeDir);
   return embed(options);
 }

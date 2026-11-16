@@ -181,6 +181,10 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
 
   const limit = Number(opts.limit ?? "50");
   if (!Number.isSafeInteger(limit) || limit < 0 || limit > 5000) throw new Error("Finding limit must be an integer between 0 and 5000.");
+  const choice = (name: string, value: string | undefined, allowed: readonly string[]): void => { if (value !== undefined && !allowed.includes(value)) throw new Error(`Unknown ${name} "${value}". Use one of: ${allowed.join(", ")}.`); };
+  choice("severity", opts.severity, ["critical", "high", "medium", "low", "info"]);
+  choice("status", opts.status, ["discovered", "verified", "confirmed", "scored", "reported", "fixed", "false-positive"]);
+  choice("triage", opts.triage, ["new", "accepted", "suppressed"]);
   const filters = { scanId: opts.scan, severity: opts.severity, category: opts.category, status: opts.status, triageStatus: opts.triage };
   const rows: FindingRow[] = [];
   const groups: Array<{ fingerprint: string; latest: FindingRow; count: number; scans: number }> = [];

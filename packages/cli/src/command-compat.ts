@@ -421,6 +421,11 @@ export function legacyRow(args: Args): LegacyRow | undefined {
 
 export function legacyNotice(args: Args): string {
   const row = legacyRow(args);
+  // `0 web --headless --port 0` is `0 --headless --port 0`: the flags carry over, only the word `web` goes.
+  if (row?.old === "web" && args[0] === "web") {
+    const flags = args.slice(1).filter((arg) => arg !== "--help" && arg !== "-h");
+    if (flags.length) return `moved: use \`0 ${flags.join(" ")}\``;
+  }
   return row ? `moved: use ${row.use.startsWith("0") ? `\`${row.use}\`` : row.use}` : "";
 }
 

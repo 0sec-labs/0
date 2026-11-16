@@ -216,7 +216,7 @@ export class LearningStore {
   }
   setKnowledgeStatus(id: string, status: KnowledgeStatus): KnowledgeEntry {
     if (!["current", "stale", "disabled"].includes(status)) fail("Invalid knowledge status.");
-    const entry = this.getKnowledge(id); if (!entry) fail("Knowledge not found.", 404);
+    const entry = this.getKnowledge(id); if (!entry) fail("Memory not found.", 404);
     // Stale source-backed knowledge needs a new evidence entry, never merely a status reset.
     if (status === "current" && entry.status !== "current") fail("Retain fresh evidence before reactivating knowledge.", 409);
     entry.status = status; entry.updatedAt = new Date().toISOString(); write(this.#db, "learning_knowledge", entry); return entry;

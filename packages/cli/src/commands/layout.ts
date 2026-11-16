@@ -124,7 +124,8 @@ export function applyNewSurface(top: Command): void {
     if (top.commands.some((command) => command.name() === stub.name)) continue;
     const added = top.createCommand(stub.name).description(stub.description).arguments(stub.args).allowUnknownOption().allowExcessArguments();
     for (const [flags, text] of stub.options ?? []) added.option(flags, text);
-    added.action(() => { throw new Error(`Incomplete: run \`0 ${top.name()} ${stub.name} --help\``); });
+    const choices = (stub.options ?? []).map(([flags, text]) => `${flags} (${text})`).join(", ");
+    added.action(() => { throw new Error(`${choices ? `Missing or unrecognised option. Use ${choices}. ` : "Incomplete. "}See \`0 ${top.name()} ${stub.name} --help\`.`); });
     top.addCommand(added);
   }
   // Visible subcommands first, in the documented order.

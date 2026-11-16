@@ -52,7 +52,7 @@ function embedded(options: ConsoleClientOptions): ConsoleClient {
         const status = typeof (error as { statusCode?: unknown }).statusCode === "number" ? (error as { statusCode: number }).statusCode : 500;
         result = { status, data: { error: error instanceof Error ? error.message : "Request failed." } };
       }
-      if (!result) return { status: 503, data: { error: "This needs a running 0 engine. Start one with `0 dashboard`." } };
+      if (!result) return { status: 503, data: { error: "This needs a running 0 engine. Start one with `0 --headless`." } };
       const descriptor = describeConsoleAudit(route, method, body);
       if (descriptor && (result.status < 400 || result.status === 401 || result.status === 403)) {
         audit({ actor: "cli", action: descriptor.action, subject: descriptor.subject, outcome: result.status < 400 ? "ok" : "denied", detail: { ...descriptor.detail, status: result.status } });
