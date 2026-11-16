@@ -12,6 +12,15 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The docs pin the current release (0.37.0) in the image tags, the GitHub Action and the compose example, and a check (`node scripts/bump-docs-pins.mjs --check`, part of `pnpm docs:check`) fails when a pin lags the CLI version.
+- What's new no longer shows an old screenshot for every release; a release without its own picture shows none.
+- The Extensions page learns from the server whether a scope is defined: the scope row says On with no switch when one is, and has a switch only when none is.
+- Refusing an approval run by a thread is one plain sentence ("This command was run by a thread, not by you. Run it yourself in a terminal to approve.") instead of naming an internal variable.
+- A command that runs from another folder than the running console says "This console is for <folder>. Run the command there, or add --db-path <path>."
+- `0 usage --by` takes `model` or `thread`; the README and docs description no longer repeat a sentence; leftover mentions of plugins and Sentinels in command help were reworded.
+
 ## [0.37.0] - 2026-11-16
 
 This release adds a verifier gate so a fix is only called Verified when the harness checked it, brings back the Findings board and the Agents list, and simplifies the sidebar, the Skills page, the docs and CI.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -29,6 +29,23 @@ function run(args, { expect = 0, extraEnv = {} } = {}) {
   assert.equal(result.status, expect, `extension smoke: ${args.join(" ")} exited ${result.status}, wanted ${expect}\n${text}`);
   return text;
 }
+const ptyFixture = join(root, "fixture-pty");
+mkdirSync(ptyFixture, { recursive: true });
+writeFileSync(join(ptyFixture, "extension.json"), JSON.stringify({ name: "pty-smoke", version: "1.0.0", description: "Terminal prompt smoke fixture" }));
+const shellQuote = text => `'${String(text).replaceAll("'", `'\\''`)}'`;
+/** Runs the CLI under a pseudo-terminal (util-linux `script`) and types `answer` once the [y/N] prompt is on screen. Linux only. */
+function runInPty(args, answer) {
+  const line = [command, ...prefix, ...args].map(shellQuote).join(" ");
+  return new Promise((done, fail) => {
+    const child = spawn("/usr/bin/script", ["-qec", line, "/dev/null"], { cwd: project, env, stdio: ["pipe", "pipe", "pipe"] });
+    let raw = "", answered = false;
+    const timer = setTimeout(() => { child.kill("SIGKILL"); fail(new Error(`pty smoke timed out:\n${strip(raw)}`)); }, 20_000);
+    const onData = chunk => { raw += chunk; if (!answered && /\[y\/N\]/.test(strip(raw))) { answered = true; child.stdin.write(`${answer}\n`); } };
+    child.stdout.on("data", onData); child.stderr.on("data", onData);
+    child.on("close", status => { clearTimeout(timer); done({ status, text: strip(raw) }); });
+  });
+}
+const installed = name => run(["skills", "extensions", "list"]).split("\n").some(line => line.includes(name));
 try {
   // The old MCP server file is imported on first use, as a disabled local extension; nothing is started.
   const listed = run(["skills", "extensions", "list"]);
@@ -49,9 +66,19 @@ try {
   assert(/enabled/.test(run(["skills", "extensions", "list"]).split("\n").find(line => line.includes("release-smoke")) ?? ""));
   assert(/Disabled release-smoke/.test(run(["skills", "extensions", "disable", "release-smoke"])));
   assert(/release-smoke/.test(run(["skills", "add", "--preview", fixture])) && /release-smoke/.test(run(["skills", "add", fixture, "--preview"])));
+  // The terminal prompt itself: Linux runners only (`script -qec` is util-linux; macOS and Windows skip).
+  if (process.platform === "linux" && existsSync("/usr/bin/script")) {
+    const no = await runInPty(["skills", "extensions", "add", ptyFixture], "n");
+    assert(/\[y\/N\]/.test(no.text), `the [y/N] prompt did not appear:\n${no.text}`);
+    assert(/Not installed/.test(no.text) && no.status !== 0, `answering n did not abort:\n${no.text}`);
+    assert(!installed("pty-smoke"), "answering n installed the extension");
+    const yes = await runInPty(["skills", "extensions", "add", ptyFixture], "y");
+    assert(/\[y\/N\]/.test(yes.text) && /Installed extension pty-smoke/.test(yes.text) && yes.status === 0, `answering y did not install:\n${yes.text}`);
+    assert(installed("pty-smoke"), "answering y did not install the extension");
+  } else console.log(`Skipping the terminal prompt case on ${process.platform}.`);
   const old = run(["plugin", "list"]);
   assert(/scope/.test(old), old);
-  console.log(`Extension smoke passed: review, agent-session refusal, install without a terminal, enable, disable, list, old-data import ran from the built CLI without a PATH interpreter.`);
+  console.log(`Extension smoke passed: review, refusal when a thread runs it, install without a terminal, enable, disable, list, old-data import ran from the built CLI without a PATH interpreter.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

@@ -75,7 +75,7 @@ function embed(options: ConsoleClientOptions): ConsoleClient {
       return { handle: (p, m, i, q) => workflows.handle(p, m, i, q), dispose: async () => { try { await workflows.dispose(); } finally { await gateway.closeAll(); } } };
     }
     const { WebSentinelService } = await import("./web/sentinels.js");
-    const offline = (): never => { throw new ConsoleRequestError("Sentinels are only available while the engine is running. Start it with `0 --headless`.", 409); };
+    const offline = (): never => { throw new ConsoleRequestError("Agents are only available while the engine is running. Start it with `0 --headless`.", 409); };
     const sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: { create: offline, send: async () => offline(), pendingDecisions: () => 0 } });
     return { handle: (p, m, i, q) => sentinels.handle(p, m, i, q), dispose: () => sentinels.dispose() };
   };

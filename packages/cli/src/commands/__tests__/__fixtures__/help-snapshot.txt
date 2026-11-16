@@ -3254,7 +3254,7 @@ Usage: 0 models usage [options]
 Show spend and tokens of the open threads, by model or by thread
 
 Options:
-  --by <model|mission>  Group by model (default) or list each thread
+  --by <model|thread>   Group by model (default) or list each thread
   --json                Print JSON
   -h, --help            display help for command
 

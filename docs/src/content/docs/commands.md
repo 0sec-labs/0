@@ -30,7 +30,7 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 | `0 findings` | Browse findings and change their status. `--format` exports, `--import` loads a report. | `list`, `show`, `update` |
 | `0 threads` | Start, follow and stop threads. | `list`, `send`, `stop` |
 | `0 agents` | Agents and, with `--automation`, saved automations. | `list`, `run`, `set` |
-| `0 skills` | Skills, plugins, MCP servers and connectors. | `list`, `add`, `run` |
+| `0 skills` | Skills, extensions, MCP servers and connectors. | `list`, `add`, `run` |
 | `0 memory` | What 0 remembers across threads. | `list`, `set`, `export` |
 | `0 models` | Models and provider connections. | `list`, `set`, `connect` |
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
@@ -709,12 +709,12 @@ Show spend and tokens of the open threads, by model or by thread. Open threads a
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--by <model\|mission>` | — | Group by model (default) or list each thread |
+| `--by <model\|thread>` | — | Group by model (default) or list each thread |
 | `--json` | — | Print JSON |
 
 ### config audit-log
 
-Show the local log of privileged actions: connection and settings changes, plugin installs and denied attempts. The log is append-only.
+Show the local log of privileged actions: connection and settings changes, extension installs and denied attempts. The log is append-only.
 
 ```text
 0 config audit-log [options]

@@ -10,8 +10,9 @@ const sum = (rows: Row[]) => { const priced = rows.filter(r => r.costUsd !== nul
 
 export function runUsage(options: JsonOption & { by?: string }, deps: ConsoleCommandDeps = {}) {
   return runConsoleCommand(options, deps, async (client, io) => {
-    const by = options.by ?? "model";
-    if (by !== "model" && by !== "mission") throw new UsageError("--by must be model or mission.");
+    const requested = options.by === "thread" ? "mission" : options.by; // `mission` stays accepted as the old spelling
+    const by = requested ?? "model";
+    if (by !== "model" && by !== "mission") throw new UsageError("--by must be model or thread.");
     const list = client.mode === "attached" ? (expectOk(await client.request("GET", "/api/console/sessions")).sessions as { id: string; title?: string }[]).slice(0, MAX_MISSIONS) : [];
     const rows: Row[] = [];
     for (const session of list) {
@@ -39,7 +40,7 @@ export function runUsage(options: JsonOption & { by?: string }, deps: ConsoleCom
 
 export function registerUsageCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
   program.command("usage").description("Show spend and tokens of the open threads, by model or by thread")
-    .option("--by <model|mission>", "Group by model (default) or list each thread")
+    .option("--by <model|thread>", "Group by model (default) or list each thread")
     .option("--json", "Print JSON")
     .action((o: JsonOption & { by?: string }) => exitWhenDone(runUsage(o, deps)));
 }
