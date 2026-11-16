@@ -29,7 +29,7 @@ let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
 const wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms));
 async function start(port = "0") {
-  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "web", "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--engines-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
+  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--engines-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
     cwd: workspace, env: { ...process.env, ZERO_TEAM_SMOKE_ENGINE_KEY: randomUUID(), ZERO_TEAM_CONFIG: "" }, stdio: ["ignore", "pipe", "pipe"],
   });
   child.stderr.resume();

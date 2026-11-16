@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Black-box check of `0 web --server-mode` over HTTP. Works against a container or a native process.
+// Black-box check of `0 --server-mode` over HTTP. Works against a container or a native process.
 //   node scripts/smoke-server-mode.mjs --port 48123 --host-name localhost --token <access token>
 // Exits non-zero on the first violated expectation. Prints no secret.
 import { request } from "node:http";

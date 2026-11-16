@@ -26,7 +26,7 @@ const env = {
   TEST_ENGINE_TOKEN: randomBytes(32).toString("hex"),
 };
 let output = "", errors = "";
-const server = spawn(command, [...prefix, "web", "--port", "0", "--no-open", "--ready-json", "--engine-token-env", "TEST_ENGINE_TOKEN", "--engine-workspace", workspace, "--db-path", join(temporary, "control.db"), "--asset-dir", assets], { env, cwd: workspace, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(command, [...prefix, "--port", "0", "--no-open", "--ready-json", "--engine-token-env", "TEST_ENGINE_TOKEN", "--engine-workspace", workspace, "--db-path", join(temporary, "control.db"), "--asset-dir", assets], { env, cwd: workspace, stdio: ["ignore", "pipe", "pipe"] });
 server.stdout.on("data", data => { output = (output + data).slice(-200_000); });
 server.stderr.on("data", data => { errors = (errors + data).slice(-200_000); });
 const exited = new Promise(resolve => server.once("exit", (code, signal) => resolve({ code, signal })));

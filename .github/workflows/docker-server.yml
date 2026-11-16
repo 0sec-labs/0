@@ -77,7 +77,7 @@ jobs:
           docker run -d --name zero-smoke -p 127.0.0.1:48123:48123 -v zero-smoke-data:/data \
             -e ZERO_ACCESS_TOKEN="$TOKEN" -e ZERO_ALLOWED_HOSTS=localhost,127.0.0.1 \
             -e ZERO_TRUSTED_PROXY=172.17.0.0/16 -e ZERO_NO_TELEMETRY=1 \
-            zero-server-smoke:ci web --host 0.0.0.0 --server-mode
+            zero-server-smoke:ci --host 0.0.0.0 --server-mode
       - name: Probe health, anonymous access, Host rules and sign-in
         run: node scripts/smoke-server-mode.mjs --port 48123 --host-name localhost --token "$ZERO_TEST_TOKEN"
       - name: Container health status and logs

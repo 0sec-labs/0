@@ -20,7 +20,7 @@ const wait = ms => new Promise(done => setTimeout(done, ms));
 const env = { PATH: process.env.PATH, HOME: home, NO_COLOR: '1', ZERO_SKIP_UPDATE_CHECK: '1', ZERO_NO_DEPRECATION_WARNINGS: '1', ZERO_E2E_ENGINE_TOKEN: randomBytes(32).toString('hex') };
 let child, browser;
 try {
-  child = spawn(process.execPath, [join(root, 'packages/cli/dist/index.js'), 'web', '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
+  child = spawn(process.execPath, [join(root, 'packages/cli/dist/index.js'), '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
     '--db-path', join(base, 'engine.db'), '--asset-dir', join(root, 'packages/web/dist'), '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN', '--engine-workspace', workspace],
   { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

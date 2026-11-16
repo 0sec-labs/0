@@ -1,6 +1,6 @@
 // The GitHub webhook receiver, end to end, in server mode.
 //
-// Starts a disposable `0 web --server-mode` (isolated HOME and database, no real credentials, ZERO_0VERSE_MCP=0) with a
+// Starts a disposable `0 --server-mode` (isolated HOME and database, no real credentials, ZERO_0VERSE_MCP=0) with a
 // fake `gh` on PATH and a deterministic OpenAI-compatible model server. A pull request Agent is created through the CLI,
 // the webhook secret is created through the console API, and signed `pull_request` deliveries are sent to
 // POST /api/webhooks/github as GitHub would (no cookie, no control token). Asserts: no secret means 404, a correctly signed
@@ -104,7 +104,7 @@ const prEvent = (number, sha, action = 'opened', extra = {}) => JSON.stringify({
 let child;
 let errors = '';
 try {
-  child = spawn(process.execPath, [cli, 'web', '--host', '127.0.0.1', '--port', String(port), '--no-open', '--ready-json', '--server-mode', '--allowed-host', 'localhost,127.0.0.1', '--public-url', origin,
+  child = spawn(process.execPath, [cli, '--host', '127.0.0.1', '--port', String(port), '--no-open', '--ready-json', '--server-mode', '--allowed-host', 'localhost,127.0.0.1', '--public-url', origin,
     '--db-path', join(base, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN', '--engine-workspace', workspace], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', data => { output = (output + data).slice(-32000); });
@@ -147,20 +147,20 @@ try {
 
   // 2. One Agent with an enabled pull request trigger, baselined against the current open pull requests.
   await setPrs([pr(1, 'a1a1a1a1')]);
-  const agent = json(['agents', 'create', '--preset', 'pr-security-reviewer', '--name', 'Webhook reviewer']);
+  const agent = json(['agents', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', 'Webhook reviewer']);
   const created = agent.sentinel ?? agent;
-  const definition = json(['automation', 'create', '--template', 'repository-review', '--name', 'Review pull requests (webhook)', '--target', workspace]);
+  const definition = json(['agents', 'set', '--automation', 'create', '--template', 'repository-review', '--name', 'Review pull requests (webhook)', '--target', workspace]);
   const file = join(base, 'definition.json');
   await writeFile(file, JSON.stringify({ ...definition, ownerSentinelId: created.id, runIn: 'new-mission' }));
-  json(['automation', 'edit', definition.id, '--file', file]);
-  json(['agents', 'resume', created.id, '--acknowledge']);
-  const trigger = json(['agents', 'triggers', 'add', created.id, '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main']);
-  json(['agents', 'triggers', 'enable', created.id, trigger.id, '--yes']);
+  json(['agents', 'set', '--automation', 'edit', definition.id, '--file', file]);
+  json(['agents', 'set', created.id, '--state', 'active', '--acknowledge']);
+  const trigger = json(['agents', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main']);
+  json(['agents', 'set', created.id, '--trigger', 'enable', trigger.id, '--yes']);
   const settle = async (predicate, what) => {
     for (const end = Date.now() + 40000; Date.now() < end;) { const value = await predicate(); if (value) return value; await wait(100); }
     assert.fail(`timed out waiting for ${what}\n${errors.slice(-2000)}`);
   };
-  await settle(async () => run(['agents', 'triggers', 'check', created.id, trigger.id], { allowFail: true }).status === 0, 'baseline check');
+  await settle(async () => run(['agents', 'set', created.id, '--trigger', 'check', trigger.id], { allowFail: true }).status === 0, 'baseline check');
   const activations = async () => (await api('GET', `/api/console/sentinels/${created.id}/activations`)).data.activations;
   assert.deepEqual(await activations(), [], 'baseline launches nothing');
   lap('agentReady');
@@ -194,7 +194,7 @@ try {
   assert.equal((await deliver(sample, { secret, id: first.id })).status, 202, 'replay is acknowledged');
   assert.equal((await deliver(prEvent(4, 'b2b2b2b2', 'synchronize'), { secret })).status, 202, 'a new delivery id for the same head SHA');
   await wait(1500);
-  json(['agents', 'triggers', 'check', created.id, trigger.id]);
+  json(['agents', 'set', created.id, '--trigger', 'check', trigger.id]);
   await wait(1500);
   assert.equal((await activations()).length, 1, 'one head SHA launches once across replay, a second event and the poller');
   assert.equal(modelRequests.length, modelCalls);

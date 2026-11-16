@@ -1,12 +1,12 @@
 // One engine, one reporter: crash reports reach the (fake) Sentry only after review.
 //
-// Starts a disposable `0 web` engine (loopback, isolated HOME, no provider
+// Starts a disposable `0` engine (loopback, isolated HOME, no provider
 // credentials, diagnosticReporting=ask saved as an explicit choice) whose ZERO_SENTRY_DSN points at a local
 // HTTPS server that records every request. A browser-style error report is
 // posted to the engine; the e2e asserts NOTHING reaches the fake Sentry until
 // the stored report is previewed and confirmed through the API, then that
 // exactly one envelope arrives carrying finite fields only. It also covers the
-// control-token gate, malformed ids/bodies and `0 doctor --discard-reports`.
+// control-token gate, malformed ids/bodies and `0 config doctor --discard-reports`.
 // The real DSN is never used.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -53,7 +53,7 @@ const env = {
 
 let child;
 try {
-  child = spawn(process.execPath, [cli, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
+  child = spawn(process.execPath, [cli, '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
     '--db-path', join(base, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN', '--engine-workspace', workspace],
   { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; let errors = '';
@@ -145,12 +145,12 @@ try {
   assert.deepEqual((await json(await api('diagnostics/pending'))).reports, [], 'a sent report leaves the queue');
   assert.equal((await api(`diagnostics/pending/${id}`, 'POST', { action: 'send', previewId: previewed.previewId })).status, 404, 'a preview cannot be replayed');
 
-  // 7. `0 doctor` announces waiting reports, and --discard-reports removes them without sending.
+  // 7. `0 config doctor` announces waiting reports, and --discard-reports removes them without sending.
   assert.equal((await api('diagnostics/report', 'POST', { ...report, name: 'RangeError' })).status, 202);
   const doctorEnv = { ...env, ZERO_SENTRY_DSN: dsn };
-  const doctor = spawnSync(process.execPath, [cli, 'doctor'], { cwd: workspace, env: doctorEnv, encoding: 'utf8', timeout: 30000 });
-  assert.match(doctor.stdout, /1 crash report is waiting for review: open 0 web .* 0 doctor --discard-reports/);
-  const discard = spawnSync(process.execPath, [cli, 'doctor', '--discard-reports'], { cwd: workspace, env: doctorEnv, encoding: 'utf8', timeout: 30000 });
+  const doctor = spawnSync(process.execPath, [cli, 'config', 'doctor'], { cwd: workspace, env: doctorEnv, encoding: 'utf8', timeout: 30000 });
+  assert.match(doctor.stdout, /1 crash report is waiting for review: open the web console .* 0 config doctor --discard-reports/);
+  const discard = spawnSync(process.execPath, [cli, 'config', 'doctor', '--discard-reports'], { cwd: workspace, env: doctorEnv, encoding: 'utf8', timeout: 30000 });
   assert.equal(discard.status, 0, discard.stderr);
   assert.match(discard.stdout, /Discarded 1 crash report\. Nothing was sent\./);
   assert.deepEqual((await json(await api('diagnostics/pending'))).reports, []);

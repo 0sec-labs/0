@@ -104,7 +104,7 @@ function install(name, { binary = true, settings = { updatePolicy: 'notify' } } 
 function start(installed, env = {}) {
   return new Promise(async (done, fail) => {
     const port = await freePort();
-    const child = spawn(installed.program, [join(dist, '0.js'), 'web', '--port', String(port), '--db-path', join(installed.folder, 'data.db'), '--asset-dir', assets, '--no-open'], {
+    const child = spawn(installed.program, [join(dist, '0.js'), '--port', String(port), '--db-path', join(installed.folder, 'data.db'), '--asset-dir', assets, '--no-open'], {
       cwd: installed.folder, stdio: ['ignore', 'pipe', 'pipe'],
       env: { PATH: process.env.PATH, HOME: installed.home, SHELL: '/bin/sh', TMPDIR: installed.folder, ZERO_UPDATE_ORIGIN: origin, INSTALL_FOXGUARD: '0', ZERO_NO_TELEMETRY: '1', DO_NOT_TRACK: '1', ...env },
     });

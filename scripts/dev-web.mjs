@@ -141,7 +141,7 @@ export async function run(argv = process.argv.slice(2)) {
     let readyResolve;
     const ready = new Promise(resolveReady => { readyResolve = resolveReady; });
     let output = '';
-    processes.launch(process.execPath, ['--watch', '--watch-preserve-output', 'packages/cli/dist/index.js', 'web', '--host', host, '--no-open', '--dev-url', frontendUrl, '--asset-dir', 'packages/web', '--port', String(backendPort), '--ready-json'], 'Backend watcher', true, data => {
+    processes.launch(process.execPath, ['--watch', '--watch-preserve-output', 'packages/cli/dist/index.js', '--host', host, '--no-open', '--dev-url', frontendUrl, '--asset-dir', 'packages/web', '--port', String(backendPort), '--ready-json'], 'Backend watcher', true, data => {
       output = (output + data).slice(-65536);
       if (output.includes(`ZERO_DASHBOARD_READY {"url":"${backendUrl}"}`)) readyResolve();
     });

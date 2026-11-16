@@ -42,12 +42,12 @@ function run(args) {
 }
 
 try {
-  run(["plugin", "init", pluginId, "--dir", root]);
+  run(["skills", "add", "--new", pluginId, "--dir", root]);
   const source = join(root, pluginId);
   copyFileSync(join(source, "manifest.json"), join(pluginDir, "plugin.json"));
   copyFileSync(join(source, "plugin.js"), join(pluginDir, "plugin.js"));
-  run(["plugin", "enable", pluginId]);
-  const output = run(["plugin", "run", pluginId, "sha256", "--yes", "input=hello"]);
+  run(["skills", "list", pluginId, "--enable"]);
+  const output = run(["skills", "run", pluginId, "sha256", "--yes", "input=hello"]);
   assert(output.includes("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"), output);
   console.log("Plugin runtime smoke passed: generated SHA-256 plugin executed without a PATH interpreter.");
 } finally {

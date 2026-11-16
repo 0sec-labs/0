@@ -156,7 +156,7 @@ await writeFile(preload, `setTimeout(() => { throw new Error('SECRET-CRASH-MESSA
 async function crashRun(home, extra = {}) {
   const workspace = join(home, 'workspace');
   await mkdir(workspace, { recursive: true });
-  const result = await runCapture(['web', '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json', '--db-path', join(home, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN', '--engine-workspace', workspace],
+  const result = await runCapture(['--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json', '--db-path', join(home, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN', '--engine-workspace', workspace],
     scrubbedEnv(home, { ZERO_E2E_ENGINE_TOKEN: randomBytes(32).toString('hex'), ...extra }), workspace, { nodeArgs: ['--import', preload], timeoutMs: 45000 });
   assert.equal(result.code, 1, `crash run should exit 1, got ${result.code}: ${result.stderr.slice(-1500)}`);
   assert.match(result.stderr, /SECRET-CRASH-MESSAGE/, 'the crash must still be printed locally exactly as before');

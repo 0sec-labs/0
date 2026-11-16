@@ -1,6 +1,6 @@
 // The pull request Agent, end to end: preset -> trigger -> poll -> thread -> optional PR comment.
 //
-// Starts a disposable `0 web` engine (loopback, isolated HOME and database, no real credentials,
+// Starts a disposable `0` engine (loopback, isolated HOME and database, no real credentials,
 // ZERO_0VERSE_MCP=0) with a fake `gh` on PATH that serves canned pull requests and records every
 // call, plus a deterministic OpenAI-compatible model server. Two Agents are created from the
 // `pr-security-reviewer` preset through the CLI: one with "Comment on the pull request" on, one
@@ -111,7 +111,7 @@ Object.assign(env, {
 let child;
 let browser;
 try {
-  child = spawn(process.execPath, [cli, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
+  child = spawn(process.execPath, [cli, '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
     '--db-path', join(base, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN',
     '--engine-workspace', workspace], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; let errors = '';
@@ -150,14 +150,14 @@ try {
   // 1. Two Agents from the real preset: comments on, comments off.
   await setPrs([pr(1, 'a1a1a1a1'), pr(2, 'f1f1f1f1', { isCrossRepository: true }), pr(3, 'd1d1d1d1', { isDraft: true })]);
   const makeAgent = (name, flags) => {
-    const agent = json(['agents', 'create', '--preset', 'pr-security-reviewer', '--name', name]);
+    const agent = json(['agents', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', name]);
     const created = agent.sentinel ?? agent;
-    const definition = json(['automation', 'create', '--template', 'repository-review', '--name', `Review pull requests (${name})`, '--target', workspace]);
+    const definition = json(['agents', 'set', '--automation', 'create', '--template', 'repository-review', '--name', `Review pull requests (${name})`, '--target', workspace]);
     const file = join(base, `${created.id}.json`);
     return writeFile(file, JSON.stringify({ ...definition, ownerSentinelId: created.id, runIn: 'new-mission' })).then(() => {
-      json(['automation', 'edit', definition.id, '--file', file]);
-      json(['agents', 'resume', created.id, '--acknowledge']);
-      const trigger = json(['agents', 'triggers', 'add', created.id, '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main', ...flags]);
+      json(['agents', 'set', '--automation', 'edit', definition.id, '--file', file]);
+      json(['agents', 'set', created.id, '--state', 'active', '--acknowledge']);
+      const trigger = json(['agents', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main', ...flags]);
       assert.equal(trigger.enabled, false, 'a new trigger starts off');
       return { id: created.id, triggerId: trigger.id };
     });
@@ -170,14 +170,14 @@ try {
   assert.equal((await triggerOf(quiet)).github.includeForks, false, 'forks are off by default');
   lap('agentsCreated');
 
-  const check = agent => json(['agents', 'triggers', 'check', agent.id, agent.triggerId]);
+  const check = agent => json(['agents', 'set', agent.id, '--trigger', 'check', agent.triggerId]);
   const activations = async agent => (await api('GET', `/api/console/sentinels/${agent.id}/activations`)).data.activations;
   const settle = async (predicate, what) => {
     for (const end = Date.now() + 40000; Date.now() < end;) { const value = await predicate(); if (value) return value; await wait(100); }
     assert.fail(`timed out waiting for ${what}\n${errors.slice(-2000)}`);
   };
-  const checkUntilIdle = async agent => { await settle(async () => { const result = run(['agents', 'triggers', 'check', agent.id, agent.triggerId], { allowFail: true }); return result.status === 0; }, 'trigger check'); };
-  for (const agent of agents) json(['agents', 'triggers', 'enable', agent.id, agent.triggerId, '--yes']);
+  const checkUntilIdle = async agent => { await settle(async () => { const result = run(['agents', 'set', agent.id, '--trigger', 'check', agent.triggerId], { allowFail: true }); return result.status === 0; }, 'trigger check'); };
+  for (const agent of agents) json(['agents', 'set', agent.id, '--trigger', 'enable', agent.triggerId, '--yes']);
 
   // 2. The first poll only baselines. Nothing starts, nothing is posted.
   for (const agent of agents) await checkUntilIdle(agent);

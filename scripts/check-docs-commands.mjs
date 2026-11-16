@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const docsRoot = join(root, "docs/src/content/docs");
-const MIGRATION_PAGE = "docs/src/content/docs/cli-changes-0-35.md";
+const MOVED_ALLOWED_PAGES = new Set(["docs/src/content/docs/cli-changes-0-35.md", "docs/src/content/docs/commands.md"]);
 const IMPLICIT_FLAGS = new Set(["-h", "--help", "-V", "--version"]);
 const SHELL_FENCES = new Set(["", "bash", "sh", "shell", "zsh", "text", "console", "terminal"]);
 
@@ -202,10 +202,7 @@ async function loadProgram() {
       const { notice } = compat.resolveInvocation(args);
       return notice ? notice.replace(/^moved: use /, "") : undefined;
     };
-    rewrite = (args) => {
-      const resolved = compat.resolveInvocation(args);
-      return resolved.notice ? undefined : resolved.args;
-    };
+    rewrite = (args) => compat.resolveInvocation(args).args;
   } catch { /* alias layer optional */ }
   return { program, moved, rewrite };
 }
@@ -357,9 +354,10 @@ export async function main() {
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const rel = relative(root, file);
-    // The migration page lists the old commands next to the new ones on purpose.
-    const allowMoved = rel === MIGRATION_PAGE;
+    // The migration page and the generated reference list old names on purpose; a line may opt in with `docs-check: allow-moved`.
+    const fileLines = text.split("\n");
     for (const cmd of extractCommands(text)) {
+      const allowMoved = MOVED_ALLOWED_PAGES.has(rel) || [fileLines[cmd.line - 1], fileLines[cmd.line - 2]].some((line) => (line ?? "").includes("docs-check: allow-moved"));
       for (const p of checkInvocation(program, cmd.text, moved, rewrite, { allowMoved })) problems.push(`${rel}:${cmd.line}: ${p}\n    > ${cmd.text}`);
     }
     problems.push(...checkLinks(file, text));

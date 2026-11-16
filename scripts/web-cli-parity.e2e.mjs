@@ -1,6 +1,6 @@
 // One engine, two interfaces: the CLI and the browser must see the same state.
 //
-// Starts a disposable `0 web` engine (loopback, isolated HOME, no provider
+// Starts a disposable `0` engine (loopback, isolated HOME, no provider
 // credentials), creates a chat through the CLI, then walks every browser route
 // and fails on a console error, a failed /api call or an error screen. Finally
 // asserts the chat the CLI created is visible in the browser and through the
@@ -44,7 +44,7 @@ const wait = ms => new Promise(done => setTimeout(done, ms));
 let child;
 let browser;
 try {
-  child = spawn(process.execPath, [cli, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
+  child = spawn(process.execPath, [cli, '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
     '--db-path', join(base, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN',
     '--engine-workspace', workspace], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
@@ -70,7 +70,7 @@ try {
   const created = run(['chats', 'create']);
   assert.equal(typeof created.id, 'string');
   assert.ok(run(['chats', 'list']).some(chat => chat.id === created.id), 'CLI cannot see the chat it created');
-  assert.ok(run(['automation', 'list', '--templates']).some(template => template.id === 'repository-review'));
+  assert.ok(run(['agents', 'list', '--automation', '--templates']).some(template => template.id === 'repository-review'));
   assert.deepEqual(run(['runs', 'list']), []);
 
   // 2. Browser -> same engine: every route renders without errors.

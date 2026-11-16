@@ -71,15 +71,16 @@ run_cli --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
 grep -q "Security agents for your repositories" "$TMP/help.out" || fail "--help did not contain tagline"
 grep -q "scan" "$TMP/help.out" || fail "--help did not list scan subcommand"
 grep -q "findings" "$TMP/help.out" || fail "--help did not list findings subcommand"
-grep -q "doctor" "$TMP/help.out" || fail "--help did not list doctor subcommand"
-# mcp-server lives under the hidden `lab` group; the old top-level name still works.
+grep -q "config" "$TMP/help.out" || fail "--help did not list config subcommand"
+run_cli config --help 2>&1 | grep -q "doctor" || fail "config --help did not list doctor subcommand"
+# mcp-server lives under the hidden `lab` group; the old top-level name still works (silently when piped).
 run_cli lab --help 2>&1 | grep -q "mcp-server" || fail "lab --help did not list mcp-server subcommand"
 run_cli mcp-server --help >/dev/null 2>&1 || fail "legacy mcp-server --help exited non-zero"
 
 # ── 2. doctor ──────────────────────────────────────────────────────────────
 # Proves runtime detection boots and doesn't crash on a bare environment.
-say "doctor"
-run_cli doctor > "$TMP/doctor.out" 2>&1 || fail "doctor exited non-zero"
+say "config doctor"
+run_cli config doctor > "$TMP/doctor.out" 2>&1 || fail "config doctor exited non-zero"
 grep -q "Node.js" "$TMP/doctor.out" || fail "doctor did not produce the expected banner"
 
 # ── 3. history (DB smoke) ──────────────────────────────────────────────────
@@ -88,7 +89,7 @@ grep -q "Node.js" "$TMP/doctor.out" || fail "doctor did not produce the expected
 # listScans() query. This is the regression guard for the 0.7.0 → 0.7.1
 # native-bindings → WASM swap and the 0.7.4 WAL header migration.
 say "history (DB init)"
-if ! run_cli history --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1; then
+if ! run_cli lab runs history --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1; then
   # Surface the REAL underlying error instead of swallowing it (#610). The DB
   # layer is the most opaque failure mode: a corrupt node-sqlite3-wasm.wasm
   # (e.g. from a poisoned runner cache) throws a WebAssembly CompileError here,
@@ -118,7 +119,7 @@ for attempt in 1 2 3; do
   # next retry begins. Give every attempt isolated state so a slow teardown
   # cannot turn the next healthy boot into a spurious "database is locked".
   printf '%s\n' "$INIT_MSG" \
-    | timeout_cmd "$MCP_SMOKE_TIMEOUT_SECONDS" "${CLI_ENV[@]}" $CLI mcp-server \
+    | timeout_cmd "$MCP_SMOKE_TIMEOUT_SECONDS" "${CLI_ENV[@]}" $CLI lab mcp-server \
         --target https://example.invalid \
         --scan-id "ci-smoke-$attempt" \
         --db-path "$TMP/mcp-$attempt.db" 2> "$TMP/mcp.err" \

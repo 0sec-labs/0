@@ -200,8 +200,8 @@ COPY --from=builder /app/dist /app/dist
 RUN ln -s /app/dist/0.js /usr/local/bin/0 \
     && chmod +x /app/dist/0.js
 
-# tini is PID 1 so SIGTERM reaches `0 web` (graceful drain) and zombies are reaped.
-# openssh-client: `0 computers deploy --ssh` runs ssh and scp (host key checking stays on).
+# tini is PID 1 so SIGTERM reaches `0` (graceful drain) and zombies are reaped.
+# openssh-client: `0 computers add --ssh` runs ssh and scp (host key checking stays on).
 RUN apt-get update && apt-get install -y --no-install-recommends tini openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
@@ -231,4 +231,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # `docker run image scan ...` still works: the arguments replace CMD.
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/dist/0.js"]
-CMD ["web", "--host", "0.0.0.0", "--server-mode"]
+CMD ["--host", "0.0.0.0", "--server-mode"]
