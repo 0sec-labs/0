@@ -27,6 +27,8 @@ export interface ProtectedPathContext {
   readonly real?: (path: string) => string;
   /** One extension's own folder (an approved extension starting its own server): paths inside it, symlinks resolved, are not state. */
   readonly exemptDir?: string;
+  /** Commands (not file writes) may name files inside an installed extension revision to run or read them. */
+  readonly extensionFilesReadable?: boolean;
 }
 
 export interface ProtectedHit { readonly path: string; readonly reason: string }
@@ -71,7 +73,7 @@ function realOf(path: string, real: (p: string) => string): string {
 }
 
 /** Is `path` (absolute, normalised, may contain glob segments) inside or equal to a protected location? */
-function protectedReason(path: string, states: readonly string[]): string | null {
+function protectedReason(path: string, states: readonly string[], allowExtensionFiles = false): string | null {
   const segs = path.split(sep).filter(Boolean);
   for (const state of states) {
     const base = state.split(sep).filter(Boolean);
@@ -85,6 +87,13 @@ function protectedReason(path: string, states: readonly string[]): string | null
     }
     if (!prefixMatches) continue;
     const first = segs[base.length]!;
+    // `extensions/<name>/<revision>/<file>`: a file inside one installed revision. Running or reading it is how an
+    // enabled extension's script is used; approvals live in the root files (state.json, audit.jsonl, connections.json), and
+    // an edited revision no longer matches its pin, so it is refused at load time.
+    if (allowExtensionFiles && first === "extensions" && segs.length >= base.length + 4) {
+      const name = segs[base.length + 1]!;
+      if (!name.startsWith(".") && !GLOB.test(name) && !EXTENSION_ROOT_FILES.has(name)) continue;
+    }
     if (GLOB.test(first)) {
       const re = globRegex(first);
       if ([...PROTECTED_STATE_NAMES, "0.db"].some(name => re.test(name))) return `${state}${sep}${first}`;
@@ -93,6 +102,8 @@ function protectedReason(path: string, states: readonly string[]): string | null
   return null;
 }
 
+const EXTENSION_ROOT_FILES = new Set(["state.json", "audit.jsonl", "connections.json"]);
+const WRITING_VERBS = /^(tee|sed|install|dd|touch)$/;
 const DESTRUCTIVE = /^(rm|mv|chmod|chown|ln|cp|rsync|tar|find|truncate|shred|unlink|rmdir)$/;
 
 /** Find the first protected location the command names, or null. */
@@ -101,13 +112,13 @@ export function findProtectedPathUse(command: string, extraPaths: readonly strin
   const states = [...new Set([join(ctx.home, ".0"), realOf(join(ctx.home, ".0"), real)])];
   const exempt = ctx.exemptDir ? [...new Set([resolve(ctx.exemptDir), realOf(resolve(ctx.exemptDir), real)])] : [];
   const inside = (path: string, dir: string) => path === dir || path.startsWith(dir + sep);
-  const check = (candidate: string, cwd: string): ProtectedHit | null => {
+  const check = (candidate: string, cwd: string, readOnly = false): ProtectedHit | null => {
     if (!candidate) return null;
     const expanded = expandHome(candidate, ctx.home);
     const abs = isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
     if (exempt.length && exempt.some(dir => inside(abs, dir)) && exempt.some(dir => inside(realOf(abs, real), dir))) return null;
     for (const variant of new Set([abs, realOf(abs, real)])) {
-      const why = protectedReason(variant, states);
+      const why = protectedReason(variant, states, readOnly && ctx.extensionFilesReadable === true);
       if (why) return { path: abs, reason: `touches ${why}` };
     }
     return null;
@@ -115,17 +126,19 @@ export function findProtectedPathUse(command: string, extraPaths: readonly strin
   let cwd = ctx.cwd;
   for (const p of extraPaths) { const hit = check(p, cwd); if (hit) return hit; }
   const tokens = tokenize(command);
-  let atStart = true; let verb = ""; let verbs: string[] = [];
+  let atStart = true; let verb = ""; let verbs: string[] = []; let afterWriteOp = false;
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]!;
-    if ("op" in t) { atStart = true; continue; }
+    if ("op" in t) { atStart = true; afterWriteOp = t.op === ">"; continue; }
     if (atStart) { verb = t.word.replace(/^.*\//, ""); verbs = [verb]; atStart = false; }
     else verbs.push(t.word);
     const word = expandHome(t.word, ctx.home);
     // The word itself, then every path-like piece inside it (python -c "open('~/.0/extensions/x')").
     const pieces = new Set<string>([word, ...word.split(/[\s'"`=:,;()[\]{}<>|&!]+/).filter(p => p.length > 0)]);
+    const readOnly = !afterWriteOp && !DESTRUCTIVE.test(verb) && !WRITING_VERBS.test(verb);
+    afterWriteOp = false;
     for (const piece of pieces) {
-      const hit = check(piece, cwd); if (hit) return hit;
+      const hit = check(piece, cwd, readOnly && piece === word); if (hit) return hit;
       // `$(...)`/backtick pieces and ${VAR} remain unresolved text; nothing more can be said here.
     }
     if ((verb === "cd" || verb === "pushd") && verbs.length === 2) {

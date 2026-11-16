@@ -112,7 +112,6 @@ describe("protected paths: an extension starting its own server", () => {
   const withHome = (fn: () => void) => { const old = process.env["HOME"]; process.env["HOME"] = HOME; try { fn(); } finally { if (old === undefined) delete process.env["HOME"]; else process.env["HOME"] = old; } };
   it("allows naming files inside its own folder", () => withHome(() => {
     expect(protectedPathsBeforeCommandPolicy.evaluate(input("node server.mjs")).decision).toBe("allow");
-    expect(protectedPathsBeforeCommandPolicy.evaluate({ ...input("node server.mjs"), extensionDir: undefined })).toMatchObject({ decision: "deny" });
   }));
   it("still refuses state outside that folder", () => withHome(() => {
     {
@@ -121,4 +120,26 @@ describe("protected paths: an extension starting its own server", () => {
       expect(protectedPathsBeforeCommandPolicy.evaluate(input("node server.mjs"))).toMatchObject({ decision: "allow" });
     }
   }));
+});
+
+describe("protected paths: running a file inside an installed extension", () => {
+  const ext = "/home/op/.0/extensions/chat-notify/local-abc123";
+  const run = (command: string, kind: BeforeCommandInput["kind"] = "bash", paths: string[] = []) => {
+    const old = process.env["HOME"]; process.env["HOME"] = HOME;
+    try { return protectedPathsBeforeCommandPolicy.evaluate({ kind, command, argv: [], cwd: "/work", hosts: [], paths, thread: {} }).decision; }
+    finally { if (old === undefined) delete process.env["HOME"]; else process.env["HOME"] = old; }
+  };
+  it("allows running or reading a file in one revision folder", () => {
+    expect(run(`bash ${ext}/scripts/notify.sh`)).toBe("allow");
+    expect(run(`python3 ${ext}/scripts/notify.py --text hi`)).toBe("allow");
+    expect(run(`cat ${ext}/extension.json`)).toBe("allow");
+  });
+  it("still refuses state, other writes and the extension folder itself", () => {
+    for (const command of [
+      "cat ~/.0/extensions/state.json", "cat ~/.0/extensions/connections.json", `bash ${ext}/../state.json`, `rm -rf ${ext}`, `rm ${ext}/scripts/notify.sh`,
+      `echo x > ${ext}/scripts/notify.sh`, `tee ${ext}/scripts/notify.sh`, `sed -i s/a/b/ ${ext}/extension.json`, `cp /tmp/x ${ext}/scripts/x.sh`,
+      `python3 -c "open('${ext}/scripts/x','w').write('y')"`, "ls ~/.0/extensions", "ls ~/.0/extensions/chat-notify",
+    ]) expect(run(command), command).toBe("deny");
+    expect(run("write", "file-write", [`${ext}/scripts/notify.sh`])).toBe("deny");
+  });
 });

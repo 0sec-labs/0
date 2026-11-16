@@ -20,6 +20,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- A thread can run a script that lives in an installed extension (and so receives that connector's approved token); naming any file inside an extension folder was refused as protected state. State files, writes and removals under `~/.0/extensions` are still refused.
 - A thread can no longer install or approve an extension by wrapping the command (`env -u ZERO_AGENT_SESSION node ... skills extensions add --yes`); the approval-command check now sees through `env` and `sudo` options and a `node <script>` prefix.
 - An extension's own MCP server now starts: loading it was refused with "touches ~/.0/extensions" because the server runs in the extension's folder. Other paths under the 0 state folder are still protected.
 - A changed or first-seen MCP tool list is no longer approved automatically when commands run without asking; the thread waits for you, as documented.
