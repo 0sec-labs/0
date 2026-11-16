@@ -61,3 +61,13 @@ export function threadSubline(input: { attention?: string; workspacePath?: strin
   if (input.attention) return { kind: "needs-you", text: input.attention };
   return { kind: "place", folder: folderName(input.workspacePath), computer: input.computer };
 }
+
+export type ThreadShelf = "main" | "settled" | "automations";
+export const SETTLED_AFTER_MS = 14 * 24 * 3600_000;
+
+/** Which part of the Threads list a thread belongs to: automation runs and Agent activations go to Automations, quiet threads untouched for two weeks to Settled. Waiting, open and selected threads stay on the main list. */
+export function threadShelf(input: { automation: boolean; waiting: boolean; selected: boolean; timestamp: number; now: number }): ThreadShelf {
+  if (input.waiting || input.selected) return "main";
+  if (input.automation) return "automations";
+  return input.now - input.timestamp > SETTLED_AFTER_MS ? "settled" : "main";
+}

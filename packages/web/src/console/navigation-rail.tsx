@@ -27,7 +27,6 @@ import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
-import { SidebarModeToggle } from "@/components/sidebar/sidebar-mode-toggle";
 import { useSidebarListMode } from "@/components/sidebar/use-sidebar-list";
 import { cn } from "@/lib/utils";
 
@@ -180,7 +179,6 @@ export function ConsoleNavigationRail({
           </NavLink>
         ))}
       </SidebarGroup>
-      {list.supported && <SidebarModeToggle mode={list.mode} onChange={list.setMode} />}
       {/* Both lists stay mounted: the Threads source keeps its queries and polling while Agents is shown. */}
       {list.mode === "agents" && <SentinelSidebarSection />}
       <div id="navigation-chat-history" className={cn("flex min-h-0 flex-1 flex-col", list.mode === "agents" && "hidden")}>

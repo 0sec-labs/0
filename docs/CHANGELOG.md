@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The Agents | Threads switch is a small icon toggle on the list header, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
+
 ### Removed
 
 - The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
