@@ -331,6 +331,8 @@ export function rewriteNewForms(args: Args): string[] | undefined {
   // `--help` asks about the command as typed, except where the flag picks the command: `agents list --automation --help`, `config doctor --help`.
   if (args.includes("--help") || args.includes("-h")) {
     if (first === "agents") return automations(args);
+    // `threads send new --help` describes starting a thread (its flags: --folder, --wait, --cost-ceiling), not sending to one.
+    if (first === "threads" && args[1] === "send" && args[2] === "new") return threads(args);
     return first === "config" && args[1] === "doctor" ? config(args) : undefined;
   }
   return NEW_FORMS[first]!(args);

@@ -8,7 +8,8 @@ export function registerDoctorCommand(program: Command): void {
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
     .option("--discard-reports", "Delete crash reports waiting for review on this computer")
-    .action(async (options: { discardReports?: boolean }) => {
+    .action(async (options: { discardReports?: boolean }, command: Command) => {
+      if (command.args.length) throw new Error(`Unknown check "${command.args[0]}". Use upgrade, workbench or checks, or no argument for the summary.`);
       const pending = await import("../state/pending-diagnostics.js");
       if (options.discardReports) {
         const removed = pending.discardPendingReports();

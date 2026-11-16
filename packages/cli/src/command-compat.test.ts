@@ -102,6 +102,10 @@ describe("the notice", () => {
     expect(shouldPrintMovedNotice(["findings", "accept", "x"], true)).toBe(true);
   });
 
+  it("describes starting a thread for threads send new --help", () => {
+    expect(rewriteNewForms(["threads", "send", "new", "--help"])).toEqual(["threads", "start", "--help"]);
+  });
+
   it("names the new command for an old one and stays silent for new ones", () => {
     expect(resolveInvocation(["findings", "accept", "f1", "--yes"])).toEqual({ args: ["findings", "accept", "f1", "--yes"], notice: "moved: use `0 findings update <id> --status accepted`" });
     expect(resolveInvocation(["findings", "update", "f1", "--status", "accepted"]).notice).toBe("");

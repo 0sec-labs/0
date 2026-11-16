@@ -351,7 +351,7 @@ function text(input: unknown, name: string, max = 4_096): string {
 function provider(input: unknown) {
   const id = input === "codex" ? "chatgpt-codex" : text(input, "provider", 64);
   const result = PROVIDERS.find((entry) => entry.id === id);
-  if (!result) throw new OperatorError(404, "unknown_provider", "Provider does not exist.");
+  if (!result) throw new OperatorError(404, "unknown_provider", `Unknown provider "${id}". Known providers: ${PROVIDERS.map((entry) => entry.id).join(", ")}.`);
   return result;
 }
 function settingsView() {

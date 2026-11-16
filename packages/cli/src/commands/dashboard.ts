@@ -95,7 +95,7 @@ export function registerDashboardCommand(program: Command): void {
     .option("--db-path <path>", "Path to SQLite database")
     .option("--port <port>", "Port to bind; 0 chooses a free loopback port", "48123")
     .option("--host <host>", "Loopback host to bind (127.0.0.0/8 or ::1)", "127.0.0.1")
-    .option("--asset-dir <path>", "Path to built dashboard assets")
+    .option("--asset-dir <path>", "Path to the built web app")
     .option("--dev-url <url>", "Loopback Vite server for authenticated frontend hot reload")
     .option("--team-config <path>", "Enable workspace accounts, roles, and shared conversation controls")
     .option("--engine-token-env <name>", "Environment variable holding the engine bearer credential (32–4096 characters)")
@@ -111,9 +111,9 @@ export function registerDashboardCommand(program: Command): void {
     .option("--public-url <url>", "Server mode: the public https URL of this console (sign-in cookies, single sign-on); also ZERO_PUBLIC_URL")
     .option("--access-token-env <name>", "Server mode: environment variable holding the access token (32+ characters); default ZERO_ACCESS_TOKEN, else one is generated")
     .option("--shutdown-timeout <seconds>", "Server mode: seconds to finish in-flight requests on SIGTERM (default 20)")
-    .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
+    .option("--ready-json", "Emit the bound console URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
-    .option("--headless", "Serve the API only: no browser, and no dashboard assets needed (use with `0 threads`)")
+    .option("--headless", "Serve the API only: no browser, and no web app files needed (use with `0 threads`)")
     .action(async (opts: DashboardOptions) => {
       if (opts.headless) opts.open = false;
       const serverMode = opts.serverMode === true || process.env.ZERO_SERVER_MODE === "1";
@@ -594,7 +594,7 @@ export function registerDashboardCommand(program: Command): void {
               res.end(req.method === "HEAD" ? undefined : body);
               return;
             }
-            if (!assetDir) { json(res, 404, { error: "This console serves the API only; the dashboard is not installed." }); return; }
+            if (!assetDir) { json(res, 404, { error: "This console serves the API only; the web app is not installed." }); return; }
             const explicitAsset = resolveAssetPath(assetDir, requestUrl.pathname);
             if (explicitAsset) {
               sendFile(res, explicitAsset, controlToken);
@@ -650,7 +650,7 @@ export function registerDashboardCommand(program: Command): void {
             void Promise.resolve().then(shutdown);
             return;
           }
-          console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
+          console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" console"));
           console.log(chalk.gray(`  ${serverMode ? publicUrl || `http://${host.includes(":") ? `[${host}]` : host}:${address && typeof address !== "string" ? address.port : port}` : url}`));
           if (serverGuard) {
             console.log(chalk.gray(`  Server mode: single node, one process owns the database. Allowed hosts: ${allowedHosts.join(", ") || publicUrl}`));
