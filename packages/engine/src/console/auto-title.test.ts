@@ -33,6 +33,7 @@ describe("title helpers", () => {
   it("classifies default and legacy titles", () => {
     expect(isDefaultConversationTitle("")).toBe(true);
     expect(isDefaultConversationTitle("  New chat ")).toBe(true);
+    expect(isDefaultConversationTitle("New thread")).toBe(true);
     expect(isDefaultConversationTitle("New mission")).toBe(true);
     expect(isDefaultConversationTitle("wassup")).toBe(false);
     expect(inferTitleSource("Campaign iter 12: probe-auth")).toBe("user");

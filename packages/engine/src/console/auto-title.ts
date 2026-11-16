@@ -17,7 +17,7 @@ const FALLBACK_CHARS = 48;
 const USER_CONTEXT_CHARS = 600;
 const ASSISTANT_CONTEXT_CHARS = 600;
 
-const PLACEHOLDER_TITLES = new Set(["new chat", "new conversation", "new session", "new mission", "resumed chat"]);
+const PLACEHOLDER_TITLES = new Set(["new chat", "new conversation", "new session", "new mission", "new thread", "resumed chat"]);
 
 /** True for blank titles and the client-side placeholders. */
 export function isDefaultConversationTitle(title: string | undefined | null): boolean {
