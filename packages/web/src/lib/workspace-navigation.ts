@@ -14,10 +14,11 @@ export const WORKSPACE_DESTINATIONS = [
 ] as const;
 
 /**
- * The sidebar: "New thread" (an action, not a route) followed by these six destinations, in this order. There is no More menu.
- * Automations live inside Agents; Skills is active on /skills* (installed, browse, catalog detail); Extensions on /extensions.
+ * The sidebar: "New thread" (an action, not a route) followed by these five destinations, in this order. There is no More menu.
+ * Agents are their own sidebar section below these (header, "+" and one row per Agent); automations live inside an Agent.
+ * Skills is active on /skills* (installed, browse, catalog detail); Extensions on /extensions.
  */
-export const SIDEBAR_DESTINATIONS = ["/findings", "/agents", "/skills", "/memory", "/computers", "/extensions"] as const;
+export const SIDEBAR_DESTINATIONS = ["/findings", "/skills", "/memory", "/computers", "/extensions"] as const;
 
 /** Whether a sidebar destination is highlighted for the (canonical, basename-free) current path. */
 export function isSidebarDestinationActive(to: string, currentPath: string): boolean {

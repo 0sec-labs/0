@@ -21,17 +21,17 @@ test("compatibility paths preserve resource identities and only replace whole ro
   for (const path of ["/launchpad", "/scans-extra", "/findings/scans", "/chats/workflows"]) expect(canonicalWorkspacePath(path)).toBe(path);
 });
 
-test("the sidebar lists six destinations after New thread, in order, with no overflow menu", () => {
-  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/agents", "/skills", "/memory", "/computers", "/extensions"]);
+test("the sidebar lists five destinations after New thread, in order, with no overflow menu", () => {
+  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/skills", "/memory", "/computers", "/extensions"]);
   const labels = SIDEBAR_DESTINATIONS.map(to => WORKSPACE_DESTINATIONS.find(item => item.to === to)?.label);
-  expect(labels).toEqual(["Findings", "Agents", "Skills", "Memory", "Computers", "Extensions"]);
+  expect(labels).toEqual(["Findings", "Skills", "Memory", "Computers", "Extensions"]);
 });
 
 test("sidebar active state: Skills owns /skills*, Extensions owns /extensions", () => {
   const activeFor = (path: string) => SIDEBAR_DESTINATIONS.filter(to => isSidebarDestinationActive(to, path));
   expect(activeFor("/skills")).toEqual(["/skills"]);
   expect(activeFor("/skills/catalog/o~r~x")).toEqual(["/skills"]);
-  expect(activeFor("/agents/abc")).toEqual(["/agents"]);
+  expect(activeFor("/agents/abc")).toEqual([]);
   expect(activeFor("/extensions")).toEqual(["/extensions"]);
   expect(activeFor("/memory")).toEqual(["/memory"]);
   expect(activeFor("/computers")).toEqual(["/computers"]);
