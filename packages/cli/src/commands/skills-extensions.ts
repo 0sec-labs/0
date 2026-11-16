@@ -96,8 +96,12 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
 
   consoleOptions(ext.command("list").description("List installed extensions and built-ins").option("--project <dir>", "Show enablement for this project"))
     .action((options: Options) => guarded(io, options, svc => {
-      const { rows, error } = svc.list(options.project ? resolve(options.project) : undefined);
-      if (error) return fail(io, options, error);
+      const project = options.project ? resolve(options.project) : undefined;
+      const listed = svc.list(project);
+      if (listed.error) return fail(io, options, listed.error);
+      // An enabled extension that will not load (edited on disk, capabilities changed) must not look healthy here.
+      const refused = new Map(svc.loadable(project).refused.map(r => [r.name, r.reason]));
+      const rows = listed.rows.map(row => refused.has(row.name) && row.kind !== "built-in" && row.kind !== "unmigrated" ? { ...row, status: "refused" as const, detail: refused.get(row.name)! } : row);
       emit(io, options, { extensions: rows }, () => renderTable(rows.map(r => [r.name, r.kind, r.status === "built-in" ? (r.enabled ? "on" : "off") : r.status, r.revision?.slice(0, 12) ?? "-", r.detail.slice(0, 60)]), ["NAME", "KIND", "STATUS", "REVISION", "NOTE"]));
     }));
 

@@ -60,6 +60,15 @@ describe("0 skills add / 0 skills extensions (local fixture repo, temp HOME)", (
     await run("extensions", "remove", "demo", "--yes"); expect(code).toBe(0); expect(existsSync(join(home, ".0", "extensions", "demo"))).toBe(false);
   });
 
+  it("marks an enabled extension refused in the list once its files change on disk", async () => {
+    const r = repo();
+    await run("add", `${r.dir}@${r.shas[0]}`, "--yes", "--enable");
+    expect(await run("extensions", "list")).toMatch(/demo\s+git\s+enabled/);
+    writeFileSync(join(home, ".0", "extensions", "demo", r.shas[0]!, "skills", "a", "SKILL.md"), "tampered\n");
+    const list = await run("extensions", "list");
+    expect(list).toMatch(/demo\s+git\s+refused/); expect(list).toContain("differs from the pinned revision");
+  });
+
   it("refuses bad pins, built-in removal and unconfirmed built-in disable", async () => {
     const r = repo();
     expect(await run("add", `${r.dir}@${r.shas[0]!.slice(0, 7)}`, "--yes")).toContain("full 40-character"); expect(code).toBe(1);
