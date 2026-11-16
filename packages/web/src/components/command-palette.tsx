@@ -191,13 +191,20 @@ export function CommandPalette({
         href: "/chats?new=1",
         run: () => navigate("/chats?new=1"),
       },
-      {
-        id: "control-models", group: "Pages", href: "/models", label: "Models", meta: "Providers and the models 0 uses", icon: CapySlidersIcon, keywords: ["models", "providers", "connections"],
+      ...[
+        ["models", "Models", "Providers and the models 0 uses", ["providers", "connections"]],
+        ["doctor", "Diagnostics", "Check that everything works", []],
+        ["tools", "Tools", "What 0 can use", []],
+        ["project", "Folder", "Folder and scope", []],
+        ["fix", "Fix", "Review and apply a code fix", []],
+      ].map(([route, label, meta, extra]): PaletteAction => ({
+        id: `control-${route}`, group: "Pages", href: `/${route}`, label: label as string, meta: meta as string, icon: CapySlidersIcon,
+        keywords: [route as string, label as string, ...(extra as string[])],
         run: () => {
           const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
-          navigate(`/models${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
+          navigate(`/${route}${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
         },
-      },
+      })),
     ];
 
     base.push({ id: "whats-new", group: "Actions", label: "What's new", meta: `Release notes · ${LATEST_RELEASE.version}`, icon: CapySparkleFourIcon, keywords: ["whats new release notes changelog version updates"], run: () => openWhatsNew() });
