@@ -1,6 +1,6 @@
 ---
-title: Computers and teams
-description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and share a computer with teammates.
+title: Computers
+description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and keep work running on the machine that owns it.
 ---
 
 A computer owns threads, automation runs, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
@@ -37,7 +37,7 @@ The browser app also deploys workers from its computer selector.
 
 ## Run a computer by hand
 
-Install 0 on the server. Give it its own model connection (see [Models and keys](/models/)) and prepare its repositories, scope and any VM or Docker prerequisites there.
+Install 0 on the server. Give it its own model connection (see [Models](/models/)) and prepare its repositories, scope and any VM or Docker prerequisites there.
 
 Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start a computer admitted to one repository:
 
@@ -148,48 +148,6 @@ For a direct call to a computer API, use `0 api`:
 - Keep the computer process running. There is no crash recovery or detached executor. Stopping the computer ends its in-process work. Saved records and files survive.
 - A remote computer uses its own local or VM executors. Giving a local computer an arbitrary remote executor is not implemented.
 
-## Team workspaces
-
-Local use needs no account. Use team mode when several people share one computer and its threads.
-
-In the browser app, choose **Team**, enter a workspace name, your display name, account ID and password, and you are signed in as owner. Add editors and viewers from **Team settings** in the account menu. Only owners add accounts.
-
-From a terminal:
-
-```bash
-0 config set team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
-0 config set team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
-0 config get team --config ./team.json
-0 --team-config ./team.json
-```
-
-Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open threads.
-
-Owners and editors can change work. Viewers can read. Messages keep their authors, and avatars show who is viewing or typing.
-
-Limits: members share one computer workspace, not separate tenants. Each team gets its own thread directory, findings database and reports by default. Existing personal threads are not imported. Use `--db-path` to choose the database to share. The computer binds to loopback. Remote access and a reverse proxy are your deployment work.
-
-### OIDC sign-in
-
-Add an `oidc` object and give each member the provider's verified `oidcSub`. Names and email claims never grant membership or roles.
-
-```json
-{
-  "workspace": { "id": "your-workspace-id", "name": "Security" },
-  "users": [
-    { "id": "alex", "name": "Alex", "role": "owner", "oidcSub": "provider-subject-id" }
-  ],
-  "oidc": {
-    "issuer": "https://identity.example.com",
-    "clientId": "your-client-id",
-    "clientSecretEnv": "ZERO_TEAM_OIDC_SECRET",
-    "redirectUri": "http://127.0.0.1:48123/api/team/auth/callback"
-  }
-}
-```
-
-Register the exact callback URL with your provider. Omit `clientSecretEnv` for a public client. Sign-in uses the authorization code flow with PKCE and checks issuer, audience, nonce and signature. Session cookies are HTTP-only and last eight hours.
-
 ## Next
 
-[Architecture](/architecture/#where-work-runs), [Automations](/automations/), [Agents and MCP](/mcp/), [Reports and disclosure](/reports/).
+[Agents](/agents/#automations), [Threads](/threads/), [Server mode and Docker](/server-mode/).

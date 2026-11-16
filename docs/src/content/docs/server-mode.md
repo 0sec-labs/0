@@ -1,9 +1,10 @@
 ---
-title: Docker
-description: Run one-shot scans from the 0 container image, or run the web console on a server (experimental, single node).
+title: Server mode and Docker
+description: Run one-shot scans from the 0 container image, or run the app on a server for a team (experimental, single node).
 ---
 
-The image is Linux amd64 only. Its entry point is the `0` CLI, so arguments after the image name are `0` arguments. With no arguments it starts the web console (see [Run the web console on a server](#run-the-web-console-on-a-server-experimental-single-node)).
+
+The image is Linux amd64 only. Its entry point is the `0` CLI, so arguments after the image name are `0` arguments. With no arguments it starts the web console (see [Run the app on a server](#run-the-app-on-a-server-experimental-single-node)).
 
 ## One-shot scans
 
@@ -18,9 +19,9 @@ Tags:
 ghcr.io/0sec-labs/0security:latest
 ghcr.io/0sec-labs/0security:<sha>
 ghcr.io/0sec-labs/0security:edge      # nightly build of the newest green main commit
-ghcr.io/0sec-labs/0security:v0.30.1   # releases only
-ghcr.io/0sec-labs/0security:0.30.1    # releases only
-ghcr.io/0sec-labs/0security:0.30      # releases only, follows the latest 0.30.x
+ghcr.io/0sec-labs/0security:v0.36.0   # releases only
+ghcr.io/0sec-labs/0security:0.36.0    # releases only
+ghcr.io/0sec-labs/0security:0.36      # releases only, follows the latest 0.36.x
 ```
 
 **Sources:** [`Dockerfile`](https://github.com/0sec-labs/0security/blob/main/scripts/docker/Dockerfile),
@@ -56,11 +57,11 @@ docker run --rm \
 ```
 
 The container runs as the `ubuntu` user (uid 1000). Mount your working directory
-at `/work` so the container can read source and write reports. Scanning a web target needs a [scope file](/scope/). State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
+at `/work` so the container can read source and write reports. Scanning a web target needs a [scope file](/configuration/#scope). State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
 
-## Run the web console on a server (experimental, single node)
+## Run the app on a server (experimental, single node)
 
-This is the one supported way to run the web console for more than one person on a server. It is **experimental**: one node, one container, one volume. There is no high availability and no Helm chart or Terraform module. Organizations that need more run 0 under an [Enterprise](/open-source-and-enterprise/) arrangement.
+This is the one supported way to run the web console for more than one person on a server. It is **experimental**: one node, one container, one volume. There is no high availability. See [Teams and enterprise](#teams-and-enterprise).
 
 ### Start it
 
@@ -82,9 +83,9 @@ ZERO_ALLOWED_HOSTS=0.example.com
 docker compose --profile proxy up -d
 ```
 
-Without Compose: `docker run -d --name zero -p 127.0.0.1:48123:48123 -v zero-data:/data -e ZERO_ACCESS_TOKEN=... ghcr.io/0sec-labs/0security:v0.30.1`.
+Without Compose: `docker run -d --name zero -p 127.0.0.1:48123:48123 -v zero-data:/data -e ZERO_ACCESS_TOKEN=... ghcr.io/0sec-labs/0security:v0.36.0`.
 
-Open the address and enter the access token. If you left `ZERO_ACCESS_TOKEN` empty, the first start generates one, prints it once in `docker compose logs zero` and stores it (mode 0600) in `/data/.0/access-token`. With [team accounts](/engines/) configured (`ZERO_TEAM_CONFIG`), people sign in with those instead.
+Open the address and enter the access token. If you left `ZERO_ACCESS_TOKEN` empty, the first start generates one, prints it once in `docker compose logs zero` and stores it (mode 0600) in `/data/.0/access-token`. With [team accounts](#teams) configured (`ZERO_TEAM_CONFIG`), people sign in with those instead.
 
 ### Server mode flags
 
@@ -129,7 +130,7 @@ Restore by stopping the container, extracting the archive into the volume, and s
 ### Upgrade
 
 ```bash
-# set ZERO_IMAGE_TAG=v0.30.2 in .env (or keep latest), then
+# set ZERO_IMAGE_TAG=v0.36.1 in .env (or keep latest), then
 docker compose pull && docker compose up -d
 ```
 
@@ -139,7 +140,7 @@ The container never updates itself. The console detects Docker and shows `docker
 
 ### Remote computers over SSH
 
-The image includes the OpenSSH client, so Settings or `0 computers add --ssh user@host` can install and connect a [remote computer](/engines/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.
+The image includes the OpenSSH client, so Settings or `0 computers add --ssh user@host` can install and connect a [remote computer](/computers/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.
 
 1. Use a dedicated key for this, not your personal one: `ssh-keygen -t ed25519 -f zero_ed25519 -N ""`, then add `zero_ed25519.pub` to the remote user's `authorized_keys`. The key must not need a passphrase prompt (the deploy runs non-interactively).
 2. Record the host key and verify its fingerprint out of band before trusting it: `ssh-keyscan -t ed25519 host.example.com > known_hosts`, then compare `ssh-keygen -lf known_hosts` with the fingerprint on the server (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run on the server). Do not paste an unverified scan blindly.
@@ -149,7 +150,7 @@ The image includes the OpenSSH client, so Settings or `0 computers add --ssh use
 docker run -d ... \
   -v "$PWD/zero_ed25519:/home/ubuntu/.ssh/id_ed25519:ro" \
   -v "$PWD/known_hosts:/home/ubuntu/.ssh/known_hosts:ro" \
-  ghcr.io/0sec-labs/0security:v0.30.1
+  ghcr.io/0sec-labs/0security:v0.36.0
 ```
 
 The container runs as uid 1000. The key file must be readable by that user and not by others: on a Linux host run `sudo chown 1000:1000 zero_ed25519 && chmod 600 zero_ed25519`. OpenSSH refuses a key that is group- or world-readable and owned by the same user, and a key you cannot read at all. Commented lines in the compose file show the same mounts.
@@ -160,32 +161,17 @@ The remote computer needs: Linux, Node.js, an SSH account that can run `bash`, a
 
 ### Pull request reviews
 
-An Agent with a `github-pr` trigger finds new and updated pull requests by **polling** `gh pr list` (at least every 60 seconds, default 2 minutes). No inbound webhook and no public address are needed, so it works from a container behind a proxy or a firewall. It only needs working GitHub access from the container:
+An Agent with a `github-pr` trigger polls `gh pr list`, so it needs no inbound address and works from a container behind a proxy. It only needs GitHub access from the container: set `GH_TOKEN` (or `GITHUB_TOKEN`) in `.env` to a fine-grained token limited to the repositories you review (Contents, Pull requests and Metadata, read), or run `docker compose exec -it zero gh auth login` once (the credential is kept under `/data/.config/gh`). Reviews are drafts in the app and post nothing to GitHub unless you turn on comments. Details are in [Agents](/agents/#github-pull-request-trigger).
 
-- **Environment token (simplest).** Set `GH_TOKEN` (or `GITHUB_TOKEN`) in `.env` to a fine-grained personal access token limited to the repositories you review, with Contents (read), Pull requests (read), and Metadata (read). Settings then shows **Connected as <account> via token**.
-- **`gh auth login` once.** Run `docker compose exec -it zero gh auth login`. The credential is stored under `/data/.config/gh` in the state volume and survives restarts and upgrades. Settings shows **Connected as <account> via GitHub CLI**. You can also sign in from the GitHub card in Settings.
-
-Create the Agent (for example **PR Security Reviewer**), choose the repository and the pull-request trigger, and set the poll interval. The first poll only records the pull requests that are already open; it reviews only ones opened or updated after that. If `gh` is not authenticated the trigger shows **blocked** with the reason and retries at the next poll.
-
-What a review does: it reads the pull request diff as untrusted data and produces a **draft review with inline comments, a summary and findings in the console**. It does **not** post comments or reviews to GitHub, and it never approves or requests changes: you read the draft and decide what to publish. Fixes are proposed as drafts and need your approval before anything is pushed or a pull request is opened. A pull request run is scoped to the repository's checked-out folder, and its shell gets an allowlisted environment (other provider keys and tokens are stripped; see [Agents](/agents/#limits-for-pull-request-runs)). It uses the container sandbox when available and enabled. Because PR content is untrusted, review only repositories whose pull requests you are willing to have the model read, and keep the token narrow.
-
-### Optional: GitHub webhook for faster reviews
-
-Polling is the default and keeps working. If the console has a public HTTPS address, you can also let GitHub tell it about pushes. The Caddy `proxy` profile already forwards everything, so nothing changes in the compose files; make sure `ZERO_PUBLIC_URL` is your `https://` address, because the payload URL is built from it.
-
-1. In the console open **Agents**, find the **GitHub webhook** card and choose **Set up webhook**. Copy the secret; it is shown once. From a terminal: `docker compose exec zero 0 agents webhook secret rotate --yes` creates or replaces it and prints it once.
-2. On GitHub: repository **Settings**, **Webhooks**, **Add webhook**. Payload URL `https://<your domain>/api/webhooks/github`, content type `application/json`, the secret, and only the **Pull requests** event.
-3. Use **Test** on the card to see the last deliveries. A delivery that is signed, new and for a configured trigger makes that trigger check GitHub immediately; anything else is ignored or refused and is listed without its content.
-
-`/api/webhooks/github` is the only address that answers without signing in; it requires a valid `X-Hub-Signature-256` for every request. Keep the proxy in front of it, keep `--trusted-proxy` set so the per-source rate limit sees the real sender, and rotate the secret if it leaks (the old one works for 5 minutes). Delivery ids are remembered in memory for 24 hours, so a restart forgets them; a replay after a restart still cannot start a second review of the same commit, because the Agent records the last reviewed commit per pull request. If GitHub cannot reach your server, deliveries fail on GitHub's side and polling covers the gap.
+With a public HTTPS address (`ZERO_PUBLIC_URL`), the optional GitHub webhook at `https://<your domain>/api/webhooks/github` makes pull request Agents react right after a push. It is the only address that answers without sign-in, and it requires a valid `X-Hub-Signature-256` on every request. Set it up as described in [Agents](/agents/#faster-with-a-github-webhook-server-mode), keep `--trusted-proxy` set so the rate limit sees the real sender, and rotate the secret if it leaks (the old one works for 5 minutes). From a terminal: `docker compose exec zero 0 agents webhook secret rotate --yes`.
 
 ### Not supported
 
 - High availability, failover, or more than one replica.
 - Sharing the volume between containers or hosts.
-- Webhooks other than the optional GitHub pull request webhook below (pull request triggers poll without it).
+- Webhooks other than the optional GitHub pull request webhook above (pull request triggers poll without it).
 - Shared sandboxes or per-customer isolation inside one container. Everyone who signs in shares the same computer and the same data.
-- A Helm chart, a Terraform module, or a hosted service. Dedicated and on-premises deployments are arranged by contract.
+- A hosted service. Dedicated and on-premises deployments are arranged by contract.
 - Anything other than a TLS-terminating proxy in front of it for access over the internet.
 
 ### Threat model in short
@@ -194,7 +180,7 @@ The console can run security tools and use your model keys, so access to it is f
 
 ## Moving from the old image name
 
-The image is now published only as `ghcr.io/0sec-labs/0security`. `ghcr.io/0sec-labs/0` is no longer updated, so pulling `ghcr.io/0sec-labs/0:latest` silently keeps the last version you already had. Switch your `docker run`, Compose files and CI to `ghcr.io/0sec-labs/0security`.
+The image is now published only as `ghcr.io/0sec-labs/0security`. The earlier name, without `security` at the end, is no longer updated, so pulling it silently keeps the last version you already had. Switch your `docker run`, Compose files and CI to the new name.
 
 ## Supply chain
 
@@ -212,4 +198,50 @@ docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:fu
 
 The published image embeds the project's telemetry keys like the release binaries do. Building the Dockerfile yourself embeds nothing unless you pass the `zero_release_sentry_dsn` and `zero_release_posthog_key` BuildKit secrets.
 
-Next: [CI/CD](/ci/github-action/), [Scan web and APIs](/scan-web/).
+## Teams
+
+Local use needs no account. Use team mode when several people share one computer and its threads.
+
+In the browser app, choose **Team**, enter a workspace name, your display name, account ID and password, and you are signed in as owner. Add editors and viewers from **Team settings** in the account menu. Only owners add accounts.
+
+From a terminal:
+
+```bash
+0 config set team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
+0 config set team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
+0 config get team --config ./team.json
+0 --team-config ./team.json
+```
+
+Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open threads.
+
+Owners and editors can change work. Viewers can read. Messages keep their authors, and avatars show who is viewing or typing.
+
+Limits: members share one computer workspace, not separate tenants. Each team gets its own thread directory, findings database and reports by default. Existing personal threads are not imported. Use `--db-path` to choose the database to share. The computer binds to loopback. Remote access and a reverse proxy are your deployment work.
+
+### OIDC sign-in
+
+Add an `oidc` object and give each member the provider's verified `oidcSub`. Names and email claims never grant membership or roles.
+
+```json
+{
+  "workspace": { "id": "your-workspace-id", "name": "Security" },
+  "users": [
+    { "id": "alex", "name": "Alex", "role": "owner", "oidcSub": "provider-subject-id" }
+  ],
+  "oidc": {
+    "issuer": "https://identity.example.com",
+    "clientId": "your-client-id",
+    "clientSecretEnv": "ZERO_TEAM_OIDC_SECRET",
+    "redirectUri": "http://127.0.0.1:48123/api/team/auth/callback"
+  }
+}
+```
+
+Register the exact callback URL with your provider. Omit `clientSecretEnv` for a public client. Sign-in uses the authorization code flow with PKCE and checks issuer, audience, nonce and signature. Session cookies are HTTP-only and last eight hours.
+
+## Teams and enterprise
+
+0 is open source under MIT OR Apache-2.0. The CLI, the engine, the browser app, the GitHub Action and the team workspace are all in the [`0sec-labs/0security`](https://github.com/0sec-labs/0security) repository, and nothing in them needs an account, a license key or a 0security-hosted service. Scans, model calls (to the provider you choose, with your own key) and findings stay on your computer, your CI runner or your servers. The one automatic upload is the anonymous telemetry described in [Configuration](/configuration/#telemetry).
+
+A team workspace shares one computer between members. It is not a multi-tenant service: sessions are held in memory (members sign in again after a restart), and results from several computers are not merged. Enterprise is arranged with us rather than self-served, for example running 0 on your own infrastructure with our help or a dedicated deployment that we operate for you, one customer per deployment, by contract. We do not publish a Helm chart or a Terraform module and do not offer a shared multi-tenant cloud. [Book a demo](https://0.security/enterprise/).

@@ -8,52 +8,21 @@ tableOfContents:
 
 Pick your task below, or search for a command name.
 
-New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan web and APIs](/scan-web/). Settings and environment variables are on [Configuration](/configuration/).
+New to 0? Read the [Quickstart](/) first. Settings and environment variables are on [Configuration](/configuration/).
 
 ## Start by task
 
-<div class="docs-task-grid">
-  <section class="docs-task-card">
-    <h3>Scan</h3>
-    <p>Assess a repository, a package, or a live web app, API or MCP endpoint with one command.</p>
-    <p><a href="#the-nine-commands">scan &lt;target&gt;</a> · <a href="#scan-source">source options</a> · <a href="#scan-package">package options</a> · <a href="#scan-web">web options</a> · <a href="#scan-deep">deep</a> · <a href="#scan-deps">dependencies</a></p>
-    <p>Guides: <a href="/scan-code/">Scan code</a> · <a href="/scan-web/">Scan web and APIs</a> · <a href="/dependencies/">Dependencies</a></p>
-  </section>
-  <section class="docs-task-card">
-    <h3>Verify and fix</h3>
-    <p>Reproduce an issue, validate a source fix, and close the loop.</p>
-    <p><a href="#scan-verify">scan verify</a> · <a href="#scan-fix">scan fix</a> · <a href="#scan-repair">repair</a> · <a href="#scan-disclose">scan disclose</a></p>
-    <p>Guides: <a href="/verify-and-fix/">Verify and fix</a> · <a href="/reports/">Reports and disclosure</a></p>
-  </section>
-  <section class="docs-task-card">
-    <h3>Review findings and threads</h3>
-    <p>Triage the findings queue, then follow, continue or stop threads.</p>
-    <p><a href="#findings">findings</a> · <a href="#findings-update">findings update</a> · <a href="#threads">threads</a> · <a href="#lab-runs">scan runs</a></p>
-    <p>Guide: <a href="/findings/">Findings</a></p>
-  </section>
-  <section class="docs-task-card">
-    <h3>Automate</h3>
-    <p>Run Agents and saved automations, use 0 in CI, and connect coding agents.</p>
-    <p><a href="#agents">agents</a> · <a href="#automation">automations</a> · <a href="#lab-mcp-server">mcp-server</a> · <a href="#api">api</a></p>
-    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">MCP servers</a></p>
-  </section>
-  <section class="docs-task-card">
-    <h3>Investigate further</h3>
-    <p>Specialist discovery, binary analysis, fuzzing and agent assurance.</p>
-    <p><a href="#lab-research">research</a> · <a href="#lab-research-hunt">hunt</a> · <a href="#lab-research-memsafety">memsafety</a> · <a href="#lab-research-binary">binary</a> · <a href="#scan-agent-assure">agent-assure</a></p>
-    <p>Guide: <a href="/research-workflows/">Specialist research</a></p>
-  </section>
-  <section class="docs-task-card">
-    <h3>Set up and extend</h3>
-    <p>Open the app, connect a model, check the install, and add skills and plugins.</p>
-    <p><a href="#config">config</a> · <a href="#config-doctor">config doctor</a> · <a href="#models">models</a> · <a href="#models-connect">models connect</a> · <a href="#skills">skills</a> · <a href="#computers">computers</a> · <a href="#web">0 (web console)</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/extensions/">Extensions</a> · <a href="/engines/">Remote engines and teams</a></p>
-  </section>
-</div>
+| Task | Commands | Guide |
+| --- | --- | --- |
+| Scan a repository, package, dependencies or live target | [scan](#the-nine-commands) · [source](#scan-source) · [package](#scan-package) · [web](#scan-web) · [deep](#scan-deep) · [deps](#scan-deps) | [Quickstart](/#scan-from-the-terminal) |
+| Verify and fix | [scan verify](#scan-verify) · [scan fix](#scan-fix) · [repair](#scan-repair) · [scan disclose](#scan-disclose) | [Findings](/findings/#verify-and-fix) |
+| Review findings and threads | [findings](#findings) · [findings update](#findings-update) · [threads](#threads) · [scan runs](#lab-runs) | [Findings](/findings/), [Threads](/threads/) |
+| Automate | [agents](#agents) · [mcp-server](#lab-mcp-server) · [api](#api) | [Agents](/agents/), [Extensions](/extensions/#mcp-servers) |
+| Set up and extend | [config](#config) · [config doctor](#config-doctor) · [models](#models) · [models connect](#models-connect) · [skills](#skills) · [computers](#computers) | [Models](/models/), [Extensions](/extensions/), [Computers](/computers/) |
 
 ## The nine commands
 
-`0` with no arguments opens the web console. Everything else is one of nine commands, each with at most three subcommands in `--help`. The sections below also document the earlier names, which still work for one release and print `moved: use ...` on a terminal. See [CLI changes in 0.35](/cli-changes-0-35/) for every old command and what replaces it.
+`0` with no arguments opens the web console. Everything else is one of nine commands, each with at most three subcommands in `--help`. The sections below also document the earlier names, which still work for one release and print `moved: use ...` on a terminal. See the [0.35 migration notes](/changelog/#cli-changes-in-035) for every old command and what replaces it.
 
 | Command | What it does | Subcommands |
 | --- | --- | --- |
@@ -67,6 +36,10 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
 | `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
 
+### Commands, skills and workflows
+
+The nine commands are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors them (`/threads list` is `0 threads list`), and `scan` is CLI-only. Skills are know-how a thread loads (see [Skills](/skills/)). Workflows today are pipeline templates run by the engine's workflow runner with time and cost caps; an automation is a workflow template plus a trigger, and an Agent owns automations (see [Agents](/agents/#automations)). As direction, not shipped: a thread would run a skill on a target, with `scan` as shorthand for that. See [Threads](/threads/#commands-skills-and-workflows).
+
 `0 doctor` stays as an alias of `0 config doctor`. `0 api` and `0 lab` are hidden developer commands. The old top-level names `web`, `plugin` and `automation` are hidden aliases for one release.
 
 ## Invocation and safety
@@ -76,18 +49,18 @@ command-specific `--help`.
 
 The browser app's chat uses the same words as slash commands: `/threads list`,
 `/findings list`, `/models default` and `/config get` mirror `0 threads list`,
-`0 findings list`, `0 models set` and `0 config get`. `scan` is CLI-only. See [Slash commands](/app/#slash-commands).
+`0 findings list`, `0 models set` and `0 config get`. `scan` is CLI-only. See [Slash commands](/threads/#slash-commands).
 
 Option tables show registration defaults. **— means no default is registered**:
 a handler may resolve configuration or require an explicit value. Inverse
 `--no-*` options show the underlying positive boolean default. See
 [Configuration](/configuration/) for environment and runtime resolution.
 
-- With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/app/).
+- With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/threads/).
 - `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 lab runs relaunch`.
 - `0 --help` lists 9 top-level commands. Every earlier command name and flag still works for one release through hidden aliases with identical behaviour and exit codes. On a terminal (not when piped, in CI or with `--json`) an old name prints one dim `moved: use ...` line to stderr.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
-- Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/scope/).
+- Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/configuration/#scope).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
@@ -203,7 +176,7 @@ Run chat with the full tool registry: recon, web, source-scan, variant-hunt, ver
 
 Interactive chat uses `0 web`. `0 lab console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
-Guide: [Read the workflow](/app/).
+Guide: [Read the workflow](/threads/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -229,15 +202,15 @@ Guide: [Read the workflow](/app/).
 
 #### Approvals
 
-See [Browser app](/app/#approvals) for Ask and Auto behavior. Approvals never grant testing authorization.
+See [Browser app](/threads/) for Ask and Auto behavior. Approvals never grant testing authorization.
 
 #### Approval prompts
 
-Tool, network-scope, and directory approvals are distinct gates. Per-action prompts (the Ask before running commands setting) require a wired approval callback, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/app/) before relying on an approval boundary.
+Tool, network-scope, and directory approvals are distinct gates. Per-action prompts (the Ask before running commands setting) require a wired approval callback, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/threads/) before relying on an approval boundary.
 
 #### Session persistence
 
-Console transcript resume differs from scan journal continuation. See [Browser app](/app/) and [Scan web and APIs](/scan-web/).
+Console transcript resume differs from scan journal continuation. See [Browser app](/threads/) and [Scan web and APIs](/#scan-from-the-terminal).
 
 #### Console settings
 
@@ -251,7 +224,7 @@ Open the local browser workspace for threads, scans and findings.
 0 web [options]
 ```
 
-Guide: [Read the workflow](/app/).
+Guide: [Read the workflow](/threads/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -287,7 +260,7 @@ Call an admitted HTTP API on a running engine without sending a model prompt.
 0 api [options] [path]
 ```
 
-Guide: [Control a running web backend](/engines/).
+Guide: [Control a running web backend](/computers/).
 
 Select either `--engine <id>` from an operator-managed registry, or both
 `--engine-url <url>` and `--engine-token-env <name>` for direct attachment.
@@ -325,7 +298,7 @@ and interactive OAuth consent remain browser operations.
 ### findings reports
 
 Import retained CI artifacts into a chosen local browser workspace without
-starting an assessment. See [CI reports in the browser](/ci/github-action/#review-ci-reports-in-the-browser).
+starting an assessment. See [CI reports in the browser](/#ci).
 
 ```text
 0 findings reports
@@ -385,7 +358,7 @@ Check local runtime prerequisites and suggest the next command
 0 doctor [options]
 ```
 
-Guide: [Read the workflow](/troubleshooting/).
+Guide: [Read the workflow](/#troubleshooting).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -997,9 +970,9 @@ Run autonomous pentest against a URL, web app, or MCP server
 0 scan web [options]
 ```
 
-The scope extension is on by default. Once a scope is defined, live HTTP/HTTPS/MCP targets are checked against it, including when `--require-scope` is omitted; with no scope defined nothing is restricted. Turn it off with `0 skills extensions disable scope --yes`. See [Scope and authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
+The scope extension is on by default. Once a scope is defined, live HTTP/HTTPS/MCP targets are checked against it, including when `--require-scope` is omitted; with no scope defined nothing is restricted. Turn it off with `0 skills extensions disable scope --yes`. See [Scope and authorization](/configuration/#scope). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
-Guide: [Read the workflow](/scan-web/).
+Guide: [Read the workflow](/#scan-from-the-terminal).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1066,7 +1039,7 @@ Guide: [Read the workflow](/scan-web/).
 
 #### `--api-spec`: OpenAPI / Swagger import
 
-Import endpoint knowledge. Target authorization is still required. See [Scan web and APIs](/scan-web/).
+Import endpoint knowledge. Target authorization is still required. See [Scan web and APIs](/#scan-from-the-terminal).
 
 <span id="--race--best-of-n-strategy-racing"></span>
 
@@ -1078,17 +1051,17 @@ Use strategy racing for benchmark and CTF targets. Keep it off for normal live-t
 
 #### `--egats`: Evidence-Gated Attack Tree Search
 
-Enable hypothesis-tree search. Findings still require verification. See [Finding Triage](/triage/).
+Enable hypothesis-tree search. Findings still require verification. See [Finding Triage](/findings/#how-scans-verify-findings).
 
 <span id="--cost-ceiling--hard-spend-guardrail"></span>
 
 #### `--cost-ceiling`: spend limit
 
-See [Costs and budgets](/budgets/) for spend versus turn limits and partial outcomes.
+See [Costs and budgets](/configuration/#costs-and-budgets) for spend versus turn limits and partial outcomes.
 
 #### `--export github:owner/repo`
 
-Creates external GitHub issues. Review destination, permissions, and sensitive evidence first; see [Reports and disclosure](/reports/).
+Creates external GitHub issues. Review destination, permissions, and sensitive evidence first; see [Reports and disclosure](/findings/#export-and-share).
 
 ### scan package
 
@@ -1098,7 +1071,7 @@ Audit a package for security vulnerabilities
 0 scan package [options] <package>
 ```
 
-Guide: [Read the workflow](/scan-code/).
+Guide: [Read the workflow](/#scan-from-the-terminal).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1133,7 +1106,7 @@ Deep source code security review of a repository
 
 Static and AI review produce leads that need runtime verification. `--changed-only` controls static leads and prioritization; model filesystem access is unchanged. `review --auth` is unsupported.
 
-Guide: [Read the workflow](/scan-code/).
+Guide: [Read the workflow](/#scan-from-the-terminal).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1186,7 +1159,7 @@ Guide: [Read the workflow](/scan-code/).
 
 #### Review profiles
 
-Profiles select review behavior and prerequisites. See [Scan code](/scan-code/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
+Profiles select review behavior and prerequisites. See [Scan code](/#scan-from-the-terminal) and Research Workflows. Static kernel review leaves VM execution and crash reproduction to a separate step.
 
 ### scan repair
 
@@ -1216,7 +1189,7 @@ Publication is opt-in. `--publish` uses authorized repository credentials and `g
 
 Exit codes: `0` completed, `2` blocked, `3` failed, `130` cancelled.
 
-Guide: [Scope and authorization](/scope/).
+Guide: [Scope and authorization](/configuration/#scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1248,7 +1221,7 @@ Run a seedless DEPTH review: enumerate source files, apply profile-specific find
 0 scan deep [options] <target>
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1278,7 +1251,7 @@ Generate, source-retest, and optionally apply a scoped fix for one reproduced so
 0 scan fix [options] <repo>
 ```
 
-Guide: [Read the workflow](/verify-and-fix/).
+Guide: [Read the workflow](/findings/#verify-and-fix).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1520,7 +1493,7 @@ Triage findings and manage learned FP memories
 0 findings triage
 ```
 
-Guide: [Read the workflow](/triage/).
+Guide: [Read the workflow](/findings/#how-scans-verify-findings).
 
 Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
 
@@ -1607,9 +1580,9 @@ Deterministically replay a finding's PoC steps and emit a verification_result JS
 0 scan verify [options] [finding]
 ```
 
-Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Verify and fix](/verify-and-fix/).
+Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/findings/#verify-one-finding) and [Verify and fix](/findings/#verify-and-fix).
 
-Guide: [Read the workflow](/verification-result/).
+Guide: [Read the workflow](/findings/#verify-one-finding).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1649,7 +1622,7 @@ Assemble GHSA-ready advisory drafts from persisted findings
 0 scan disclose [options] [findingId]
 ```
 
-Guide: [Read the workflow](/reports/).
+Guide: [Read the workflow](/findings/#export-and-share).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1745,7 +1718,7 @@ Import kernel crash reports (KASAN, UBSAN, oops, syzkaller) into 0 findings.
 0 lab research ingest [options] [path]
 ```
 
-Guide: [Read the workflow](/kernel-vm/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1777,7 +1750,7 @@ Guide: [Read the workflow](/kernel-vm/).
 
 #### Real kernel VM verification
 
-Imported crash logs record a prior run. For a new reproduction, follow [Kernel VM Verification](/kernel-vm/) and its execution and evidence requirements.
+Imported crash logs record a prior run. For a new reproduction, follow Kernel VM Verification and its execution and evidence requirements.
 
 ### config db
 
@@ -1787,7 +1760,7 @@ Manage the local findings database.
 0 config db
 ```
 
-Guide: [Read the workflow](/troubleshooting/).
+Guide: [Read the workflow](/#troubleshooting).
 
 Subcommands: [repair](#config-db-repair) · [reset](#config-db-reset).
 
@@ -1945,9 +1918,9 @@ Resume a previous scan from persisted state
 0 lab runs relaunch [options] <scanId>
 ```
 
-Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Verify and fix](/verify-and-fix/) before resuming a live target.
+Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Verify and fix](/findings/#verify-and-fix) before resuming a live target.
 
-Guide: [Read the workflow](/verify-and-fix/).
+Guide: [Read the workflow](/findings/#verify-and-fix).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1971,7 +1944,7 @@ Replay the last scan's attack chain as an animated terminal sequence
 0 lab runs replay [options]
 ```
 
-Guide: [Read the workflow](/verify-and-fix/).
+Guide: [Read the workflow](/findings/#verify-and-fix).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1988,7 +1961,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/configuration/#authorized-scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2012,7 +1985,7 @@ Run the autonomous verification worker against persisted queued case work
 
 Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
 
-Guide: [Read the workflow](/automations/).
+Guide: [Read the workflow](/agents/#automations).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2075,7 +2048,7 @@ Run A/B variant tournaments and a CI regression gate over the labeled corpus (#6
 0 lab improve bench
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [improvement-project](#lab-improve-bench-improvement-project) · [improvement-assess](#lab-improve-bench-improvement-assess) · [calibrate](#lab-improve-bench-calibrate) · [run](#lab-improve-bench-run) · [diff](#lab-improve-bench-diff) · [scoreboard](#lab-improve-bench-scoreboard).
 
@@ -2229,7 +2202,7 @@ Autonomous self-improvement: source-candidate proposal, lens evaluation, and aut
 0 lab improve evolve
 ```
 
-Guide: [Read the workflow](/self-improvement/).
+Guide: Read the workflow.
 
 Subcommands: [run](#lab-improve-evolve-run) · [status](#lab-improve-evolve-status) · [reconcile](#lab-improve-evolve-reconcile) · [promote](#lab-improve-evolve-promote) · [rollback](#lab-improve-evolve-rollback) · [exec](#lab-improve-evolve-exec) · [feedback](#lab-improve-evolve-feedback).
 
@@ -2270,7 +2243,7 @@ Show active and canary versions, snapshot identities, and registry events
 Record an observed charge for an interrupted durable dispatch. Supply the
 reservation ID and immutable cost-receipt digest shown by the campaign status.
 This resolves cost uncertainty once; it does not bypass provenance or promotion.
-See [durable campaign accounting](/self-improvement/#evolve-a-detection-worker).
+See durable campaign accounting.
 
 ```text
 0 lab improve evolve reconcile [options]
@@ -2399,7 +2372,7 @@ Show retained observations and their approval/processing status
 0 lab improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See Learning for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#lab-improve-learning-status) · [process](#lab-improve-learning-process) · [evolve](#lab-improve-learning-evolve).
 
@@ -2454,7 +2427,7 @@ Run target-specific engines through the shared evidence research plane
 0 lab research
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [pipeline](#lab-research-pipeline) · [counterexample](#lab-research-counterexample) · [mobile](#lab-research-mobile) · [linux-matrix](#lab-research-linux-matrix) · [linux](#lab-research-linux) · [hunt](#lab-research-hunt) · [recency-hunt](#lab-research-recency-hunt) · [assumption-hunt](#lab-research-assumption-hunt) · [memsafety](#lab-research-memsafety) · [lens-synth](#lab-research-lens-synth) · [specdrift](#lab-research-specdrift) · [protocol-check](#lab-research-protocol-check) · [npm-discovery](#lab-research-npm-discovery) · [js-recon](#lab-research-js-recon) · [xnu-fuzz](#lab-research-xnu-fuzz) · [kernel](#lab-research-kernel) · [cve](#lab-research-cve) · [intel](#lab-research-intel) · [recon](#lab-research-recon) · [binary](#lab-research-binary) · [ingest](#lab-research-ingest) · [exploit](#lab-research-exploit) · [identity](#lab-research-identity) · [adgraph](#lab-research-adgraph) · [entragraph](#lab-research-entragraph) · [cloud](#lab-research-cloud) · [h1](#lab-research-h1).
 
@@ -2533,7 +2506,7 @@ candidate as a confirmed finding.
 0 lab research counterexample [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2557,7 +2530,7 @@ Hunt variants of a bug class using a proven fix. Generate candidate sites, run f
 0 lab research hunt [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2598,7 +2571,7 @@ Hunt the kernelCTF freshness window in a linux-next diff. Exclude files unreacha
 0 lab research recency-hunt [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2632,7 +2605,7 @@ Mine implicit function preconditions without a seed. Compare relied-on and enfor
 0 lab research assumption-hunt [options] <source-root>
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2670,7 +2643,7 @@ Scan userspace or Rust code for memory-safety faults in Monty mode. Clone the so
 0 lab research memsafety [options] <source>
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2699,7 +2672,7 @@ Kernel security workflows
 0 lab research kernel
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [syzbot-mine](#lab-research-kernel-syzbot-mine) · [weights](#lab-research-kernel-weights) · [variant-hunt](#lab-research-kernel-variant-hunt).
 
@@ -2764,7 +2737,7 @@ Run the kernel-VM escalation ladder for a confirmed memory-safety finding (ADR-0
 0 lab research exploit [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2799,7 +2772,7 @@ Model each IOKit user client's `IOExternalMethodDispatch2022` gate, generate gat
 0 lab research xnu-fuzz
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [enumerate](#lab-research-xnu-fuzz-enumerate) · [gen](#lab-research-xnu-fuzz-gen) · [harness-plan](#lab-research-xnu-fuzz-harness-plan).
 
@@ -2857,7 +2830,7 @@ Analyze a compiled binary by delegating to the in-repo 0verse engine (uv run --f
 0 lab research binary [options] <target> [passthrough...]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2879,7 +2852,7 @@ Check Tier-1 HTTP conformance against a spec excerpt (issue #972). The LLM propo
 0 lab research protocol-check [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2901,9 +2874,9 @@ Protocol/spec differential-hunting research commands.
 0 lab research specdrift
 ```
 
-See [Research Workflows](/research-workflows/) for prerequisites and evidence limits.
+See Research Workflows for prerequisites and evidence limits.
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [extract](#lab-research-specdrift-extract) · [scan](#lab-research-specdrift-scan) · [plan](#lab-research-specdrift-plan).
 
@@ -2969,7 +2942,7 @@ Test whether untrusted MCP content causes a prohibited action in an authorized a
 0 scan agent-assure [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3000,7 +2973,7 @@ Run adversarial safety eval against an AI/LLM endpoint and produce a scorecard
 0 scan eval [options]
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3022,7 +2995,7 @@ Evolve appsec finder coverage from curated misses; promotion is corpus-gated and
 0 lab research lens-synth [options]
 ```
 
-Guide: [Read the workflow](/self-improvement/#finder-lenses).
+Guide: Read the workflow.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3050,7 +3023,7 @@ Enumerate subdomains through passive CT/DNS, endpoints, OpenAPI/Swagger docs, an
 0 lab research recon [options] <domain>
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -3071,7 +3044,7 @@ Fetch a site's JavaScript bundles and extract endpoints, API base URLs, and reda
 0 lab research js-recon [options] <url>
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -3092,7 +3065,7 @@ Run registered npm-package detectors for SSPP fuzzing, validation read-stability
 0 lab research npm-discovery
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [list](#lab-research-npm-discovery-list) · [run](#lab-research-npm-discovery-run).
 
@@ -3135,7 +3108,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 lab research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/configuration/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3152,7 +3125,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 lab research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/configuration/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3169,7 +3142,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 lab research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-scope).
+Guide: [Read the workflow](/configuration/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3191,7 +3164,7 @@ These commands inspect authorized cloud infrastructure. For managed testing,
 contact the service operator; `0 lab research cloud` is local AWS/S3 reconnaissance, not
 managed-service account setup.
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [s3-probe](#lab-research-cloud-s3-probe) · [validate-creds](#lab-research-cloud-validate-creds).
 
@@ -3239,7 +3212,7 @@ Live vulnerability intelligence lookup helpers
 0 lab research intel
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [dossier](#lab-research-intel-dossier) · [target-history](#lab-research-intel-target-history) · [search](#lab-research-intel-search) · [cve](#lab-research-intel-cve) · [similar](#lab-research-intel-similar).
 
@@ -3362,7 +3335,7 @@ CVE workflows: artifact lookup (`find`) and autonomous PoC adaptation (`adapt`).
 0 lab research cve
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [find](#lab-research-cve-find) · [adapt](#lab-research-cve-adapt).
 
@@ -3532,7 +3505,7 @@ Use `--automations --workspace /absolute/path/to/repo` for template discovery an
 
 Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 automation` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
 
-Guide: [Read the workflow](/mcp/).
+Guide: [Read the workflow](/extensions/#mcp-servers).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3727,7 +3700,7 @@ HackerOne hacker-API helpers (read-only)
 0 lab research h1
 ```
 
-Guide: [Read the workflow](/research-workflows/).
+Guide: Read the workflow.
 
 Subcommands: [auth](#lab-research-h1-auth) · [programs](#lab-research-h1-programs) · [scope](#lab-research-h1-scope).
 
@@ -3807,7 +3780,7 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 These commands store operator-approved criteria for a real local project root,
 not cloud enrollment or repository-controlled configuration. See the
-[review-check workflow](/scan-code/).
+[review-check workflow](/#scan-from-the-terminal).
 
 ### skills
 
@@ -4242,7 +4215,7 @@ Memory is what 0 remembers across threads. False-positive and evaluation memorie
 0 memory import memory.json --preview
 ```
 
-Guide: [Read the workflow](/self-improvement/).
+Guide: Read the workflow.
 
 Subcommands: [list](#memory-list) · [set](#memory-set) · [export](#memory-export) · [disable](#memory-disable) · [enable](#memory-enable) · [import](#memory-import).
 
@@ -4332,7 +4305,7 @@ Import a memory archive; imported memories start disabled
 
 These commands store operator-approved criteria for a real local project root,
 not cloud enrollment or repository-controlled configuration. See the
-[review-check workflow](/scan-code/).
+[review-check workflow](/#scan-from-the-terminal).
 
 ### doctor checks
 
@@ -4467,11 +4440,11 @@ Delete a local check and its revisions from the selected project.
 
 ## XBOW benchmark runner
 
-The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/benchmark/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/bench/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
+The XBOW runner lives in the benchmark workspace. See [Benchmarks](/findings/#benchmarks) and [Methodology](/findings/#benchmarks) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/bench/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
 
 ## Workflow execution
 
-See [Workflow CLI](/automations/) for templates, foreground execution, scope, and host lifetime.
+See [Workflow CLI](/agents/#automations) for templates, foreground execution, scope, and host lifetime.
 
 ### automation
 
@@ -5823,7 +5796,7 @@ handler behavior and prerequisites beyond the registered flags.
 
 Provision opt-in accounts for a customer-controlled team engine. Account-free local
 use remains the default. Creating a config does not activate it on a running host.
-See [Team workspaces](/engines/#team-workspaces) for roles and deployment boundaries.
+See [Team workspaces](/computers/) for roles and deployment boundaries.
 
 Subcommands: [init](#config-team-init) · [add-user](#config-team-add-user) · [list](#config-team-list).
 

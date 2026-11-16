@@ -6,7 +6,7 @@
 #
 # One replica, one volume: a single process owns the SQLite database in /data.
 # Never scale this service above 1 and never mount the volume into a second container.
-# There is no high availability. See docs/src/content/docs/docker.md.
+# There is no high availability. See docs/src/content/docs/server-mode.md.
 name: zero
 
 services:

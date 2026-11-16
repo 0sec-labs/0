@@ -1,9 +1,9 @@
 ---
 title: Configuration
-description: Execution profile, runtime modes, state directory, 0 config, environment variables, flags, telemetry and updates.
+description: Settings, environment variables, scope, costs, telemetry, updates and the security model.
 ---
 
-Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models and keys](/models/).
+Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models](/models/).
 
 ## Quick start
 
@@ -74,7 +74,7 @@ Rules:
 | `claude` | Runs the signed-in Claude Code CLI. |
 | `codex` | Managed source review keeps the native API tool boundary. Live scans use the ChatGPT Codex provider when you are signed in. |
 
-`--model` does not select a runtime. Pass `--runtime api` to use the provider rules in [Models and keys](/models/) instead of workflow-based selection.
+`--model` does not select a runtime. Pass `--runtime api` to use the provider rules in [Models](/models/) instead of workflow-based selection.
 
 The `claude` and `codex` runtimes need that CLI installed and signed in (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`):
 
@@ -90,7 +90,7 @@ The full list is in the [CLI reference](/commands/). These change behavior most.
 
 | Flag | Values | Notes |
 | --- | --- | --- |
-| `--depth` | `quick`, `default`, `deep` | Sets the investigation budget, not a test count. See [Costs and budgets](/budgets/). |
+| `--depth` | `quick`, `default`, `deep` | Sets the investigation budget, not a test count. See [Costs and budgets](#costs-and-budgets). |
 | `--format` | `terminal`, `json`, `md`, `html`, `sarif`, `pdf` | `html` and `pdf` are saved to a temporary file. |
 | `--diff-base <ref>` | git ref | Diff-aware source review. Add `--changed-only` to limit leads to changed files. |
 | `--cost-ceiling <usd>` | number | Stop when estimated cost passes the limit. |
@@ -101,7 +101,7 @@ The full list is in the [CLI reference](/commands/). These change behavior most.
 0 scan ./my-repo --diff-base origin/main --changed-only --format sarif
 ```
 
-For web scans, `--mode` is `deep`, `probe`, `web`, `mcp` or `http_audit`. Targets starting with `mcp://` default to `mcp`. See [Scan web and APIs](/scan-web/).
+For web scans, `--mode` is `deep`, `probe`, `web`, `mcp` or `http_audit`. Targets starting with `mcp://` default to `mcp`. See [Quickstart](/#scan-from-the-terminal).
 
 ## State directory
 
@@ -113,7 +113,7 @@ Per-user state lives in `~/.0`.
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
 | `console-sessions/` | One transcript JSON per thread. |
-| `engines.json` | Registered remote computers. See [Remote computers](/engines/). |
+| `engines.json` | Registered remote computers. See [Computers](/computers/). |
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
 | `feedback.md` | Locally staged feedback. |
@@ -146,15 +146,17 @@ Layers, highest first: project, global, default. Unknown keys are dropped and in
 
 Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development source updates, `executionProfile` and `approvals`.
 
-`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under Settings, Helpers, and `--approvals ask|auto` on `0 lab console` overrides it for one run. It is the only place asking first is decided: threads and Agents have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
-
 `0 config set --from-file <file>` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 
 Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic thread titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved threads idle for that many days when the app starts.
 
+### Ask before running commands
+
+`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under **Settings → Helpers**, and `--approvals ask|auto` on `0 lab console` overrides it for one run. It is the only place asking first is decided: threads and Agents have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
+
 ### Development source updates
 
-Enable **Development source updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed computer code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
+Enable **Development source updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed computer code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See Self-improvement.
 
 ## Environment variables
 
@@ -215,7 +217,6 @@ Set these on the process that runs `0`.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `ZERO_CSP` | `enforce` | Content-Security-Policy mode: `enforce`, `report-only` or `off`. Leave it on. The page embeds the control token. |
-| `ZERO_SELF_EDIT` | off | `1` enables self-edit preview routes. The preview backend runs agent-edited code as your user and is not a sandbox. |
 
 ### Deprecated names
 
@@ -285,7 +286,7 @@ Your `diagnosticReporting` choice decides what happens to a report:
 | `ask` | The report is stored locally in `~/.0/diagnostics/pending/`. Nothing is sent until you preview the exact body in the browser app (Settings, Feedback) and confirm. |
 | `automatic` | The report is sent once, with a short timeout. A failure is ignored. This is the default. |
 
-A report contains the error class (for example `TypeError`), the 0security version and release channel, Node version, platform, CPU architecture, the surface, the name of the command that was running (only from the built-in command list, never arguments) and scrubbed locations inside 0security's own code. It never contains error messages, command output, file paths, targets, hostnames, findings, source code or credentials.
+A report contains the error class (for example `TypeError`), the 0security version and release channel, Node version, operating system, CPU architecture, the surface, the name of the command that was running (only from the built-in command list, never arguments) and scrubbed locations inside 0security's own code. It never contains error messages, command output, file paths, targets, hostnames, findings, source code or credentials.
 
 `0 config doctor` prints one line when reports are waiting. `0 config doctor --discard-reports` deletes them without sending anything.
 
@@ -346,16 +347,302 @@ The installer is the same `install.sh` used for a fresh install. Repeated attemp
 
 - Every six hours, with up to ten percent of random spread, it asks for the newest release. The answer is cached in `last-update-check`, shared with the command line, and a failed or offline check is ignored until the next pass. With **Automatic**, it installs the verified release in the background only while no thread is running, then shows **Restart to finish updating**.
 - The **Update available** card has **Update and restart**. It runs the same installer as `0 config doctor upgrade` (checksum verified, atomic swap in the folder of the running binary), then shuts the console down cleanly and starts the same command again with the same port, `--db-path` and `--asset-dir`. The page shows **Updating…**, reconnects on its own and reports **Updated to <version>**. If threads are running it asks first, because the restart stops them. Only one update runs at a time, and only the browser console can start one (an attached engine or tool is refused).
-- With **Automatic**, server mode off and no service manager, the console also restarts by itself once nothing has run for 10 minutes. In [server mode](/docker/) it never restarts itself: it shows the card instead.
+- With **Automatic**, server mode off and no service manager, the console also restarts by itself once nothing has run for 10 minutes. In [server mode](/server-mode/) it never restarts itself: it shows the card instead.
 - Under launchd, systemd or pm2 (detected from the environment, or set `ZERO_SUPERVISED=1` or `0`), the console exits with code 0 after installing and expects the service manager to start it again: use `KeepAlive` (launchd), `Restart=always` (systemd) or pm2's default. It never starts a second copy.
 
 The card never offers a button that cannot work. Docker images are replaced, never changed in place (`docker pull ghcr.io/0sec-labs/0security:latest`, then recreate the container); a source checkout updates with `git pull` and a rebuild; an npm install must move to the standalone binary; a binary in a read-only folder or on Windows shows `0 config doctor upgrade`.
 
-Copies older than this feature cannot be updated from the console, and nothing can reach them remotely. Update them once with `0 config doctor upgrade` or the install one-liner on the [install page](/#update); every later update then works from the card.
+Copies older than this feature cannot be updated from the console, and nothing can reach them remotely. Update them once with `0 config doctor upgrade` or the install one-liner on the [Quickstart](/#update); every later update then works from the card.
 
 `ZERO_UPDATE_ORIGIN` points the check and the installer at a mirror or a test server that serves `/latest`, `/install.sh` and `/releases/download/<tag>/<asset>`. It is not set normally.
 
 The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day. Copies older than 0.29 only check when `ZERO_UPDATE_CHECK=1` is set; update those with the installer, or with the upgrade command that older versions have.
+
+## Scope
+
+A scope file lists the hosts 0 may test. Use one for every live target.
+
+Only test systems you own or are authorized to test. A scope file encodes that authorization; it does not grant it, and it is not a sandbox.
+
+### Set up scope
+
+Scope enforcement is a built-in extension. It is **on by default**, in every project. Scope is on whenever a scope is set: with no scope nothing is restricted, and the moment you set one (`--scope`, a thread, Agent or automation scope, or a pull request checkout) its hosts, paths and exclusions are enforced.
+
+If the scope extension is turned off or fails while a scope is set, commands are **denied**, not allowed. To also require a scope for every live target, enable it explicitly for the project:
+
+```bash
+0 skills extensions enable scope
+```
+
+Save `scope.json` with your authorized hosts:
+
+```json
+{
+  "in_scope": ["app.example.com"],
+  "out_of_scope": []
+}
+```
+
+Pass it to the scan:
+
+```bash
+0 scan https://app.example.com --scope ./scope.json \
+  --depth quick --cost-ceiling 2
+```
+
+With the extension enabled explicitly, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
+
+With no scope set, host checks, exclusions and local filesystem boundaries have nothing to enforce. Credential protection, sandboxing and resource limits apply either way. Turning the extension off (`0 skills list scope --disable`) makes any scope you set deny commands until you turn it back on.
+
+### Matching rules
+
+Rules match the URL's **hostname**, case-insensitive. Port, path and resolved IP address are ignored.
+
+| Rule | Matches | Does not match |
+| --- | --- | --- |
+| `app.example.com` | `https://app.example.com/` on any path or port | `api.app.example.com`, `example.com` |
+| `*.example.com` | `app.example.com`, `a.b.example.com` | The apex `example.com`, `example.com.attacker.test` |
+| `192.0.2.0/24` | A literal IPv4 host in range, such as `http://192.0.2.10/` | A DNS name that resolves into the range |
+
+- Write the hostname alone. No `https://`, path or `:443`.
+- Only a leading `*.` wildcard works. No bare `*`, interior wildcards or IPv6 CIDRs.
+- Add the apex and `*.` as two rules if both are authorized.
+- IPv4 prefix lengths are integers from 0 to 32. Avoid broad ranges unless all of it is authorized.
+- Exact IPv6 addresses work in bare or bracketed form.
+- A trailing root dot is ignored (`app.example.com.` equals `app.example.com`).
+
+#### Exclusions win
+
+A matching `out_of_scope` rule always beats `in_scope`. An empty `in_scope` denies everything.
+
+```json
+{
+  "in_scope": ["example.com", "*.example.com"],
+  "out_of_scope": ["payments.example.com", "*.production.example.com"]
+}
+```
+
+- `https://app.example.com/` is allowed.
+- `https://payments.example.com/` is denied.
+- `https://api.production.example.com/` is denied.
+- `https://production.example.com/` is **allowed**. The wildcard does not match its apex; add it to `out_of_scope` too.
+
+A redirect or a linked third-party host does not become in scope because the start page was.
+
+### Scope is one input of several
+
+| Input | What it controls |
+| --- | --- |
+| `--scope` | Which hosts may be reached, once a scope is set. |
+| `--auth` | Credentials for the target. Not permission to test it. |
+| `--model` and your provider key | Which model does the work. |
+| `--engagement-profile conservative` | A quieter testing posture. Not a new scope. |
+| `--rate-limit` | Request pacing. |
+| `--cost-ceiling` | Estimated model spend for the run. |
+
+With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped scans. `--allow-scanners` shows them without widening the host list.
+
+<span id="requirements-differ-by-command"></span>
+#### What each command enforces
+
+| Command | With a scope set |
+| --- | --- |
+| `scan web` (HTTP, HTTPS, MCP) | Needs a matching scope file before it starts. |
+| `recon --active`, `js-recon`, `cloud`, `agent-assure` | Need `--scope`; candidates are checked before live work. |
+| `recon` without `--active` | Still does CT, DNS and HTTP lookups. `--scope` only guards active subdomain enumeration, not passive discovery or probes. |
+| `identity` | The scope must allow `graph.microsoft.com`. |
+| `adgraph`, `entragraph` | Offline analysis of exports you supply. No network. |
+| `scan source`, `fix`, `scan repair` | Local source and tool boundaries. `fix` and `scan repair` do not take `--scope`. |
+
+If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
+
+There is no access setting: a thread or Agent has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Ask before running commands](#ask-before-running-commands)).
+
+### Local workflows and strict scope mode
+
+Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
+
+In threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply whenever a scope is set. Private-network restrictions always apply.
+
+To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the scope extension to be on, which it is by default.
+
+### Execution boundary
+
+The default shell executor runs on your host. URL checks and scanner suppression are not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
+
+`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current computer**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
+
+Saved state is not ongoing authorization. Before you resume a run, confirm the target, scope, credentials and allowed side effects are still valid.
+
+### Diagnose a scope refusal
+
+1. Check that `--scope` points to the right file where 0 lab runs. A host path is not inside a container unless you mount it.
+2. Check the JSON is valid and `in_scope` and `out_of_scope` are string arrays.
+3. Compare the target hostname with each rule, including apex versus wildcard and exclusions.
+4. Check whether a redirect, API call or tool argument goes to another host.
+5. Fix the mismatch or get more authorization. Do not widen scope just to silence the refusal.
+
+### Authorized scope
+
+Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
+
+<span id="engagement-posture-profile"></span>
+### Posture profile
+
+The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `--engagement-profile conservative` is quieter:
+
+```bash
+0 scan https://app.example.com --scope ./engagement-scope.json \
+  --engagement-profile conservative
+```
+
+| Behavior | Default | Conservative |
+| --- | --- | --- |
+| Request rate | 5 rps per host | 1 rps per host |
+| Jitter | none | 0 to 750 ms |
+| Reset-endpoint burst probe | 15 POSTs | off (reported as a manual-test lead) |
+| Web recon pre-pass | unthrottled | rate-limited |
+| WAF-evasion ladder | on when blocked | off |
+
+The profile lowers the fallback rate. It does **not** cap an explicit `--rate-limit`.
+
+Turn off WAF evasion on its own with `--no-waf-evasion` or `ZERO_WAF_EVASION=0`. Detection and block reporting still work.
+
+Set the same controls in the scope file. The scope file beats environment variables, which beat CLI flags:
+
+```json
+{
+  "in_scope": ["app.example.com"],
+  "out_of_scope": [],
+  "engagement": {
+    "profile": "conservative",
+    "waf_evasion": false,
+    "reset_burst_probe": false,
+    "rate_limit_rps": 1,
+    "jitter_ms": 750
+  }
+}
+```
+
+Environment variables: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`, `ZERO_ENGAGEMENT_RATE_RPS` and `ZERO_ENGAGEMENT_JITTER_MS`. A bad profile name or value stops the scan with exit code 2.
+
+When a profile is active, the report carries an `engagementPosture` record with the posture as applied, and the run emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or extension traffic.
+
+<span id="what-0-does-not-do"></span>
+### What scope does not cover
+
+- Recon starts from domains you supply. It is not an organization-wide inventory or a CIDR sweep.
+- Identity collection and AD or Entra graph analysis do not exploit, spray credentials or walk the paths they report. See the CLI reference.
+- A quiet posture is not stealth.
+- A hostname in scope does not authorize persistence, implants, C2, pivoting or destructive impact.
+- A saved lead or a model's confirmation is not always a reproduced vulnerability. Check the verifier result before disclosure. See [Verify and fix](/findings/#verify-and-fix).
+- Scope does not limit where model traffic goes. See [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
+
+## Costs and budgets
+
+0 has three separate limits: estimated model cost, agent turns and request timeouts. Provider and infrastructure costs are yours.
+
+### Set a cost ceiling
+
+```bash
+0 scan ./authorized-repo --runtime api --cost-ceiling 5
+0 scan npm:lodash --runtime api --cost-ceiling 2
+env ZERO_COST_CEILING_USD=3 0 scan https://authorized.example --scope ./scope.json --runtime api
+```
+
+`--cost-ceiling <usd>` beats `ZERO_COST_CEILING_USD`. The value must be positive. With neither, there is no dollar limit.
+
+When the estimate passes the ceiling, 0 stops, keeps partial findings and exits with code `4`. With `ZERO_EMIT_RESULT_LINE=1` the result line carries `exit_reason: "cost_ceiling_exceeded"`. Treat a cost stop as incomplete, not as a clean result.
+
+Commands that take `--cost-ceiling`: `scan web`, `scan source`, `scan package`, `scan deep`, `scan campaign`, `scan repair`.
+
+Gotchas:
+
+- It is a soft stop on estimated usage, not an invoice cap. Calls in flight finish, so each active session can overshoot by one turn.
+- Source and package scans share one ledger across research, per-file sessions and verification. `scan deep` shares one across its planner and finders.
+- `scan repair --cost-ceiling` is not a whole-workflow cap. The repair loop checks its own ledger between findings, so the shown cost is not a reliable investigation-plus-repair total.
+- Tool services, infrastructure and other integrations are not metered by the ledger.
+
+### Turn limits
+
+A turn is one model round trip. It can hold several tool calls.
+
+| Work | Default |
+| --- | --- |
+| Web and deep scan attack stage | 20 (`quick`), 40 (`default`), 100 (`deep`) |
+| Source and package research and verification | No limit. The agent stops when the work is done. |
+| Browser app threads | No limit per message. `0 lab console --max-tool-calls <n>` sets one. |
+
+A larger limit raises the ceiling on work, not the floor. A run that finishes early does not use the rest.
+
+To bound source and package scans, for example in CI:
+
+```bash
+env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
+  0 scan ./authorized-repo --runtime api --cost-ceiling 5
+```
+
+| Variable | Applies to |
+| --- | --- |
+| `ZERO_MAX_TURNS` | Every shared-runner session |
+| `ZERO_MAX_TURNS_AUDIT` | Package audit research (beats the global value) |
+| `ZERO_MAX_TURNS_REVIEW` | Source review research (beats the global value) |
+| `ZERO_MAX_TURNS_VERIFY` | Verification (beats the global value) |
+
+Invalid, zero or negative values are ignored. These do not limit the web attack stage. MCP, kernel and per-file hunts have their own limits.
+
+Near the end of a session the agent gets two one-time warnings, at 85% of the limit and three turns before it. `ZERO_FEATURE_BUDGET_WARNINGS=0` turns the warnings off. It does not remove the limit.
+
+### When a budget runs out
+
+0 keeps partial findings and records an incomplete session. An exhausted attack stage can still feed verification and reporting. Read the incomplete-run reason before you trust a partial report, and do not assume every saved finding was reproduced.
+
+Loops checkpoint every two turns when a database is attached. Resume does not replay requests that were in flight.
+
+### Cost estimates
+
+The estimator prices input, output, cached-input and cache-write tokens from a bundled rate table. An unknown model price is unknown, not zero.
+
+- Gateway prices can differ from direct-provider prices, even for the same model name.
+- Subscription routes (ChatGPT Codex, coding plans) have their own allowances. Token-dollar estimates do not show remaining quota.
+- Failed or cancelled requests can use provider capacity without usage reaching the CLI. Check your provider invoice.
+
+### Choosing a depth
+
+Use `quick` for a short pass, `default` for routine work and `deep` when the target needs more. Set a dollar ceiling and a provider-side spending limit as separate controls.
+
+A repeated run can take another path and spends again. A run with no findings does not show the target is secure.
+
+## Security model
+
+0 runs as you, with bash. The agent can do what you can do in a terminal; the defences are scope, approvals, the sandbox when you use one, and the prompts below. This page covers third-party code and text: extensions, MCP servers and skills.
+
+### Extensions and MCP
+
+An extension or MCP server you add runs other people's code as your user. 0 puts an explicit review in front of it. It does not sandbox it. Setup is in [Extensions](/extensions/).
+
+- **Pinned by commit.** A git extension is fetched without running anything and pinned to a full 40-character commit. Branches, tags and short SHAs are refused. The installed folder is hashed; if it changes on disk, it is blocked until you review it again. Local folders are pinned by content hash.
+- **The install prompt.** It shows `repo @ commit`, the licence, the file list, hidden-Unicode flags and what the extension can do: scripts it ships, MCP servers (command or URL, variable names), services it calls (hosts, read or write) and any scope it defines. The click echoes the commit, and the server re-checks that the revision it installs is the one you saw. Approving is the operator's: an agent session or a command without a terminal is refused. The audit log records `extension.install` with the commit and capabilities.
+- **Updates re-prompt.** Any change, even one new script, shows the folder diff and a capability delta and asks again. There is no silent auto-update of third-party extensions. Built-ins update with the binary.
+- **Per-tool MCP pins.** The first time an MCP server connects you approve its tools; 0 stores a sha256 of each tool's name, description, input schema and annotations. If any tool is changed, new or removed, the whole server is blocked until you approve again. MCP servers start only when the model first loads them, run through `beforeCommand` (your scope and approvals), and their output is labelled untrusted and capped. Details are in [MCP servers in extensions](/extensions/#servers-bundled-in-an-extension).
+- **Environment allowlist.** A process gets a scrubbed environment plus only the variable names the extension declared and you approved. Provider keys are never passed unless declared and shown in the prompt. Loader variables (`LD_PRELOAD`, `DYLD_*`, `NODE_OPTIONS`) are always rejected. A connection token reaches only a declared variable.
+- **Repo config is a suggestion.** A repository's `.0/` or `.claude/` files cannot install or enable anything.
+- **Network.** Remote MCP servers need https (plain http only to loopback); hosts that resolve to private, loopback, link-local or metadata addresses are refused and redirects are not followed.
+
+#### Residual risk
+
+- An approved extension or MCP server can read your files, use your network and run programs as your user. Approval is informed consent, not isolation. Use a Computer or SmolVM when you need isolation.
+- A commit pin shows you got the code you reviewed, not that it is safe. Review the repository, not only the manifest.
+- There are no signatures or publisher identity. A catalog entry marked verified means 0 curated it and pinned its commit.
+- An MCP server sees what the agent sends it, and its tool names, descriptions and results can contain prompt injection.
+
+Skills from GitHub get the same treatment: a pinned snapshot, a preview and an explicit click. See [Skills](/skills/#adding-skills-from-github).
+
+### Who can approve
+
+Approval routes are browser-only: agent callers get `403 browser_only`, so an agent cannot add or approve its own tools. In team mode only the workspace owner can use them (`403 owner_required`).
+
+Report problems through the [security policy](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).
 
 ## Limits
 

@@ -1,9 +1,9 @@
 ---
 title: Agents
-description: Standing watchers with a scope, an access level, a daily budget and a review gate.
+description: Standing jobs with a scope, a daily budget and a review gate, plus the saved automations they run and the GitHub pull request trigger.
 ---
 
-An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It then runs threads for you on a schedule, when a GitHub pull request opens, or when you start it by hand.
+An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It then runs threads for you on a schedule, when a GitHub pull request is opened or updated, or when you start it by hand. An **automation** is a workflow template plus a trigger: a saved list of steps that runs against a target and keeps its results. An Agent owns automations.
 
 ## Create one
 
@@ -37,14 +37,12 @@ A new Agent always starts paused and with production targets off. A preset fills
 
 There is one mode: an Agent has shell access, like a thread. There is no access setting to choose. What limits an Agent is its scope, its budget, the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
 
-- **Ask before running commands.** One global setting (Settings, Helpers), off by default. When on, an Agent needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations.
-- **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on.
+- **Ask before running commands.** One global setting (**Settings → Helpers**), off by default; see [Configuration](/configuration/#ask-before-running-commands). When on, an Agent needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations.
+- **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on. See [Scope](/configuration/#scope).
 
 ## Budget
 
-Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Agent and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**.
-
-Records saved with older per-run cost and time caps load normally, and those two caps are ignored.
+Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Agent and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**. Older per-run cost and time caps load normally and are ignored.
 
 ## Triggers
 
@@ -56,9 +54,13 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 `github-pr` polls by default. In server mode you can also add a [GitHub webhook](#faster-with-a-github-webhook-server-mode) so a push is picked up in seconds; polling stays on as the fallback. The first poll only records pull requests that are already open and never reviews them. If `gh` is missing or signed out, the trigger shows a blocked status and retries on the next poll. Push and finding-created triggers do not exist.
 
-### Faster with a GitHub webhook (server mode)
+### GitHub pull request trigger
 
-Polling needs nothing. If you run `0 --server-mode` behind a public HTTPS address (see [Docker](/docker/)), a webhook makes pull request Agents react right after a push. It is only an accelerator: a delivery asks the Agent's trigger to check GitHub now, exactly as a poll would, so forks, drafts, comments and the one-review-per-commit rule behave the same. If the webhook is off or unreachable, polling keeps working.
+`github-pr` polls GitHub for new and updated pull requests. The sections below cover the webhook that speeds it up and what a run does.
+
+#### Faster with a GitHub webhook (server mode)
+
+Polling needs nothing. If you run `0 --server-mode` behind a public HTTPS address (see [Server mode](/server-mode/)), a webhook makes pull request Agents react right after a push. It is only an accelerator: a delivery asks the Agent's trigger to check GitHub now, exactly as a poll would, so forks, drafts, comments and the one-review-per-commit rule behave the same. If the webhook is off or unreachable, polling keeps working.
 
 1. Open **Agents** (or Settings > Git) and choose **Set up webhook**. Copy the secret now; it is shown once. The card also shows the payload URL, built from `--public-url`.
 2. On GitHub, open the repository (or organisation), **Settings**, **Webhooks**, **Add webhook**. Payload URL: the one on the card. Content type: `application/json`. Secret: the secret. Events: **Let me select individual events**, then only **Pull requests**. Keep **Active** on and add the webhook.
@@ -66,7 +68,7 @@ Polling needs nothing. If you run `0 --server-mode` behind a public HTTPS addres
 
 The trigger must exist and be on for that repository and base branch; deliveries for anything else are ignored. Rotate the secret with the card or `0 agents webhook secret rotate --yes`; the old secret still works for 5 minutes so you can update GitHub without losing deliveries. Deliveries are checked by signature before anything is read, limited to 1 MB, deduplicated by delivery id and rate limited. The route does not exist outside server mode.
 
-### What a pull request run does
+#### What a pull request run does
 
 A new commit on an open pull request starts one thread, recorded as an activation on the Agent with a link to the thread. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. 0 does not check out or execute the pull request branch itself; the run works in the repository's local checked-out folder.
 
@@ -79,7 +81,7 @@ By default a run **posts nothing to GitHub**. Results are in the Agent's activit
 
 Draft pull requests are skipped the same way, with the reason `draft pull request`, and are reviewed once when marked ready for review. Changing a trigger's repository, branch or options turns it off and records a new baseline, so turning on comments or forks needs a fresh approval.
 
-### Limits for pull request runs
+#### Limits for pull request runs
 
 The pull request is untrusted content, and a run has shell access, so these limits apply by default:
 
@@ -116,25 +118,40 @@ Everything on the Agents page works from `0 agents`. Commands attach to a runnin
 
 `delete`, `run` and enabling a trigger need `--yes` because the CLI never prompts. IDs may be abbreviated to a unique prefix.
 
-## API
+## Automations
 
-Routes sit under `/api/console` and need the dashboard control token. In team mode, viewers are read-only and editors can delete only their own Agents.
+A **template** is a versioned starter definition, an **automation** is a saved definition you can edit, and a **run** is one execution with its step results, findings and evidence. Use one when you want the same job repeated, scheduled or handed to a pipeline. Scan steps use the model connection from [Models](/models/); the model of a coding agent that calls 0 over MCP does not configure it.
 
-| Route | Purpose |
-| --- | --- |
-| `GET sentinel-presets` | List presets. |
-| `GET` / `POST sentinels` | List, or create. `POST` accepts `{ "preset": "<id>" }` plus overrides. |
-| `GET` / `PATCH` / `DELETE sentinels/:id` | Read, update (needs `version`), delete (needs `?version=`). |
-| `POST sentinels/:id/pause`, `resume`, `acknowledge` | Status and review gate. |
-| `GET sentinels/:id/budget` | Spend against the daily cap, as `{ runs, costUsd }`. |
-| `.../triggers`, `.../triggers/:id/check`, `.../run`, `.../activations`, `.../automations`, `.../files` | Triggers, manual run, run history, owned automations, memory files. |
+In the browser, open an Agent, add an automation from a template (or describe a custom one in a thread), edit its **Steps**, and set a **Triggers** schedule. A schedule fires only while the app and its computer are running.
 
-## Next steps
+```bash
+0 agents list --automation --templates
+0 agents set --automation create --template repository-review --name "Weekly review" --target /absolute/path/to/repo
+0 agents run --automation --template repository-review --revision 1 \
+  --target /absolute/path/to/repo --workspace /absolute/path/to/repo \
+  --time-cap 600000 --cost-cap 5 --format json > run.json
+0 agents run --automation AUTOMATION_ID --revision 3 \
+  --target https://target.example.com --scope /absolute/path/to/scope.json
+```
 
-- [Automations](/automations/): the saved jobs an Agent can own.
-- [Skills](/skills/): instructions an Agent loads.
-- [Scope](/scope/): authorization rules.
+`set --automation` also takes `edit`, `duplicate`, `delete` and `triggers`; `delete`, `triggers remove` and `triggers enable` need `--yes`. Other flags of `run` are `--model`, `--inputs <path>` (a JSON object of artifact inputs, such as a finding to verify), `--allow-apply` (permit patch-apply steps) and `--chat <id>` (attach to an existing thread). The command stays in the foreground, and Ctrl-C cancels.
+
+Templates for source targets include `repository-review`, `finding-verification` (needs a finding and a replay runner), `fix-candidate` (needs a finding and a `testCommand`), `security-research` and `deep-source-review`. A template whose prerequisites are missing fails before launch; it never turns into a plain scan.
+
+- A completed run exits `0` even when it found something. Execution failure exits `2` and cancellation `130`. Read the findings in the JSON, not only the exit code. The `scan` shortcuts keep their own convention and can exit `1` on findings.
+- Steps run in order, and earlier findings pass forward as evidence. One deadline and one cost ledger cover the run. Cost accounting is an estimate, so in-flight calls can pass the cap.
+- Partial results stay on record when later work fails or the run is cancelled. Run history does not resume interrupted work; `0 lab runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing thread when the computer supports it.
+- Applying a patch needs `--allow-apply` on the foreground command and approval of the exact candidate that process created. A candidate is not evidence that it fixes the finding; see [Findings](/findings/#verify-and-fix).
+- `0 lab runs list|show|cancel` reads retained runs, including the one-step runs that `0 scan` records.
+
+To work on the runs you see in the browser from a CLI or MCP client, attach to that computer with `--engine-url` and `--engine-token-env`, or `--engine <id>` for a registered one; see [Computers](/computers/).
 
 ## Older Agents
 
-The API fields `access`, `autonomy` and `toolAccess` (and the older `accessLevel` with `commands` and `pull-requests`) are optional and ignored on write, and are no longer returned. Older Agents saved with `observe`, `propose`, `run` or `act` still load and all mean the single mode; stored rows are not rewritten. An Agent that was read-only is marked as needing review once, because its authority widened. Keep GitHub credentials off machines that should not publish.
+The API fields `access`, `autonomy` and `toolAccess` are ignored on write and no longer returned. Agents saved with `observe`, `propose`, `run` or `act` still load and all mean the single mode. An Agent that was read-only is marked as needing review once, because its authority widened. Keep GitHub credentials off machines that should not publish.
+
+## Next steps
+
+- [Skills](/skills/): instructions an Agent loads.
+- [Extensions](/extensions/): connect GitHub and other services.
+- [Configuration](/configuration/#scope): authorization rules.

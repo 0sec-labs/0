@@ -53,7 +53,7 @@ are not sandboxed. The guardrails are review and pinning, not isolation:
 
 Reports that bypass the review, pinning, caller or secret-handling rules are in
 scope. Behaviour of an approved third-party extension is not a flaw in 0. See
-the [security model](https://docs.0.security/security-model/).
+the [security model](https://docs.0.security/configuration/#security-model).
 
 ## Self-edit preview
 

@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const docsRoot = join(root, "docs/src/content/docs");
-const MOVED_ALLOWED_PAGES = new Set(["docs/src/content/docs/cli-changes-0-35.md", "docs/src/content/docs/commands.md"]);
+const MOVED_ALLOWED_PAGES = new Set(["docs/src/content/docs/changelog.md", "docs/src/content/docs/commands.md"]);
 const IMPLICIT_FLAGS = new Set(["-h", "--help", "-V", "--version"]);
 const SHELL_FENCES = new Set(["", "bash", "sh", "shell", "zsh", "text", "console", "terminal"]);
 

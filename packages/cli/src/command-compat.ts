@@ -11,7 +11,7 @@
  *
  * `LEGACY` is the only deprecation table for this release. Delete its rows with the
  * implementation commands they point at when the grace period ends (see
- * docs/src/content/docs/cli-changes-0-35.md for the same table in prose).
+ * docs/src/content/docs/changelog.md for the same table in prose).
  */
 import { statSync } from "node:fs";
 import { rewriteMovedCommand } from "./command-aliases.js";

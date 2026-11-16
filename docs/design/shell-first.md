@@ -1,15 +1,13 @@
----
-title: Shell-first rationale
-description: Why 0 uses bash instead of structured tools, with A/B test data from the XBOW benchmark.
----
+# Shell-first rationale
 
-> **Decision (2026-11):** the default tool list for Threads and Agents is now a small core with everything else behind skill-provided packs; see [Core toolset](https://github.com/0sec-labs/0security/blob/main/docs/design/core-toolset.md). The text below is the earlier single-challenge experiment.
+Why 0 uses bash instead of structured tools, with A/B test data from the XBOW benchmark. Moved from the public docs site; the benchmark figures are historical single-challenge observations, not current claims.
+
+> **Decision (2026-11):** the default tool list for Threads and Agents is now a small core with everything else behind skill-provided packs; see [Core toolset](core-toolset.md). The text below is the earlier single-challenge experiment.
 >
 > **Historical experiment and rationale.** The small A/B observations below are
 > preserved, not a current universal performance claim or exhaustive tool list.
 > Current workflows expose additional tools, explicit scope controls and
-> configurable executors; see [Architecture](/architecture/) and [Research
-> Workflows](/research-workflows/). Shell access is not automatically sandboxed.
+> configurable executors; see [Architecture](architecture.md). Shell access is not automatically sandboxed.
 
 Most AI security tools give agents structured tools with typed parameters -- `crawl(url)`, `submit_form(url, fields)`, `http_request(url, method, body)`. The agent must learn the tool API, choose the right tool, and compose multi-step operations across separate tool calls.
 
@@ -94,7 +92,7 @@ Tested Azure gpt-5.4 with `reasoning_effort: "high"` (previously running on defa
 
 The lead agent can spawn concurrent subagents via `spawn_agents` to fan out across independent hypotheses or endpoints, each in a fresh context, and merge their results back.
 
-**Verdict: shipped.** An early single-shot `spawn_agent` prototype went unused because the agent preferred to stay in bash, so we reworked it into a concurrent fan-out primitive. In that form it earns its keep on targets with a broad attack surface, where exploring branches in parallel beats a single linear run. See the Agent Techniques and [XBOW analysis](/research/xbow-analysis/) pages for how the fan-out is used alongside compaction, loop detection, and retry/handoff.
+**Verdict: shipped.** An early single-shot `spawn_agent` prototype went unused because the agent preferred to stay in bash, so we reworked it into a concurrent fan-out primitive. In that form it earns its keep on targets with a broad attack surface, where exploring branches in parallel beats a single linear run. See the XBOW notes for how the fan-out is used alongside compaction, loop detection, and retry/handoff.
 
 ### Tool router hook
 

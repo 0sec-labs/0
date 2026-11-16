@@ -1,7 +1,16 @@
 ---
-title: CLI changes in 0.35
-description: The CLI is now nine commands. Every old command and flag still works for one release; this page maps each old command to its replacement.
+title: Changelog
+description: Where release notes live, and the migration notes for the 0.35 CLI and 0.36 extension changes.
 ---
+
+The full history is in [`docs/CHANGELOG.md`](https://github.com/0sec-labs/0security/blob/main/docs/CHANGELOG.md), with a summary per release from v0.11.0 on. Each release also has notes on the [GitHub Releases](https://github.com/0sec-labs/0security/releases) page. This page keeps the two migration notes that people still need.
+
+## Moving to extensions (0.36)
+
+Version 0.36 replaced the old plugin system with [extensions](/extensions/): one installable, commit-pinned unit for skills, scripts, MCP servers, connectors and scope policies. The first start imports your old data without changing or deleting it, and `0 skills extensions import` prints the report again. Installed GitHub plugins and model-written plugins appear as disabled entries marked "could not migrate" (re-express them as scripts or MCP servers), custom MCP servers become local extensions that need approval, and token-only service connections become connector extensions that need approval and a new token.
+
+## CLI changes in 0.35
+
 
 0.35 reduces the CLI to nine top-level commands, each with at most three subcommands in `--help`:
 
@@ -19,7 +28,7 @@ description: The CLI is now nine commands. Every old command and flag still work
 0 config                  get | set | doctor
 ```
 
-## What keeps working
+### What keeps working
 
 Nothing you have scripted stops working in this release. Every old command, subcommand and flag is still registered, hidden from `--help`, and runs the same code with the same arguments and exit codes. On a terminal an old invocation also prints one dim line to stderr:
 
@@ -34,7 +43,7 @@ The line is not printed when stdout is not a terminal (pipes, CI) or when `--jso
 - `0 api` and `0 lab` are hidden developer commands and are unchanged. `0 -p`, `0 -c` and `0 -r` are unchanged.
 - The flags `--access`, `--mode`, `--autonomy` and `--tool-access` are removed from help. There is one mode, so they are accepted and ignored for one release (on a terminal, one dim line says so).
 
-## Choices the new grammar makes
+### Choices the new grammar makes
 
 Where the earlier commands do not fold into a single verb, the new form is a flag on the verb you already know. These are the same flag everywhere:
 
@@ -46,9 +55,9 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 - `automation versions` and `automation rollback` are removed after this release; use git history for versions.
 - `scan eval` and `scan agent-assure` move into plugins after this release. `lab research` and `lab improve` stay hidden until their destinations exist (the private package and the benchmark plugin); they are not removed in 0.35.
 
-## Every old command
+### Every old command
 
-### scan
+#### scan
 
 | Old | New |
 | --- | --- |
@@ -67,7 +76,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 scan disclose track` | `0 scan disclose --track <id>` |
 | `0 scan disclose review` | `0 scan disclose --review <finding.json>` |
 
-### findings
+#### findings
 
 | Old | New |
 | --- | --- |
@@ -89,7 +98,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 findings keys revoke` | `0 config set api.key --revoke <id>` |
 | `0 findings keys` | `0 config get api.keys` |
 
-### threads
+#### threads
 
 | Old | New |
 | --- | --- |
@@ -111,7 +120,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 threads archive` | `0 threads list <id> --archive` |
 | `0 threads delete` | `0 threads list <id> --delete` |
 
-### agents
+#### agents
 
 | Old | New |
 | --- | --- |
@@ -128,7 +137,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 agents files` | `0 agents set <id> --files list\|get\|put\|rm` |
 | `0 agents triggers` | `0 agents set <id> --trigger list\|add\|enable\|disable\|check\|rm` |
 
-### automation (now `agents --automation`)
+#### automation (now `agents --automation`)
 
 | Old | New |
 | --- | --- |
@@ -144,7 +153,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 automation rollback` | git (this command is removed after 0.35) |
 | `0 automation` | `0 agents list --automation` |
 
-### models
+#### models
 
 | Old | New |
 | --- | --- |
@@ -153,7 +162,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 models connections` | `0 models connect <provider>` |
 | `0 models usage` | `0 models list --usage` |
 
-### computers
+#### computers
 
 | Old | New |
 | --- | --- |
@@ -161,7 +170,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 computers repair` | `0 config doctor` |
 | `0 computers hosts` | `0 computers list --hosts` |
 
-### skills
+#### skills
 
 | Old | New |
 | --- | --- |
@@ -177,7 +186,7 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 skills delete` | `0 skills list <name> --delete` |
 | `0 skills remove` | `0 skills add --remove <name>` |
 
-### plugin (now `skills extensions`)
+#### plugin (now `skills extensions`)
 
 The `plugin` group is hidden and kept as aliases. The executable plugin runtime, the registry and `self_extend` were removed; see the changelog.
 
@@ -204,7 +213,7 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | `0 plugin mcp` | `0 skills extensions mcp <name> --url <url>` |
 | `0 plugin` | `0 skills extensions` |
 
-### memory
+#### memory
 
 | Old | New |
 | --- | --- |
@@ -212,7 +221,7 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | `0 memory disable` | `0 memory set <id> off` |
 | `0 memory import` | `0 memory set --import <file>` |
 
-### config
+#### config
 
 | Old | New |
 | --- | --- |
@@ -229,7 +238,7 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | `0 config github status` | `0 config get github` |
 | `0 config github` | `0 config set github <connect\|repos>` |
 
-### doctor
+#### doctor
 
 | Old | New |
 | --- | --- |
@@ -237,7 +246,7 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | `0 doctor workbench` | `0 config doctor workbench` |
 | `0 doctor checks` | `0 config doctor checks` |
 
-### web
+#### web
 
 | Old | New |
 | --- | --- |

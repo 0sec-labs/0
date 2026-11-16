@@ -1,5 +1,5 @@
 ---
-title: Models and keys
+title: Models
 description: Connect a model provider, choose models per role and control how 0 routes model calls.
 ---
 
@@ -46,7 +46,7 @@ Check what 0 found:
 ```
 
 <span id="0-doctor--credential-readiness"></span>
-`0 config doctor` prints the CLI version, runtime, platform and Node.js check, then the API provider status: `configured`, `bad` (found but unusable, with the reason) or `missing`. It also lists `claude`, `codex` and `gemini` CLIs found on `PATH`. It checks local configuration only. The first model request proves the key, model access and quota.
+`0 config doctor` prints the CLI version, runtime, operating system and Node.js check, then the API provider status: `configured`, `bad` (found but unusable, with the reason) or `missing`. It also lists `claude`, `codex` and `gemini` CLIs found on `PATH`. It checks local configuration only. The first model request proves the key, model access and quota.
 
 ## Choose a model
 
@@ -310,7 +310,7 @@ The flag requests access; it does not grant it. Reports keep the requested progr
 
 Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`, as in the [Azure OpenAI](#azure-openai) example, and leave `ZERO_LLM_FALLBACK` unset.
 
-- Setting a provider's variables alone does not prove all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
+- Setting a provider's variables alone does not guarantee all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
 - Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
 - The `claude` and `codex` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
 
@@ -334,5 +334,5 @@ Keys saved under **Providers** on the Models page are stored in plaintext at `~/
 ## Limits
 
 - Billing, model access and rate limits belong to your provider account.
-- Shown prices are estimates. Unknown prices are unknown, not zero, so a cost ceiling cannot bound that model. See [Costs and budgets](/budgets/).
-- A model connection does not authorize a target. See [Scope and authorization](/scope/).
+- Shown prices are estimates. Unknown prices are unknown, not zero, so a cost ceiling cannot bound that model. See [Costs and budgets](/configuration/#costs-and-budgets).
+- A model connection does not authorize a target. See [Scope and authorization](/configuration/#scope).
