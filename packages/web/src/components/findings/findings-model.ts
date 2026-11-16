@@ -19,8 +19,6 @@ export type FindingStatus = FindingWorkflowStatus | "accepted";
 
 /** Group order: things that need a person first, closed work last. */
 export const STATUS_ORDER: readonly FindingStatus[] = ["blocked", "human_review", "agent_review", "in_progress", "todo", "backlog", "accepted", "done", "cancelled"];
-/** Board columns follow the lifecycle left to right. */
-export const BOARD_ORDER: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "accepted", "done", "cancelled"];
 /** Statuses a person can set. Review gates are derived by the engine and are read-only. */
 /** The review gate overrides open statuses, so only closing a finding sticks while it needs the operator's review. */
 export const REVIEW_LOCK_NOTE = "Needs review: confirm it first. Only Done or Cancelled can be set until then.";
@@ -131,9 +129,8 @@ export const toggleValue = <T>(values: readonly T[], value: T): T[] => values.in
 export type GroupBy = "status" | "severity" | "category" | "mission" | "none";
 export type OrderBy = "severity" | "updated" | "seen" | "title" | "occurrences";
 export type Direction = "asc" | "desc";
-export type Layout = "list" | "board";
-export type DisplayOptions = { layout: Layout; groupBy: GroupBy; orderBy: OrderBy; direction: Direction };
-export const DEFAULT_DISPLAY: DisplayOptions = { layout: "list", groupBy: "status", orderBy: "severity", direction: "desc" };
+export type DisplayOptions = { groupBy: GroupBy; orderBy: OrderBy; direction: Direction };
+export const DEFAULT_DISPLAY: DisplayOptions = { groupBy: "status", orderBy: "severity", direction: "desc" };
 
 export const GROUP_BY_OPTIONS: readonly { value: GroupBy; label: string }[] = [
   { value: "status", label: "Status" }, { value: "severity", label: "Severity" }, { value: "category", label: "Category" }, { value: "mission", label: missionLabel }, { value: "none", label: "No grouping" },
@@ -271,7 +268,7 @@ export function stepCursor(ids: readonly string[], current: string | null, delta
   return ids[Math.min(ids.length - 1, Math.max(0, index + delta))]!;
 }
 
-/* ---------- board ---------- */
+/* ---------- status moves ---------- */
 
 /** What dropping a card on a column does: a status write, an accept-risk review, or a refusal with the reason shown to the person. */
 export type DropDecision =
@@ -283,7 +280,7 @@ export const REVIEW_STAGE_NOTE = "Review stages are set by 0, not by hand.";
 export const CLOSED_ACCEPT_NOTE = "Reopen a closed finding before accepting its risk.";
 
 /**
- * The one rule set for moving a finding to a status, shared by board drops and keyboard drags. The API enforces the same rules.
+ * The one rule set for moving a finding to a status, shared by every way of setting a status. The API enforces the same rules.
  * A `null` reason means "nothing to do" (same column) and needs no message.
  */
 export function resolveDrop(current: FindingStatus, target: FindingStatus): DropDecision {
@@ -292,14 +289,6 @@ export function resolveDrop(current: FindingStatus, target: FindingStatus): Drop
   if (target === "accepted") return isClosedStatus(current) ? { ok: false, reason: CLOSED_ACCEPT_NOTE } : { ok: true, kind: "triage", status: "accepted" };
   if (statusLockedByReview(current, target)) return { ok: false, reason: REVIEW_LOCK_NOTE };
   return { ok: true, kind: "workflow", status: target as FindingWorkflowStatus };
-}
-
-export type BoardColumn = { status: FindingStatus; label: string; items: FindingGroup[]; droppable: boolean };
-export function boardColumns(groups: readonly FindingGroup[], orderBy: OrderBy, direction: Direction): BoardColumn[] {
-  const sorted = sortFindings(groups, orderBy, direction);
-  return BOARD_ORDER.map(status => ({
-    status, label: STATUS_LABEL[status], items: sorted.filter(group => findingStatus(group) === status), droppable: status !== "agent_review" && status !== "human_review",
-  }));
 }
 
 /** Mission label map from scans: target is the friendliest stable name. */
@@ -369,7 +358,6 @@ export function mergeView(stored: unknown): FindingsView {
   }
   return {
     display: {
-      layout: pick(display.layout, ["list", "board"], DEFAULT_DISPLAY.layout),
       groupBy: pick(display.groupBy, GROUP_BY_OPTIONS.map(option => option.value), DEFAULT_DISPLAY.groupBy),
       orderBy: pick(display.orderBy, ORDER_BY_OPTIONS.map(option => option.value), DEFAULT_DISPLAY.orderBy),
       direction: pick(display.direction, ["asc", "desc"], DEFAULT_DISPLAY.direction),

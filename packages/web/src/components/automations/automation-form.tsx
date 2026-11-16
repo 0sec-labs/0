@@ -30,7 +30,6 @@ import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOpt
 import { errorText } from "@/lib/api-error";
 import { readAutomationDraft, writeAutomationDraft } from "./automation-draft";
 
-const NO_RECENTS: string[] = [];
 
 /** Capy's single long form: header, settings, triggers, instructions, runs, then collapsible depth. */
 export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, runButtonRef, menuButtonRef, linear, nodeId, error, onBack, onSave, onRun, onDuplicate, onDelete, onSelectStep, onAddStep, onRestore, onAction }: {

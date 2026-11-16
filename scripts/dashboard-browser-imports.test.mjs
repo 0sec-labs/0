@@ -15,8 +15,7 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
     absWorkingDir: repoRoot,
     entryPoints: [
       "packages/web/src/components/access-milestone.tsx",
-      "packages/web/src/components/event-timeline.tsx",
-      "packages/web/src/pages/engagements-page.tsx",
+      "packages/web/src/components/automations/automation-editor.tsx",
       "packages/web/src/pages/skills-page.tsx",
       "packages/web/src/console/team-collaboration.tsx",
       "packages/web/src/components/workflow-definition-editor.tsx",
