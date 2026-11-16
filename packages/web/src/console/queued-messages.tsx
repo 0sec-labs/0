@@ -17,6 +17,8 @@ export function QueuedMessages({
 }) {
   const { removeConsoleQueuedMessage } = useBackendApi();
   const count = snapshot.queuedMessages.length;
+  // Stopping a turn pauses the queue on purpose; "after the current response" would then wait forever.
+  const paused = snapshot.session.status === "stopped" || snapshot.session.status === "failed";
   const remove = (id?: string) =>
     void workspace.perform(() => removeConsoleQueuedMessage(snapshot.session.id, id), snapshot.session.id);
 
@@ -38,13 +40,13 @@ export function QueuedMessages({
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Clock3 aria-hidden="true" className="size-3" />
-                Queued · sends after the current response
+                {paused ? "Queued · paused. Send now to continue" : "Queued · sends after the current response"}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 disabled={workspace.busy}
-                title="Interrupt the current response and send this message now"
+                title={paused ? "Send this message now" : "Interrupt the current response and send this message now"}
                 onClick={() => void workspace.sendQueuedNow(message.id)}
               >
                 {workspace.queuedSendingId === message.id ? "Sending…" : "Send now"}
@@ -89,7 +91,7 @@ export function QueuedMessages({
           </Popover.Close>
         </div>
         <Popover.Description className="mt-1 text-xs text-muted-foreground">
-          Messages to send after the current response.
+          {paused ? "Paused after the last turn stopped. Send one now to continue." : "Messages to send after the current response."}
         </Popover.Description>
         {count > 0 ? (
           <>
@@ -104,7 +106,7 @@ export function QueuedMessages({
                     variant="ghost"
                     size="sm"
                     disabled={workspace.busy}
-                    title="Interrupt the current response and send this message now"
+                    title={paused ? "Send this message now" : "Interrupt the current response and send this message now"}
                     onClick={() => void workspace.sendQueuedNow(message.id)}
                   >
                     {workspace.queuedSendingId === message.id ? "Sending…" : "Send now"}
