@@ -20,6 +20,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- Server mode with an explicit port now stops with a clear error when the port is busy instead of silently listening on a random one that a container port mapping or proxy cannot reach.
 - A pull request or scheduled Agent run that fails because the model call failed now says why on the activation (for example an invalid API key) instead of "Stopped: error."
 - Agents no longer show the old word "Sentinel" in an Agent's thread title, its starter files and error messages (for example "Agent changed. Reload before saving.").
 - A new thread now gets an automatic title after its first answer; it stayed "New thread" because the title generator did not recognise that placeholder.

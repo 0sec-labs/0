@@ -136,3 +136,16 @@ test("CLI starts a loopback host and controls live sessions across independent C
   assert.equal(missing.status, 2);
   assert.equal(typeof JSON.parse(missing.stderr).error, "string");
 });
+
+test("server mode refuses a busy port instead of moving to another one", async t => {
+  const { cli } = fixture(t);
+  const { createServer } = await import("node:net");
+  const busy = createServer();
+  await new Promise(resolve => busy.listen(0, "127.0.0.1", resolve));
+  t.after(() => busy.close());
+  const port = busy.address().port;
+  const result = cli(["--server-mode", "--host", "127.0.0.1", "--port", String(port), "--no-open"], { ZERO_ACCESS_TOKEN: randomBytes(24).toString("hex") });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /EADDRINUSE/);
+  assert.doesNotMatch(result.stdout, /free port/);
+});

@@ -626,7 +626,7 @@ export function registerDashboardCommand(program: Command): void {
 
         let retriedPort = false;
         server.on("error", (error: NodeJS.ErrnoException) => {
-          if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort) {
+          if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort && !serverMode) {
             retriedPort = true;
             console.log(chalk.gray(`  Port ${port} is in use; opening the web console on a free port.`));
             server.listen(0, host, onListening);
