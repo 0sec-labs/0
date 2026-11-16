@@ -31,6 +31,7 @@ export { parseManifest, type ExtensionManifest, type ManifestFormat } from "./co
 export { renderInstallPrompt, type InstallPrompt } from "./core/prompt.js";
 export type { ExtensionState, ExtensionEntry, ImportReport } from "./core/state.js";
 export type { ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, Snapshot } from "./ports.js";
+export { approvalRefusal, currentApprovalEnvironment, type ApprovalEnvironment } from "./approval-gate.js";
 export { ExtensionInstaller } from "./installer.js";
 export { FsExtensionStore, extensionsRoot } from "./adapters/fs-store.js";
 export { DefaultSourceResolver } from "./adapters/source-resolver.js";

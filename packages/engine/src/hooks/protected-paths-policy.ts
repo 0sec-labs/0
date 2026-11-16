@@ -1,0 +1,35 @@
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, basename, join } from "node:path";
+import type { BeforeCommandDecision, BeforeCommandInput, BeforeCommandPolicy } from "./before-command.js";
+import { findApprovalCommand, findProtectedPathUse } from "./protected-paths.js";
+
+/** realpath of the deepest existing ancestor plus the not-yet-existing tail. */
+export function realpathLoose(path: string): string {
+  const tail: string[] = []; let cur = path;
+  for (;;) {
+    try { return join(realpathSync(cur), ...tail.reverse()); }
+    catch { const parent = dirname(cur); if (parent === cur) return path; tail.push(basename(cur)); cur = parent; }
+  }
+}
+
+const GUARDED_KINDS = new Set(["bash", "process", "file-write", "file-read"]);
+
+/**
+ * Built-in decider: an agent may not touch the files that hold approvals, enablement, grants, audit, settings or the
+ * database, and may not run the CLI commands that grant approvals. It denies with a reason that tells the agent to
+ * ask the operator. Layered defence, not a boundary: the agent runs as the same OS user with bash, so text analysis
+ * cannot see paths built at run time. The sandbox is the hard boundary.
+ */
+export const protectedPathsBeforeCommandPolicy: BeforeCommandPolicy = {
+  id: "protected-paths",
+  evaluate(input: BeforeCommandInput): BeforeCommandDecision {
+    if (!GUARDED_KINDS.has(input.kind)) return { decision: "allow" };
+    const approval = input.kind === "bash" || input.kind === "process" ? findApprovalCommand(input.command) : null;
+    if (approval) return { decision: "deny", reason: `\`${approval}\` grants approvals or changes extension enablement, and an agent session may not run it. Ask the operator to run it in their own terminal or approve it on the Extensions page.` };
+    const home = process.env["HOME"] || homedir();
+    const hit = findProtectedPathUse(input.kind === "file-write" || input.kind === "file-read" ? "" : input.command, input.paths, { home, cwd: input.cwd, real: realpathLoose });
+    if (hit) return { decision: "deny", reason: `${hit.reason}. Approvals, enablement, grants, audit, settings and database files are protected from agent commands; ask the operator to make this change.` };
+    return { decision: "allow" };
+  },
+};

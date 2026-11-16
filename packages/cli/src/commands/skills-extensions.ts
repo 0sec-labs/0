@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { createExtensionService, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
+import { approvalRefusal, createExtensionService, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
 import { EXIT_FAILURE, EXIT_USAGE, UsageError, consoleOptions, emit, renderTable, type CommandIo, type OutputOptions } from "./console-output.js";
 
 type Options = OutputOptions & { yes?: boolean; preview?: boolean; enable?: boolean; project?: string; to?: string; force?: boolean };
@@ -19,6 +19,13 @@ export function isExtensionSource(source: string): boolean {
 }
 
 const fail = (io: CommandIo, options: OutputOptions, message: string, code = EXIT_FAILURE) => { io.err(options.json ? JSON.stringify({ error: message }) : message); io.setExitCode(code); };
+
+/** Approval-bearing commands are the operator's: refuse from an agent session or without a terminal (a flag alone never approves). */
+function operatorOnly(io: CommandIo, options: OutputOptions, what: string): boolean {
+  const refusal = approvalRefusal(what);
+  if (refusal) fail(io, options, refusal, EXIT_USAGE);
+  return refusal === null;
+}
 
 /** Run the one-time importer on first use and say so. */
 function ensureImported(svc: ExtensionService, io: CommandIo, options: OutputOptions): void {
@@ -47,6 +54,7 @@ export async function addExtension(io: CommandIo, source: string, options: Optio
     const pinnedInput = /@[0-9a-f]{40}$/.test(source);
     if (options.preview) return showPrompt(io, options, p, "");
     if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
+    if (!operatorOnly(io, options, "install an extension")) return;
     if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
     const done = svc.installer.commit(p, { approvedRevision: p.prompt.revision, ...(options.enable ? { enable: options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const } } : {}) });
     if (!done.ok) return fail(io, options, done.error.message);
@@ -76,6 +84,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
 
   consoleOptions(ext.command("enable <name>").description("Enable globally, or for one project with --project").option("--project <dir>", "Enable for this project only").option("--yes", "Approve an unapproved revision (for example an imported one)"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
+      if (!operatorOnly(io, options, "change extension enablement")) return;
       const r = svc.installer.enable(name, { ...(options.project ? { project: resolve(options.project) } : {}), approve: options.yes === true });
       if (!r.ok) return fail(io, options, r.error.message, r.error.code === "needs_approval" ? EXIT_USAGE : EXIT_FAILURE);
       emit(io, options, r.value, () => `Enabled ${name}${options.project ? ` for ${resolve(options.project)}` : ""}.`);
@@ -83,6 +92,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
 
   consoleOptions(ext.command("disable <name>").description("Disable globally, or for one project with --project").option("--project <dir>", "Disable for this project only").option("--yes", "Confirm disabling a built-in"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
+      if (!operatorOnly(io, options, "change extension enablement")) return;
       const r = svc.installer.disable(name, { ...(options.project ? { project: resolve(options.project) } : {}), confirm: options.yes === true });
       if (!r.ok) return fail(io, options, r.error.code === "needs_confirmation" ? `${r.error.message} Re-run with --yes to confirm.` : r.error.message, r.error.code === "needs_confirmation" ? EXIT_USAGE : EXIT_FAILURE);
       emit(io, options, r.value, () => `Disabled ${name}.`);
@@ -91,6 +101,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
   consoleOptions(ext.command("remove <name>").description("Remove an installed extension and its stored revisions").option("--yes", "Confirm the removal"))
     .action((name: string, options: Options) => guarded(io, options, svc => {
       if (options.yes !== true) throw new UsageError(`This removes extension ${name}. Re-run with --yes to confirm.`);
+      if (!operatorOnly(io, options, "remove an extension")) return;
       const r = svc.installer.remove(name); if (!r.ok) return fail(io, options, r.error.message);
       emit(io, options, r.value, () => `Removed ${name}.`);
     }));
@@ -102,6 +113,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
       if ("upToDate" in r.value) { const { revision } = r.value; return emit(io, options, { upToDate: true, revision }, () => `${name} is up to date at ${revision.slice(0, 12)}.`); }
       const p = r.value;
       if (options.yes !== true) { showPrompt(io, options, p, `Re-run with --yes --to ${p.prompt.revision} to approve this revision.`); io.setExitCode(EXIT_USAGE); return; }
+      if (!operatorOnly(io, options, "approve an extension update")) return;
       if (p.prompt.pinned && options.to !== p.prompt.revision) return fail(io, options, `--yes needs --to ${p.prompt.revision}: approve the exact revision you reviewed.`, EXIT_USAGE);
       const done = svc.installer.commit(p, { approvedRevision: p.prompt.revision });
       if (!done.ok) return fail(io, options, done.error.message);
@@ -110,6 +122,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
 
   consoleOptions(ext.command("import").description("Import earlier plugins, MCP servers and skills (runs once automatically); shows what could not be migrated").option("--force", "Run the importer again"))
     .action((options: Options) => guarded(io, options, svc => {
+      if (!operatorOnly(io, options, "import earlier extensions")) return;
       const r = svc.importer.run({ force: options.force === true }); if (!r.ok) return fail(io, options, r.error.message);
       const rep = r.value;
       emit(io, options, rep, () => [`Imported ${rep.migrated.length}, could not migrate ${rep.notMigrated.length}${rep.alreadyDone ? " (earlier run)" : ""}.`, ...rep.migrated.map(i => `  ok   ${i.kind} ${i.name}: ${i.detail}`), ...rep.notMigrated.map(i => `  skip ${i.kind} ${i.name}: ${i.detail}`), ...rep.notes.map(n => `  note ${n}`)].join("\n"));

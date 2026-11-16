@@ -1,3 +1,5 @@
+import { AGENT_SESSION_ENV } from "../shared/agent-session.js";
+
 // Credentials supplied to the 0 process must not reach agent-controlled
 // child processes. This is defense in depth only: credentials retained by the
 // parent process are a separate process-isolation problem (0#134).
@@ -166,5 +168,7 @@ export function allowlistedChildEnv(
     if (SENSITIVE_ENV_PATTERNS.some((pattern) => upper.includes(pattern))) continue;
     out[key] = value;
   }
+  // Always last, so neither the operator allow-list nor extras can drop or override it.
+  out[AGENT_SESSION_ENV] = "1";
   return out;
 }

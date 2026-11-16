@@ -66,7 +66,7 @@ describe("newly covered credential shapes", () => {
       E2B_API_KEY: "e",
       "ZERO_LLM_TARGET_KEY": "t",
     });
-    expect(Object.keys(env)).toEqual(["PATH"]);
+    expect(Object.keys(env)).toEqual(["PATH", "ZERO_AGENT_SESSION"]);
   });
 });
 
@@ -130,16 +130,16 @@ describe("Together AI credentials", () => {
   it("never reaches an agent-controlled child, inherited or injected", () => {
     const parent = { PATH: "/bin", TOGETHER_API_KEY: "synthetic-together-secret", TOGETHER_BASE_URL: "https://api.together.ai/v1" };
     expect(JSON.stringify(sanitizedEnv(parent))).not.toContain("synthetic-together-secret");
-    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin" });
+    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin", ZERO_AGENT_SESSION: "1" });
     const injected = allowlistedChildEnv({ TOGETHER_API_KEY: "synthetic-together-secret", together_api_key: "synthetic-together-secret" }, { PATH: "/bin" });
-    expect(injected).toEqual({ PATH: "/bin" });
+    expect(injected).toEqual({ PATH: "/bin", ZERO_AGENT_SESSION: "1" });
   });
 });
 
 describe("bash child environment override", () => {
   const parent = { PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-x", GITHUB_TOKEN: "ghp_x", AWS_SECRET_ACCESS_KEY: "aws", CUSTOM_BUILD_FLAG: "1" };
   it("strips provider keys and tokens by default", () => {
-    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin" });
+    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin", ZERO_AGENT_SESSION: "1" });
   });
   it("ZERO_BASH_ENV_ALLOW adds exactly the named variables", () => {
     const env = sanitizedEnv({ ...parent, ZERO_BASH_ENV_ALLOW: "CUSTOM_BUILD_FLAG, not a name,GITHUB_TOKEN" });
@@ -151,5 +151,13 @@ describe("bash child environment override", () => {
   it("ZERO_BASH_ENV_PASSTHROUGH_ALL=1 turns the allowlist off", () => {
     expect(sanitizedEnv({ ...parent, ZERO_BASH_ENV_PASSTHROUGH_ALL: "1" }).ANTHROPIC_API_KEY).toBe("sk-ant-x");
     expect(sanitizedEnv({ ...parent, ZERO_BASH_ENV_PASSTHROUGH_ALL: "yes" }).ANTHROPIC_API_KEY).toBeUndefined();
+  });
+});
+
+describe("agent session marker", () => {
+  it("is set in every child environment, including passthrough and extras", () => {
+    expect(sanitizedEnv({ PATH: "/bin" }).ZERO_AGENT_SESSION).toBe("1");
+    expect(sanitizedEnv({ PATH: "/bin", ZERO_BASH_ENV_PASSTHROUGH_ALL: "1", ZERO_AGENT_SESSION: "0" }).ZERO_AGENT_SESSION).toBe("1");
+    expect(allowlistedChildEnv({ ZERO_AGENT_SESSION: "" }, { PATH: "/bin" }).ZERO_AGENT_SESSION).toBe("1");
   });
 });

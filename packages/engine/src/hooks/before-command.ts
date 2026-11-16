@@ -16,7 +16,11 @@ export interface BeforeCommandScope {
   readonly raw: { readonly out_of_scope?: readonly string[] };
 }
 
-export type BeforeCommandKind = "bash" | "network" | "file-write";
+/**
+ * What the call does: `bash` runs shell text, `process` starts a program or feeds a running one, `network` reaches a
+ * host, `file-write` changes files, `file-read` reads them (never needs operator approval).
+ */
+export type BeforeCommandKind = "bash" | "network" | "file-write" | "process" | "file-read";
 
 /** Who is running the command, and the scope that applies to it (undefined = none defined). */
 export interface BeforeCommandThread {
