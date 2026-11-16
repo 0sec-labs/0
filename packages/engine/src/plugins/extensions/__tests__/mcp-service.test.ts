@@ -26,7 +26,7 @@ describe("extension service MCP wiring", () => {
 
     const first = svc.mcpHost({ gate: allow, parentEnv: { PATH: process.env["PATH"] } });
     first.attachOperator({ cwd: process.cwd(), thread: () => ({}), approve: yes });
-    expect((await first.loadServer("mcp__docs-fake")).ok).toBe(true); await first.closeAll();
+    expect((await first.loadServer("mcp__x-docs-fake")).ok).toBe(true); await first.closeAll();
     const approved = unwrap(svc.mcpStatus("docs"))[0]!;
     expect(approved.state).toBe("approved");
     expect(approved.tools.map(t => [t.name, t.state])).toEqual([["echo", "approved"], ["env_report", "approved"], ["inject", "approved"]]);
@@ -34,7 +34,7 @@ describe("extension service MCP wiring", () => {
 
     writeFileSync(variant, "v3"); // the server adds a tool
     const second = svc.mcpHost({ gate: allow, parentEnv: { PATH: process.env["PATH"] } });
-    const blocked = await second.loadServer("mcp__docs-fake");
+    const blocked = await second.loadServer("mcp__x-docs-fake");
     expect(blocked.ok).toBe(false); expect(blocked.message).toContain("new: extra"); await second.closeAll();
     expect(unwrap(svc.mcpStatus("docs"))[0]).toMatchObject({ state: "needs-approval" });
     expect(unwrap(svc.mcpStatus("docs"))[0]!.tools.find(t => t.name === "extra")?.state).toBe("new");
@@ -47,6 +47,6 @@ describe("extension service MCP wiring", () => {
     unwrap(svc.installer.disable("docs"));
     const host = svc.mcpHost({ gate: allow }); const spy = new SpyConnector();
     expect(host.serverIds()).toEqual([]); expect(spy.launches).toHaveLength(0);
-    expect((await host.loadServer("mcp__docs-fake")).ok).toBe(false);
+    expect((await host.loadServer("mcp__x-docs-fake")).ok).toBe(false);
   });
 });

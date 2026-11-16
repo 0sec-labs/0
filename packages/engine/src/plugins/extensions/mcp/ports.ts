@@ -8,6 +8,7 @@ import type { Result } from "../core/result.js";
 import type { McpPinRecord } from "../core/state.js";
 import type { McpToolInfo } from "./core/tool-hash.js";
 import type { ToolReview } from "./core/review.js";
+import type { ToolSnapshots } from "./core/snapshot.js";
 
 export type McpLaunch =
   | { readonly kind: "stdio"; readonly command: string; readonly args: readonly string[]; readonly env: Readonly<Record<string, string>>; readonly cwd: string }
@@ -20,6 +21,10 @@ export interface McpSession {
   tools(): Promise<McpToolInfo[]>;
   call(name: string, args: Record<string, unknown>): Promise<McpCallResult>;
   close(): Promise<void>;
+  /** The server said its tool list changed (`notifications/tools/list_changed`). Must be re-validated before anything is called. */
+  onToolsChanged(listener: () => void): void;
+  /** The connection ended: the child exited, the stream closed, or a call timed out and the session was shut down. Fires once. */
+  onClosed(listener: (reason: string) => void): void;
 }
 
 export interface McpConnector { connect(launch: McpLaunch): Promise<McpSession> }
@@ -41,6 +46,12 @@ export interface McpObservation { readonly at: string; readonly tools: Record<st
 export interface McpObservationLog {
   record(extension: string, revision: string, server: string, observation: McpObservation): void;
   read(extension: string, revision: string): Readonly<Record<string, McpObservation>>;
+}
+
+/** What the operator last approved for each tool, as display text, so the next prompt can show a diff. Informational: the pin hash is the authority. */
+export interface McpSnapshotStore {
+  read(extension: string, revision: string, server: string): ToolSnapshots | undefined;
+  write(extension: string, revision: string, server: string, tools: ToolSnapshots): void;
 }
 
 export interface McpThread { readonly thread: () => BeforeCommandThread; readonly cwd: string }

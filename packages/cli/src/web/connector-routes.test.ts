@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createExtensionService, type ConnectorAuthPort, type ConnectorStatus } from "@0/engine";
 import { handleConnectorRequest } from "./connector-routes.js";
 import { describeConsoleAudit } from "./audit.js";
-import { isPrivilegedOperatorRoute } from "./privileged-routes.js";
+import { isPrivilegedOperatorRoute, privilegedRouteDenial } from "./privileged-routes.js";
+import { ServerModeGuard } from "./server-mode.js";
 
 const homes: string[] = [];
 afterEach(() => { for (const h of homes.splice(0)) rmSync(h, { recursive: true, force: true }); });
@@ -45,5 +46,36 @@ describe("connector routes", () => {
     const audit = describeConsoleAudit("extensions/connectors/github/connect", "POST", { token: "secret-value" });
     expect(audit).toMatchObject({ action: "extension.connector.connect", subject: "github" });
     expect(JSON.stringify(audit)).not.toContain("secret-value");
+  });
+});
+
+describe("connector route authority", () => {
+  const urls = ["connect", "sign-in", "cancel", "disconnect"].map(a => `/api/console/extensions/connectors/github/${a}`);
+  it("refuses the engine bearer on every connector mutation but lets it read", () => {
+    for (const url of urls) expect(privilegedRouteDenial(url, "POST", { engineRequest: true, teamEnabled: false })).toMatchObject({ status: 403, data: { code: "browser_only" } });
+    expect(privilegedRouteDenial("/api/console/extensions/connectors", "GET", { engineRequest: true, teamEnabled: false })).toBeNull();
+  });
+  it("refuses viewers and members in team mode, allows the owner and a solo browser", () => {
+    for (const url of urls) {
+      for (const role of ["viewer", "member", undefined]) expect(privilegedRouteDenial(url, "POST", { engineRequest: false, teamEnabled: true, ...(role ? { role } : {}) })).toMatchObject({ status: 403 });
+      expect(privilegedRouteDenial(url, "POST", { engineRequest: false, teamEnabled: true, role: "owner" })).toBeNull();
+      expect(privilegedRouteDenial(url, "POST", { engineRequest: false, teamEnabled: false })).toBeNull();
+    }
+  });
+  it("refuses a cross-site mutation without same-origin evidence (CSRF)", () => {
+    const g = new ServerModeGuard({ allowedHosts: ["0.example.com"], trustedProxies: [], accessToken: "t".repeat(40) });
+    const ctx = { authority: "0.example.com", https: false, clientIp: "198.51.100.7", viaTrustedProxy: false };
+    const req = (headers: Record<string, string>) => ({ method: "POST", url: urls[0], headers, socket: { remoteAddress: "203.0.113.9" } }) as never;
+    expect(g.csrfDenial(req({}), ctx)).toMatch(/Origin/);
+    expect(g.csrfDenial(req({ "sec-fetch-site": "cross-site" }), ctx)).toMatch(/Origin/);
+    expect(g.csrfDenial(req({ "sec-fetch-site": "same-origin" }), ctx)).toBeUndefined();
+    expect(g.csrfDenial(req({ origin: "http://0.example.com" }), ctx)).toBeUndefined();
+  });
+  it("stores nothing when the GitHub adapter rejects a token", async () => {
+    const svc = setup();
+    const rejecting: ConnectorAuthPort = { status: async () => connected, connectToken: async () => { throw Object.assign(new Error("GitHub did not accept this token."), { status: 422 }); } };
+    const r = await handleConnectorRequest(svc, { github: rejecting }, "extensions/connectors/github/connect", "POST", { token: "github_pat_bad" });
+    expect(r!.status).toBe(422); expect(JSON.stringify(r!.data)).not.toContain("github_pat_bad");
+    expect(svc.secrets.has("github", "GITHUB_TOKEN")).toBe(false);
   });
 });

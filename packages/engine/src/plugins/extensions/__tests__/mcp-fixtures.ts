@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { McpGate, McpConnector, McpLaunch, McpPinStore, McpObservationLog, McpObservation } from "../mcp/ports.js";
+import type { McpSnapshotStore, McpGate, McpConnector, McpLaunch, McpPinStore, McpObservationLog, McpObservation } from "../mcp/ports.js";
 import { ExtensionMcpHost } from "../mcp/host.js";
 import { SdkMcpConnector } from "../mcp/adapters/http.js";
 import { StdioMcpConnector } from "../mcp/adapters/stdio.js";
@@ -10,6 +10,9 @@ import { extensionEnv } from "../core/env.js";
 import { parseManifest } from "../core/manifest.js";
 import type { FolderFile } from "../core/files.js";
 import type { LoadedExtension } from "../runtime.js";
+import type { McpToolHost } from "../../../agent/mcp-host.js";
+import type { ToolSnapshots } from "../mcp/core/snapshot.js";
+import type { McpToolInfo } from "../mcp/core/tool-hash.js";
 // @ts-expect-error plain JS fixture shared by the stdio script and the in-process HTTP server
 import { buildServer } from "./fixtures/fake-mcp-server.mjs";
 
@@ -22,7 +25,7 @@ export function loaded(name: string, files: Record<string, unknown>, dir = "/non
   const manifest = parseManifest(folder({ "extension.json": { name, version: "1.0.0", description: `The ${name} extension.` }, ...files }), { fallbackName: name });
   if (!manifest.ok) throw new Error(manifest.error.message);
   const capabilities = capabilitiesOf(manifest.value);
-  return { name, revision: "local-0123456789abcdef", dir, manifest: manifest.value, capabilities, approvedEnv: capabilities.env, env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: capabilities.env, parent }) };
+  return { name, revision: "local-0123456789abcdef", dir, manifest: manifest.value, capabilities, approvedEnv: capabilities.env, connected: (parent = process.env) => parent, unapprovedEnv: [], env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: capabilities.env, parent }) };
 }
 
 export const stdioExtension = (name: string, variantArg: string, env: string[] = [], dir = process.cwd()): LoadedExtension =>
@@ -50,12 +53,12 @@ export class SpyConnector implements McpConnector {
   connect(launch: McpLaunch) { this.launches.push(launch); return this.#inner.connect(launch); }
 }
 
-export function makeHost(extensions: LoadedExtension[], options: { gate?: McpGate; pins?: McpPinStore; observed?: McpObservationLog; parentEnv?: Record<string, string | undefined>; approve?: (r: { name: string; summary: string }) => Promise<boolean> | boolean } = {}) {
-  const connector = new SpyConnector(); const pins = options.pins ?? new MemoryPins(); const observed = options.observed ?? new MemoryObserved();
-  const host = new ExtensionMcpHost({ extensions, connector, pins, observed, gate: options.gate ?? allow, parentEnv: options.parentEnv ?? { PATH: process.env["PATH"] } });
+export function makeHost(extensions: LoadedExtension[], options: { connector?: McpConnector; base?: McpToolHost; gate?: McpGate; pins?: McpPinStore; snapshots?: McpSnapshotStore; observed?: McpObservationLog; parentEnv?: Record<string, string | undefined>; approve?: (r: { name: string; summary: string }) => Promise<boolean> | boolean } = {}) {
+  const connector = (options.connector ?? new SpyConnector()) as SpyConnector; const pins = options.pins ?? new MemoryPins(); const observed = options.observed ?? new MemoryObserved();
+  const host = new ExtensionMcpHost({ extensions, connector, pins, observed, gate: options.gate ?? allow, ...(options.base ? { base: options.base } : {}), ...(options.snapshots ? { snapshots: options.snapshots } : {}), parentEnv: options.parentEnv ?? { PATH: process.env["PATH"] } });
   const asked: Array<{ name: string; summary: string }> = [];
   const approve = options.approve; host.attachOperator({ cwd: process.cwd(), thread: () => ({}), ...(approve ? { approve: async r => { asked.push(r); return approve(r); } } : {}) });
-  return { host, connector, pins, observed, asked };
+  return { host, connector, pins, observed, asked, snapshots: options.snapshots };
 }
 
 export async function startFakeHttp(variant: () => string): Promise<{ url: string; close: () => Promise<void> }> {
@@ -71,4 +74,22 @@ export async function startFakeHttp(variant: () => string): Promise<{ url: strin
   await new Promise<void>(r => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   return { url: `http://127.0.0.1:${port}/mcp`, close: () => new Promise<void>(r => { server.closeAllConnections?.(); server.close(() => r()); }) };
+}
+
+/** The text between the nonce fence of a labelled result. */
+export const unfence = (labelled: string): string => /<<<UNTRUSTED_MCP_OUTPUT:([0-9a-f]{32})\n([\s\S]*)\nUNTRUSTED_MCP_OUTPUT:\1>>>/.exec(labelled)![2]!;
+
+/** An in-memory server: the tools it lists are whatever the test puts in `tools`. */
+export class FakeConnector implements McpConnector {
+  readonly launches: McpLaunch[] = [];
+  constructor(public tools: McpToolInfo[]) {}
+  async connect(launch: McpLaunch) {
+    this.launches.push(launch);
+    return { tools: async () => this.tools, call: async () => ({ text: "ok", isError: false }), close: async () => undefined, onToolsChanged: () => undefined, onClosed: () => undefined };
+  }
+}
+export class MemorySnapshots implements McpSnapshotStore {
+  readonly #map = new Map<string, ToolSnapshots>();
+  read(e: string, _r: string, s: string) { return this.#map.get(`${e}\0${s}`); }
+  write(e: string, _r: string, s: string, t: ToolSnapshots) { this.#map.set(`${e}\0${s}`, t); }
 }

@@ -21,7 +21,7 @@ GitHub stores the credential in `gh`'s own store. 0 never reads it and no script
 
 Install the connector extension (`0 skills add <source>` or **Add extension**). The install prompt shows the connector's declared read and write list, the hosts it may reach and the variable its token fills. After you approve it, its card appears on **Extensions** with one **Connect** button. Paste the token, 0 checks it against the connector's declared health URL when it has one, and stores it on this computer in `~/.0/extensions/connections.json` (readable only by you).
 
-A script in the extension receives the token only when the extension declared that variable name and you approved the prompt. Model provider keys and every other secret stay out. **Disconnect** deletes the stored token.
+A script in the extension receives the token only when the extension declared that variable name and you approved the prompt. When the bash tool runs a command that names a file inside an enabled extension's folder, the declared and approved variables (the stored token included) are added to the command's environment, and the value is masked in the output. An extension whose approval does not cover a variable it declares does not run. MCP servers of the extension get the token the same way. Model provider keys and every other secret stay out. **Disconnect** deletes the stored token.
 
 If you used service plugins before, token-only connections (such as Slack or Linear) are imported once as connector extensions that need approval. The old token is not copied: connect again to fill the new slot. Services that need a URL or identifiers as well (such as Jira or Elastic) are listed in the import report and keep working where they are.
 

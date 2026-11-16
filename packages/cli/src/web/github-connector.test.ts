@@ -27,4 +27,10 @@ describe("GitHub connector adapter", () => {
     await adapter.signIn(); await adapter.connectToken("abcdef"); await adapter.cancel();
     expect(calls).toEqual(["start:login", "connect:6", "cancel"]);
   });
+
+  it("refuses a malformed token before any gh process starts and never reports it connected", async () => {
+    const { GitHubPublicationAuth: Real } = await import("./github-auth.js");
+    const adapter = new GitHubConnector(new Real({ computer: "box" }));
+    for (const bad of ["", "   ", "has a space", "x".repeat(16_001)]) await expect(adapter.connectToken(bad)).rejects.toMatchObject({ statusCode: 400 });
+  });
 });

@@ -1,6 +1,7 @@
 /** Pure: compare the tools a server shows now with the hashes the operator approved. Fail closed. */
 import type { McpToolInfo } from "./tool-hash.js";
 import { hashTools } from "./tool-hash.js";
+import { reviewReason } from "./approval-text.js";
 
 export interface ToolReview {
   /** Tools whose hash matches the approval: the only ones that may be advertised or called. */
@@ -14,8 +15,6 @@ export interface ToolReview {
   readonly reason: string;
 }
 
-const list = (label: string, names: readonly string[]): string => (names.length ? `${label}: ${names.slice(0, 5).join(", ")}${names.length > 5 ? ` and ${names.length - 5} more` : ""}` : "");
-
 /**
  * `pinned` is undefined when the operator never approved this server's tools: every tool is then New. A tool that is
  * changed, new or removed is not callable until the operator approves again, and a server that rewrote one tool is not
@@ -23,12 +22,12 @@ const list = (label: string, names: readonly string[]): string => (names.length 
  */
 export function reviewHashes(pinned: Readonly<Record<string, string>> | undefined, current: Readonly<Record<string, string>>): ToolReview {
   const names = Object.keys(current).sort();
-  if (!pinned) return { allowed: [], changed: [], added: names, removed: [], needsApproval: true, reason: `tools not approved yet (${names.length}): review and approve them` };
+  if (!pinned) return { allowed: [], changed: [], added: names, removed: [], needsApproval: true, reason: reviewReason({ changed: [], added: names, removed: [], needsApproval: true }, false) };
   const changed = names.filter(n => Object.hasOwn(pinned, n) && pinned[n] !== current[n]);
   const added = names.filter(n => !Object.hasOwn(pinned, n));
   const removed = Object.keys(pinned).filter(n => !Object.hasOwn(current, n)).sort();
   const needsApproval = changed.length + added.length + removed.length > 0;
-  const reason = needsApproval ? [list("changed", changed), list("new", added), list("removed", removed)].filter(Boolean).join("; ") + "; blocked until you approve them again" : "";
+  const reason = reviewReason({ changed, added, removed, needsApproval }, true);
   return { allowed: needsApproval ? [] : names, changed, added, removed, needsApproval, reason };
 }
 

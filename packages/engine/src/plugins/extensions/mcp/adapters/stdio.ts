@@ -1,10 +1,11 @@
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { beginExecutionResource } from "../../../../agent/execution-resource-registry.js";
 import type { McpConnector, McpLaunch, McpSession } from "../ports.js";
-import { connectSdk } from "./sdk-session.js";
+import { connectSdk, type SessionOptions } from "./sdk-session.js";
 
 /** Starts a server process with exactly the environment it is given (the SDK adds only its small safe default set). */
 export class StdioMcpConnector implements McpConnector {
+  constructor(private readonly options: SessionOptions = {}) {}
   async connect(launch: McpLaunch): Promise<McpSession> {
     if (launch.kind !== "stdio") throw new Error("not a stdio launch");
     const transport = new StdioClientTransport({ command: launch.command, args: [...launch.args], env: { ...launch.env }, cwd: launch.cwd });
@@ -16,7 +17,7 @@ export class StdioMcpConnector implements McpConnector {
       try { const pending = start(); register(); await pending; register(); }
       catch (error) { register(); if (!settled) creation.failed(); throw error; }
     };
-    try { return await connectSdk(transport); }
+    try { return await connectSdk(transport, this.options); }
     catch (error) { if (!started) creation.failed(); throw error; }
   }
 }

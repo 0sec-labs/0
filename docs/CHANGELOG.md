@@ -14,6 +14,8 @@ on the GitHub Release tag.
 
 ### Security
 
+- Extensions: a connector's stored token now reaches the scripts (through bash) and MCP servers of the extension that declared and was approved for that variable, and is masked in what comes back. The approval prompt for MCP tools shows sanitised plain text with an old-versus-new description and schema diff. Extension server ids are namespaced (`x-`) and cannot shadow your own servers. Tool output fences use a per-call random code and neutralise look-alikes; responses and nested schema descriptions are bounded. A changed tool list, a dead process or a hung call blocks the server, and the pin is re-checked before each call. `npx`, `uvx`, `pip` and similar launchers must pin an exact version. Remote MCP hosts are resolved and refused when they point at private, loopback, link-local or metadata addresses.
+
 - Extensions: an agent can no longer approve its own extensions by flag. Approval commands refuse from an agent
   session and without a terminal, a built-in `beforeCommand` decider denies agent commands that touch approval,
   enablement and settings files, every executing tool (monitor, pty_session, python_exec, run_command, file tools)

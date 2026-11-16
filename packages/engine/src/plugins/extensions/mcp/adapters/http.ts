@@ -1,21 +1,19 @@
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { McpConnector, McpLaunch, McpSession } from "../ports.js";
-import { connectSdk } from "./sdk-session.js";
+import { checkRemoteEndpoint, systemResolver, type Resolver } from "./endpoint.js";
+import { connectSdk, type SessionOptions } from "./sdk-session.js";
 
-/** HTTPS only (plain http on loopback for local servers), no URL credentials, no redirects. */
-export function httpEndpoint(raw: string): URL {
-  const url = new URL(raw);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if ((url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) || url.username || url.password || url.hash) throw new Error("MCP HTTP endpoint requires HTTPS (HTTP on loopback only), without URL credentials or a fragment");
-  return url;
-}
-
+/** Remote servers. The endpoint is checked (HTTPS, public addresses after DNS) before connecting and again before every request; redirects are refused. */
 export class HttpMcpConnector implements McpConnector {
+  constructor(private readonly options: SessionOptions & { resolve?: Resolver } = {}) {}
   async connect(launch: McpLaunch): Promise<McpSession> {
     if (launch.kind !== "http") throw new Error("not an http launch");
-    const url = httpEndpoint(launch.url); const init = { headers: { ...launch.headers }, redirect: "error" as const };
-    return connectSdk(launch.transport === "sse" ? new SSEClientTransport(url, { requestInit: init }) : new StreamableHTTPClientTransport(url, { requestInit: init }));
+    const resolve = this.options.resolve ?? systemResolver;
+    const url = await checkRemoteEndpoint(launch.url, resolve);
+    const guarded: typeof fetch = async (input, init) => { await checkRemoteEndpoint(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, resolve); return fetch(input, init); };
+    const init = { headers: { ...launch.headers }, redirect: "error" as const };
+    return connectSdk(launch.transport === "sse" ? new SSEClientTransport(url, { requestInit: init, fetch: guarded }) : new StreamableHTTPClientTransport(url, { requestInit: init, fetch: guarded }), this.options);
   }
 }
 
