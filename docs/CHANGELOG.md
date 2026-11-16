@@ -16,6 +16,13 @@ on the GitHub Release tag.
 
 - Choose the animated background behind a new thread in **Settings > Appearance > Background** (or the command palette's Change background). Dither stays the default; Aurora, Grid, Topography, Constellation, Scanline, Code rain, Waves, Ripple and None are live previews that follow the colour theme, stay at or under 30 fps, pause when the tab is hidden or off screen, freeze under Reduce motion and are capped so text keeps AA contrast.
 
+### Fixed
+
+- `0 threads start` no longer fails with "Console thread is already processing a turn" when you pass `--folder`. It creates the thread and runs exactly one turn with your prompt, and no longer leaves an empty thread behind.
+- `0 threads start --wait` now prints the reply with its tokens and cost, prints the error when the turn failed, and exits non-zero. Add `--cost-ceiling <usd>` to stop a thread at a spend limit; `0 threads show <id> --json` shows its usage.
+- `0 threads` commands now fail with "No console running. Start one with: 0 web --headless" and a non-zero exit when no console is running, instead of printing `[]` or "Console thread was not found".
+- `0 web --headless` (and `0 web --no-open`) starts without built dashboard assets and serves the API only. A missing 0verse environment is skipped with one log line instead of stopping the console.
+
 ## [0.34.0] - 2026-11-15
 
 This release lets the console update and restart itself, lets pull request Agents react to GitHub straight away in server mode, and shows exactly which tools change when you review a plugin update.

@@ -288,7 +288,18 @@ id=$(0 threads start "Map the login flow" --folder ~/code/app --access read-only
 0 threads delete "$id" --yes
 ```
 
-`start --wait` blocks until the turn ends and prints the reply. `clear` and `delete` need `--yes`. Every command takes `--json`. Exit code 0 means success, 1 means the request failed, 2 means a usage error. A remote token cannot change settings the browser protects.
+`start` creates the thread and runs exactly one turn with your prompt. `start --wait` blocks until the turn ends, prints the reply and its usage (tokens and estimated cost), and exits 1 if the turn errored. `start --cost-ceiling <usd>` stops the thread once its estimated spend reaches that amount; the turn then counts as failed. `threads show <id> --json` includes the thread's usage and cost. `clear` and `delete` need `--yes`. Every command takes `--json`. Exit code 0 means success, 1 means the request failed, 2 means a usage error. A remote token cannot change settings the browser protects.
+
+### Run without a browser
+
+On a server or in CI, start the console with `0 web --headless`. It opens no browser, needs no built dashboard assets (it serves the API only and logs one line), and skips the optional 0verse tools with one log line if their environment is not installed. `0 web --no-open` behaves the same when assets are missing.
+
+```bash
+0 web --headless --ready-json &        # prints ZERO_DASHBOARD_READY {"url": ...}
+0 threads start "Review the dependency bumps" --folder ~/code/app --access changes --cost-ceiling 2 --wait
+```
+
+Every `0 threads` command needs a running console. Without one it prints `No console running. Start one with: 0 web --headless` and exits non-zero; it never prints an empty list.
 
 ### Drive a running app from scripts
 

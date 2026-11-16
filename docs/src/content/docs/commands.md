@@ -171,6 +171,7 @@ Guide: [Read the workflow](/app/).
 | `--shutdown-timeout <seconds>` | — | Server mode: seconds to finish in-flight requests on SIGTERM (default 20) |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
+| `--headless` | — | Serve the API only: no browser, and no dashboard assets needed (use with `0 threads`) |
 | `--engines-config <path>` | — | Trusted engine connection registry JSON (default ~/.0/engines.json) |
 
 ### api
@@ -4679,6 +4680,7 @@ Read an existing live session without recreating it or restoring approvals.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--json` | — | Print JSON (the default) |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -4926,6 +4928,7 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | `--scope <path>` | — | Scope policy JSON file |
 | `--title <title>` | — | Thread title |
 | `--wait` | — | Wait for the turn to finish and print the reply |
+| `--cost-ceiling <usd>` | — | Stop the thread when its estimated spend reaches this many USD |
 | `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
