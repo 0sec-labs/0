@@ -63,7 +63,7 @@ head:
               "name": "What are persistent security agents (Agents)?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "An Agent is a named agent with a scope, a tool-access level, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand."
+                "text": "An Agent is a named agent with a scope, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand."
               }
             },
             {
@@ -79,7 +79,7 @@ head:
               "name": "Is it safe to point at my systems?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Only scan systems you own or are authorized to test. A scope file limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused, read-only and with production targets off."
+                "text": "Only scan systems you own or are authorized to test. A scope file limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused and with production targets off."
               }
             },
             {
@@ -120,7 +120,7 @@ A finding is a claim until verification reproduces it. A fix is accepted only wh
 
 ## What are persistent security agents (Agents)?
 
-An Agent is a named agent with a scope, a tool-access level, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand. See [Agents](/agents/).
+An Agent is a named agent with a scope, a daily budget and memory. It runs threads on a schedule, when a GitHub pull request opens, or when you start it by hand. See [Agents](/agents/).
 
 ## Does it work in CI?
 
@@ -128,7 +128,7 @@ Yes. The GitHub Action runs 0 on your own runner with your own model key, applie
 
 ## Is it safe to point at my systems?
 
-Only scan systems you own or are authorized to test. A [scope file](/scope/) limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused, read-only and with production targets off.
+Only scan systems you own or are authorized to test. A [scope file](/scope/) limits live testing to the hosts you list, but it is not a sandbox. New Agents start paused and with production targets off.
 
 ## How do I get started?
 

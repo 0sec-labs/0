@@ -335,7 +335,7 @@ recommendations above where they differ.
    gone, the scan detail card is "Run details", and the local folder is always
    allowed with no prompt (auto local grants are silent; the two network-scope
    notices remain).
-4. **Access is two states everywhere: Read-only | Can make changes**
+4. **Access is two states everywhere: Read-only | Can make changes** (reversed on 2026-11-15, see "Decision 2026-11-15: one mode" at the end)
    (`read-only | changes`). This replaces the earlier three-level Agent access
    and the four engine modes (`standard`, `recon`, `copilot`, `yolo`) and Agent
    autonomy values (`observe`, `propose`, `run`, `act`). It applies to threads,
@@ -377,3 +377,25 @@ recommendations above where they differ.
 **Security note.** With Auto by default, commands run as the user on a local
 computer with no confirmation. The workbench sandbox isolates them when used.
 Third-party target authorization remains an optional plugin.
+
+## Decision 2026-11-15: one mode
+
+Owner decision (Doruk, final). **Read-only is removed entirely.** This reverses decision 4 above (access as two states, Read-only or Can make changes) and the Read-only rows of decisions 6 and 7. The earlier text stays as history. There is now one mode: the agent has shell access. Nothing is chosen per Thread, Agent or automation, and no access picker exists in the engine, CLI, API or web app.
+
+Rationale:
+
+- The two-state picker added a choice that did not buy safety. Read-only refused the shell, so an Agent could not do useful work (build, test, run a scanner, check a fix), and a text allowlist cannot make a shell read-only.
+- The limits that actually bound a run are the target scope, the budget, the sandbox and the operator asking. Those apply the same in every run and are easier to explain than an access level.
+- One mode removes a control people misread and the inconsistencies that came with it, for example the Dependency Watcher preset that said Can make changes while described as a watcher (usage study, `how-people-use-it.md`, row 10).
+
+What limits remain:
+
+- **Target scope**: host and path allowlists whenever a scope exists; an out-of-scope host is refused and scope does not grow on its own. Subagent policies can only narrow scope, budget and turns (`intersectWorkerPolicies`).
+- **Budget**: the cost ceiling and time caps, and an Agent's daily USD and run-count caps.
+- **Sandbox**: the optional container executor (SmolVM or Docker) isolates commands from the host.
+- **Ask before running commands**: the global operator setting, kept as is, off by default.
+- The privileged-routes table for the API (API authentication, not agent access) and the audit log.
+
+Legacy values: every stored value (`observe`, `recon`, `read-only`, `act`, `run`, `propose`, `yolo`, `copilot`, `standard`, `changes`, and the older `commands` and `pull-requests`) still loads without error and means the single mode. `standard` and `propose` still ask first, as before. Stored rows are not rewritten. The CLI flags `--access`, `--mode`, `--autonomy` and `--tool-access` (and the older hidden alias) are removed from help but accepted and ignored for one release; the API `access` field is optional and ignored on write.
+
+Untrusted content without Read-only: pull request Agents skip fork pull requests and drafts by default. A github-pr run uses the repository's checked-out folder as its scope, passes the shell only an allowlisted environment (other provider keys and tokens are stripped; override with `ZERO_BASH_ENV_ALLOW`, or `ZERO_BASH_ENV_PASSTHROUGH_ALL=1`), and prefers the container sandbox when it is available and enabled. Otherwise it runs on the host and the Agent detail shows a one-line note.

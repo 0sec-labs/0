@@ -178,7 +178,7 @@ The implemented console handoff validates bounded source-linked lesson prose
 against host-owned scope and cited file hashes, then persists it on the host.
 Fresh guests fetch current lessons before model calls and recheck the hashes.
 Disabled lessons stay disabled across new run records. Standard mode requires
-host-approved scope; an explicit host YOLO workspace grant also covers child
+host-approved scope; an explicit host workspace grant also covers child
 directories. Guest state, prose and transcripts do not create authority. This
 roundtrip has been tested in three fresh VMs. It does not qualify every toolbox
 image, provider or validator.

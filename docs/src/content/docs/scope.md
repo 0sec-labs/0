@@ -97,7 +97,7 @@ With the plugin on, generic scanner wrappers (sqlmap, nikto and similar) are hid
 
 If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
 
-Access is separate from scope. A thread or Agent is **Read-only** or **Can make changes**; Read-only refuses every command and edit, whatever the scope says. Asking before each command is the global **Ask before running commands** setting (see [Configuration](/configuration/)).
+There is no access setting: a thread or Agent has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Configuration](/configuration/)).
 
 ## Local workflows and strict scope mode
 

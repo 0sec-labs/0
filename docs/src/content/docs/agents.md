@@ -14,29 +14,30 @@ An Agent is a persistent agent with a name, a standing job, a scope, files and a
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Agent has a scope, an access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Agent has a scope, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
 ## Presets
 
-A new Agent always starts paused, read-only and with production targets off. A preset fills in the job, skills and access level. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
+A new Agent always starts paused and with production targets off. A preset fills in the job and skills. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
-| Preset | Access | Job |
-| --- | --- | --- |
-| `pen-tester` | Read-only | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
-| `pr-security-reviewer` | Can make changes | Review each opened or updated pull request diff and draft comments. |
-| `dependency-watcher` | Can make changes | Watch lockfiles and advisories and propose safe upgrades. |
-| `fix-engineer` | Can make changes | Turn a confirmed finding into a tested draft fix for review. |
-| `secrets-hunter` | Read-only | Find leaked credentials in code and git history, reported redacted. |
-| `attack-surface-monitor` | Read-only | Re-map the in-scope external surface daily and report what is new. |
-| `cloud-posture-auditor` | Read-only | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
-| `incident-triage` | Can make changes | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
-| `regression-tester` | Read-only | Re-check known findings and API spec drift to catch regressions. |
-| `release-gate` | Can make changes | Review what changed since the last release before you ship. |
+| Preset | Job |
+| --- | --- |
+| `pen-tester` | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
+| `pr-security-reviewer` | Review each opened or updated pull request diff and draft comments. |
+| `dependency-watcher` | Watch lockfiles and advisories and propose safe upgrades. |
+| `fix-engineer` | Turn a confirmed finding into a tested draft fix for review. |
+| `secrets-hunter` | Find leaked credentials in code and git history, reported redacted. |
+| `attack-surface-monitor` | Re-map the in-scope external surface daily and report what is new. |
+| `cloud-posture-auditor` | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
+| `incident-triage` | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
+| `regression-tester` | Re-check known findings and API spec drift to catch regressions. |
+| `release-gate` | Review what changed since the last release before you ship. |
 
-## Access, tools and scope
+## Limits and scope
 
-- **Access.** One choice per Agent, two options. **Read-only** can read and report. **Can make changes** runs commands and opens pull requests. No preset opens pull requests unprompted; each preset's instructions say what it may do.
-- **Ask before running commands.** One global setting (Settings, Helpers), off by default. When on, an Agent that can make changes needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations. The first start after upgrading shows one dismissible note and records one audit entry.
+There is one mode: an Agent has shell access, like a thread. There is no access setting to choose. What limits an Agent is its scope, its budget, the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
+
+- **Ask before running commands.** One global setting (Settings, Helpers), off by default. When on, an Agent needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations.
 - **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on.
 
 ## Budget
@@ -67,16 +68,24 @@ The trigger must exist and be on for that repository and base branch; deliveries
 
 ### What a pull request run does
 
-A new commit on an open pull request starts one thread, recorded as an activation on the Agent with a link to the thread. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. Nothing is cloned, checked out or executed from the pull request.
+A new commit on an open pull request starts one thread, recorded as an activation on the Agent with a link to the thread. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. 0 does not check out or execute the pull request branch itself; the run works in the repository's local checked-out folder.
 
 By default a run **posts nothing to GitHub**. Results are in the Agent's activity and thread only. Two options on the trigger change that, and both are off by default:
 
 | Option | UI label | CLI flag | Effect |
 | --- | --- | --- | --- |
 | `commentOnPr` | Comment on the pull request | `--comment` | When a run completes, posts one summary comment with the reviewed commit and each finding's severity, title and repository-relative location. No proof-of-concept steps, evidence, descriptions or local paths. The comment carries a hidden marker per Agent, so a later push edits it in place. At most one comment per pull request per minute and 30 per hour. |
-| `includeForks` | Include pull requests from forks | `--include-forks` | Without it, fork pull requests are skipped and recorded as a skipped activation with the reason `fork pull request`. With it, the run is read-only analysis of the diff in recon mode with GET-only requests, and the activation and any comment say it is untrusted. |
+| `includeForks` | Include pull requests from forks | `--include-forks` | Without it, fork pull requests are skipped and recorded as a skipped activation with the reason `fork pull request`. With it, the run uses the same limits as every pull request run (below), and the activation and any comment say it is untrusted. |
 
 Draft pull requests are skipped the same way, with the reason `draft pull request`, and are reviewed once when marked ready for review. Changing a trigger's repository, branch or options turns it off and records a new baseline, so turning on comments or forks needs a fresh approval.
+
+### Limits for pull request runs
+
+The pull request is untrusted content, and a run has shell access, so these limits apply by default:
+
+- **Scope.** The run's scope is that repository's checked-out folder. It cannot reach other folders, and network scope rules still apply to live targets.
+- **Environment.** The shell starts with an allowlisted environment: `PATH`, home and temporary directory basics, locale, `TERM` and CI variables. Other provider keys and tokens are removed. Set `ZERO_BASH_ENV_ALLOW` to a comma-separated list of extra variable names to pass through, or `ZERO_BASH_ENV_PASSTHROUGH_ALL=1` to turn the allowlist off.
+- **Sandbox.** When the container sandbox (SmolVM or Docker) is available and enabled, the run uses it. Otherwise it runs on the host and the Agent detail shows a one-line note saying so.
 
 ```bash
 0 agents set <agent> --trigger add --automation <automation> --kind github-pr --repo owner/name --comment --include-forks
@@ -96,8 +105,8 @@ Everything on the Agents page works from `0 agents`. Commands attach to a runnin
 
 ```bash
 0 agents list --presets
-0 agents set --create --preset pen-tester --name "Nightly probe" --access read-only
-0 agents set AGENT_ID --daily-usd 5 --access read-only
+0 agents set --create --preset pen-tester --name "Nightly probe"
+0 agents set AGENT_ID --daily-usd 5
 0 agents set AGENT_ID --files put reports/scope.md --file ./scope.md
 0 agents set AGENT_ID --state active --acknowledge
 0 agents run AGENT_ID --task "Re-test the login flow" --yes
@@ -126,13 +135,6 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 - [Skills](/skills/): instructions an Agent loads.
 - [Scope](/scope/): authorization rules.
 
-## Access and older Agents
+## Older Agents
 
-The API keeps `autonomy` and `toolAccess` for compatibility and adds `access` (`read-only` or `changes`), echoed on every Agent. A request may send `access` instead of `autonomy`; the older name `accessLevel` and its values `commands` and `pull-requests` are still accepted as input and mean `changes`. An explicit `autonomy` wins. New saves store only `observe` or `act`.
-
-| Access | Stored `autonomy` | What runs |
-| --- | --- | --- |
-| Read-only | `observe` | Passive reads and reports. Commands are refused. |
-| Can make changes | `act` (new saves); `run` and `propose` (older Agents, still read) | Runs commands and opens pull requests. Whether it asks first is only the global **Ask before running commands** setting. |
-
-Existing rows are not rewritten. An older `propose` or `run` Agent loads as Can make changes and becomes `act` the next time you save its access. Until then its mutating web requests stay blocked. Moving an Agent to Read-only uses the Read-only values; moving it to Can make changes keeps the web access it already had. Untrusted fork pull requests always run read-only. Keep GitHub credentials off machines that should not publish.
+The API fields `access`, `autonomy` and `toolAccess` (and the older `accessLevel` with `commands` and `pull-requests`) are optional and ignored on write, and are no longer returned. Older Agents saved with `observe`, `propose`, `run` or `act` still load and all mean the single mode; stored rows are not rewritten. An Agent that was read-only is marked as needing review once, because its authority widened. Keep GitHub credentials off machines that should not publish.

@@ -50,7 +50,7 @@ function collect(command) {
 }
 
 // Deprecated spellings kept as hidden aliases of renamed flags; other hidden options stay documented.
-const renamedAliases = new Set(["--backend", "--backends-config", "--session", "--workflows", "--yolo", "--mode", "--autonomy", "--tool-access"]);
+const renamedAliases = new Set(["--access", "--backend", "--backends-config", "--session", "--workflows", "--yolo", "--mode", "--autonomy", "--tool-access"]);
 const isRenamedAlias = (option) => option.hidden && renamedAliases.has(option.long);
 
 function optionTable(command) {

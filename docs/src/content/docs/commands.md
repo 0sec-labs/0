@@ -231,7 +231,6 @@ Guide: [Read the workflow](/app/).
 | `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
 | `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
-| `--access <level>` | — | Access: read-only \| changes (default changes) |
 | `--approvals <ask\|auto>` | — | ask puts each command or change to you first (headless runs cannot answer, so effectful tools are refused). auto, the default, runs commands without asking. Credential, private-network and sandbox protections apply either way. Overrides the approvals setting. |
 | `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
@@ -5041,7 +5040,6 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | --- | --- | --- |
 | `--model <model>` | — | Model for this thread |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--access <level>` | — | Access: read-only \| changes (default changes) |
 | `--approvals <ask\|auto>` | — | Moved to the global setting |
 | `--folder <path>` | — | Folder the thread works in |
 | `--target <target>` | — | Authorized target |
@@ -5134,7 +5132,6 @@ Change a thread's model, reasoning effort, mode or folder. A computer is chosen 
 | --- | --- | --- |
 | `--model <model>` | — | Model |
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
-| `--access <level>` | — | Access: read-only \| changes (default changes) |
 | `--approvals <ask\|auto>` | — | Moved to the global setting |
 | `--folder <path>` | — | Folder the thread works in |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
@@ -5383,7 +5380,6 @@ Create a Agent from a preset or a JSON definition.
 | --- | --- | --- |
 | `--preset <id>` | — | Start from a preset (see `0 agents list --presets`) |
 | `--name <name>` | — | Name |
-| `--access <level>` | — | Access: read-only \| changes |
 | `--file <path>` | — | Agent JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
@@ -5404,7 +5400,6 @@ Change a Agent's settings.
 | --- | --- | --- |
 | `--name <name>` | — | Name |
 | `--mission <text>` | — | One-line purpose |
-| `--access <level>` | — | Access: read-only \| changes |
 | `--daily-usd <usd>` | — | Daily budget in USD |
 | `--max-runs <n>` | — | Maximum runs per day |
 | `--file <path>` | — | Patch JSON object |
@@ -5686,7 +5681,7 @@ Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
 | `--repo <owner/name>` | — | github-pr: repository to watch |
 | `--base-branch <branch>` | — | github-pr: only pull requests into this branch |
 | `--comment` | — | github-pr: comment on each pull request with one short summary, edited in place on later pushes (default: off) |
-| `--include-forks` | — | github-pr: also review pull requests from forks, read-only and marked untrusted (default: skipped) |
+| `--include-forks` | — | github-pr: also review pull requests from forks, marked untrusted (default: skipped) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 

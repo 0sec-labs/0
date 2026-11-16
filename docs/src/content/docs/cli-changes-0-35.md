@@ -32,7 +32,7 @@ The line is not printed when stdout is not a terminal (pipes, CI) or when `--jso
 - `0 web` is now `0`. The web flags (`--port`, `--host`, `--headless`, `--no-open`, `--ready-json`, `--server-mode`, `--db-path` and the rest) work on `0` directly, for example `0 --headless --ready-json`. `0 web ...` keeps working and prints the moved line.
 - `0 doctor` stays as a permanent alias of `0 config doctor` and prints no notice. `doctor upgrade`, `doctor workbench` and `doctor checks` are reached as `0 config doctor upgrade|workbench|checks`.
 - `0 api` and `0 lab` are hidden developer commands and are unchanged. `0 -p`, `0 -c` and `0 -r` are unchanged.
-- The hidden flags `--mode`, `--yolo`, `--autonomy` and `--tool-access` keep working as documented aliases of `--access` and the approvals setting.
+- The flags `--access`, `--mode`, `--autonomy` and `--tool-access` are removed from help. There is one mode, so they are accepted and ignored for one release (on a terminal, one dim line says so).
 
 ## Choices the new grammar makes
 

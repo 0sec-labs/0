@@ -174,7 +174,7 @@ Fresh CLI scans write a run-local `~/.0/runs/<scan-id>/state.db`, journal and re
 
 Tool sets depend on role, target, scope and enabled features.
 
-Threads and Agents start with a small core: `bash`, the file tools, `save_finding`, `update_finding`, `ask_operator`, `load_skill` and `done`. A skill adds specialist tools (browser, cloud, proxy and others) only when it needs them. Read-only, scope and approvals apply the same way whichever tools are listed. See the [tool philosophy](https://github.com/0sec-labs/0security/blob/main/docs/design/tool-philosophy.md) and the [core toolset](https://github.com/0sec-labs/0security/blob/main/docs/design/core-toolset.md) notes.
+Threads and Agents start with a small core: `bash`, the file tools, `save_finding`, `update_finding`, `ask_operator`, `load_skill` and `done`. A skill adds specialist tools (browser, cloud, proxy and others) only when it needs them. Scope, budget and approvals apply the same way whichever tools are listed. See the [tool philosophy](https://github.com/0sec-labs/0security/blob/main/docs/design/tool-philosophy.md) and the [core toolset](https://github.com/0sec-labs/0security/blob/main/docs/design/core-toolset.md) notes.
 
 ## Next
 

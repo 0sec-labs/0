@@ -21,10 +21,10 @@ up"). The evidence and the per-tool table are in
    operator enabled it. A tool nobody references is deleted, not hidden.
 5. **Verify before claiming.** `done` is a claim. "Verified" is set by harness
    code (the verifier gate), never by a tool the model can call.
-6. **Fewer tools never means weaker guards.** Read-only, target scope and
+6. **Fewer tools never means weaker guards.** Target scope, budget and
    "ask before running commands" are enforced at dispatch and in the executor,
-   not in the prompt and not by parsing shell text. Read-only refuses the shell
-   outright. The shell's scope check reads URLs from the command text, so
+   not in the prompt and not by parsing shell text. There is one mode (shell
+   access); there is no read-only variant. The shell's scope check reads URLs from the command text, so
    isolation for hosts built at run time belongs in the sandbox; see the known
    gaps in the core-toolset doc.
 7. **Keep schemas stable.** The advertised list and its order do not change
