@@ -32,7 +32,7 @@ This release adds a verifier gate so a fix is only called Verified when the harn
 - Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. The pages and help text now say so.
 - Scope shows On, with no switch, while a scope is set. GitHub shows Built in.
 - Automations are created and edited inside Agents. `/automations` and its old addresses open Agents.
-- `0 skills add` flags work before or after the source, and `--yes` installs without a terminal (CI, scripts). An Agent session still refuses.
+- `0 skills add` flags work before or after the source, and `--yes` installs without a terminal (CI, scripts). A command run by a thread still refuses.
 - The docs went from 49 pages to 12.
 - CI went from 14 workflows to 5, with one shared build and a release that waits for a green Main on the tag's commit.
 - Skills now live at `/skills`; `/plugins/skills` redirects there.
@@ -106,7 +106,7 @@ This release replaces the old plugin system with extensions. Extensions connect 
 
 ### Security
 
-- An agent can no longer approve its own extensions by flag. Approval commands refuse from an agent session, and commands from an agent that touch approval, enablement or settings files are denied. These are layers; the sandbox is the boundary (see `docs/design/extension-architecture.md`).
+- An agent can no longer approve its own extensions by flag. Approval commands refuse when a thread runs them, and commands from an agent that touch approval, enablement or settings files are denied. These are layers; the sandbox is the boundary (see `docs/design/extension-architecture.md`).
 - Every executing tool (monitor, pty_session, python_exec, run_command and file tools) now goes through `beforeCommand`, and extension approvals are sealed.
 - A connector's stored token reaches only the scripts and MCP servers of the extension that declared and was approved for it, and is masked in what comes back.
 - MCP approval prompts show sanitised plain text with an old versus new description and schema diff. Extension server ids are namespaced (`x-`), and a dead process or hung call blocks the server.

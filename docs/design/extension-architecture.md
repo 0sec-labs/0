@@ -83,6 +83,9 @@ reaches the extension code only through the `@0/engine` barrel.
     change when it is set, and the CLI's approval-bearing commands refuse when it is set (a flag alone never
     approves from an agent session). Without the marker, `--yes` approves with or without a terminal, so a person can
     install from CI or a script; a bare `add` at a terminal asks for confirmation. The Extensions page is the other approval path (browser-only, owner-only).
+    `ZERO_AGENT_SESSION` is an internal marker (`shared/agent-session.ts`), set on every command the agent runs through
+    bash, so approval commands can tell a thread from the operator. Users never see its name: the refusal is one
+    sentence, "This command was run by a thread, not by you. Run it yourself in a terminal to approve." (`RUN_BY_THREAD_MESSAGE`).
 12. **Git fetches are bounded.** The all-refs fallback fetch has a 60 s timeout and a 128 MB cap on what it writes;
     git alone receives `HTTPS_PROXY`/`NO_PROXY` from the parent environment.
 

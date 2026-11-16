@@ -2,7 +2,7 @@
 import { chmodSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { AGENT_SESSION_ENV } from "../../../shared/agent-session.js";
+import { AGENT_SESSION_ENV, RUN_BY_THREAD_MESSAGE } from "../../../shared/agent-session.js";
 import { err, ok, type Result } from "../core/result.js";
 import type { ConnectionSecrets } from "../ports.js";
 import { extensionsRoot } from "./fs-store.js";
@@ -35,7 +35,7 @@ export class FsConnectionSecrets implements ConnectionSecrets {
 
   read(extension: string, name: string): string | undefined { return this.#load()[extension]?.[name]; }
   has(extension: string, name: string): boolean { return this.read(extension, name) !== undefined; }
-  #refused(): Result<void> | null { return process.env[AGENT_SESSION_ENV] ? err("agent_session", "Refusing to change a connection from an agent session; connecting a service is the operator's.") : null; }
+  #refused(): Result<void> | null { return process.env[AGENT_SESSION_ENV] ? err("agent_session", RUN_BY_THREAD_MESSAGE) : null; }
   write(extension: string, name: string, value: string): Result<void> { const no = this.#refused(); if (no) return no; const d = this.#load(); (d[extension] ??= {})[name] = value; return this.#save(d); }
   remove(extension: string, name: string): Result<void> {
     const no = this.#refused(); if (no) return no;

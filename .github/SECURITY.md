@@ -37,7 +37,7 @@ are not sandboxed. The guardrails are review and pinning, not isolation:
 
 - nothing runs on install; you read one prompt (repository at the full commit,
   files, what it can run, connect to or call) and approve the exact revision, from
-  your own terminal or the browser, never from an agent session;
+  your own terminal or the browser, never from a command a thread ran;
 - git extensions are fetched without executing anything, pinned to a full commit
   SHA, installed disabled, and never auto-update; any change re-prompts;
 - an MCP server's tools are hashed per tool and a changed, new or removed tool

@@ -39,7 +39,7 @@ try {
   assert(review.includes("release-smoke") && review.includes("Re-run with --yes"), review);
   // A flag alone never approves from an agent session.
   const refused = run(["skills", "extensions", "add", fixture, "--yes"], { expect: 2, extraEnv: { ZERO_AGENT_SESSION: "1" } });
-  assert(/agent session/.test(refused), refused);
+  assert(/run by a thread, not by you/.test(refused) && !/ZERO_AGENT_SESSION|agent session/i.test(refused), refused);
   assert(!/release-smoke/.test(run(["skills", "extensions", "list"]).split("\n").find(line => line.includes("release-smoke")) ?? ""), "agent session installed an extension");
   // A person running --yes without a terminal (CI, a script) installs; flags work before and after the source.
   const added = run(["skills", "extensions", "add", fixture, "--yes"]);

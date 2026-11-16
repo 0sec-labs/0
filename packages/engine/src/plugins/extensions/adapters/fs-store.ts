@@ -10,7 +10,7 @@
 import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { AGENT_SESSION_ENV, homeStateDir } from "../../../shared/index.js";
+import { AGENT_SESSION_ENV, RUN_BY_THREAD_MESSAGE, homeStateDir } from "../../../shared/index.js";
 import { gitTreeHash, type FolderFile } from "../core/files.js";
 import { err, ok, type Result } from "../core/result.js";
 import { sealAll, verifySeals } from "../core/seal.js";
@@ -52,7 +52,7 @@ export class FsExtensionStore implements ExtensionStore {
   }
 
   #agentRefusal(what: string): Result<never> | null {
-    return process.env[AGENT_SESSION_ENV] ? err("agent_session", `Refusing to ${what} from an agent session; approvals are the operator's.`) : null;
+    return process.env[AGENT_SESSION_ENV] ? err("agent_session", RUN_BY_THREAD_MESSAGE) : null;
   }
 
   update<T>(fn: (state: ExtensionState) => Result<T>, audit?: (value: T) => AuditEvent): Result<T> {

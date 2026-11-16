@@ -91,7 +91,7 @@ describe("approvals are the operator's", () => {
     for (const tty of [false, true]) {
       operatorAtTerminal(tty); process.env.ZERO_AGENT_SESSION = "1"; out.length = 0; err.length = 0; code = 0;
       await run("add", `${r.dir}@${r.shas[0]}`, "--yes", "--enable");
-      expect(code, String(tty)).not.toBe(0); expect(err.join("\n"), String(tty)).toMatch(/agent session/);
+      expect(code, String(tty)).not.toBe(0); expect(err.join("\n"), String(tty)).toMatch(/run by a thread, not by you/);
       await run("add", `${r.dir}@${r.shas[0]}`); expect(code, String(tty)).toBe(2); expect(out.join("\n") + err.join("\n")).toContain("Re-run with --yes");
       await run("extensions", "enable", "demo", "--yes"); await run("extensions", "disable", "scope", "--yes"); await run("extensions", "import", "--force"); await run("extensions", "remove", "demo", "--yes");
       expect(existsSync(join(home, ".0", "extensions", "demo")), String(tty)).toBe(false);

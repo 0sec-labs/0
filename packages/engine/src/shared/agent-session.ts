@@ -4,3 +4,6 @@
  * boundary: the agent runs as the same OS user and can unset it. See docs/design/extension-architecture.md.
  */
 export const AGENT_SESSION_ENV = "ZERO_AGENT_SESSION";
+
+/** The one sentence a person sees when an approval command is refused because a thread ran it. Never name the variable or say "agent session" to users. */
+export const RUN_BY_THREAD_MESSAGE = "This command was run by a thread, not by you. Run it yourself in a terminal to approve.";
