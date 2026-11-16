@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUpdate, failureLine, importNote, isOn, promptView, rowControl, showBuiltInChip, shortRevision, sourceLine, sourceProblem, statusView, toggleIntent, type ExtensionRowDto, type InstallPromptDto } from "./extensions-model";
+import { canUpdate, failureLine, importNote, isOn, promptView, rowControl, scopeDefinedOf, showBuiltInChip, shortRevision, sourceLine, sourceProblem, statusView, toggleIntent, type ExtensionRowDto, type InstallPromptDto } from "./extensions-model";
 
 const row = (over: Partial<ExtensionRowDto> = {}): ExtensionRowDto => ({ name: "demo", builtin: false, kind: "git", version: "1.0.0", description: "", status: "disabled", enabled: false, revision: "a".repeat(40), sourceLabel: "acme/demo", canDo: [], skills: [], refusal: null, note: "", ...over });
 const prompt = (over: Partial<InstallPromptDto> = {}): InstallPromptDto => ({ kind: "install", name: "demo", version: "1.0.0", description: "d", source: { type: "git", url: "u" }, revision: "b".repeat(40), pinned: true, repoAtCommit: `u @ ${"b".repeat(40)}`, licence: null, canDo: [], warnings: [], hiddenUnicode: [], files: [], diff: null, ...over });
@@ -80,5 +80,19 @@ describe("rowControl", () => {
     expect(showBuiltInChip({ builtin: true }, { kind: "label", text: "Built in" })).toBe(false);
     expect(showBuiltInChip({ builtin: true }, { kind: "switch" })).toBe(true);
     expect(showBuiltInChip({ builtin: false }, { kind: "switch" })).toBe(false);
+  });
+});
+
+describe("scopeDefinedOf", () => {
+  it("uses the server answer and assumes a scope may exist until it answers", () => {
+    expect(scopeDefinedOf(undefined)).toBe(true);
+    expect(scopeDefinedOf({})).toBe(true);
+    expect(scopeDefinedOf({ scopeDefined: true })).toBe(true);
+    expect(scopeDefinedOf({ scopeDefined: false })).toBe(false);
+  });
+  it("gives the scope row no switch while a scope is defined and a switch when none is", () => {
+    const scope = { required: "scope-defined" as const, enabled: true };
+    expect(rowControl(scope, scopeDefinedOf({ scopeDefined: true }))).toEqual({ kind: "label", text: "On" });
+    expect(rowControl(scope, scopeDefinedOf({ scopeDefined: false }))).toEqual({ kind: "switch" });
   });
 });

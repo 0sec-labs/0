@@ -16,7 +16,7 @@ export interface ExtensionRowDto {
   mcp?: Array<{ server: string; state: "not-connected" | "approved" | "needs-approval"; reason: string }>;
 }
 export interface ImportReportDto { importedAt: string; migrated: Array<{ kind: string; name: string; detail: string }>; notMigrated: Array<{ kind: string; name: string; detail: string }>; notes: string[] }
-/** `scopeDefined` is unset until the server can say; the page then assumes a scope may exist, so scope shows no switch. */
+/** `scopeDefined` comes from the server (a project scope file, a scope in settings, or an Agent or automation scope). Only an older server leaves it unset, and the page then assumes a scope may exist, so scope shows no switch. */
 export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string; scopeDefined?: boolean }
 
 export interface InstallPromptDto {
@@ -65,6 +65,9 @@ export function toggleIntent(row: ExtensionRowDto): ToggleIntent {
   return row.enabled ? "disable" : "enable";
 }
 export const isOn = (row: ExtensionRowDto): boolean => row.enabled && row.status !== "refused" && row.status !== "needs-approval";
+
+/** The server says whether a scope is defined; before it answers (or from an older server) assume one may exist, so the scope row has no switch. */
+export const scopeDefinedOf = (overview: Pick<OverviewDto, "scopeDefined"> | undefined): boolean => overview?.scopeDefined ?? true;
 
 /**
  * The control on the right of a row. A required built-in is not an on/off setting: github is simply "Built in" (disconnect

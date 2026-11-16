@@ -49,6 +49,10 @@ export class WebSentinelService {
       if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.one-mode", subject: "access", outcome: "ok", detail: { agents, threads, note: "Threads and Agents now always have shell access; limits are scope, budget and the sandbox." } });
     } catch { /* Advisory only. */ }
   }
+  /** How many Agents carry a scope (targets, domains, repositories or exclusions). Feeds the Extensions page's "scope defined" signal. */
+  scopedAgents(): number {
+    try { return this.#store.list().filter(a => a.scope.targets.length + a.scope.domains.length + a.scope.repos.length + a.scope.outOfScope.length > 0).length; } catch { return 0; }
+  }
   /** Webhook acceleration: the triggers a delivery for this repository and base branch may check. */
   webhookTargets(repo: string, baseBranch: string): Array<{ id: string }> { return this.#runner.pullRequestTriggers(repo, baseBranch).map(trigger => ({ id: trigger.id })); }
   /** Webhook acceleration: runs the poller's own check for one trigger now (same draft, fork, comment and head-SHA rules). */

@@ -13,7 +13,7 @@
  *   POST extensions/enable|disable   { name, approve? | confirm? }
  *   POST extensions/remove           { name, confirm }
  */
-import { approvalFor, createExtensionService, McpDraftSource, type ExtensionService, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
+import { approvalFor, createExtensionService, McpDraftSource, type ExtensionService, type ExtensionScopeSignals as ScopeSignals, type ExtensionErrorCode, type PreparedInstall, type ExtensionResult as Result } from "@0/engine";
 import { z } from "zod";
 
 export interface ExtensionReply { status: number; data: unknown }
@@ -58,7 +58,7 @@ async function prepareDraft(svc: ExtensionService, draft: z.infer<typeof mcp>, a
 }
 
 /** `path` is relative to /api/console/. Returns null when the route is not an extensions route. */
-export async function handleExtensionRequest(svc: ExtensionService, path: string, method: string, input: unknown, query: URLSearchParams = new URLSearchParams()): Promise<ExtensionReply | null> {
+export async function handleExtensionRequest(svc: ExtensionService, path: string, method: string, input: unknown, query: URLSearchParams = new URLSearchParams(), scopeSignals?: () => ScopeSignals): Promise<ExtensionReply | null> {
   if (!/^extensions(?:\/|$)/.test(path)) return null;
   const parse = <S extends z.ZodTypeAny>(schema: S): { value: z.output<S> } | ExtensionReply => {
     const r = schema.safeParse(input ?? {});
@@ -70,7 +70,8 @@ export async function handleExtensionRequest(svc: ExtensionService, path: string
   try {
     if (path === "extensions" && method === "GET") {
       const project = query.get("project");
-      return { status: 200, data: svc.overview(project ?? undefined) };
+      const signals = scopeSignals?.() ?? {};
+      return { status: 200, data: svc.overview(project ?? undefined, { ...signals, ...(project ? { projectFolder: project } : {}) }) };
     }
     const info = /^extensions\/info\/([^/]+)$/.exec(path);
     if (info && method === "GET") return fromResult(svc.info(decodeURIComponent(info[1]!)), v => ({ status: 200, data: { prompt: v.prompt, enabled: v.entry.enabled } }));

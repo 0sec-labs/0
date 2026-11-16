@@ -11,7 +11,7 @@ import { ReviewSheet } from "@/components/extensions/review-sheet";
 import { useExtensions } from "@/components/extensions/use-extensions";
 import { useReviewFlow } from "@/components/extensions/use-review-flow";
 import { errorText } from "@/lib/api-error";
-import { importNote, toggleIntent, type ExtensionRowDto } from "@/lib/extensions-model";
+import { importNote, scopeDefinedOf, toggleIntent, type ExtensionRowDto } from "@/lib/extensions-model";
 
 /** One-line status that stays hidden for the first 250 ms so a quick load never flashes. */
 function useAfter(active: boolean, ms: number): boolean {
@@ -29,7 +29,7 @@ export function ExtensionsPage() {
   const [actionError, setActionError] = useState("");
   const showLoading = useAfter(api.overview.isPending, 250);
   const data = api.overview.data;
-  const scopeDefined = data?.scopeDefined ?? true;
+  const scopeDefined = scopeDefinedOf(data);
   const note = importNote(data?.importReport ?? null);
   const busy = flow.pending || api.enable.isPending || api.disable.isPending || api.remove.isPending;
 

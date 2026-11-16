@@ -841,7 +841,7 @@ export {
 } from "./plugins/extensions/index.js";
 export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,
-  ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
+  ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, ScopeSignals as ExtensionScopeSignals, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
   McpServerStatus as ExtensionMcpServerStatus, McpToolStatus as ExtensionMcpToolStatus, McpGate as ExtensionMcpGate,
 } from "./plugins/extensions/index.js";
 // Connector contract (extension manifest `connector`): declaration, auth port, token adapter, secret store.

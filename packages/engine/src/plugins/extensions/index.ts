@@ -14,7 +14,7 @@ import { FsConnectionSecrets } from "./adapters/fs-connection-secrets.js";
 import { LegacyImporter } from "./import/index.js";
 import { ExtensionInstaller } from "./installer.js";
 import { listRows, loadable } from "./runtime.js";
-import { extensionOverview, type ExtensionOverview } from "./overview.js";
+import { extensionOverview, type ExtensionOverview, type ScopeSignals } from "./overview.js";
 import { ExtensionMcpHost } from "./mcp/host.js";
 import { StdioMcpConnector } from "./mcp/adapters/stdio.js";
 import { SdkMcpConnector } from "./mcp/adapters/http.js";
@@ -66,7 +66,7 @@ export interface ExtensionService {
   list(project?: string): ReturnType<typeof listRows>;
   loadable(project?: string): ReturnType<typeof loadable>;
   /** Everything the Extensions page lists, in one read-only call. */
-  overview(project?: string): ExtensionOverview;
+  overview(project?: string, scope?: ScopeSignals): ExtensionOverview;
   /** The install prompt for what is installed now, after checking the folder still matches its pin. */
   /** The MCP servers an installed extension declares, with approved tool hashes against what each last showed. Connects to nothing. */
   mcpStatus(name: string): Result<McpServerStatus[]>;
@@ -89,7 +89,7 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
     store, secrets, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
     list: project => listRows(store, project ? projectKeyOf(project) : null),
     loadable: project => loadable(store, project ? projectKeyOf(project) : null, secrets),
-    overview: project => extensionOverview(store, project ? projectKeyOf(project) : null, { pins, observed }),
+    overview: (project, scope) => extensionOverview(store, project ? projectKeyOf(project) : null, { pins, observed }, scope),
     mcpStatus(name) { const r = service.info(name); return r.ok ? ok(mcpServerStatuses(r.value.manifest, pins.pins(name, r.value.entry.active!), observed.read(name, r.value.entry.active!))) : r; },
     mcpHost: o => new ExtensionMcpHost({ extensions: loadable(store, o.project ? projectKeyOf(o.project) : null, secrets).extensions, snapshots, connector: o.connector ?? new SdkMcpConnector(new StdioMcpConnector()), pins, observed, gate: o.gate, ...(o.base ? { base: o.base } : {}), ...(o.parentEnv ? { parentEnv: o.parentEnv } : {}) }),
     scriptRuns: project => createScriptRuns({ store, secrets, projectKey: project ? projectKeyOf(project) : null }),
@@ -108,6 +108,7 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
   return service;
 }
 export * from "./mcp/index.js";
-export type { ExtensionOverview, ExtensionOverviewRow } from "./overview.js";
+export { scopeDefinedFrom } from "./overview.js";
+export type { ExtensionOverview, ExtensionOverviewRow, ScopeSignals } from "./overview.js";
 export { extensionSkillRoots, type ExtensionSkillRoot } from "./skills.js";
 export { runStartupImport } from "./startup.js";

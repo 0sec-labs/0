@@ -177,7 +177,7 @@ export async function handleWebConsoleApiRequest(
     const extensionService = createExtensionService();
     const connectors = await handleConnectorRequest(extensionService, { github: new GitHubConnector(github) }, path, method, input);
     if (connectors) { json(res, connectors.status, connectors.data); return true; }
-    const extensions = await handleExtensionRequest(extensionService, path, method, input, requestUrl.searchParams);
+    const extensions = await handleExtensionRequest(extensionService, path, method, input, requestUrl.searchParams, () => ({ agentScopes: sentinels.scopedAgents() }));
     if (extensions) { json(res, extensions.status, extensions.data); return true; }
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
