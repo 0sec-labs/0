@@ -76,6 +76,7 @@ import { trackExecutionResourceSpawn } from "../agent/execution-resource-registr
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { createHash } from "node:crypto";
 
 import { homeStateDir } from "../shared/index.js";
 
@@ -240,7 +241,7 @@ export function readInstalledPlugin(
       ok: false,
       errors: [
         `plugin id ${JSON.stringify(String(pluginId))} is not a safe identifier; ` +
-          "ids must match ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$ and are rejected, not sanitized",
+        "ids must match ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$ and are rejected, not sanitized",
       ],
     };
   }
@@ -289,12 +290,44 @@ export function readInstalledPlugin(
       ok: false,
       errors: [
         `manifest declares id "${result.manifest.id}" but is installed as "${pluginId}"; ` +
-          "a plugin may not claim another plugin's identity",
+        "a plugin may not claim another plugin's identity",
       ],
     };
   }
   if (!existsSync(entryPath)) {
     return { ok: false, errors: [`plugin "${pluginId}" has no ${PLUGIN_ENTRY_FILE} entrypoint`] };
+  }
+
+  // Enforce entry digest if a source.json exists (installed via GitHub)
+  const sourceJsonPath = join(dir, "source.json");
+  if (existsSync(sourceJsonPath)) {
+    try {
+      const source = JSON.parse(readFileSync(sourceJsonPath, "utf-8")) as { entrySha256?: string };
+      if (source.entrySha256) {
+        // 1. Prevent DoS via large files
+        const stat = statSync(entryPath);
+        if (stat.size > MAX_MANIFEST_BYTES) {
+          return { ok: false, errors: [`Plugin "${pluginId}" entry file exceeds ${MAX_MANIFEST_BYTES} bytes`] };
+        }
+
+        const entryBytes = readFileSync(entryPath);
+        const currentHash = createHash("sha256").update(entryBytes).digest("hex");
+
+        if (currentHash !== source.entrySha256) {
+          return {
+            ok: false,
+            errors: [
+              `Plugin "${pluginId}" entry file digest mismatch. ` +
+              `Expected: ${source.entrySha256.slice(0, 8)}..., Got: ${currentHash.slice(0, 8)}... ` +
+              `Re-install the plugin to continue.`
+            ],
+          };
+        }
+      }
+    } catch {
+      // If source.json is malformed, fail closed for security
+      return { ok: false, errors: [`Plugin "${pluginId}" has a malformed source.json`] };
+    }
   }
 
   return { ok: true, plugin: { id: pluginId, dir, manifestPath, entryPath, manifest: result.manifest } };
@@ -409,7 +442,7 @@ export const nodeChildSpawner: PluginSpawner = (spec, handlers) => {
     // Spawn can throw synchronously (ENOENT on some platforms, EACCES, …).
     // Report it through the same path as any other death.
     queueMicrotask(() => finish(`plugin failed to spawn: ${describeError(err)}`));
-    return { write: () => {}, kill: () => {} };
+    return { write: () => { }, kill: () => { } };
   }
 
   child.stdout?.setEncoding("utf-8");
@@ -503,13 +536,13 @@ export type LoadResult =
 
 export type PluginCallResult =
   | {
-      ok: true;
-      /** Original plugin result content. */
-      content: string;
-      /** True when the plugin itself reported failure (content is the reason). */
-      failed: boolean;
-      truncated: boolean;
-    }
+    ok: true;
+    /** Original plugin result content. */
+    content: string;
+    /** True when the plugin itself reported failure (content is the reason). */
+    failed: boolean;
+    truncated: boolean;
+  }
   | { ok: false; error: string };
 
 // ── Internal per-plugin state ────────────────────────────────────────────────
@@ -688,7 +721,7 @@ export class PluginHost {
         pluginId,
         errors: [
           `plugin "${pluginId}" is installed but not enabled for this project; ` +
-            "an operator must enable it explicitly",
+          "an operator must enable it explicitly",
         ],
       };
     }
@@ -808,7 +841,7 @@ export class PluginHost {
         pluginId,
         errors: [
           `plugin "${pluginId}" has ${live.pending.size} call(s) in flight; ` +
-            "reload is only safe at a turn boundary",
+          "reload is only safe at a turn boundary",
         ],
       };
     }
