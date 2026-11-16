@@ -68,7 +68,10 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);
   const templates = jsonSuccess(cli(["automation", "list", "--templates", "--format", "json"]));
   assert.ok(templates.some(template => template.id === "repository-review"));
-  assert.deepEqual(jsonSuccess(cli(["threads", "list", "--format", "json"])), []);
+  const noConsole = cli(["threads", "list", "--format", "json"]);
+  assert.equal(noConsole.status, 2, "threads need a running console, never an empty list");
+  assert.equal(noConsole.stdout, "");
+  assert.match(JSON.parse(noConsole.stderr).error, /^No console running\. Start one with: 0 web --headless/);
   assert.equal(jsonSuccess(cli(["config", "export"])).executionProfile, "local");
   const history = cli(["lab", "runs", "history"]);
   assert.equal(history.status, 0, history.stderr);
