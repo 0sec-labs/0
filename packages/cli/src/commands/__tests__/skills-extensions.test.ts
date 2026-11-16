@@ -22,9 +22,9 @@ function repo(): { dir: string; shas: string[] } {
 }
 
 const stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
-/** Approvals need a terminal and no agent marker; these tests play the operator at a terminal. */
+/** Approvals need no agent marker; these tests run without a terminal (as CI does) unless a test says otherwise. */
 const operatorAtTerminal = (on: boolean) => { Object.defineProperty(process.stdin, "isTTY", { value: on, configurable: true }); };
-beforeEach(() => { operatorAtTerminal(true); delete process.env.ZERO_AGENT_SESSION; savedHome = process.env.HOME; home = realpathSync(mkdtempSync(join(tmpdir(), "ext-cli-home-"))); process.env.HOME = home; out.length = 0; err.length = 0; code = 0; });
+beforeEach(() => { operatorAtTerminal(false); delete process.env.ZERO_AGENT_SESSION; savedHome = process.env.HOME; home = realpathSync(mkdtempSync(join(tmpdir(), "ext-cli-home-"))); process.env.HOME = home; out.length = 0; err.length = 0; code = 0; });
 afterEach(() => { if (stdinTty) Object.defineProperty(process.stdin, "isTTY", stdinTty); else delete (process.stdin as { isTTY?: boolean }).isTTY; delete process.env.ZERO_AGENT_SESSION; if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome; rmSync(home, { recursive: true, force: true }); for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 async function run(...args: string[]): Promise<string> {
@@ -77,18 +77,30 @@ describe("0 skills add / 0 skills extensions (local fixture repo, temp HOME)", (
 });
 
 describe("approvals are the operator's", () => {
-  it("refuse from an agent session and without a terminal, and change nothing", async () => {
+  it("refuse from an agent session even with --yes or a terminal, and change nothing", async () => {
     const r = repo();
-    for (const [label, setup] of [["agent session", () => { process.env.ZERO_AGENT_SESSION = "1"; }], ["no terminal", () => operatorAtTerminal(false)]] as const) {
-      setup(); out.length = 0; err.length = 0; code = 0;
+    for (const tty of [false, true]) {
+      operatorAtTerminal(tty); process.env.ZERO_AGENT_SESSION = "1"; out.length = 0; err.length = 0; code = 0;
       await run("add", `${r.dir}@${r.shas[0]}`, "--yes", "--enable");
-      expect(code, label).not.toBe(0); expect(err.join("\n"), label).toMatch(/agent session|without a terminal/);
+      expect(code, String(tty)).not.toBe(0); expect(err.join("\n"), String(tty)).toMatch(/agent session/);
+      await run("add", `${r.dir}@${r.shas[0]}`); expect(code, String(tty)).toBe(2); expect(out.join("\n") + err.join("\n")).toContain("Re-run with --yes");
       await run("extensions", "enable", "demo", "--yes"); await run("extensions", "disable", "scope", "--yes"); await run("extensions", "import", "--force"); await run("extensions", "remove", "demo", "--yes");
-      expect(existsSync(join(home, ".0", "extensions", "demo")), label).toBe(false);
+      expect(existsSync(join(home, ".0", "extensions", "demo")), String(tty)).toBe(false);
       const state = join(home, ".0", "extensions", "state.json");
-      if (existsSync(state)) { const parsed = JSON.parse(readFileSync(state, "utf8")); expect(Object.keys(parsed.extensions), label).toEqual([]); expect(parsed.builtins, label).toEqual({}); }
-      operatorAtTerminal(true); delete process.env.ZERO_AGENT_SESSION;
+      if (existsSync(state)) { const parsed = JSON.parse(readFileSync(state, "utf8")); expect(Object.keys(parsed.extensions), String(tty)).toEqual([]); expect(parsed.builtins, String(tty)).toEqual({}); }
+      delete process.env.ZERO_AGENT_SESSION;
     }
+  });
+
+  it("installs on --yes without a terminal when not in an agent session, with the flags before or after the source", async () => {
+    const r = repo(); operatorAtTerminal(false);
+    expect(await run("add", `${r.dir}@${r.shas[0]}`, "--yes")).toContain("Installed extension demo"); expect(code).toBe(0);
+    await run("extensions", "remove", "demo", "--yes");
+    expect(await run("add", "--yes", `${r.dir}@${r.shas[0]}`)).toContain("Installed extension demo"); expect(code).toBe(0);
+    await run("extensions", "remove", "demo", "--yes");
+    const bare = await run("add", `${r.dir}@${r.shas[0]}`);
+    expect(code).toBe(2); expect(bare).toContain("It can:"); expect(bare).toContain("Re-run with --yes to install");
+    expect(await run("add", `${r.dir}@${r.shas[0]}`, "--preview")).toContain("It can:"); expect(code).toBe(0);
   });
 
   it("adds one MCP server as a local extension through the same prompt: no --yes installs nothing", async () => {

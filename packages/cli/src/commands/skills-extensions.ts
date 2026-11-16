@@ -4,6 +4,7 @@
 // decision (pin, diff, approval, tamper check, env allowlist) lives in the engine.
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { approvalFor, approvalRefusal, createExtensionService, McpDraftSource, renderInstallPrompt, type ExtensionService, type PreparedInstall } from "@0/engine";
 import { EXIT_FAILURE, EXIT_USAGE, UsageError, consoleOptions, emit, renderTable, type CommandIo, type OutputOptions } from "./console-output.js";
@@ -20,7 +21,7 @@ export function isExtensionSource(source: string): boolean {
 
 const fail = (io: CommandIo, options: OutputOptions, message: string, code = EXIT_FAILURE) => { io.err(options.json ? JSON.stringify({ error: message }) : message); io.setExitCode(code); };
 
-/** Approval-bearing commands are the operator's: refuse from an agent session or without a terminal (a flag alone never approves). */
+/** Approval-bearing commands are the operator's: refuse from an agent session (a flag alone never approves there). A person running `--yes` in CI or a script is fine: the marker decides, not the TTY. */
 function operatorOnly(io: CommandIo, options: OutputOptions, what: string): boolean {
   const refusal = approvalRefusal(what);
   if (refusal) fail(io, options, refusal, EXIT_USAGE);
@@ -44,11 +45,22 @@ function showPrompt(io: CommandIo, options: Options, prepared: PreparedInstall, 
   emit(io, options, { prompt: prepared.prompt, installed: false }, () => `${renderInstallPrompt(prepared.prompt)}\n${tail}`.trimEnd());
 }
 
-/** One prompt, then (with --yes, from a terminal) install the exact revision shown. Shared by git/folder sources and typed MCP servers. */
-function reviewAndCommit(svc: ExtensionService, io: CommandIo, options: Options, p: PreparedInstall, source: string): void {
+/** Whether a person at a terminal can be asked: not for --json, not from an agent session. */
+const canAskOperator = (options: Options): boolean => options.json !== true && process.stdin.isTTY === true && approvalRefusal("ask") === null;
+
+async function confirmAtTerminal(): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try { return /^y(es)?$/i.test((await rl.question("Install this exact revision? [y/N] ")).trim()); } finally { rl.close(); }
+}
+
+/** One prompt, then install the exact revision shown after `--yes` or a "y" at a terminal. Shared by git/folder sources and typed MCP servers. */
+async function reviewAndCommit(svc: ExtensionService, io: CommandIo, options: Options, p: PreparedInstall, source: string): Promise<void> {
   const pinnedInput = /@[0-9a-f]{40}$/.test(source);
   if (options.preview) return showPrompt(io, options, p, "");
-  if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
+  if (options.yes !== true && canAskOperator(options) && (pinnedInput || p.snapshot.source.type !== "git")) {
+    showPrompt(io, options, p, "");
+    if (!await confirmAtTerminal()) { io.err("Not installed."); io.setExitCode(EXIT_USAGE); return; }
+  } else if (options.yes !== true) { showPrompt(io, options, p, p.snapshot.source.type === "git" && !pinnedInput ? `Re-run with \`0 skills add ${source}@${p.prompt.revision} --yes\` to install this exact revision.` : `Re-run with --yes to install this exact revision (${p.prompt.revision}).`); io.setExitCode(EXIT_USAGE); return; }
   if (!operatorOnly(io, options, "install an extension")) return;
   if (!pinnedInput && p.snapshot.source.type === "git") return fail(io, options, `Refusing to install an unpinned commit with --yes. Pin it: ${source}@${p.prompt.revision}`, EXIT_USAGE);
   const done = svc.installer.commit(p, approvalFor(p, options.enable ? (options.project ? { scope: "project" as const, project: resolve(options.project) } : { scope: "global" as const }) : undefined));
@@ -62,7 +74,7 @@ export async function addExtension(io: CommandIo, source: string, options: Optio
   await guarded(io, options, async svc => {
     const prepared = await svc.installer.prepare(source);
     if (!prepared.ok) { if (isBareRepo(source) && prepared.error.code === "invalid_manifest") { outcome = "not-extension"; return; } return fail(io, options, prepared.error.message); }
-    reviewAndCommit(svc, io, options, prepared.value, source);
+    await reviewAndCommit(svc, io, options, prepared.value, source);
   });
   return outcome;
 }
@@ -79,7 +91,7 @@ export function registerExtensionCommands(skills: Command, io: CommandIo): void 
       if (Boolean(options.url) === Boolean(program)) throw new UsageError("Give either --url <https-url> or a command after `--`.");
       const prepared = await svc.installer.prepareSource(new McpDraftSource(options.url ? { name, url: options.url } : { name, command: program!, args }));
       if (!prepared.ok) return fail(io, options, prepared.error.message);
-      reviewAndCommit(svc, io, options, prepared.value, name);
+      await reviewAndCommit(svc, io, options, prepared.value, name);
     }));
 
   consoleOptions(ext.command("list").description("List installed extensions and built-ins").option("--project <dir>", "Show enablement for this project"))

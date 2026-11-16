@@ -184,7 +184,8 @@ function skills(a: Args): string[] | undefined {
     const remove = pull(tail, "--remove", true);
     if (remove.value) return ["skills", "remove", remove.value, ...remove.rest];
     const source = tail[0];
-    if (isWord(source) && looksLikePath(source)) return ["skills", isDirectory(source) ? "link" : "import", ...tail];
+    const extensionFlow = /@[0-9a-f]{40}$/.test(source ?? "") || tail.some(word => ["--preview", "--yes", "--enable", "--project"].includes(word));
+    if (isWord(source) && looksLikePath(source) && !extensionFlow) return ["skills", isDirectory(source) ? "link" : "import", ...tail];
   }
   return undefined;
 }
