@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is software infrastructure for deploying sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere.
+  0security is software infrastructure to deploy sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere.
 </p>
 
 <p align="center">
