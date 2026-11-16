@@ -8,6 +8,18 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.35.0",
+    date: "2026-11-15",
+    title: "Nine commands, one mode",
+    summary: "The CLI is down to nine commands, 0 opens the console, and Threads and Agents have shell access with a small core tool list.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ListChecks", title: "Nine commands", text: "Run 0 to open the console. scan, findings, threads, agents, skills, memory, models, computers and config cover the rest, and old commands still work for one release with a short moved note." },
+      { icon: "ShieldCheck", title: "One mode with shell access", text: "Read-only and Can make changes are gone. Scope, budget, the sandbox and the Ask before running commands setting limit what Threads and Agents can do." },
+      { icon: "Gauge", title: "Faster and steadier", text: "0 --version starts in about 0.15 seconds, Threads and Agents load a small core tool list, and a long-running console no longer fails every call after heavy use." },
+    ],
+  },
+  {
     version: "0.34.0",
     date: "2026-11-15",
     title: "Updates that finish themselves",
