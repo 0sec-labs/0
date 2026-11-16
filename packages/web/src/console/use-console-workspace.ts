@@ -659,7 +659,8 @@ export function useConsoleWorkspace(
     loadEarlierMessages,
     sessionsLoaded: sessionsQuery.isSuccess,
     savedLoaded: savedQuery.isSuccess,
-    listsSettled: (sessionsQuery.isSuccess || sessionsQuery.isError) && (savedQuery.isSuccess || savedQuery.isError),
+    // Not while either list is refetching: after a restart the saved list still predates the threads the old server saved on its way down.
+    listsSettled: (sessionsQuery.isSuccess || sessionsQuery.isError) && (savedQuery.isSuccess || savedQuery.isError) && !sessionsQuery.isFetching && !savedQuery.isFetching,
     sessions: sessionsQuery.data ?? [],
     saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),

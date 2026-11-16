@@ -21,6 +21,8 @@ on the GitHub Release tag.
 
 - Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
 - `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
+- A thread now keeps your prompt the moment a turn starts. Before, stopping or crashing the console during a turn lost the prompt and left an empty thread.
+- Restarting the console while a thread is open no longer sends the tab to Home with "That thread isn't available here." The tab stays on the thread, which shows your prompt and a Retry button.
 
 ## [0.38.0] - 2026-11-16
 

@@ -1504,6 +1504,22 @@ export class ConsoleGateway {
       }
     })();
     managed.turn = turn;
+    this.#saveTurnStart(managed, modelBody);
+  }
+  /**
+   * A turn is only saved when it ends, so a crash, kill or power loss mid-turn used to lose the prompt as well as the answer
+   * and left an empty thread. Save the thread with the prompt as soon as the turn starts; the end-of-turn save replaces it.
+   */
+  #saveTurnStart(managed: ManagedSession, prompt: string): void {
+    try {
+      const transcript = this.#privateTranscript(managed, managed.savedId ?? managed.id);
+      const last = transcript.messages.at(-1) as NativeMessage | undefined;
+      const present = last?.role === "user" && Array.isArray(last.content) && last.content.some(block => block.type === "text" && block.text === prompt);
+      if (!present && prompt.trim()) {
+        const messages = [...transcript.messages, { role: "user", content: [{ type: "text", text: prompt }] } as NativeMessage];
+        saveSession({ ...transcript, messages, messageCount: messages.length }, this.#options.homeDir);
+      } else saveSession(transcript, this.#options.homeDir);
+    } catch { /* the end-of-turn save is authoritative */ }
   }
   /** Bills the single auxiliary title call to the session ledger (never touches context occupancy). */
   #chargeAuxiliary(managed: ManagedSession, usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number } | undefined, model: string | undefined): void {
