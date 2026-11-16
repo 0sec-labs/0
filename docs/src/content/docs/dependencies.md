@@ -3,11 +3,11 @@ title: Dependencies
 description: Check your project's dependencies against advisory databases and apply the package manager's fixes.
 ---
 
-`0 scan deps` runs your ecosystem's own audit tool and prints vulnerable dependencies in one format.
+`0 scan <dir> --module deps` runs your ecosystem's own audit tool and prints vulnerable dependencies in one format.
 
 ```bash
 cd my-app
-0 scan deps scan
+0 scan . --module deps
 ```
 
 No model or API key is needed.
@@ -15,9 +15,9 @@ No model or API key is needed.
 ## Scan
 
 ```bash
-0 scan deps scan
-0 scan deps scan --cwd ./services/api --json
-0 scan deps scan --ecosystem pnpm
+0 scan . --module deps
+0 scan ./services/api --module deps --json
+0 scan . --module deps --ecosystem pnpm
 ```
 
 0 detects the ecosystem from the files in the project directory, in this order:
@@ -52,9 +52,9 @@ npm: 2 vulnerable dependencies
 Commit or stash your work first. With `--yes`, `deps fix` changes your lockfile and manifests.
 
 ```bash
-0 scan deps fix
-0 scan deps fix --yes
-0 scan deps fix --yes --cwd ./services/api
+0 scan . --module deps-fix
+0 scan . --module deps-fix --yes
+0 scan ./services/api --module deps-fix --yes
 ```
 
 Without `--yes`, 0 prints the command it would run and changes nothing.
@@ -66,14 +66,14 @@ Without `--yes`, 0 prints the command it would run and changes nothing.
 | `cargo` | `cargo update` |
 | `pypi` | `pip-audit --fix` |
 
-With `--yes`, 0 prints the tool's output and exits with its exit code. Run `0 scan deps scan` again and your tests afterwards.
+With `--yes`, 0 prints the tool's output and exits with its exit code. Run `0 scan . --module deps` again and your tests afterwards.
 
 ## Scan a package you depend on
 
 `deps` reports known advisories. To review the code of one package, including issues with no advisory yet, run a package scan:
 
 ```bash
-0 scan package lodash --package-version 4.17.20
+0 scan npm:lodash --package-version 4.17.20
 ```
 
 See [Scan code](/scan-code/#package-scan).

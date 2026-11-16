@@ -3,10 +3,10 @@ title: Scan web and APIs
 description: Run an authorized assessment against a live web app, API or MCP endpoint.
 ---
 
-`0 scan web` sends agents at a live target. They map it, attack it, then try to confirm each candidate in a separate verification pass.
+`0 scan <url>` sends agents at a live target. They map it, attack it, then try to confirm each candidate in a separate verification pass.
 
 ```bash
-0 scan web --target https://staging.example.com --depth quick --cost-ceiling 5
+0 scan https://staging.example.com --depth quick --cost-ceiling 5
 ```
 
 Test only systems you own or are authorized to assess. You need a connected model ([Models and keys](/models/)).
@@ -16,11 +16,11 @@ Test only systems you own or are authorized to assess. You need a connected mode
 Scope enforcement is a built-in plugin, off by default. Turn it on per project so every live scan must name its allowed hosts:
 
 ```bash
-0 plugin enable scope
+0 skills list scope --enable
 cat > scope.json <<'EOF'
 { "in_scope": ["staging.example.com"], "out_of_scope": [] }
 EOF
-0 scan web --target https://staging.example.com --scope ./scope.json
+0 scan https://staging.example.com --scope ./scope.json
 ```
 
 With the plugin on, HTTP, HTTPS and MCP targets (including localhost) are refused without a scope file, and a target outside it is refused before any request. Rules match hostnames, not paths or ports. `out_of_scope` always wins. See [Scope and authorization](/scope/).
@@ -31,9 +31,9 @@ Scope is an application policy. It is not a network sandbox.
 
 | Target | Command |
 |---|---|
-| Web app | `0 scan web --target https://app.example.com` |
-| REST API with a spec | `0 scan web --target https://api.example.com --api-spec ./openapi.yaml` |
-| MCP endpoint | `0 scan web --target mcp://mcp.example.com` |
+| Web app | `0 scan https://app.example.com` |
+| REST API with a spec | `0 scan https://api.example.com --api-spec ./openapi.yaml` |
+| MCP endpoint | `0 scan mcp://mcp.example.com` |
 | Short form | `0 scan https://app.example.com` |
 
 The mode follows the target: `mcp://` runs the MCP assessment, `http(s)://` runs the web assessment. `--mode probe|deep|mcp|web|http_audit` overrides it. `--api-spec` accepts OpenAPI 3.x or Swagger 2.0 and seeds endpoints, parameters and auth requirements.
@@ -48,7 +48,7 @@ In an interactive terminal, `scan web` first asks you to confirm a plan. Pass `-
 cat > auth.json <<'EOF'
 {"type":"bearer","token":"your-target-token"}
 EOF
-0 scan web --target https://api.example.com --api-spec ./openapi.yaml --auth ./auth.json
+0 scan https://api.example.com --api-spec ./openapi.yaml --auth ./auth.json
 ```
 
 Other shapes:
@@ -64,7 +64,7 @@ Your model key pays for inference. Target credentials only authenticate to the t
 ### Test access control with several users
 
 ```bash
-0 scan web --target https://app.example.com --identities ./identities.json \
+0 scan https://app.example.com --identities ./identities.json \
   --access-control-fixtures ./fixtures.json
 ```
 
@@ -74,17 +74,17 @@ Your model key pays for inference. Target credentials only authenticate to the t
 ## Add source code (white box)
 
 ```bash
-0 scan web --target http://localhost:8080 --repo ./my-app
+0 scan http://localhost:8080 --repo ./my-app
 ```
 
 `--repo` gives the agents the source behind the URL. They get `read_file` and `run_command` on that directory, and the prompt asks them to map routes to handlers and follow input to sinks before attacking. This finds hardcoded credentials, missing role checks and unlinked admin routes that HTTP probing misses.
 
-`--repo` is a local directory. 0 does not clone it, start the app or check that it matches the deployed revision. Source observations are leads until a live request confirms them. For source-only review, use [`0 scan source`](/scan-code/).
+`--repo` is a local directory. 0 does not clone it, start the app or check that it matches the deployed revision. Source observations are leads until a live request confirms them. For source-only review, use [`0 scan <path>`](/scan-code/).
 
 ## Depth, cost and traffic
 
 ```bash
-0 scan web --target https://staging.example.com \
+0 scan https://staging.example.com \
   --depth quick --cost-ceiling 5 --rate-limit 2 --engagement-profile conservative
 ```
 
@@ -109,17 +109,17 @@ WordPress fingerprinting is on by default. When the agent finds WordPress, it li
 ### Long-running campaigns
 
 ```bash
-0 scan campaign --target https://staging.example.com --scope ./scope.json --iterations 3
+0 scan https://staging.example.com --module campaign --scope ./scope.json --iterations 3
 ```
 
-A campaign runs several objective-driven threads in a row, each visible in the browser app. `--scope` is required because the threads run without per-action approval. `--dry-run` prints the plan without starting anything. Run `0 scan campaign --help` for time and cost caps.
+A campaign runs several objective-driven threads in a row, each visible in the browser app. `--scope` is required because the threads run without per-action approval. `--dry-run` prints the plan without starting anything. Run `0 scan <url> --module campaign --help` for time and cost caps.
 
 ## What you get
 
 The terminal prints each finding with its severity, the request and response that support it, and the agent's analysis. Use `--format json` for the full report, or `sarif`, `md`, `html` or `pdf` ([Reports](/reports/)).
 
 ```bash
-0 scan web --target https://staging.example.com --format json > scan.json
+0 scan https://staging.example.com --format json > scan.json
 ```
 
 Each run is stored in `~/.0/runs/<scan-id>/state.db` with `report.json`. Pick another database with `--db-path`. Review results under **Findings** in the browser app or with [`0 findings`](/findings/).
@@ -129,7 +129,7 @@ Exit codes: `0` completed with no high or critical findings, `1` at least one hi
 ### Resume and replay
 
 ```bash
-0 scan web --target https://staging.example.com --scope ./scope.json --resume SCAN_ID
+0 scan https://staging.example.com --scope ./scope.json --resume SCAN_ID
 0 lab runs relaunch SCAN_ID
 0 lab runs replay --scan SCAN_ID
 ```
@@ -144,7 +144,7 @@ docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
   -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
   --entrypoint /bin/sh ghcr.io/0sec-labs/0security:latest -c \
-  '0 plugin enable scope && exec 0 scan web --target https://app.example.com \
+  '0 skills list scope --enable && exec 0 scan https://app.example.com \
   --scope /work/scope.json --runtime api --depth quick --cost-ceiling 2 --format json'
 ```
 

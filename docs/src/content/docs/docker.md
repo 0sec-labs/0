@@ -88,7 +88,7 @@ Open the address and enter the access token. If you left `ZERO_ACCESS_TOKEN` emp
 
 ### Server mode flags
 
-`web --host 0.0.0.0 --server-mode` is the image default. It is off unless you pass it; a plain `0 web` still binds loopback only.
+`0 --host 0.0.0.0 --server-mode` is the image default. It is off unless you pass it; a plain `0` still binds loopback only.
 
 | Flag | Environment | Purpose |
 |---|---|---|
@@ -139,7 +139,7 @@ The container never updates itself. The console detects Docker and shows `docker
 
 ### Remote computers over SSH
 
-The image includes the OpenSSH client, so Settings or `0 computers deploy --ssh user@host` can install and connect a [remote computer](/engines/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.
+The image includes the OpenSSH client, so Settings or `0 computers add --ssh user@host` can install and connect a [remote computer](/engines/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.
 
 1. Use a dedicated key for this, not your personal one: `ssh-keygen -t ed25519 -f zero_ed25519 -N ""`, then add `zero_ed25519.pub` to the remote user's `authorized_keys`. The key must not need a passphrase prompt (the deploy runs non-interactively).
 2. Record the host key and verify its fingerprint out of band before trusting it: `ssh-keyscan -t ed25519 host.example.com > known_hosts`, then compare `ssh-keygen -lf known_hosts` with the fingerprint on the server (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, run on the server). Do not paste an unverified scan blindly.

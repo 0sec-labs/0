@@ -8,34 +8,34 @@ A plugin is code you add to the agent: a tool plugin (tools it can call) or an M
 ## Install and use a plugin
 
 ```sh
-0 plugin browse
-0 plugin search foxguard
-0 plugin install foxguard.scanner
-0 plugin info foxguard.scanner
-0 plugin enable foxguard.scanner
-0 plugin run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
+0 skills list --catalog
+0 skills list foxguard
+0 skills add foxguard.scanner
+0 skills list foxguard.scanner --info
+0 skills list foxguard.scanner --enable
+0 skills run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
 ```
 
-Install straight from GitHub with `0 plugin install github:owner/repo`. It shows the pinned commit and the permissions it asks for. Add `--yes` to install exactly that commit. The plugin stays disabled.
+Install straight from GitHub with `0 skills add github:owner/repo`. It shows the pinned commit and the permissions it asks for. Add `--yes` to install exactly that commit. The plugin stays disabled.
 
 In the browser app, open **Plugins**. **Explore the marketplace** lists the registry, and **Add** offers **From marketplace**, **From GitHub repository** and **MCP server**. See [MCP](/mcp/) for MCP servers and service connections.
 
-The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community-curated index. `0 plugin browse`, `search` and `install` read its [`index.json`](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json) over HTTPS. Set `ZERO_REGISTRY_URL` or pass `--registry URL` to use another index. An explicitly empty value disables fetching. Entries are marked `unverified` unless you configure a verification key. Set `ZERO_REGISTRY_PUBLIC_KEY_FILE` to a PEM file with one or more Ed25519 public keys (SPKI) and the registry refuses unsigned entries and entries whose signature (base64 Ed25519 over the canonical entry) does not verify. A set but unreadable or empty key file refuses everything. A listing or a review is not a signature.
+The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community-curated index. `0 skills list --catalog`, `search` and `install` read its [`index.json`](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json) over HTTPS. Set `ZERO_REGISTRY_URL` or pass `--registry URL` to use another index. An explicitly empty value disables fetching. Entries are marked `unverified` unless you configure a verification key. Set `ZERO_REGISTRY_PUBLIC_KEY_FILE` to a PEM file with one or more Ed25519 public keys (SPKI) and the registry refuses unsigned entries and entries whose signature (base64 Ed25519 over the canonical entry) does not verify. A set but unreadable or empty key file refuses everything. A listing or a review is not a signature.
 
 | Command | What it does |
 | --- | --- |
-| `0 plugin list` | List installed plugins and each one's state for this project. |
-| `0 plugin browse` | List everything in the registry. |
-| `0 plugin search <query>` | Search the registry. |
-| `0 plugin install <id>` | Fetch, validate and write the plugin. Runs nothing. |
-| `0 plugin install <path> --local` | Install from a local directory, offline. |
-| `0 plugin enable <id>` | Approve the plugin for this project. |
-| `0 plugin disable <id>` | Revoke project approval. Files stay. |
-| `0 plugin info <id>` | Show the manifest, capabilities and state. |
-| `0 plugin run <id> [tool] [pairs...]` | Call a tool. Effectful tools need `--yes`. |
-| `0 plugin init <name>` | Scaffold a plugin. |
-| `0 plugin validate <path>` | Check a manifest. Runs no code. |
-| `0 plugin submit <path> --out <dir>` | Prepare files for a registry pull request. |
+| `0 skills list` | List installed plugins and each one's state for this project. |
+| `0 skills list --catalog` | List everything in the registry. |
+| `0 skills list <query>` | Search the registry. |
+| `0 skills add <id>` | Fetch, validate and write the plugin. Runs nothing. |
+| `0 skills add <path> --local` | Install from a local directory, offline. |
+| `0 skills list <id>` --enable | Approve the plugin for this project. |
+| `0 skills list <id>` --disable | Revoke project approval. Files stay. |
+| `0 skills list <id>` --info | Show the manifest, capabilities and state. |
+| `0 skills run <id> [tool] [pairs...]` | Call a tool. Effectful tools need `--yes`. |
+| `0 skills add --new <name>` | Scaffold a plugin. |
+| `0 skills add <path>` --validate | Check a manifest. Runs no code. |
+| `0 skills add <path> --submit --out <dir>` | Prepare files for a registry pull request. |
 
 ### States
 
@@ -51,7 +51,7 @@ With SmolVM execution, new threads copy approved plugins into private guest stor
 
 ### Update
 
-There is no `plugin update` or `plugin uninstall`. Running `0 plugin install <id>` again writes whatever your registry now serves, over the existing copy. Read the code and `0 plugin info <id>` first. Approval covers capabilities, not exact source bytes. Local updates use `0 plugin install ./my-plugin --local`. Running threads keep the old tools.
+There is no `plugin update` or `plugin uninstall`. Running `0 skills add <id>` again writes whatever your registry now serves, over the existing copy. Read the code and `0 skills list <id>` --info first. Approval covers capabilities, not exact source bytes. Local updates use `0 skills add ./my-plugin --local`. Running threads keep the old tools.
 
 The FoxGuard adapter needs the standalone `foxguard` executable on your computer. The registry does not install it. The adapter takes an absolute `path` and an optional `severity`, and bounds scans to 25 seconds and 8 MiB of scanner output. Results can omit findings to fit the plugin limit, so check `omittedFindings` and truncation. See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js).
 
@@ -62,8 +62,8 @@ A tool plugin is a manifest plus one self-contained JavaScript program. The sour
 ### Create and validate
 
 ```sh
-0 plugin init my-plugin
-0 plugin validate ./my-plugin
+0 skills add --new my-plugin
+0 skills add ./my-plugin --validate
 ```
 
 The scaffold writes `manifest.json`, `plugin.js` and `README.md`, with a working `sha256` tool that hashes its `input` string. `--dir PATH` sets the parent directory. The name must be one directory component. A non-empty target is refused unless you pass `--force`, and symlinks are never overwritten.
@@ -73,11 +73,11 @@ The scaffold writes `manifest.json`, `plugin.js` and `README.md`, with a working
 ### Run locally
 
 ```sh
-0 plugin install ./my-plugin --local
-0 plugin info my-plugin
+0 skills add ./my-plugin --local
+0 skills list my-plugin --info
 # Read ~/.0/plugins/my-plugin/plugin.js before approving it.
-0 plugin enable my-plugin
-0 plugin run my-plugin sha256 input=hello
+0 skills list my-plugin --enable
+0 skills run my-plugin sha256 input=hello
 ```
 
 The output is the SHA-256 of `hello` (`2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824`). The host wraps tool output as untrusted data. It can neutralize instruction markers and truncate long results.
@@ -86,7 +86,7 @@ The output is the SHA-256 of `hello` (`2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1
 
 Name the tool when you pass `key=value` pairs, or the first pair is read as the tool name. For structured arguments use `--json '{"input":"hello"}'`. Pairs override matching keys and are always strings, so use `--json` for numbers, booleans and objects. Effectful tools need `--yes`, but the plugin has already loaded by then.
 
-To test in an isolated home, run the same commands with a temporary `HOME` and project directory. Also check a failure path, such as `0 plugin run my-plugin sha256 --json '{"input":3}'`, which should exit nonzero with `input must be a string`.
+To test in an isolated home, run the same commands with a temporary `HOME` and project directory. Also check a failure path, such as `0 skills run my-plugin sha256 --json '{"input":3}'`, which should exit nonzero with `input must be a string`.
 
 ### Write the tool
 
@@ -138,7 +138,7 @@ Declare what the tool does, including any program it launches.
 | `filesystem-write` | Writes files. | Local scope, not read-only |
 | `findings-write` | Changes findings state. | Not read-only |
 
-Flags combine. A tool is read-only only if every capability is `compute`, `model-call` or `filesystem-read`. Threads use these flags in authorization checks, and scope checks come from the built-in `scope` plugin (`0 plugin enable scope`, see [Scope](/scope/)). Direct `plugin run` uses only enablement and `--yes`.
+Flags combine. A tool is read-only only if every capability is `compute`, `model-call` or `filesystem-read`. Threads use these flags in authorization checks, and scope checks come from the built-in `scope` plugin (`0 skills list scope`, --enable see [Scope](/scope/)). Direct `plugin run` uses only enablement and `--yes`.
 
 Declarations are not operating-system limits. The plugin runs as you with an allowlisted environment, and the host does not check that it obeys. Provider keys and target authentication are not passed to it, and `model-call` does not give it a provider. Never read credentials from the home directory.
 
@@ -172,7 +172,7 @@ Host limits: 5 seconds for the handshake, 30 seconds per call (`plugin run --tim
 ### Submit to the registry
 
 ```sh
-0 plugin submit ./my-plugin --out ./my-plugin-submission
+0 skills add ./my-plugin --submit --out ./my-plugin-submission
 ```
 
 This validates the plugin and writes `extensions/<id>/` (manifest, `plugin.js`, README) under the new `--out` directory. The directory uses the manifest ID, which can differ from your folder name. It prints SHA-256 fingerprints, needs a non-empty README, and refuses to overwrite. It runs no code and uploads nothing.
@@ -187,7 +187,7 @@ Registry checks do not run plugin code. Review is not a sandbox or a certificati
 
 ## Model-authored plugins
 
-During a session the agent can submit TypeScript as an executable plugin with `self_extend`. It is on by default for non-verifier agents, and `allowModelSelfExtension: false` turns it off. There is no `0 plugin submit` for this path.
+During a session the agent can submit TypeScript as an executable plugin with `self_extend`. It is on by default for non-verifier agents, and `allowModelSelfExtension: false` turns it off. There is no plugin submission command for this path.
 
 Each plugin has a manifest with tool names, descriptions, parameter property schemas and capabilities. These gate what the broker allows:
 
@@ -214,7 +214,7 @@ Start a session with a guest image:
 
 ```bash
 docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
-env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 web
+env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0
 ```
 
 Enabling self-extension does not install Docker or pull an image. For measured evolution, point `ZERO_PLUGIN_EVOLUTION_CONFIG` at an operator-owned config and use its `default` profile. See [Self-improvement](/self-improvement/). Creating and replacing plugins works without it.

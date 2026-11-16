@@ -7,13 +7,13 @@ A computer owns threads, automation runs, workspace paths and execution. Choosin
 
 ## Deploy a worker
 
-`0 computers deploy` installs 0 on a Linux host, starts a computer, opens a tunnel and registers it.
+`0 computers add` installs 0 on a Linux host, starts a computer, opens a tunnel and registers it.
 
 ```bash
 0 computers list                          # registered computers
 0 computers hosts                         # SSH hosts from ~/.ssh/config
-0 computers deploy --ssh user@host        # any SSH host with key auth
-0 computers deploy --lima zero-worker     # a Lima VM (default name zero-worker)
+0 computers add --ssh user@host        # any SSH host with key auth
+0 computers add --lima zero-worker     # a Lima VM (default name zero-worker)
 ```
 
 | Option | Meaning |
@@ -42,7 +42,7 @@ Install 0 on the server. Give it its own model connection (see [Models and keys]
 Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start a computer admitted to one repository:
 
 ```bash
-0 web --host 127.0.0.1 --port 48123 --no-open \
+0 --host 127.0.0.1 --port 48123 --no-open \
   --engine-token-env ZERO_REMOTE_ENGINE_TOKEN \
   --engine-workspace /srv/repos/app --engine-target /srv/repos/app
 ```
@@ -91,7 +91,7 @@ Older versions used `backends.json`, `--backend` and `--backends-config`. 0 read
 Start the browser app with the registry and pick the computer in the selector:
 
 ```bash
-0 web --engines-config /absolute/path/engines.json
+0 --engines-config /absolute/path/engines.json
 ```
 
 Threads, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
@@ -107,8 +107,8 @@ Only `chatgpt-codex` is supported, with the remote computer's host-local executi
 The CLI and the MCP adapter select the same registered computer. They never use your laptop's provider, filesystem or database for remote targets.
 
 ```bash
-0 automation list --templates --engine staging --engines-config /abs/engines.json --format json
-0 automation run --template repository-review --target /srv/repos/app \
+0 agents list --automation --templates --engine staging --engines-config /abs/engines.json --format json
+0 agents run --automation --template repository-review --target /srv/repos/app \
   --engine staging --engines-config /abs/engines.json --format json
 0 lab runs list --engine staging --engines-config /abs/engines.json --format json
 0 lab mcp-server --automations --engine staging --engines-config /abs/engines.json
@@ -157,10 +157,10 @@ In the browser app, choose **Team**, enter a workspace name, your display name, 
 From a terminal:
 
 ```bash
-0 config team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
-0 config team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
-0 config team list --config ./team.json
-0 web --team-config ./team.json
+0 config set team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
+0 config set team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
+0 config get team --config ./team.json
+0 --team-config ./team.json
 ```
 
 Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open threads.

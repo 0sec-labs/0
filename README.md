@@ -54,7 +54,7 @@ Prefer the terminal?
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
-0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
 Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSeek and more, see [Models and keys](https://docs.0.security/models/)), or connect one in the browser with `0`.
@@ -74,7 +74,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 ## What can you do with 0?
 
 - **Find vulnerabilities** in source code, web apps and APIs, MCP endpoints and packages
-- **Check dependencies** with `0 scan deps scan` and `0 scan deps fix` for npm, pnpm, Cargo and PyPI
+- **Check dependencies** with `0 scan . --module deps` and `0 scan . --module deps-fix` for npm, pnpm, Cargo and PyPI
 - **Hunt variants** of a known fix across a codebase
 - **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
 - **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
@@ -105,7 +105,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 ## CI and coding agents
 
 ```bash
-0 automation run --template security-research \
+0 agents run --automation --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 lab mcp-server --automations --workspace /absolute/path/to/repo
 ```

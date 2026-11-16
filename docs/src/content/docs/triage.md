@@ -14,7 +14,7 @@ Inspect what ran for one finding:
 Turn on the stronger gates for a web scan:
 
 ```bash
-0 scan web --features fp-moat --target https://example.com --scope ./scope.json
+0 scan https://example.com --features fp-moat --scope ./scope.json
 ```
 
 ## Pipeline
@@ -86,7 +86,7 @@ The oracle result (`verified`, `confidence`, `evidence`, `reason`) is separate f
 Pass restricted identities and known ownership fixtures to `scan web`:
 
 ```bash
-0 scan web --target https://app.example.test --scope ./scope.json \
+0 scan https://app.example.test --scope ./scope.json \
   --identities identities.json --access-control-fixtures fixtures.json
 ```
 
@@ -161,11 +161,11 @@ Verification costs time and money. A skipped check or unavailable evaluator leav
 Mark false positives so later verification has context:
 
 ```bash
-0 findings triage mark-fp <finding-id> --reason "test fixture, not prod"
-0 findings triage memory add --finding <id> \
+0 findings update <finding-id> --status false-positive --reason "test fixture, not prod"
+0 memory set --add --finding <id> \
   --reason "sink is a harmless helper" --scope package --scope-value my-pkg
-0 findings triage memory list --scope target
-0 findings triage memory remove <id>
+0 memory list --triage
+0 memory list <id>
 ```
 
 Scope is exact: `global`, an inferred `package`, or a `target` URL or path, within the finding's category. Ranking uses token overlap. A memory never auto-rejects a finding. It is advisory, untrusted context for the verifier and is not reproduction evidence. A memory in another database is not available to every run. See [Findings](/findings/).

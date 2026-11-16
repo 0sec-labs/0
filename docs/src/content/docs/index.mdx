@@ -48,7 +48,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
 
 ## Update
 
-0 checks GitHub for a newer release when it starts in a terminal, at most once a day, and installs it by default. A console left running (`0 web`) checks every six hours and offers **Update and restart** on its update card. Change this under **Settings → Updates** (`off`, `notify`, `automatic`). To update now, run `0 doctor upgrade`. It replaces the binary it was started from and verifies the checksum first. See [Update checks](/configuration/#update-checks).
+0 checks GitHub for a newer release when it starts in a terminal, at most once a day, and installs it by default. A console left running (`0`) checks every six hours and offers **Update and restart** on its update card. Change this under **Settings → Updates** (`off`, `notify`, `automatic`). To update now, run `0 config doctor upgrade`. It replaces the binary it was started from and verifies the checksum first. See [Update checks](/configuration/#update-checks).
 
 If an old copy never updates, run the installer again. Copies older than 0.33 cannot update from the console, so do this once; after that the card works. It always installs the latest release and keeps your settings:
 
@@ -67,7 +67,7 @@ npm uninstall -g 0sec-cli
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
 ```
 
-Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings in `~/.0` are kept. `0 doctor` prints this hint when it detects an npm install.
+Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings in `~/.0` are kept. `0 config doctor` prints this hint when it detects an npm install.
 
 ## Run your first scan
 
@@ -89,10 +89,10 @@ The **Finish setting up** card in the sidebar tracks steps 2 and 3.
 
 ```bash
 export OPENAI_API_KEY=...
-0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
-`--cost-ceiling 2` is a soft cap on estimated model spend, in US dollars. See [Costs and budgets](/budgets/). Use `0 scan web` for a live app and `0 scan package` for a published package.
+`--cost-ceiling 2` is a soft cap on estimated model spend, in US dollars. See [Costs and budgets](/budgets/). Use `0 scan <url>` for a live app and `0 scan npm:<name>` for a published package.
 
 :::caution
 Only scan systems you own or are authorized to test. See [Scope and authorization](/scope/).

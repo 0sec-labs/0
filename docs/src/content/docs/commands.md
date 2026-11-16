@@ -15,26 +15,26 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
 <div class="docs-task-grid">
   <section class="docs-task-card">
     <h3>Scan</h3>
-    <p>Assess a repository, a package, or a live web app, API or MCP endpoint.</p>
-    <p><a href="#scan-source">scan source</a> · <a href="#scan-package">scan package</a> · <a href="#scan-web">scan web</a> · <a href="#scan-deep">scan deep</a> · <a href="#scan-deps">deps</a></p>
+    <p>Assess a repository, a package, or a live web app, API or MCP endpoint with one command.</p>
+    <p><a href="#the-nine-commands">scan &lt;target&gt;</a> · <a href="#scan-source">source options</a> · <a href="#scan-package">package options</a> · <a href="#scan-web">web options</a> · <a href="#scan-deep">deep</a> · <a href="#scan-deps">dependencies</a></p>
     <p>Guides: <a href="/scan-code/">Scan code</a> · <a href="/scan-web/">Scan web and APIs</a> · <a href="/dependencies/">Dependencies</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Verify and fix</h3>
     <p>Reproduce an issue, validate a source fix, and close the loop.</p>
-    <p><a href="#scan-verify">verify</a> · <a href="#scan-fix">fix</a> · <a href="#scan-repair">scan repair</a> · <a href="#scan-disclose">disclose</a></p>
+    <p><a href="#scan-verify">scan verify</a> · <a href="#scan-fix">scan fix</a> · <a href="#scan-repair">repair</a> · <a href="#scan-disclose">scan disclose</a></p>
     <p>Guides: <a href="/verify-and-fix/">Verify and fix</a> · <a href="/reports/">Reports and disclosure</a></p>
   </section>
   <section class="docs-task-card">
-    <h3>Review findings and runs</h3>
-    <p>Triage the findings queue, then find, continue or replay past runs.</p>
-    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#lab-runs">runs</a> · <a href="#lab-runs-history">history</a> · <a href="#lab-runs-relaunch">relaunch</a> · <a href="#lab-runs-replay">replay</a></p>
+    <h3>Review findings and threads</h3>
+    <p>Triage the findings queue, then follow, continue or stop threads.</p>
+    <p><a href="#findings">findings</a> · <a href="#findings-update">findings update</a> · <a href="#threads">threads</a> · <a href="#lab-runs">scan runs</a></p>
     <p>Guide: <a href="/findings/">Findings</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Automate</h3>
-    <p>Run saved automations, use 0 in CI, and connect coding agents.</p>
-    <p><a href="#automation">automation</a> · <a href="#lab-mcp-server">mcp-server</a> · <a href="#api">api</a></p>
+    <p>Run Agents and saved automations, use 0 in CI, and connect coding agents.</p>
+    <p><a href="#agents">agents</a> · <a href="#automation">automations</a> · <a href="#lab-mcp-server">mcp-server</a> · <a href="#api">api</a></p>
     <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">MCP servers</a></p>
   </section>
   <section class="docs-task-card">
@@ -45,11 +45,29 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   </section>
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
-    <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#lab-console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#doctor-upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#computers">computers</a> · <a href="#config-team">team</a></p>
+    <p>Open the app, connect a model, check the install, and add skills and plugins.</p>
+    <p><a href="#config">config</a> · <a href="#config-doctor">config doctor</a> · <a href="#models">models</a> · <a href="#models-connect">models connect</a> · <a href="#skills">skills</a> · <a href="#computers">computers</a> · <a href="#web">0 (web console)</a></p>
     <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
+
+## The nine commands
+
+`0` with no arguments opens the web console. Everything else is one of nine commands, each with at most three subcommands in `--help`. The sections below also document the earlier names, which still work for one release and print `moved: use ...` on a terminal. See [CLI changes in 0.35](/cli-changes-0-35/) for every old command and what replaces it.
+
+| Command | What it does | Subcommands |
+| --- | --- | --- |
+| `0 scan <target>` | Scan a URL, a folder or repository, or `npm:`, `pypi:`, `cargo:`, `oci:` packages. `--module deep\|repair\|campaign\|deps\|deps-fix` picks a module that has no target-detecting form. | `fix`, `verify`, `disclose` |
+| `0 findings` | Browse findings and change their status. `--format` exports, `--import` loads a report. | `list`, `show`, `update` |
+| `0 threads` | Start, follow and stop threads. | `list`, `send`, `stop` |
+| `0 agents` | Agents and, with `--automation`, saved automations. | `list`, `run`, `set` |
+| `0 skills` | Skills, plugins, MCP servers and connectors. | `list`, `add`, `run` |
+| `0 memory` | What 0 remembers across threads. | `list`, `set`, `export` |
+| `0 models` | Models and provider connections. | `list`, `set`, `connect` |
+| `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
+| `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
+
+`0 doctor` stays as an alias of `0 config doctor`. `0 api` and `0 lab` are hidden developer commands. The old top-level names `web`, `plugin` and `automation` are hidden aliases for one release.
 
 ## Invocation and safety
 
@@ -58,8 +76,7 @@ command-specific `--help`.
 
 The browser app's chat uses the same words as slash commands: `/threads list`,
 `/findings list`, `/models default` and `/config get` mirror `0 threads list`,
-`0 findings list`, `0 models default` and `0 config get`. `scan`, `api` and `web`
-are CLI-only. See [Slash commands](/app/#slash-commands).
+`0 findings list`, `0 models set` and `0 config get`. `scan` is CLI-only. See [Slash commands](/app/#slash-commands).
 
 Option tables show registration defaults. **— means no default is registered**:
 a handler may resolve configuration or require an explicit value. Inverse
@@ -68,12 +85,115 @@ a handler may resolve configuration or require an explicit value. Inverse
 
 - With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/app/).
 - `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 lab runs relaunch`.
-- `0 --help` lists 14 top-level commands. Every earlier command name still works as a hidden alias with identical behaviour and no notice, so scripts and CI keep running. For example, the old `fix` command is now `0 scan fix`, `upgrade` is `0 doctor upgrade`, and `runs` is `0 lab runs`.
+- `0 --help` lists 9 top-level commands. Every earlier command name and flag still works for one release through hidden aliases with identical behaviour and exit codes. On a terminal (not when piped, in CI or with `--json`) an old name prints one dim `moved: use ...` line to stderr.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/scope/).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
+
+## Replacements for moved commands
+
+These subcommands carry the arguments of the commands they replace; `command-compat.ts` translates them onto the older implementation commands documented in the other sections.
+
+### findings update
+
+Change a finding's status. `--status accepted` runs `findings accept`, `suppressed` runs `findings suppress`, `open` runs `findings reopen` and `false-positive` runs `findings triage mark-fp`.
+
+```text
+0 findings update [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--status <status>` | — | accepted \| suppressed \| open \| false-positive |
+
+### skills run
+
+Run a skill or a plugin tool. It takes the arguments of `plugin run`.
+
+```text
+0 skills run <name> [tool] [pairs...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+| `tool` | No |  |
+| `pairs` | No |  |
+
+### memory set
+
+Turn a memory on or off (`0 memory set <id> on|off`), load memories with `--import <file>`, or manage triage memories with `--add` and `--remove <id>`.
+
+```text
+0 memory set [options] [id] [on|off]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | No |  |
+| `on\|off` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--import <file>` | — | Import memories from a file |
+| `--add` | — | Add a triage memory (see findings triage) |
+| `--remove` | — | Remove a triage memory |
+
+### models set
+
+Show or choose the default model. It takes the arguments of `models default`.
+
+```text
+0 models set [options] [model]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `model` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <provider>` | — | Provider of the model |
+
+### models connect
+
+Add a provider connection (`0 models connect <provider>`), or `--list`, `--test` and `--remove` one. These run `models connections add|list|test|remove`.
+
+```text
+0 models connect [options] [provider]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--list` | — | List connections |
+| `--test` | — | Test a connection |
+| `--remove` | — | Remove a connection |
+
+### config doctor
+
+Check this machine and the engine. `config doctor upgrade`, `config doctor workbench` and `config doctor checks` reach the subcommands of `doctor`; `--fix` repairs the local database.
+
+```text
+0 config doctor [options] [checks...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `checks` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--fix` | — | Repair the local database |
 
 ## Interactive & setup
 
@@ -298,7 +418,7 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import) · [audit-log](#config-audit-log) · [team](#config-team) · [db](#config-db) · [github](#config-github).
+Subcommands: [get](#config-get) · [set](#config-set) · [doctor](#config-doctor) · [show](#config-show) · [list](#config-list) · [reset](#config-reset) · [export](#config-export) · [import](#config-import) · [audit-log](#config-audit-log) · [team](#config-team) · [db](#config-db) · [github](#config-github).
 
 #### config show
 
@@ -514,7 +634,7 @@ List the models your connected providers offer and choose the default, as on the
 0 models recommended
 ```
 
-Subcommands: [list](#models-list) · [default](#models-default) · [recommended](#models-recommended) · [connections](#models-connections) · [usage](#models-usage).
+Subcommands: [list](#models-list) · [set](#models-set) · [connect](#models-connect) · [default](#models-default) · [recommended](#models-recommended) · [connections](#models-connections) · [usage](#models-usage).
 
 #### models list
 
@@ -777,7 +897,7 @@ Guide: [Update checks](/configuration/#update-checks).
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
 | `--install-dir <path>` | — | Override the install directory (default: the folder of this binary, else ~/.0/bin) |
 | `--scan-dependencies` | — | Scan the current project before upgrading |
-| `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 scan deps fix --yes` to remediate |
+| `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 scan . --module deps-fix --yes` to remediate |
 
 ### scan deps
 
@@ -882,7 +1002,7 @@ Examples: `0 scan https://app.example.com`, `0 scan .`, `0 scan npm:express`, `0
 | `repair` | Find, reproduce, fix and verify in a repository |
 | `campaign` | Long-running self-directed campaign |
 
-Subcommands: [web](#scan-web) · [source](#scan-source) · [package](#scan-package) · [deep](#scan-deep) · [repair](#scan-repair) · [campaign](#scan-campaign) · [fix](#scan-fix) · [verify](#scan-verify) · [deps](#scan-deps) · [eval](#scan-eval) · [agent-assure](#scan-agent-assure) · [disclose](#scan-disclose).
+Subcommands: [fix](#scan-fix) · [verify](#scan-verify) · [disclose](#scan-disclose) · [web](#scan-web) · [source](#scan-source) · [package](#scan-package) · [deep](#scan-deep) · [repair](#scan-repair) · [campaign](#scan-campaign) · [deps](#scan-deps) · [eval](#scan-eval) · [agent-assure](#scan-agent-assure).
 
 ### scan web
 
@@ -921,7 +1041,7 @@ Guide: [Read the workflow](/scan-web/).
 | `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
 | `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
+| `--scope <path>` | — | Path to a JSON scope policy (enable with `0 skills list scope --enable`) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
 | `--require-scope` | `false` | Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled. |
 | `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
@@ -1209,7 +1329,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/findings/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3315,7 +3435,7 @@ to work there. `worker` still works as an older name.
 0 computers
 ```
 
-Subcommands: [list](#computers-list) · [deploy](#computers-deploy) · [repair](#computers-repair) · [stop](#computers-stop) · [hosts](#computers-hosts).
+Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [hosts](#computers-hosts).
 
 Aliases: `worker`.
 
@@ -3337,7 +3457,7 @@ List the registered remote computers with their host and whether 0 deployed them
 | `--json` | — | Print JSON |
 | `--engines-config <path>` | — | Engine registry path |
 
-#### computers deploy
+#### computers add
 
 Also available as `computers add`. Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
 register its connection locally. Run `pnpm build` in a source checkout first.
@@ -3345,7 +3465,7 @@ Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
 `zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
 
 ```text
-0 computers deploy [options]
+0 computers add [options]
 ```
 
 Use `--target-git` to clone your repository into the remote workspace. Forwarding
@@ -3364,7 +3484,7 @@ select that computer in the browser before starting remote work.
 | `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
-Aliases: `add`.
+Aliases: `deploy`.
 
 #### computers repair
 
@@ -3883,7 +4003,7 @@ Every command works with the app running or on its own, and takes `--json`. Addi
 
 Guide: [Read the workflow](/skills/).
 
-Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [add](#skills-add) · [remove](#skills-remove).
+Subcommands: [list](#skills-list) · [add](#skills-add) · [run](#skills-run) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [remove](#skills-remove).
 
 #### skills list
 
@@ -4124,7 +4244,7 @@ Memory is what 0 remembers across threads. False-positive and evaluation memorie
 
 Guide: [Read the workflow](/self-improvement/).
 
-Subcommands: [list](#memory-list) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
+Subcommands: [list](#memory-list) · [set](#memory-set) · [export](#memory-export) · [disable](#memory-disable) · [enable](#memory-enable) · [import](#memory-import).
 
 #### memory list
 
@@ -4448,7 +4568,7 @@ Create an automation from a template or a JSON definition.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--template <id>` | — | Start from a template (see `0 automation list --templates`) |
+| `--template <id>` | — | Start from a template (see `0 agents list --automation --templates`) |
 | `--file <path>` | — | Definition JSON object |
 | `--name <name>` | — | Name for the new automation |
 | `--target <target>` | — | Target the automation runs against |
@@ -4523,7 +4643,7 @@ Restore an earlier revision as a new revision.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--revision <n>` **required** | — | Revision to restore (see `0 automation versions`) |
+| `--revision <n>` **required** | — | Revision to restore (see `0 agents set --automation versions`) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
@@ -4638,7 +4758,7 @@ Inspect and control the same live sessions used by the browser. Attach with --en
 0 threads list --engine production
 ```
 
-Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [start](#threads-start) · [stop](#threads-stop) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
+Subcommands: [list](#threads-list) · [send](#threads-send) · [stop](#threads-stop) · [show](#threads-show) · [create](#threads-create) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [start](#threads-start) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
 
 #### threads list
 
@@ -5205,7 +5325,7 @@ Create, inspect and control Agents.
 0 agents
 ```
 
-Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
+Subcommands: [list](#agents-list) · [run](#agents-run) · [set](#agents-set) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
 
 #### agents list
 
@@ -5261,7 +5381,7 @@ Create a Agent from a preset or a JSON definition.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
+| `--preset <id>` | — | Start from a preset (see `0 agents list --presets`) |
 | `--name <name>` | — | Name |
 | `--access <level>` | — | Access: read-only \| changes |
 | `--file <path>` | — | Agent JSON object (overrides preset fields) |

@@ -12,11 +12,11 @@ MCP works in two directions. Run `0 lab mcp-server` so a coding agent can start 
 An agent with shell access can run 0 directly. No MCP adapter is needed. Install 0 where the agent runs, connect a model in [Models and keys](/models/), and give it absolute paths:
 
 ```bash
-0 scan source /absolute/path/to/repo --format json > review.json
-0 scan web --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
+0 scan /absolute/path/to/repo --format json > review.json
+0 scan https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
-The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 doctor` and `0 doctor workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 web --no-open --ready-json` starts a browser app and prints its URL.
+The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 config doctor` and `0 config doctor workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 --no-open --ready-json` starts a browser app and prints its URL.
 
 Notes for agents:
 
@@ -50,7 +50,7 @@ There are two tool sets:
 
 `--tools a,b,c` selects exactly those tools, from either set, and overrides the default. The external agent reasons with its own model. Assessments that run inside 0 use 0's [model connection](/models/).
 
-Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 automation`. Switching to host execution with `0 doctor workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
+Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 agents run --automation`. Switching to host execution with `0 config doctor workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
 
 ## Automation tools
 
@@ -59,7 +59,7 @@ Host-local execution is required for local-target stdio. The SmolVM CLI bridge c
 0 lab mcp-server --automations --workspace /absolute/path/to/repo
 
 # Live targets (needs the scope plugin and a scope file)
-0 plugin enable scope
+0 skills list scope --enable
 0 lab mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```
@@ -189,13 +189,13 @@ Open **Plugins**, press **Add** and choose **MCP server** (stdio, HTTP or SSE), 
 ### From the command line
 
 ```sh
-0 plugin mcp add docs -- npx some-mcp-server        # shows the review; add --yes to approve it
-0 plugin mcp test custom-docs
-0 plugin mcp list
-0 plugin mcp remove custom-docs --yes
-0 plugin connectors
-0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
-0 plugin disconnect linear --yes
+0 skills add --mcp docs -- npx some-mcp-server        # shows the review; add --yes to approve it
+0 skills list custom-docs --mcp-test
+0 skills list --mcp
+0 skills list custom-docs --mcp-remove --yes
+0 skills list --connectors
+0 skills add --connect linear --secret-env token=LINEAR_API_KEY --yes
+0 skills add --disconnect linear --yes
 ```
 
 Secrets come from environment variables (`--secret-env`, `--env-from`, `--header-from`), never from the command line. Every command takes `--json`.
@@ -206,7 +206,7 @@ The browser app and headless chat commands also read the JSON array in `ZERO_MCP
 
 ```bash
 env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
-  0 web
+  0
 ```
 
 - Local entries take `id`, `command` and optional `args`, `env` (string values) and `cwd`. Install the server's dependencies yourself.
@@ -231,7 +231,7 @@ export ZERO_MCP="$(node --input-type=module -e '
     headers: { Authorization: "ApiKey " + ELASTIC_API_KEY }
   }]));
 ')"
-0 web
+0
 ```
 
 A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the tools from your deployment. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys). You can also connect Elastic from **Plugins**.

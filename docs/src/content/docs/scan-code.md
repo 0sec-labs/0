@@ -6,7 +6,7 @@ description: Review a source repository, a pull request diff or a published pack
 Point 0 at a repository or package. It runs a static pass, then model-driven review agents that trace each lead to a source location.
 
 ```bash
-0 scan source ./my-app
+0 scan ./my-app
 ```
 
 You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable computer.
@@ -15,11 +15,11 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 
 | Target | Command |
 |---|---|
-| Local repository or Git URL | `0 scan source ./my-app` |
-| Only what changed in a branch | `0 scan source ./my-app --diff-base origin/main --changed-only` |
-| Published package (npm, PyPI, Cargo, OCI) | `0 scan package express` |
-| Multi-lens sweep that emits leads | `0 scan deep ./my-app` |
-| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#find-fix-and-verify-a-repository)) |
+| Local repository or Git URL | `0 scan ./my-app` |
+| Only what changed in a branch | `0 scan ./my-app --diff-base origin/main --changed-only` |
+| Published package (npm, PyPI, Cargo, OCI) | `0 scan npm:express` |
+| Multi-lens sweep that emits leads | `0 scan ./my-app` --module deep |
+| Find, reproduce, fix and verify in one run | `0 scan ./my-app --module repair --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#find-fix-and-verify-a-repository)) |
 
 `0 scan <target>` picks the module for you. A local path, `source:<path>`, a `.git` URL, `git@…` or a `https://github.com/…` URL runs `scan source --depth deep`. `npm:`, `pypi:`, `cargo:` and `oci:` prefixes run `scan package`. Bare package names are rejected as ambiguous.
 
@@ -31,8 +31,8 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 ## Source review
 
 ```bash
-0 scan source ./my-app --depth deep --cost-ceiling 5
-0 scan source https://github.com/your-org/your-repo --format json > review.json
+0 scan ./my-app --depth deep --cost-ceiling 5
+0 scan https://github.com/your-org/your-repo --format json > review.json
 ```
 
 | Option | What it does |
@@ -47,12 +47,12 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 | `--static-only` | Run only the static layer, on purpose. |
 | `--db-path <path>` | Write to this SQLite database instead of a new run directory. |
 
-Run `0 scan source --help` for the full list.
+Run `0 scan --help` for the full list.
 
 ### Review a pull request diff
 
 ```bash
-0 scan source . --diff-base origin/main --changed-only --format sarif > results.sarif
+0 scan . --diff-base origin/main --changed-only --format sarif > results.sarif
 ```
 
 `--diff-base` reviews against a Git ref. `--changed-only` restricts static leads and prioritization to changed files. It is not a whole-repository result. In CI, use the [GitHub Action](/ci/github-action/).
@@ -61,10 +61,10 @@ Run `0 scan source --help` for the full list.
 
 ```bash
 # List structurally similar code paths as JSON. No model or network calls.
-0 scan source ./my-app --fix-commit 1a2b3c4 --variants-only
+0 scan ./my-app --fix-commit 1a2b3c4 --variants-only
 
 # Feed those candidates into a full review.
-0 scan source ./my-app --fix-commit 1a2b3c4
+0 scan ./my-app --fix-commit 1a2b3c4
 ```
 
 `--fix-commit` needs a local Git repository. For a fix diff against a large tree such as the Linux kernel, use [`0 lab research hunt`](/research-workflows/#variant-hunting).
@@ -72,7 +72,7 @@ Run `0 scan source --help` for the full list.
 ### C and C++ libraries
 
 ```bash
-0 scan source ./libfoo --profile c-library --depth deep
+0 scan ./libfoo --profile c-library --depth deep
 ```
 
 The `c-library` profile asks the agent to build a libFuzzer harness with ASan and UBSan around a reachable entry point. `--harness-tier 2` builds a multi-component harness; `--harness-tier 3` adds QEMU sanitizer validation and needs a kernel and disk image (`--harness-qemu-kernel`, `--harness-qemu-disk`). Good evidence is the harness source, the build and run commands, the crashing input and the sanitizer output. A static-only memory-safety claim is a lead.
@@ -82,11 +82,11 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 Add your own review criteria per folder. They stay on your computer under `~/.0/review-checks`.
 
 ```bash
-0 doctor checks propose --project ./my-app --name "Tenant boundary" \
+0 config doctor checks propose --project ./my-app --name "Tenant boundary" \
   --prompt "Tenant-owned queries must use the authenticated organization."
-0 doctor checks list --project ./my-app
-0 doctor checks enable <check-id> --project ./my-app --yes
-0 scan source ./my-app
+0 config doctor checks list --project ./my-app
+0 config doctor checks enable <check-id> --project ./my-app --yes
+0 scan ./my-app
 ```
 
 A project can enable up to 8 checks, each up to 2,000 characters. Prompts are used literally. Each enabled check reports `pass`, `issue` or `unknown` with a reason in every output format. Checks do not change severities or exit codes. `checks set` revises a prompt, `checks disable` keeps its history, `checks remove` deletes it. Clones and downloaded packages do not inherit local approvals.
@@ -94,23 +94,23 @@ A project can enable up to 8 checks, each up to 2,000 characters. Prompts are us
 ## Package scan
 
 ```bash
-0 scan package express --package-version 4.18.2
-0 scan package requests --ecosystem pypi
-0 scan package serde --ecosystem cargo
-0 scan package alpine:3.20 --ecosystem oci
+0 scan npm:express --package-version 4.18.2
+0 scan npm:requests --ecosystem pypi
+0 scan npm:serde --ecosystem cargo
+0 scan npm:alpine:3.20 --ecosystem oci
 ```
 
 0 downloads the package into a temporary directory, checks it against [OSV](https://osv.dev) advisories (not for OCI images), runs the static pass and reviews the code with a model. `--ecosystem` defaults to `npm`; `--package-version` defaults to the latest version.
 
-To review a package's source with the full source-review options, use `0 scan source <name> --ecosystem npm`.
+To review a package's source with the full source-review options, use `0 scan <name> --ecosystem npm`.
 
-For the dependencies of your own project, use [`0 scan deps scan`](/dependencies/).
+For the dependencies of your own project, use [`0 scan . --module deps`](/dependencies/).
 
 ## Deep sweep
 
 ```bash
-0 scan deep ./my-app --max-candidates 8 --cost-ceiling 5
-0 scan deep ./contracts --profile evm-onchain
+0 scan ./my-app --module deep --max-candidates 8 --cost-ceiling 5
+0 scan ./contracts --module deep --profile evm-onchain
 ```
 
 `scan deep` picks the largest candidate files, runs specialist finder lenses on each, then asks a set of verify lenses to refute every survivor. Survivors that reach the quorum are leads to verify, not confirmed bugs. It is a separate research command, not `scan source --depth deep`.

@@ -3,7 +3,7 @@ title: Specialist research
 description: Pick the right research command for variants, binaries, kernels, protocols, identity, attack surface and AI agents, and know what its output proves.
 ---
 
-Beyond `scan`, 0 has specialist commands under `0 lab research`, plus `0 scan eval` and `0 scan agent-assure` for AI systems. Each takes a different input and produces a different kind of evidence. Pick by task, then read what the output does and does not prove.
+Beyond `scan`, 0 has specialist commands under `0 lab research`, plus `0 scan eval` and `0 scan agent-assure` for AI systems (both move into plugins after 0.35; they keep working until then). <!-- docs-check: allow-moved --> Each takes a different input and produces a different kind of evidence. Pick by task, then read what the output does and does not prove.
 
 ## Pick a command
 
@@ -45,7 +45,7 @@ A skipped stage, a missing tool or an empty result is not a clean bill of health
 
 `hunt` reads a fix diff, ranks code sites with the same bug shape, runs finders on them and passes survivors through a skeptic. Exit codes: `0` leads found, `1` no leads, `2` no candidates, `3` error. `--no-verify` skips the skeptic (triage only). `--models a,b` adds finder diversity at extra cost. Kernel options such as `--reachable-only`, `--invariant`, `--graph-slice` and `--exploitability` (boots QEMU VMs) are listed in the [reference](/commands/#lab-research-hunt).
 
-For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` does the same inside a [source review](/scan-code/#hunt-variants-of-a-known-fix).
+For a commit in a smaller repository, `0 scan ./repo --fix-commit <sha>` does the same inside a [source review](/scan-code/#hunt-variants-of-a-known-fix).
 
 ```bash
 0 lab research assumption-hunt ./linux --files net/unix/af_unix.c,net/unix/garbage.c --subsystem net/unix
@@ -136,8 +136,8 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
 ### Probe an AI endpoint
 
 ```bash
-0 scan eval --target https://ai.example.com/chat --list-categories
-0 scan eval --target https://ai.example.com/chat --categories <ids> --format json
+0 scan eval --target https://ai.example.com/chat --list-categories  # docs-check: allow-moved
+0 scan eval --target https://ai.example.com/chat --categories <ids> --format json  # docs-check: allow-moved
 ```
 
 `eval` runs an attack agent per category against the endpoint and judges the transcript. It exits `1` if any category failed and `2` on error. A category `pass` means the judges found no failure in that attempt, not that the endpoint is safe.
@@ -145,6 +145,7 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
 ### Test whether untrusted MCP content can trigger an action
 
 ```bash
+# docs-check: allow-moved
 0 scan agent-assure \
   --agent-endpoint http://localhost:8080/agent \
   --mcp-endpoint http://localhost:8081/mcp \

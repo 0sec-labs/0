@@ -7,7 +7,7 @@ description: Run threads, review findings, change settings and themes in the loc
 0
 ```
 
-`0` (or `0 web`) starts the app on this computer. No account is needed. It binds to `127.0.0.1:48123` by default.
+`0` starts the app on this computer. No account is needed. It binds to `127.0.0.1:48123` by default.
 
 | Flag | Default | Effect |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ description: Run threads, review findings, change settings and themes in the loc
 | `--db-path <path>` | local store | SQLite database for findings and runs. |
 | `--ready-json` | | Print the bound URL as JSON, for scripts. |
 
-Run `0 web --help` for the full list.
+Run `0 --help` for the full list.
 
 ## Find your way around
 
@@ -67,7 +67,7 @@ The composer also has:
 - **Add to message**: attach images or text files, or reference a file path.
 - **Thinking effort**, for models that support it.
 - **Mode**: whether the agent asks before it acts. See below.
-- Slash commands. Type `/` to list them. They are the CLI commands: `/threads start` is `0 threads start`. See [Slash commands](#slash-commands).
+- Slash commands. Type `/` to list them. They are the CLI commands: `/threads start` is `0 threads send new`. See [Slash commands](#slash-commands).
 
 ### Slash commands
 
@@ -75,29 +75,29 @@ Type `/` in the composer for a menu grouped by command. Each entry shows the CLI
 
 | Slash command | CLI | What it does here |
 | --- | --- | --- |
-| `/threads start` | `0 threads start` | Starts a new thread |
+| `/threads start` | `0 threads send new` | Starts a new thread |
 | `/threads list` | `0 threads list` | Opens the thread list |
-| `/threads export`, `/copy` | `0 threads export` | Exports this thread |
-| `/threads close` | `0 threads close` | Closes this thread after you confirm |
-| `/clear` | `0 threads clear` | Clears this thread after you confirm |
-| `/findings list`, `/findings export` | `0 findings list`, `0 findings export` | Opens Findings |
+| `/threads export`, `/copy` | `0 threads list <id> --export` | Exports this thread |
+| `/threads close` | `0 threads list <id> --close` | Closes this thread after you confirm |
+| `/clear` | `0 threads list <id> --clear` | Clears this thread after you confirm |
+| `/findings list`, `/findings export` | `0 findings list`, `0 findings list` | Opens Findings |
 | `/fix [finding-id]` | `0 scan fix` | Opens the fix flow; you approve any pull request |
-| `/agents list`, `/agents create` | `0 agents list`, `0 agents create` | Opens Agents |
-| `/automation list`, `/automation run` | `0 automation list`, `0 automation run` | Opens Automations; running asks you to confirm |
+| `/agents list`, `/agents create` | `0 agents list`, `0 agents set --create` | Opens Agents |
+| `/automation list`, `/automation run` | `0 agents list`, `0 agents run` | Opens Automations; running asks you to confirm |
 | `/computers list` | `0 computers list` | Opens Computers |
 | `/models list` | `0 models list` | Opens Models |
-| `/models default [model]` | `0 models default` | Shows the default model, or switches this thread's model |
-| `/models connections` | `0 models connections` | Opens Connections to add a key or sign in |
-| `/models usage`, `/usage` | `0 models usage` | Shows tokens, cost and context |
+| `/models default [model]` | `0 models set` | Shows the default model, or switches this thread's model |
+| `/models connections` | `0 models connect` | Opens Connections to add a key or sign in |
+| `/models usage`, `/usage` | `0 models list --usage` | Shows tokens, cost and context |
 | `/skills list` | `0 skills list` | Opens Skills |
 | `/memory list` | `0 memory list` | Opens Memory |
-| `/plugin list`, `/plugin browse` | `0 plugin list`, `0 plugin browse` | Opens Plugins or the plugin explorer |
-| `/config list`, `/config get`, `/config set` | `0 config list`, `0 config get`, `0 config set` | Opens Settings; changes are made there |
-| `/doctor` | `0 doctor` | Checks your setup |
+| `/plugin list`, `/plugin browse` | `0 skills list`, `0 skills list --catalog` | Opens Plugins or the plugin explorer |
+| `/config list`, `/config get`, `/config set` | `0 config get --all`, `0 config get`, `0 config set` | Opens Settings; changes are made there |
+| `/doctor` | `0 config doctor` | Checks your setup |
 
 Chat-only commands have no CLI form: `/help`, `/status`, `/tools`, `/explain [topic]`, `/feedback <message>`, `/theme [light|dark]` and `/shortcuts`.
 
-Slash commands never skip a confirmation. Anything that changes or deletes asks you first, exactly as the page does. `0 scan`, `0 api` and `0 web` are CLI-only. Old names still work: `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings`, `/model`, `/keybindings` and `/exit` map to their new commands.
+Slash commands never skip a confirmation. Anything that changes or deletes asks you first, exactly as the page does. `0 scan`, `0 api` and `0` are CLI-only. Old names still work: `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings`, `/model`, `/keybindings` and `/exit` map to their new commands.
 
 ### Approvals
 
@@ -272,34 +272,34 @@ Send a prompt to a thread that is open in a running app:
 
 The thread keeps its own model, scope and access, so local `--model`, `--access`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
 
-Manage live threads with `0 threads list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 threads cancel <id>` requests a stop; the thread reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
+Manage live threads with `0 threads list`, `send` and `stop`. `0 threads stop <id>` requests a stop; the thread reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
 
 ### Manage threads from the terminal
 
-`0 threads` does what the thread menu does, against the app started by `0 web`:
+`0 threads` does what the thread menu does, against the app started by `0`:
 
 ```bash
-id=$(0 threads start "Map the login flow" --folder ~/code/app --access read-only)
-0 threads set "$id" --effort high
+id=$(0 threads send new "Map the login flow" --folder ~/code/app --access read-only)
+0 threads list "$id" --set --effort high
 0 threads stop "$id"            # --force if owned execution does not drain
-0 threads retry "$id"
-0 threads rename "$id" "Login flow"
-0 threads export "$id" --format md -o login-flow.md
-0 threads delete "$id" --yes
+0 threads send "$id" --retry
+0 threads list "$id" --rename "Login flow"
+0 threads list "$id" --export --format md -o login-flow.md
+0 threads list "$id" --delete --yes
 ```
 
 `start` creates the thread and runs exactly one turn with your prompt. `start --wait` blocks until the turn ends, prints the reply and its usage (tokens and estimated cost), and exits 1 if the turn errored. `start --cost-ceiling <usd>` stops the thread once its estimated spend reaches that amount; the turn then counts as failed. `threads show <id> --json` includes the thread's usage and cost. `clear` and `delete` need `--yes`. Every command takes `--json`. Exit code 0 means success, 1 means the request failed, 2 means a usage error. A remote token cannot change settings the browser protects.
 
 ### Run without a browser
 
-On a server or in CI, start the console with `0 web --headless`. It opens no browser, needs no built dashboard assets (it serves the API only and logs one line), and skips the optional 0verse tools with one log line if their environment is not installed. `0 web --no-open` behaves the same when assets are missing.
+On a server or in CI, start the console with `0 --headless`. It opens no browser, needs no built dashboard assets (it serves the API only and logs one line), and skips the optional 0verse tools with one log line if their environment is not installed. `0 --no-open` behaves the same when assets are missing.
 
 ```bash
-0 web --headless --ready-json &        # prints ZERO_DASHBOARD_READY {"url": ...}
-0 threads start "Review the dependency bumps" --folder ~/code/app --access changes --cost-ceiling 2 --wait
+0 --headless --ready-json &        # prints ZERO_DASHBOARD_READY {"url": ...}
+0 threads send new "Review the dependency bumps" --folder ~/code/app --access changes --cost-ceiling 2 --wait
 ```
 
-Every `0 threads` command needs a running console. Without one it prints `No console running. Start one with: 0 web --headless` and exits non-zero; it never prints an empty list.
+Every `0 threads` command needs a running console. Without one it prints `No console running. Start one with: 0 --headless` and exits non-zero; it never prints an empty list.
 
 ### Drive a running app from scripts
 
@@ -307,7 +307,7 @@ Every `0 threads` command needs a running console. Without one it prints `No con
 
 ```bash
 export ZERO_AGENT_TOKEN="$(openssl rand -hex 32)"
-0 web --no-open --engine-token-env ZERO_AGENT_TOKEN --ready-json
+0 --no-open --engine-token-env ZERO_AGENT_TOKEN --ready-json
 
 # From another shell with the same token variable:
 0 api /api/console/sessions \

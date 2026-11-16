@@ -57,7 +57,7 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 ### Faster with a GitHub webhook (server mode)
 
-Polling needs nothing. If you run `0 web --server-mode` behind a public HTTPS address (see [Docker](/docker/)), a webhook makes pull request Agents react right after a push. It is only an accelerator: a delivery asks the Agent's trigger to check GitHub now, exactly as a poll would, so forks, drafts, comments and the one-review-per-commit rule behave the same. If the webhook is off or unreachable, polling keeps working.
+Polling needs nothing. If you run `0 --server-mode` behind a public HTTPS address (see [Docker](/docker/)), a webhook makes pull request Agents react right after a push. It is only an accelerator: a delivery asks the Agent's trigger to check GitHub now, exactly as a poll would, so forks, drafts, comments and the one-review-per-commit rule behave the same. If the webhook is off or unreachable, polling keeps working.
 
 1. Open **Agents** (or Settings > Git) and choose **Set up webhook**. Copy the secret now; it is shown once. The card also shows the payload URL, built from `--public-url`.
 2. On GitHub, open the repository (or organisation), **Settings**, **Webhooks**, **Add webhook**. Payload URL: the one on the card. Content type: `application/json`. Secret: the secret. Events: **Let me select individual events**, then only **Pull requests**. Keep **Active** on and add the webhook.
@@ -79,8 +79,8 @@ By default a run **posts nothing to GitHub**. Results are in the Agent's activit
 Draft pull requests are skipped the same way, with the reason `draft pull request`, and are reviewed once when marked ready for review. Changing a trigger's repository, branch or options turns it off and records a new baseline, so turning on comments or forks needs a fresh approval.
 
 ```bash
-0 agents triggers add <agent> --automation <automation> --kind github-pr --repo owner/name --comment --include-forks
-0 agents triggers check <agent> <trigger>
+0 agents set <agent> --trigger add --automation <automation> --kind github-pr --repo owner/name --comment --include-forks
+0 agents set <agent> --trigger check <trigger>
 ```
 
 The Agent's `gh` account needs permission to comment when `--comment` is on. A failed comment is shown on the activation and does not fail the review. Comments are posted with the signed-in `gh` account, so they appear as that person.
@@ -95,14 +95,14 @@ Scheduled and polled runs are autonomous, so the Agent must be **active and revi
 Everything on the Agents page works from `0 agents`. Commands attach to a running engine; without one, reads and edits work against the control database directly. Running an Agent starts a thread, so `run` needs the engine. Pass `--json` for machine output.
 
 ```bash
-0 agents presets
-0 agents create --preset pen-tester --name "Nightly probe" --access read-only
+0 agents list --presets
+0 agents set --create --preset pen-tester --name "Nightly probe" --access read-only
 0 agents set AGENT_ID --daily-usd 5 --access read-only
-0 agents files put AGENT_ID reports/scope.md --file ./scope.md
-0 agents resume AGENT_ID --acknowledge
+0 agents set AGENT_ID --files put reports/scope.md --file ./scope.md
+0 agents set AGENT_ID --state active --acknowledge
 0 agents run AGENT_ID --task "Re-test the login flow" --yes
-0 agents activations AGENT_ID
-0 agents delete AGENT_ID --yes
+0 agents run AGENT_ID --history
+0 agents set AGENT_ID --state deleted --yes
 ```
 
 `delete`, `run` and enabling a trigger need `--yes` because the CLI never prompts. IDs may be abbreviated to a unique prefix.

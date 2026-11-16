@@ -3,12 +3,12 @@ title: Troubleshooting
 description: Fix common install, provider, scan, state and browser app problems.
 ---
 
-Start with `0 doctor`. It checks the runtime, your model provider and the CLIs on your `PATH`.
+Start with `0 config doctor`. It checks the runtime, your model provider and the CLIs on your `PATH`.
 
 ```bash
-0 doctor
+0 config doctor
 0 --version
-0 config show
+0 config get
 ```
 
 ## Install
@@ -68,12 +68,12 @@ Get-FileHash .\0-windows-x64.exe -Algorithm SHA256
 .\0-windows-x64.exe --help
 ```
 
-`0 doctor upgrade` does not support Windows. Download new releases by hand.
+`0 config doctor upgrade` does not support Windows. Download new releases by hand.
 
 ## Runtime
 
 <span id="0-doctor-reports-nodejs-version-as-bad"></span>
-### `0 doctor` reports Node.js as bad
+### `0 config doctor` reports Node.js as bad
 
 A source build needs Node.js 24 or newer. The release binary bundles its own runtime.
 
@@ -92,7 +92,7 @@ No model credential was found. Connect a provider in **Settings → Models**, or
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-0 doctor
+0 config doctor
 ```
 
 See [Models and keys](/models/). `configured` means a credential was found, not that it works. The first model request proves access and quota.
@@ -103,7 +103,7 @@ See [Models and keys](/models/). `configured` means a credential was found, not 
 API provider  bad  Azure OpenAI
 ```
 
-0 found a provider but its local setup is incomplete. `0 doctor` prints the reason below the status.
+0 found a provider but its local setup is incomplete. `0 config doctor` prints the reason below the status.
 
 | Provider | Usual fix |
 | --- | --- |
@@ -120,7 +120,7 @@ The `claude`, `codex` and `gemini` CLIs are optional. Without them, use `--runti
 Some shells reject variable names that start with a digit. Pass them with `env`:
 
 ```bash
-env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan source .
+env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan .
 ```
 
 ### The wrong provider is used
@@ -129,7 +129,7 @@ With several keys set, a pin, the model name and key priority all decide the rou
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL="<model-id>" \
-  0 scan source ./authorized-repo --runtime api
+  0 scan ./authorized-repo --runtime api
 ```
 
 See [How 0 picks a provider](/models/#how-0-picks-a-provider).
@@ -155,7 +155,7 @@ For a priced model, 0 needs token usage in every response. If a proxy drops or c
 `scan web --timeout` sets the request timeout in milliseconds (default `30000`). Without a confirmed plan, it is also the scan deadline, so raising it raises both:
 
 ```bash
-0 scan web --target https://example.com --scope ./scope.json --timeout 600000
+0 scan https://example.com --scope ./scope.json --timeout 600000
 ```
 
 With a confirmed plan, the plan's time cap sets the deadline instead. A deadline requests cancellation; cleanup can take longer. `--depth quick` does less work but has no fixed duration.
@@ -184,7 +184,7 @@ The hostname matches no `in_scope` rule, or matches an `out_of_scope` rule. See 
 | `2` | Skipped, for example no candidate files or a tree over the 5,000-file cap. Narrow with `--subsystem <path>`. |
 | `3` | Error: unreadable target, bad flags or every finder failed. |
 
-`--max-candidates` and `--models <a,b>` limit the work. Raise only the limit the coverage report points to. `scan deep` does not take `--model`, `--changed-only` or `--diff-base`; run `0 scan deep --help`.
+`--max-candidates` and `--models <a,b>` limit the work. Raise only the limit the coverage report points to. `scan deep` does not take `--model`, `--changed-only` or `--diff-base`; run `0 scan --help`. --module deep
 
 ### `spawnSync rg ENOENT`
 
@@ -229,7 +229,7 @@ Two processes are writing to the same SQLite file. Stop the other scan or app cl
 
 Each new scan gets its own `~/.0/runs/<run-id>/state.db` unless you pass `--db-path` or `ZERO_DB_PATH`. Reusing one path across parallel jobs brings the contention back. The browser app uses one shared local store.
 
-`0 config db reset` refuses to run while a live process holds the lock, or while a lock with no owner is under 5 minutes old. `0 config db repair` moves the old file aside and creates a fresh database; it does not recover rows, so back up first.
+`0 config set db reset` refuses to run while a live process holds the lock, or while a lock with no owner is under 5 minutes old. `0 config doctor --fix` moves the old file aside and creates a fresh database; it does not recover rows, so back up first.
 
 ### Cannot resume a scan
 
@@ -245,7 +245,7 @@ The scan ID prints when the scan starts. `0 lab console --resume` is different: 
 
 ### The app does not open
 
-Run `0` or `0 web`. Use `0 web --no-open` and open the printed URL yourself if no browser starts. In a source checkout, run `pnpm build` first. For scripts, use `0 -p "<prompt>"`; see [Run headless](/app/#run-headless).
+Run `0` or `0`. Use `0 --no-open` and open the printed URL yourself if no browser starts. In a source checkout, run `pnpm build` first. For scripts, use `0 -p "<prompt>"`; see [Run headless](/app/#run-headless).
 
 ### macOS blocks Desktop, Documents or Downloads
 
@@ -271,9 +271,9 @@ Keys saved under **Providers** on the Models page live in `~/.0/credentials.json
 ## Known limits
 
 - `0 lab mcp-server` uses stdio transport only.
-- `0 doctor upgrade` does not support Windows.
+- `0 config doctor upgrade` does not support Windows.
 - Plugin catalog contents depend on the configured registry. Installing a plugin and enabling it are separate steps. See [Plugins](/plugins/).
 
 ## Still stuck
 
-Run `0 doctor`, then [open an issue](https://github.com/0sec-labs/0security/issues) with its output, the command you ran and the error. Leave out keys, tokens and target data. For a vulnerability in 0 itself, follow [SECURITY.md](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).
+Run `0 config doctor`, then [open an issue](https://github.com/0sec-labs/0security/issues) with its output, the command you ran and the error. Leave out keys, tokens and target data. For a vulnerability in 0 itself, follow [SECURITY.md](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).

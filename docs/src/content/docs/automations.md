@@ -9,15 +9,15 @@ An automation is a saved list of steps that runs against a target and keeps its 
 
 In the browser:
 
-1. Run `0` (or `0 web`) and open **Automations**.
+1. Run `0` and open **Automations**.
 2. Pick a template, or describe a custom automation in a thread.
 3. Set a target and press **Run**.
 
 From the CLI:
 
 ```bash
-0 automation list --templates
-0 automation run --template repository-review --revision 1 \
+0 agents list --automation --templates
+0 agents run --automation --template repository-review --revision 1 \
   --target /absolute/path/to/repo \
   --workspace /absolute/path/to/repo \
   --time-cap 600000 --cost-cap 5 --format json > run.json
@@ -44,26 +44,26 @@ A schedule fires only while the browser server and its computer connection are r
 ## Discover and inspect
 
 ```bash
-0 automation list --format json
-0 automation show --template repository-review
-0 automation show AUTOMATION_ID
+0 agents list --automation --format json
+0 agents list --automation --template repository-review
+0 agents list AUTOMATION_ID
 ```
 
 These commands never start a scan. Definitions and run history live in the control database. `--db-path /absolute/path/control.db` selects another one.
 
 ## Create and edit from the CLI
 
-Everything the editor does is available as `0 automation` subcommands (`0 automations` works too). Without a running engine they edit the control database directly; schedules need the engine. Add `--json` for machine output.
+Everything the editor does is available through the `--automation` flag of `0 agents list`, `run` and `set` (`set --automation create|edit|duplicate|delete|triggers`). Without a running engine they edit the control database directly; schedules need the engine. Add `--json` for machine output.
 
 ```bash
-0 automation create --template repository-review --name "Weekly review" --target /absolute/path/to/repo
-0 automation duplicate AUTOMATION_ID
-0 automation edit AUTOMATION_ID --file ./definition.json
-0 automation versions AUTOMATION_ID
-0 automation rollback AUTOMATION_ID --revision 2
-0 automation triggers list AUTOMATION_ID
-0 automation triggers enable TRIGGER_ID --yes
-0 automation delete AUTOMATION_ID --yes
+0 agents set --automation create --template repository-review --name "Weekly review" --target /absolute/path/to/repo
+0 agents set --automation duplicate AUTOMATION_ID
+0 agents set --automation edit AUTOMATION_ID --file ./definition.json
+0 agents set --automation versions AUTOMATION_ID
+0 agents set --automation rollback AUTOMATION_ID --revision 2
+0 agents set --automation triggers list AUTOMATION_ID
+0 agents set --automation triggers enable TRIGGER_ID --yes
+0 agents set --automation delete AUTOMATION_ID --yes
 ```
 
 `delete`, `triggers remove` and `triggers enable` need `--yes`. Schedules are created in the editor, where the schedule and its first review are set.
@@ -73,7 +73,7 @@ Everything the editor does is available as `0 automation` subcommands (`0 automa
 Run a template without saving a copy, or run a saved automation pinned to a revision:
 
 ```bash
-0 automation run AUTOMATION_ID --revision 3 \
+0 agents run --automation AUTOMATION_ID --revision 3 \
   --target https://target.example.com \
   --scope /absolute/path/to/scope.json --format json > run.json
 ```
@@ -114,11 +114,11 @@ Applying a patch needs `--allow-apply` on the foreground command and approval of
 | `security-research` | Pipeline by default. `mobile` and passive `linux-matrix` are also supported. |
 | `deep-source-review` | A local repository. Profile and review settings are optional. |
 
-Run `0 automation list --templates` for the catalog your build ships. A template whose executor or prerequisites are missing fails before launch. It never turns into a plain scan.
+Run `0 agents list --automation --templates` for the catalog your build ships. A template whose executor or prerequisites are missing fails before launch. It never turns into a plain scan.
 
 ## Retained runs
 
-`0 scan source`, `scan package`, `scan web`, `scan deep`, `fix`, `verify` and `research` also record a one-step run in the same control database.
+`0 scan`, `scan fix`, `scan verify` and `lab research` also record a one-step run in the same control database.
 
 ```bash
 0 lab runs list --format json
@@ -135,7 +135,7 @@ A CLI or MCP client that starts its own computer ends that computer when it exit
 ```bash
 # ENGINE_TOKEN holds the engine's bearer token.
 0 threads list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
-0 automation run --template repository-review --target /engine/repo \
+0 agents run --automation --template repository-review --target /engine/repo \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
   --chat SESSION_ID
 ```

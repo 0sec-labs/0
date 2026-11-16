@@ -14,7 +14,7 @@ Internal contracts (artifact schemas, registry events, worker protocol) live in 
 | Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Memory** page in the browser app | Memory is untrusted hints. Verifiers exclude them. |
 | Benchmark variants and gate regressions | `0 lab improve bench run` | Needs a labeled corpus. |
 | Evaluate and promote a detection worker | `0 lab improve evolve run --config evolution.json` | Source access and auto-promotion are off. |
-| Use an evolved finder in a review | `0 scan deep ./repo --evolution-config evolution.json` | Opt in per review. |
+| Use an evolved finder in a review | `0 scan ./repo --module deep --evolution-config evolution.json` | Opt in per review. |
 | Check task routing offline | `0 lab improve routing-qualify` | Fixture mode makes no API calls. |
 | Evolve finder prompts from curated misses | `0 lab research lens-synth` | Needs a curated corpus. Promotion needs approval. |
 | Let the agent write its own tools | `self_extend` tool | See [Plugins](/plugins/) and [Plugin security](/plugin-trust/). |
@@ -29,12 +29,12 @@ Open **Memory** in the browser app (`/memory`).
 
 ```bash
 0 memory list
-0 memory disable <id>
+0 memory set <id> off
 0 memory export -o memory.json
-0 memory import memory.json --preview
+0 memory set --import memory.json --preview
 ```
 
-`0 memory import` always shows what would be imported first, and imported memories start disabled. These are the Memory page's entries. False-positive and evaluation memories stay under `0 findings triage memory`.
+`0 memory set --import <file>` always shows what would be imported first, and imported memories start disabled. These are the Memory page's entries. False-positive and evaluation memories stay under `0 memory list --triage`.
 
 Finished threads stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
 
@@ -154,7 +154,7 @@ Candidate code runs with a sealed input and explicit command, in a fresh contain
 ### Use an evolved finder
 
 ```bash
-0 scan deep ./repo --evolution-config ./evolution.json
+0 scan ./repo --module deep --evolution-config ./evolution.json
 ```
 
 Each finder call in that review inherits the parent's pinned snapshot. Verification and host policy are not rewritten. `--models` cannot be combined with `--evolution-config`.

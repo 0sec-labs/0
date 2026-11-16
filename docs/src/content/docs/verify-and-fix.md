@@ -7,7 +7,7 @@ A finding is a claim. Verification runs it. A fix is accepted only when the patc
 
 | You have | Run |
 |---|---|
-| A repository and its test command | `0 scan repair ./my-app --test-command "npm test"` |
+| A repository and its test command | `0 scan ./my-app --module repair --test-command "npm test"` |
 | One finding with executable PoC steps | `0 scan verify finding.json --runner docker` |
 | One reproduced source finding | `0 scan fix ./my-app --finding finding.json --test-command "npm test"` |
 
@@ -23,7 +23,7 @@ The commands on this page add executable proof.
 ## Find, fix and verify a repository
 
 ```bash
-0 scan repair ./my-app \
+0 scan ./my-app --module repair \
   --setup-command "npm ci" \
   --test-command "npm test" \
   --cost-ceiling 10 > repair.json

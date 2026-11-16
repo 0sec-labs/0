@@ -3,7 +3,7 @@ title: Concepts
 description: The terms 0 uses in the browser app, the CLI and these docs.
 ---
 
-0 uses one small vocabulary everywhere. Commands, flags and API routes keep older internal names; the table notes where they differ. Chat slash commands use the CLI words too: `/threads start` is `0 threads start`.
+0 uses one small vocabulary everywhere. Commands, flags and API routes keep older internal names; the table notes where they differ. Chat slash commands use the CLI words too: `/threads start` is `0 threads send new`.
 
 | Term | Meaning |
 | --- | --- |
@@ -36,12 +36,12 @@ description: The terms 0 uses in the browser app, the CLI and these docs.
 
 | Target | Start with | Guide |
 | --- | --- | --- |
-| Source repository | `0 scan source ./repo` | [Scan code](/scan-code/) |
-| npm, PyPI, Cargo package or OCI image | `0 scan package <name> --ecosystem <eco>` | [Scan code](/scan-code/) |
-| Project dependencies | `0 scan deps scan` | [Dependencies](/dependencies/) |
-| Web app, REST API or MCP endpoint | `0 scan web --target <url> --scope ./scope.json` | [Scan web and APIs](/scan-web/) |
-| A finding you want reproduced or patched | `0 scan verify`, `0 scan fix`, `0 scan repair` | [Verify and fix](/verify-and-fix/) |
-| Binaries, kernels, identity, AI agents | `0 lab research ...`, `0 scan eval`, `0 scan agent-assure` | [Specialist research](/research-workflows/) |
+| Source repository | `0 scan ./repo` | [Scan code](/scan-code/) |
+| npm, PyPI, Cargo package or OCI image | `0 scan <eco>:<name>` | [Scan code](/scan-code/) |
+| Project dependencies | `0 scan . --module deps` | [Dependencies](/dependencies/) |
+| Web app, REST API or MCP endpoint | `0 scan <url> --scope ./scope.json` | [Scan web and APIs](/scan-web/) |
+| A finding you want reproduced or patched | `0 scan verify`, `0 scan fix`, `0 scan <path> --module repair` | [Verify and fix](/verify-and-fix/) |
+| Binaries, kernels, identity, AI agents | `0 lab research ...`, `0 scan eval`, `0 scan agent-assure` | [Specialist research](/research-workflows/) | <!-- docs-check: allow-moved -->
 
 `0 <target>` with no command picks a module for you: a URL becomes `scan web`, a local path becomes `scan source`, and a package name becomes `scan package`.
 

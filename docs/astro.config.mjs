@@ -198,6 +198,7 @@ export default defineConfig({
           label: "Reference",
           items: [
             { label: "CLI reference", slug: "commands" },
+            { label: "CLI changes in 0.35", slug: "cli-changes-0-35" },
             { label: "Configuration", slug: "configuration" },
             { label: "Costs and budgets", slug: "budgets" },
             { label: "Computers and teams", slug: "engines" },

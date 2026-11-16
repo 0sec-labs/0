@@ -659,3 +659,27 @@ Not done, with the reason:
   can show equal ScanConfig, prompt hashes and tool lists. Removal is blocked on re-running
   the XBOW subset and the npm bench through `executeAssessment` and accepting the new
   baselines.
+
+## Step 4 results (CLI collapse)
+
+Visible tree: 15 top-level commands (14 plus hidden `lab`) and 292 nodes became 9 top-level
+commands with at most three visible subcommands each (36 visible nodes). Nothing was deleted:
+the old nodes stay registered and hidden, `command-compat.ts` translates the new grammar onto
+them and prints `moved: use ...` for old invocations; `command-compat.test.ts` resolves every
+one of the 292 old nodes (`__fixtures__/legacy-commands.txt`). Deleting the hidden nodes is the
+work of the release after 0.35.
+
+Choices where this document left room:
+
+- `web`: bare `0` opens the console and accepts every old web flag (not only `--port --host`),
+  because `--headless`, `--server-mode` and `--ready-json` are the deployment surface.
+- `automation` folds into `agents` as `--automation` on `list`, `run` and `set`: Agents and
+  automations are still separate objects in the engine, so the flag says which one.
+- `plugin connect|disconnect|connectors` go to `skills add --connect|--disconnect` and
+  `skills list --connectors` (connectors are skills), not to `models connect`.
+- `scan deep|repair|campaign|deps` are `scan <target> --module ...`; `--depth` keeps meaning
+  review depth because the modules are different engines.
+- `lab` is kept hidden and working: `lab research` and `lab improve` have no destination
+  until steps 3 and 5, and `lab console|mcp-server|runs` have no replacement verbs yet.
+- `doctor` stays as a silent permanent alias of `config doctor`; `api` stays a hidden command.
+- `computers add` is the command and `deploy` its alias.

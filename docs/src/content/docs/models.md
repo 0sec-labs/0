@@ -19,7 +19,7 @@ Export a provider key, then run any command:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
 | Provider | Environment |
@@ -37,16 +37,16 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 | OpenCode Zen | `OPENCODE_API_KEY` (`OPENCODE_BASE_URL` to change endpoint) |
 | Together AI | `TOGETHER_API_KEY` ([details](#together-ai)) |
 
-Pass `ZERO_*` variables with `env`, for example `env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=... 0 doctor`.
+Pass `ZERO_*` variables with `env`, for example `env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=... 0 config doctor`.
 
 Check what 0 found:
 
 ```bash
-0 doctor
+0 config doctor
 ```
 
 <span id="0-doctor--credential-readiness"></span>
-`0 doctor` prints the CLI version, runtime, platform and Node.js check, then the API provider status: `configured`, `bad` (found but unusable, with the reason) or `missing`. It also lists `claude`, `codex` and `gemini` CLIs found on `PATH`. It checks local configuration only. The first model request proves the key, model access and quota.
+`0 config doctor` prints the CLI version, runtime, platform and Node.js check, then the API provider status: `configured`, `bad` (found but unusable, with the reason) or `missing`. It also lists `claude`, `codex` and `gemini` CLIs found on `PATH`. It checks local configuration only. The first model request proves the key, model access and quota.
 
 ## Choose a model
 
@@ -57,7 +57,7 @@ Use an exact model ID your account supports:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL=<model-id> \
-  0 scan source ./authorized-repo --runtime api
+  0 scan ./authorized-repo --runtime api
 ```
 
 Agent workflows need a model that supports tool calling.
@@ -73,7 +73,7 @@ In the browser, open **Models → Advanced**:
 - **Pick models per task automatically** lets 0 choose among models your connection can reach.
 - Each role has its own model select. **Auto** follows the main model or the automatic choice.
 
-On `0 scan web`, use `--task-model <role=model>` (repeatable) for `discovery`, `attack`, `verify` and `report`, or `--single-model` to use one model throughout.
+On `0 scan <url>`, use `--task-model <role=model>` (repeatable) for `discovery`, `attack`, `verify` and `report`, or `--single-model` to use one model throughout.
 
 Role models stay on the parent's connection. Child agents use the same provider, endpoint and credentials, and do not inherit a failover chain. Choose models that same account serves. Connecting a second provider does not make roles cross accounts. Role changes apply after the current step finishes. Role routing is not failover and does not add an independent verification stage on its own.
 
@@ -104,7 +104,7 @@ The direct `--runtime ollama` runtime was removed in 0.35. Ollama serves an Open
 
 ```bash
 OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
-  0 scan source ./authorized-repo --runtime api --model gemma4:27b
+  0 scan ./authorized-repo --runtime api --model gemma4:27b
 ```
 
 Pull a model that supports tool calling first. A remote Ollama server receives your source context.
@@ -137,7 +137,7 @@ export AZURE_OPENAI_API_KEY="your-azure-key"
 export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
 export AZURE_OPENAI_WIRE_API="responses"
 env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL="your-deployment-id" \
-  0 scan source ./authorized-repo --runtime api --cost-ceiling 5
+  0 scan ./authorized-repo --runtime api --cost-ceiling 5
 ```
 
 | Setting | Resolution |
@@ -156,9 +156,9 @@ Together model IDs look like other providers' IDs (`Qwen/...`, `deepseek-ai/...`
 
 ```bash
 env ZERO_SELECTED_PROVIDER=together ZERO_MODEL=openai/gpt-oss-120b \
-  0 scan source ./authorized-repo --runtime api
+  0 scan ./authorized-repo --runtime api
 # or, with no provider pin:
-0 scan source ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
+0 scan ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
 ```
 
 The `together/` prefix is removed once before the request. The default model is `openai/gpt-oss-120b`. The picker lists chat models with published prices; set `TOGETHER_MODEL_LIST=all` to list every chat model your key can see. Unlisted IDs, including dedicated endpoints, still work with `--model`.
@@ -204,7 +204,7 @@ A rejected or unreachable provider is never picked as the default model for new 
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan web --target https://example.com --scope ./scope.json --runtime api
+  0 scan https://example.com --scope ./scope.json --runtime api
 ```
 
 Pin when you need a predictable bill, especially with Azure deployment names. `ZERO_FORCE_PROVIDER` is a benchmark override; setting it to a different value than `ZERO_SELECTED_PROVIDER` is an error.
@@ -252,7 +252,7 @@ An explicit `--api-key` without a pin picks by shape: `sk-or-` selects OpenRoute
 
 ```bash
 env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0 scan source ./authorized-repo --runtime api
+  0 scan ./authorized-repo --runtime api
 ```
 
 Each entry is `<provider>:<model>`, comma-separated, tried in order. Entries without credentials (or, for Azure, without an endpoint) are skipped. Failover changes who receives your context and who bills you. A cyber access program request disables failover.
@@ -278,8 +278,8 @@ If a provider misbehaves under `auto`, set `ZERO_RUNTIME=legacy` and report it.
 | `codex` | Source reviews keep 0's own tool boundary. Live scans use the ChatGPT Codex provider directly. |
 
 ```bash
-0 scan web --target https://api.example.com --scope ./scope.json --runtime claude
-0 scan source ./my-repo --runtime codex
+0 scan https://api.example.com --scope ./scope.json --runtime claude
+0 scan ./my-repo --runtime codex
 ```
 
 Use `--runtime api` when you want the provider rules on this page instead of `auto`. External CLIs make their own network calls, which 0 does not control.
@@ -290,16 +290,16 @@ Use `--runtime api` when you want the provider rules on this page instead of `au
 OpenAI's Daybreak programs need an explicit request. A model name alone does not select one.
 
 - **Browser**: use the **Daybreak** control beside the model settings. **Automatic** clears the request.
-- **CLI**: `0 scan source` and `0 scan web` accept `--cyber-access-program standard|daybreak_blue|daybreak_red`. It requires `--runtime api` and `--provider openai` or `--provider chatgpt-codex`.
+- **CLI**: `0 scan <path>` and `0 scan <url>` accept `--cyber-access-program standard|daybreak_blue|daybreak_red`. It requires `--runtime api` and `--provider openai` or `--provider chatgpt-codex`.
 
 ```bash
 # OpenAI API project with approved access:
 env OPENAI_WIRE_API=responses \
-  0 scan source ./authorized-repo --runtime api --provider openai \
+  0 scan ./authorized-repo --runtime api --provider openai \
   --model <approved-model> --cyber-access-program daybreak_blue
 
 # Existing ChatGPT/Codex sign-in:
-0 scan source ./authorized-repo --runtime api --provider chatgpt-codex \
+0 scan ./authorized-repo --runtime api --provider chatgpt-codex \
   --model <model> --cyber-access-program daybreak_blue
 ```
 
@@ -319,11 +319,11 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 The same actions as **Settings → Connections** and **Models** are available as commands. Keys come from an environment variable or stdin, never from an argument.
 
 ```bash
-0 models connections add openai --key-env MY_OPENAI_KEY
-0 models connections test openai
+0 models connect openai --key-env MY_OPENAI_KEY
+0 models connect openai --test
 0 models list --provider openai
-0 models default --provider openai gpt-5.4-mini
-0 models connections remove openai --yes
+0 models set --provider openai gpt-5.4-mini
+0 models connect openai --remove --yes
 ```
 
 <span id="console-credential-store"></span>

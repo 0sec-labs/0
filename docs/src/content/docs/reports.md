@@ -6,7 +6,7 @@ description: Export findings as JSON, SARIF, Markdown, HTML or PDF, build assess
 Choose an output format on the scan, export from the browser app, or draft a disclosure from stored findings.
 
 ```bash
-0 scan source ./my-app --format sarif > results.sarif
+0 scan ./my-app --format sarif > results.sarif
 ```
 
 ## Output formats
@@ -23,9 +23,9 @@ Choose an output format on the scan, export from the browser app, or draft a dis
 | `pdf` | A file in the system temp directory | A printable report |
 
 ```bash
-0 scan web --target https://staging.example.com --format json > scan.json
-0 scan source ./my-app --format md > review.md
-0 scan web --target https://staging.example.com --format html
+0 scan https://staging.example.com --format json > scan.json
+0 scan ./my-app --format md > review.md
+0 scan https://staging.example.com --format html
 ```
 
 HTML and PDF print `Report saved to: <path>`, a timestamped file such as `0-report-1731577200000.html` in the system temp directory, and try to open it. There is no flag to choose that path, and redirecting stdout does not move it. Copy the file somewhere durable.
@@ -37,7 +37,7 @@ Every run also writes `report.json` next to its database in `~/.0/runs/<scan-id>
 A full `report.json` carries evidence, proof-of-concept steps and descriptions that can quote source code or secrets. To pass findings to someone else, write a share-safe copy:
 
 ```bash
-0 findings reports export ./report.json --output ./report.share.json
+0 findings reports export ./report.json  <!-- docs-check: allow-moved --> --output ./report.share.json
 ```
 
 The copy keeps the target, summary and each finding's id, title, severity, category, status, fingerprint, CVSS, confidence and source location. It leaves out evidence, PoC steps, agent transcripts, triage notes, suggested code and local absolute paths, and it strips credentials and query strings from URL targets. Add `--include-description` to keep each finding's description after you have read them. The file lists what was withheld in `redactions` and carries `schemaVersion: 1`. The command sends nothing anywhere.
@@ -79,22 +79,22 @@ Authenticate with the computer's bearer token. See [Computers and teams](/engine
 Bring a report from CI into the browser app without re-running anything:
 
 ```bash
-0 findings reports import ./0-report/report.json --metadata ./0-report/run.json --db-path ~/.0/0.db
+0 findings list --import ./0-report/report.json --metadata ./0-report/run.json --db-path ~/.0/0.db
 ```
 
-`--db-path` is the web computer's database; `~/.0/0.db` is the local default. Stop `0 web` before importing. The GitHub Action writes `report.json` and `run.json` to its report directory (`0-report` by default); `--metadata` is optional. Importing executes nothing from the report.
+`--db-path` is the web computer's database; `~/.0/0.db` is the local default. Stop `0` before importing. The GitHub Action writes `report.json` and `run.json` to its report directory (`0-report` by default); `--metadata` is optional. Importing executes nothing from the report.
 
 ## Send findings to GitHub
 
 ```bash
 export GITHUB_TOKEN=...
-0 scan web --target https://staging.example.com --export github:your-org/security-findings
+0 scan https://staging.example.com --export github:your-org/security-findings
 ```
 
 `--export github:owner/repo` opens one issue per finding with labels `0`, `severity:<level>` and `category:<name>`. It creates missing labels and skips an open issue with the same title. It exports every finding in the report, verified or not.
 
 ```bash
-0 scan source ./my-app --emit pr --dry-run
+0 scan ./my-app --emit pr --dry-run
 ```
 
 `--emit pr` opens a GitHub pull request per reproduced finding and writes the unverified ones to `hypotheses.md`. `--base` sets the base branch (default `main`). `--dry-run` prints the `git` and `gh` commands instead; on `scan source` it turns on automatically when `gh auth status` fails. The scan itself still runs and spends.
@@ -128,15 +128,15 @@ To check that findings still apply before you file:
 
 ```bash
 # Vendor notification draft with a "DRAFT — NOT SENT" banner
-0 scan disclose evidence-pack finding.json --target "lodash@4.17.21" --out notification.md
+0 scan disclose --pack finding.json --target "lodash@4.17.21" --out notification.md
 
 # Deterministic, redacted reproducibility manifest for a verified finding
-0 scan disclose review finding.json --target "lodash@4.17.21" --out manifest.json
+0 scan disclose --review finding.json --target "lodash@4.17.21" --out manifest.json
 
 # Track the disclosure timeline
-0 scan disclose track 3f2a --out record.json
-0 scan disclose track 3f2a --record record.json --to sent --disclosed-to "Vendor PSIRT" --out record.json
-0 scan disclose track 3f2a --record record.json --to cve_assigned --cve-id CVE-2026-12345 --out record.json
+0 scan disclose --track 3f2a --out record.json
+0 scan disclose --track 3f2a --record record.json --to sent --disclosed-to "Vendor PSIRT" --out record.json
+0 scan disclose --track 3f2a --record record.json --to cve_assigned --cve-id CVE-2026-12345 --out record.json
 ```
 
 `evidence-pack` refuses findings whose PoC did not reproduce unless you pass `--allow-unreproduced`. `review` fails if the finding lacks the evidence a manifest needs. `track` records intent only: statuses are `draft`, `sent`, `acknowledged`, `accepted`, `cve_assigned`, `published`, `rejected`, `not_applicable`, `duplicate` and `withdrawn`. Moving a record to `sent` does not send anything.

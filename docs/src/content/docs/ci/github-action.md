@@ -74,9 +74,9 @@ The action keeps its original `mode` names. They map to the current scan command
 
 | `mode` | Same as | Notes |
 | --- | --- | --- |
-| `review` | `0 scan source <path>` | Source code. Supports `diff-base` and `changed-only`. |
-| `audit` | `0 scan package <package>` | A package. The action uses the CLI's default ecosystem (`npm`). |
-| `scan` | `0 scan web --target <url> --scope <file> --mode <scan-mode>` | A live target. |
+| `review` | `0 scan <path>` | Source code. Supports `diff-base` and `changed-only`. |
+| `audit` | `0 scan npm:<package>` | A package. The action uses the CLI's default ecosystem (`npm`). |
+| `scan` | `0 scan <url> --scope <file> --mode <scan-mode>` | A live target. |
 
 The action invokes the old command names, which the CLI still accepts and rewrites to the new ones with a notice on stderr. See [Scan code](/scan-code/) and [Scan web and APIs](/scan-web/) for the commands.
 
@@ -248,7 +248,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - run: 0 scan source . --runtime api --depth quick --cost-ceiling 5 --format sarif > results.sarif
+      - run: 0 scan . --runtime api --depth quick --cost-ceiling 5 --format sarif > results.sarif
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       - if: success() && hashFiles('results.sarif') != ''
@@ -265,7 +265,7 @@ Pin an image digest for reproducible runs. A failed process can leave an empty o
 - run: |
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
     echo "$HOME/.0/bin" >> "$GITHUB_PATH"
-- run: 0 scan source . --runtime api --cost-ceiling 5 --format sarif > results.sarif
+- run: 0 scan . --runtime api --cost-ceiling 5 --format sarif > results.sarif
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -289,7 +289,7 @@ Install and build scripts run repository code, so never do this for an untrusted
 ### GitLab, Jenkins and others
 
 ```bash
-0 scan source . --runtime api --depth quick --cost-ceiling 5 --format json > report.json
+0 scan . --runtime api --depth quick --cost-ceiling 5 --format json > report.json
 ```
 
 Use your runner's secret store, keep the exit status and report on failure, and gate on the findings. Direct CLI commands do not apply the action's severity gate. Make deployment depend on this job.
@@ -308,8 +308,8 @@ Use your runner's secret store, keep the exit status and report on failure, and 
 Package and live-target scans work the same way:
 
 ```bash
-0 scan package lodash --ecosystem npm --runtime api --depth quick --format sarif > audit.sarif
-0 scan web --target https://staging.example.com --scope scope.json --mode deep \
+0 scan npm:lodash --ecosystem npm --runtime api --depth quick --format sarif > audit.sarif
+0 scan https://staging.example.com --scope scope.json --mode deep \
   --runtime api --format sarif --timeout 600000 > scan.sarif
 ```
 
@@ -326,9 +326,9 @@ Pass the provider's key as a step-scoped secret, never as a literal. Name the ru
 Download the report artifact and import it into a workspace database:
 
 ```bash
-0 findings reports import ./0-report/report.json --metadata ./0-report/run.json \
+0 findings list --import ./0-report/report.json --metadata ./0-report/run.json \
   --db-path /absolute/path/security-workspace.db
-0 web --db-path /absolute/path/security-workspace.db
+0 --db-path /absolute/path/security-workspace.db
 ```
 
 Stop any engine using that database before importing, then open the app. The imported run and its findings appear there. The importer only reads JSON. It runs no commands and contacts nobody. It keeps the original report, source timestamps and CLI exit code, and derives a stable identity, so re-importing the same files does nothing. Limits are 20 MiB per report, 64 KiB of metadata and 2,000 findings.

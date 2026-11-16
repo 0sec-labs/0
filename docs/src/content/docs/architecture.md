@@ -102,7 +102,7 @@ Different models can serve discovery, review, refutation and fix roles when the 
 
 ## Scan modes
 
-`0 scan web --mode <mode>` picks one. Without it the mode follows the target.
+`0 scan <url> --mode <mode>` picks one. Without it the mode follows the target.
 
 | Mode | Target | What it does |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ Different models can serve discovery, review, refutation and fix roles when the 
 | `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation. |
 | `http_audit` | Authenticated HTTP target | Scoped assessment driven by `ZERO_TARGET_*` settings. |
 
-Package audits and source reviews are separate commands: `0 scan package` and `0 scan source`.
+Package audits and source reviews are separate commands: `0 scan npm:<name>` and `0 scan <path>`.
 
 ## Runtime adapters
 
@@ -150,7 +150,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 
 - Client: selected agent and console paths connect to external MCP servers and expose their tools.
 - Server: `0 lab mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
-- Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
+- Scan target: `0 scan mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
 See [MCP servers](/mcp/).
 

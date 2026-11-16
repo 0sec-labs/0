@@ -8,9 +8,9 @@ description: Cost ceilings, turn limits and price estimates for 0 lab runs.
 ## Set a cost ceiling
 
 ```bash
-0 scan source ./authorized-repo --runtime api --cost-ceiling 5
-0 scan package lodash --runtime api --cost-ceiling 2
-env ZERO_COST_CEILING_USD=3 0 scan web --target https://authorized.example --scope ./scope.json --runtime api
+0 scan ./authorized-repo --runtime api --cost-ceiling 5
+0 scan npm:lodash --runtime api --cost-ceiling 2
+env ZERO_COST_CEILING_USD=3 0 scan https://authorized.example --scope ./scope.json --runtime api
 ```
 
 `--cost-ceiling <usd>` beats `ZERO_COST_CEILING_USD`. The value must be positive. With neither, there is no dollar limit.
@@ -42,7 +42,7 @@ To bound source and package scans, for example in CI:
 
 ```bash
 env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
-  0 scan source ./authorized-repo --runtime api --cost-ceiling 5
+  0 scan ./authorized-repo --runtime api --cost-ceiling 5
 ```
 
 | Variable | Applies to |

@@ -19,13 +19,13 @@ Everything on the Skills page has a command. With the app running they go throug
 
 ```sh
 0 skills list
-0 skills catalog --search handoff
+0 skills list --catalog --search handoff
 0 skills add mattpocock~skills~handoff --yes      # shows a review first; --yes installs that commit
 0 skills import ./code-review --json              # a folder with SKILL.md, or an exported bundle
-0 skills edit code-review --file ./SKILL.md
-0 skills export code-review -o code-review.skill.json
+0 skills list code-review --edit --file ./SKILL.md
+0 skills list code-review --export -o code-review.skill.json
 0 skills link ~/team-skills                       # mount a folder without copying it
-0 skills delete code-review --yes
+0 skills list code-review --delete --yes
 ```
 
 ## Folder format

@@ -64,9 +64,9 @@ These routes need owner control access and, in team mode, a signed-in workspace 
 From a terminal on the same machine:
 
 ```bash
-0 findings keys create ci-reader --expires-in 30   # prints the token once
-0 findings keys list
-0 findings keys revoke <id> --yes
+0 config set api.key ci-reader --expires-in 30   # prints the token once
+0 config get api.keys
+0 config set api.key --revoke <id> --yes
 ```
 
 Stored credentials hold hashes and metadata, never the plaintext token. Revoked credentials stay listed for audit.

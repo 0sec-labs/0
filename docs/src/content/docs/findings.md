@@ -26,9 +26,9 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 0 findings
 0 findings --severity high --triage new
 0 findings show 3f2a
-0 findings accept 3f2a --note "Confirmed on staging, ticket SEC-142"
-0 findings suppress 3f2a --note "Test-only endpoint"
-0 findings reopen 3f2a
+0 findings update 3f2a --status accepted --note "Confirmed on staging, ticket SEC-142"
+0 findings update 3f2a --status suppressed --note "Test-only endpoint"
+0 findings update 3f2a --status open
 ```
 
 `0 findings` (same as `0 findings list`) merges every local run under `~/.0/runs/` and groups duplicates. `--all` shows raw rows instead. IDs accept a unique prefix.
@@ -51,8 +51,8 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 Export findings without opening the browser:
 
 ```bash
-0 findings export 3f2a 91bc --format sarif -o findings.sarif
-0 findings export --scan <scan-id> --format pdf -o report.pdf
+0 findings list 3f2a 91bc --format sarif -o findings.sarif
+0 findings list --scan <scan-id> --format pdf -o report.pdf
 ```
 
 Formats are `json` (default), `md`, `sarif`, `html` and `pdf`. Without `-o` the report goes to stdout, except `pdf`, which needs a file.
@@ -71,12 +71,12 @@ Accepting a finding does not verify it, and suppressing it does not prove it fal
 Record why a finding is a false alarm. Later scans that read the same database recall the memory as context.
 
 ```bash
-0 findings triage mark-fp 3f2a --reason "Echo endpoint only exists in test fixtures" \
+0 findings update 3f2a --status false-positive --reason "Echo endpoint only exists in test fixtures" \
   --db-path ./engagement.db
-0 findings triage memory add --finding 3f2a --reason "Intentional CORS for the public API" \
+0 memory set --add --finding 3f2a --reason "Intentional CORS for the public API" \
   --db-path ./engagement.db
-0 findings triage memory list --db-path ./engagement.db
-0 findings triage memory remove MEMORY_ID --db-path ./engagement.db
+0 memory list --db-path ./engagement.db
+0 memory list MEMORY_ID --db-path ./engagement.db
 ```
 
 `mark-fp` suppresses the finding and creates a memory. `memory add` creates a memory without suppressing. `--scope global|target|package` sets where a memory applies (default `target`); `--scope-value` names the target URL or package.

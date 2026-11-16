@@ -12,7 +12,7 @@ Only test systems you own or are authorized to test. A scope file encodes that a
 Scope enforcement is a built-in plugin. It is **off by default**. Turn it on per project:
 
 ```bash
-0 plugin enable scope
+0 skills list scope --enable
 ```
 
 Save `scope.json` with your authorized hosts:
@@ -27,13 +27,13 @@ Save `scope.json` with your authorized hosts:
 Pass it to the scan:
 
 ```bash
-0 scan web --target https://app.example.com --scope ./scope.json \
+0 scan https://app.example.com --scope ./scope.json \
   --depth quick --cost-ceiling 2
 ```
 
 With the plugin on, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
 
-With the plugin off, host checks, exclusions and local filesystem boundaries are **not enforced**. Credential protection, sandboxing and resource limits apply either way. Turn it off with `0 plugin disable scope`.
+With the plugin off, host checks, exclusions and local filesystem boundaries are **not enforced**. Credential protection, sandboxing and resource limits apply either way. Turn it off with `0 skills list scope`. --disable
 
 ## Matching rules
 
@@ -135,7 +135,7 @@ To collect an engagement's scans and findings in one place, use the **Reports** 
 The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `--engagement-profile conservative` is quieter:
 
 ```bash
-0 scan web --target https://app.example.com --scope ./engagement-scope.json \
+0 scan https://app.example.com --scope ./engagement-scope.json \
   --engagement-profile conservative
 ```
 
