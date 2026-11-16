@@ -41,8 +41,8 @@ export function registerWorkerCommand(program: Command): void {
   enginesConfigOption(list, "Engine registry path");
 
   const deploy = worker
-    .command("deploy")
-    .alias("add")
+    .command("add")
+    .alias("deploy")
     .description("Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH host) and register it")
     .option("--ssh <user@host>", "SSH target host (BatchMode; key auth from ssh config/agent)")
     .option("--lima <name>", "Lima instance name", "zero-worker")
@@ -91,7 +91,7 @@ export function registerWorkerCommand(program: Command): void {
         ...(entry.hostname ? { hostname: entry.hostname } : {}),
         ...(entry.user ? { user: entry.user } : {}),
         ...(entry.port ? { port: entry.port } : {}),
-        deploy: `0 worker deploy --ssh ${entry.alias}`,
+        deploy: `0 computers add --ssh ${entry.alias}`,
       })), null, 2) + "\n");
     });
 }

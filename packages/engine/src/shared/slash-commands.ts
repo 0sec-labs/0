@@ -2,7 +2,7 @@
  * The one slash-command registry, shared by the chat composer and the CLI docs.
  *
  * Every command is defined once. A command that mirrors the CLI is named like it
- * (`/threads list` is `0 threads list`) and carries that path in `cli`, so a parity
+ * (`/threads list` is `0 threads list`) and carries the visible CLI path in `cli`, so a parity
  * test can prove the two never drift. Commands that exist only in chat have no `cli`.
  *
  * Portable: no React, no @0/engine imports.
@@ -33,7 +33,7 @@ export interface SlashCommand {
   readonly description: string;
   /** Usage hint, e.g. "/models default [model]". */
   readonly usage?: string;
-  /** The CLI command this mirrors, without the leading `0 `, e.g. `threads list`. Absent for chat-only commands. */
+  /** The CLI command this mirrors, without the leading `0 `, e.g. `threads list` or `threads list --export` (a visible command path, then any flag it needs). Absent for chat-only commands. */
   readonly cli?: string;
   /** Web page route this command opens. */
   readonly destination?: string;
@@ -66,7 +66,7 @@ const cmd = (
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
   // Threads
   cmd("threads start", "Threads", "Start a new thread", {
-    cli: "threads start",
+    cli: "threads send",
     aliases: ["new"],
     legacy: ["new-mission", "new-chat", "threads new", "threads create", "onboard", "launcher", "run", "home"],
   }),
@@ -74,9 +74,9 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     cli: "threads list",
     legacy: ["threads", "chats", "sessions", "history", "runs", "ops", "chat", "back"],
   }),
-  cmd("threads export", "Threads", "Export this thread", { cli: "threads export" }),
-  cmd("threads close", "Threads", "Close this thread", { cli: "threads close", legacy: ["exit", "quit"] }),
-  cmd("clear", "Threads", "Clear this thread", { cli: "threads clear" }),
+  cmd("threads export", "Threads", "Export this thread", { cli: "threads list --export" }),
+  cmd("threads close", "Threads", "Close this thread", { cli: "threads list --close", legacy: ["exit", "quit"] }),
+  cmd("clear", "Threads", "Clear this thread", { cli: "threads list --clear" }),
 
   // Findings
   cmd("findings list", "Findings", "Review findings", {
@@ -86,7 +86,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["findings"],
   }),
   cmd("findings export", "Findings", "Export findings and reports", {
-    cli: "findings export",
+    cli: "findings list --format",
     destination: "/findings",
   }),
   cmd("fix", "Findings", "Write and test a fix; you approve any pull request", {
@@ -101,14 +101,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     destination: "/agents",
     legacy: ["agents"],
   }),
-  cmd("agents create", "Agents", "Create an agent", { cli: "agents create", destination: "/agents" }),
+  cmd("agents create", "Agents", "Create an agent", { cli: "agents set --create", destination: "/agents" }),
   cmd("automation list", "Automation", "Browse automations", {
-    cli: "automation list",
+    cli: "agents list",
     destination: "/automations",
     legacy: ["automation", "automations"],
   }),
   cmd("automation run", "Automation", "Run an automation (you confirm first)", {
-    cli: "automation run",
+    cli: "agents run",
     destination: "/automations",
   }),
   cmd("computers list", "Computers", "Browse your computers", {
@@ -124,17 +124,17 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["models"],
   }),
   cmd("models default", "Models", "Show the default model, or set this thread's", {
-    cli: "models default",
+    cli: "models set",
     usage: "/models default [model]",
     legacy: ["model"],
   }),
   cmd("models connections", "Models", "Add an API key or sign in", {
-    cli: "models connections",
+    cli: "models connect",
     destination: "/connections",
     legacy: ["connect", "connections"],
   }),
   cmd("models usage", "Models", "Tokens, cost and context", {
-    cli: "models usage",
+    cli: "models list --usage",
     aliases: ["usage"],
     legacy: ["cost", "tokens"],
   }),
@@ -151,19 +151,19 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["memory"],
   }),
   cmd("plugin list", "Plugins", "Browse and enable plugins", {
-    cli: "plugin list",
+    cli: "skills list",
     destination: "/plugins",
     aliases: ["plugins"],
     legacy: ["plugin", "hackstore", "store", "market", "marketplace"],
   }),
   cmd("plugin browse", "Plugins", "Explore plugins to install", {
-    cli: "plugin browse",
+    cli: "skills list --catalog",
     destination: "/plugins/explore",
   }),
 
   // Settings
   cmd("config list", "Settings", "Open settings", {
-    cli: "config list",
+    cli: "config get --all",
     destination: "/settings",
     aliases: ["settings"],
     legacy: ["config", "prefs"],
@@ -178,7 +178,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     destination: "/settings",
     usage: "/config set <key> <value>",
   }),
-  cmd("doctor", "Settings", "Check your setup", { cli: "doctor", destination: "/doctor" }),
+  cmd("doctor", "Settings", "Check your setup", { cli: "config doctor", destination: "/doctor" }),
 
   // Chat only
   cmd("help", "Chat", "List commands", { aliases: ["commands"], legacy: ["?"], usage: "/help" }),

@@ -22,7 +22,7 @@ function tree() {
   program.command("runs").command("history");
   return program;
 }
-const moved = (args) => (args[0] === "review" ? "0 scan source" : undefined);
+const moved = (args) => (args[0] === "review" ? "`0 scan source`" : undefined);
 const check = (text) => checkInvocation(tree(), text, moved);
 
 test("extracts fenced lines, prompts, continuations and inline spans", () => {

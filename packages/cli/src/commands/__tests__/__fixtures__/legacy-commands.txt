@@ -1,0 +1,293 @@
+# Every command node of the 0.34 CLI (generated from its tree, one path per line). command-compat.test.ts resolves each one.
+scan
+scan web
+scan source
+scan package
+scan deep
+scan repair
+scan campaign
+scan fix
+scan verify
+scan deps
+scan deps scan
+scan deps fix
+scan eval
+scan agent-assure
+scan disclose
+scan disclose evidence-pack
+scan disclose track
+scan disclose review
+findings
+findings list
+findings show
+findings accept
+findings suppress
+findings reopen
+findings triage
+findings triage memory
+findings triage memory add
+findings triage memory list
+findings triage memory remove
+findings triage mark-fp
+findings export
+findings keys
+findings keys list
+findings keys create
+findings keys revoke
+findings reports
+findings reports import
+findings reports export
+automation
+automation list
+automation show
+automation run
+automation create
+automation edit
+automation duplicate
+automation versions
+automation rollback
+automation delete
+automation triggers
+automation triggers list
+automation triggers enable
+automation triggers disable
+automation triggers remove
+threads
+threads list
+threads show
+threads create
+threads send
+threads continue
+threads cancel
+threads force-stop
+threads events
+threads resume
+threads decide
+threads start
+threads stop
+threads retry
+threads set
+threads rename
+threads clear
+threads close
+threads archive
+threads delete
+threads export
+agents
+agents list
+agents show
+agents presets
+agents create
+agents set
+agents pause
+agents resume
+agents acknowledge
+agents archive
+agents delete
+agents run
+agents activations
+agents budget
+agents files
+agents files list
+agents files get
+agents files put
+agents files rm
+agents triggers
+agents triggers list
+agents triggers add
+agents triggers enable
+agents triggers disable
+agents triggers check
+agents triggers rm
+agents webhook
+agents webhook status
+agents webhook secret
+agents webhook secret rotate
+lab
+lab research
+lab research pipeline
+lab research counterexample
+lab research mobile
+lab research linux-matrix
+lab research linux
+lab research hunt
+lab research recency-hunt
+lab research assumption-hunt
+lab research memsafety
+lab research lens-synth
+lab research specdrift
+lab research specdrift extract
+lab research specdrift scan
+lab research specdrift plan
+lab research protocol-check
+lab research npm-discovery
+lab research npm-discovery list
+lab research npm-discovery run
+lab research js-recon
+lab research xnu-fuzz
+lab research xnu-fuzz enumerate
+lab research xnu-fuzz gen
+lab research xnu-fuzz harness-plan
+lab research kernel
+lab research kernel syzbot-mine
+lab research kernel weights
+lab research kernel variant-hunt
+lab research cve
+lab research cve find
+lab research cve adapt
+lab research intel
+lab research intel dossier
+lab research intel target-history
+lab research intel search
+lab research intel cve
+lab research intel similar
+lab research recon
+lab research binary
+lab research ingest
+lab research exploit
+lab research identity
+lab research adgraph
+lab research entragraph
+lab research cloud
+lab research cloud s3-probe
+lab research cloud validate-creds
+lab research h1
+lab research h1 auth
+lab research h1 programs
+lab research h1 programs list
+lab research h1 programs show
+lab research h1 scope
+lab research h1 scope dump
+lab improve
+lab improve bench
+lab improve bench improvement-project
+lab improve bench improvement-assess
+lab improve bench calibrate
+lab improve bench run
+lab improve bench diff
+lab improve bench scoreboard
+lab improve routing-qualify
+lab improve evolve
+lab improve evolve run
+lab improve evolve status
+lab improve evolve reconcile
+lab improve evolve promote
+lab improve evolve rollback
+lab improve evolve exec
+lab improve evolve feedback
+lab improve evolve feedback capture
+lab improve evolve feedback approve
+lab improve evolve feedback release
+lab improve evolve feedback status
+lab improve learning
+lab improve learning status
+lab improve learning process
+lab improve learning evolve
+lab console
+lab mcp-server
+lab runs
+lab runs resume
+lab runs list
+lab runs show
+lab runs cancel
+lab runs history
+lab runs replay
+lab runs relaunch
+lab runs timeline
+lab runs orchestrate
+web
+api
+computers
+computers list
+computers deploy
+computers repair
+computers stop
+computers hosts
+doctor
+doctor upgrade
+doctor workbench
+doctor workbench run-agent
+doctor workbench console-agent
+doctor workbench setup
+doctor workbench status
+doctor workbench providers
+doctor workbench configure
+doctor workbench disable
+doctor checks
+doctor checks propose
+doctor checks add
+doctor checks list
+doctor checks enable
+doctor checks disable
+doctor checks set
+doctor checks remove
+config
+config show
+config list
+config get
+config set
+config reset
+config export
+config import
+config audit-log
+config team
+config team init
+config team add-user
+config team list
+config db
+config db repair
+config db reset
+config github
+config github status
+config github connect
+config github repos
+models
+models list
+models default
+models recommended
+models connections
+models connections list
+models connections add
+models connections test
+models connections remove
+models usage
+plugin
+plugin list
+plugin search
+plugin browse
+plugin install
+plugin enable
+plugin disable
+plugin info
+plugin run
+plugin init
+plugin validate
+plugin submit
+plugin connectors
+plugin connect
+plugin disconnect
+plugin mcp
+plugin mcp list
+plugin mcp add
+plugin mcp test
+plugin mcp remove
+skills
+skills list
+skills show
+skills new
+skills edit
+skills copy
+skills delete
+skills import
+skills export
+skills link
+skills unlink
+skills catalog
+skills add
+skills remove
+memory
+memory list
+memory disable
+memory enable
+memory export
+memory import

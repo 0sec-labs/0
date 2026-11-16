@@ -10,7 +10,7 @@
  * compares the help of every node of both trees against the recorded fixture, so they cannot drift.
  */
 import { Command } from "commander";
-import { adoptCommands, nest } from "./layout.js";
+import { adoptCommands, applyNewSurface, nest } from "./layout.js";
 import { findTopLevel } from "./manifest.js";
 import { addCommandStubs } from "../program.js";
 
@@ -163,6 +163,7 @@ export async function loadTopLevel(program: Command, name: string): Promise<void
   await build(scratch);
   const built = scratch.commands.find((command) => command.name() === name);
   if (!built) throw new Error(`Command tree: section \`${name}\` did not register itself`);
+  applyNewSurface(built);
   program.addCommand(built);
 }
 

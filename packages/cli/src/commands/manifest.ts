@@ -18,22 +18,49 @@ export interface TopLevelCommand {
   readonly arguments?: string;
 }
 
+/** Descriptions of the nine visible commands: the one copy the real groups and the root help share. */
+export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  scan: "Scan a target (URL, repository, package) or work a finding: fix, verify, disclose",
+  findings: "Browse findings and change their status",
+  threads: "Start, follow and stop threads",
+  agents: "Agents and their automations: list, run, change",
+  skills: "Skills, plugins and connectors: list, add, run",
+  memory: "What 0 remembers across threads",
+  models: "Models and provider connections",
+  computers: "Remote computers that run 0",
+  config: "Settings, API keys, team and setup checks (config doctor)",
+};
+
+/** The only subcommands `--help` shows for each visible command. Everything else stays reachable as a hidden old name (see command-compat.ts). */
+export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
+  scan: ["fix", "verify", "disclose"],
+  findings: ["list", "show", "update"],
+  threads: ["list", "send", "stop"],
+  agents: ["list", "run", "set"],
+  skills: ["list", "add", "run"],
+  memory: ["list", "set", "export"],
+  models: ["list", "set", "connect"],
+  computers: ["list", "add", "stop"],
+  config: ["get", "set", "doctor"],
+};
+
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
-  { name: "scan", aliases: [], description: "Assess a target: live web/MCP, source repository, package, deep review, or repair loop" },
-  { name: "findings", aliases: [], description: "Browse and manage persisted findings", options: true },
-  { name: "automation", aliases: ["automations"], description: "Discover templates, inspect saved automations, and run an automation" },
-  { name: "threads", aliases: [], description: "Inspect and control threads on the selected engine" },
-  { name: "agents", aliases: [], description: "Create, inspect and control Agents" },
+  { name: "scan", aliases: [], description: GROUP_DESCRIPTIONS["scan"]! },
+  { name: "findings", aliases: [], description: GROUP_DESCRIPTIONS["findings"]!, options: true },
+  { name: "threads", aliases: [], description: GROUP_DESCRIPTIONS["threads"]! },
+  { name: "agents", aliases: [], description: GROUP_DESCRIPTIONS["agents"]! },
+  { name: "skills", aliases: [], description: GROUP_DESCRIPTIONS["skills"]! },
+  { name: "memory", aliases: [], description: GROUP_DESCRIPTIONS["memory"]! },
+  { name: "models", aliases: [], description: GROUP_DESCRIPTIONS["models"]! },
+  { name: "computers", aliases: ["worker"], description: GROUP_DESCRIPTIONS["computers"]! },
+  { name: "config", aliases: [], description: GROUP_DESCRIPTIONS["config"]! },
+  // Old top-level names: hidden, still working for one release (command-compat.ts prints the moved line).
+  { name: "automation", aliases: ["automations"], description: "Discover templates, inspect saved automations, and run an automation", hidden: true },
+  { name: "plugin", aliases: [], description: "Find, install, enable, inspect, run, and author plugins", hidden: true },
+  { name: "doctor", aliases: [], description: "Check local runtime prerequisites and suggest the next command", hidden: true, options: true },
+  { name: "web", aliases: [], description: "Run the local browser console and operations workspace", hidden: true, options: true },
+  { name: "api", aliases: [], description: "Call a trusted engine API with deterministic JSON output (defaults to its handshake)", hidden: true, options: true, arguments: "[path]" },
   { name: "lab", aliases: [], description: "Developer commands: research, improve, console, mcp-server, runs", hidden: true },
-  { name: "web", aliases: [], description: "Run the local browser console and operations workspace", options: true },
-  { name: "api", aliases: [], description: "Call a trusted engine API with deterministic JSON output (defaults to its handshake)", options: true, arguments: "[path]" },
-  { name: "computers", aliases: ["worker"], description: "Add and manage remote computers" },
-  { name: "doctor", aliases: [], description: "Check local runtime prerequisites and suggest the next command", options: true },
-  { name: "config", aliases: [], description: "Inspect, export, and import engine configuration (global and project layers)" },
-  { name: "models", aliases: [], description: "List available models and choose the default (the web Models page)" },
-  { name: "plugin", aliases: [], description: "Find, install, enable, inspect, run, and author plugins" },
-  { name: "skills", aliases: [], description: "Browse, add, create, edit, import, export and link skills" },
-  { name: "memory", aliases: [], description: "List, disable, export and import what 0 remembers across threads" },
 ];
 
 export function findTopLevel(name: string): TopLevelCommand | undefined {

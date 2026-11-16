@@ -107,7 +107,8 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
 import { detectAndRoute, rewriteScanArgs } from "./routing.js";
-import { rewriteMovedCommand, shouldPrintMovedNotice } from "./command-aliases.js";
+import { shouldPrintMovedNotice } from "./command-aliases.js";
+import { formatMovedNotice, resolveInvocation } from "./command-compat.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
 
@@ -168,12 +169,14 @@ let userArgs = process.argv.slice(2);
     process.argv = [process.argv[0], process.argv[1], ...userArgs];
   }
 }
-const moved = rewriteMovedCommand(userArgs);
-if (moved) {
-  if (moved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
-  userArgs = moved.args;
-  process.argv = [process.argv[0], process.argv[1], ...userArgs];
+// The alias layer: old-old names and the new grammar become the implementation commands, and an old
+// invocation that still works gets one dim `moved:` line (see command-compat.ts).
+{
+  const resolved = resolveInvocation(userArgs);
+  if (resolved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(formatMovedNotice(resolved.notice, process.stderr.isTTY === true));
+  userArgs = resolved.args;
 }
+process.argv = [process.argv[0], process.argv[1], ...userArgs];
 const scanRoute = rewriteScanArgs(userArgs);
 if (scanRoute) {
   userArgs = scanRoute;

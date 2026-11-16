@@ -10,7 +10,7 @@
  * the CLI and its generated reference cannot drift apart.
  */
 import type { Command } from "commander";
-import { HELP_GROUPS, NEW_HOME, adoptCommands, configureGroupedHelp, nest } from "./layout.js";
+import { HELP_GROUPS, NEW_HOME, adoptCommands, applyNewSurface, configureGroupedHelp, nest } from "./layout.js";
 
 export { HELP_GROUPS, NEW_HOME, configureGroupedHelp };
 
@@ -171,5 +171,6 @@ export function registerCommandTree(program: Command): void {
   registerMemoryCommand(program);
 
   adoptCommands(program);
+  for (const command of program.commands) applyNewSurface(command);
 }
 

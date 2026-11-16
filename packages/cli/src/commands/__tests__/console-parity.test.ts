@@ -44,8 +44,8 @@ describe("command tree", () => {
     expect(nested("config")).toEqual(expect.arrayContaining(["github", "audit-log"]));
     const computers = program.commands.find(c => c.name() === "computers")!;
     expect(computers.aliases()).toContain("worker");
-    expect(computers.commands.map(c => c.name())).toEqual(expect.arrayContaining(["list", "deploy", "repair", "stop", "hosts"]));
-    expect(computers.commands.find(c => c.name() === "deploy")!.aliases()).toContain("add");
+    expect(computers.commands.map(c => c.name())).toEqual(expect.arrayContaining(["list", "add", "repair", "stop", "hosts"]));
+    expect(computers.commands.find(c => c.name() === "add")!.aliases()).toContain("deploy");
     expect(program.commands.find(c => c.name() === "config")!.commands.map(c => c.name())).toEqual(expect.arrayContaining(["get", "set", "reset", "list", "show"]));
   });
 });

@@ -4,58 +4,37 @@ Usage: 0 [options] [command]
 Security agents for your repositories. Run 0 to open the console.
 
 Options:
-  -h, --help              display help for command
+  -h, --help          display help for command
 
 Work:
-  scan                    Assess a target: live web/MCP, source repository, package, deep review,
-                          or repair loop
-  findings [options]      Browse and manage persisted findings
-  threads                 Inspect and control threads on the selected engine
-  agents                  Create, inspect and control Agents
-  automation|automations  Discover templates, inspect saved automations, and run an automation
+  scan                Scan a target (URL, repository, package) or work a finding: fix, verify,
+                      disclose
+  findings [options]  Browse findings and change their status
+  threads             Start, follow and stop threads
+  agents              Agents and their automations: list, run, change
 
 Setup:
-  models                  List available models and choose the default (the web Models page)
-  computers|worker        Add and manage remote computers
-  skills                  Browse, add, create, edit, import, export and link skills
-  plugin                  Find, install, enable, inspect, run, and author plugins
-  memory                  List, disable, export and import what 0 remembers across threads
-  config                  Inspect, export, and import engine configuration (global and project
-                          layers)
-
-Run:
-  web [options]           Run the local browser console and operations workspace
-  doctor [options]        Check local runtime prerequisites and suggest the next command
-  api [options] [path]    Call a trusted engine API with deterministic JSON output (defaults to its
-                          handshake)
+  skills              Skills, plugins and connectors: list, add, run
+  memory              What 0 remembers across threads
+  models              Models and provider connections
+  computers|worker    Remote computers that run 0
+  config              Settings, API keys, team and setup checks (config doctor)
 
 ### 0 agents
 Usage: 0 agents [options] [command]
 
-Create, inspect and control Agents
+Agents and their automations: list, run, change
 
 Options:
-  -h, --help                  display help for command
+  -h, --help          display help for command
 
 Commands:
-  list [options]              List Agents
-  show [options] <id>         Show an Agent (full or prefix ID)
-  presets [options]           List Agent presets
-  create [options]            Create an Agent from a preset or a JSON definition
-  set [options] <id>          Change an Agent's settings
-  pause [options] <id>        Pause an Agent
-  resume [options] <id>       Resume a paused Agent
-  acknowledge [options] <id>  Mark changed scope, model or tools as reviewed
-  archive [options] <id>      Archive an Agent; its history stays
-  delete [options] <id>       Delete an Agent; its automations are detached, not deleted
-  run [options] <id>          Run an Agent now; starts a thread (needs a running engine)
-  activations [options] <id>  List an Agent's recent runs
-  budget [options] <id>       Show an Agent's budget and the last 24 hours of spend
-  files                       Read and edit an Agent's instructions and memory files
-  triggers                    Control what starts an Agent's automations
-  help [command]              display help for command
+  list [options]      List Agents
+  run [options] <id>  Run an Agent now; starts a thread (needs a running engine)
+  set [options] <id>  Change an Agent's settings
+  help [command]      display help for command
 
-### 0 agents acknowledge
+### 0 agents acknowledge (hidden)
 Usage: 0 agents acknowledge [options] <id>
 
 Mark changed scope, model or tools as reviewed
@@ -65,7 +44,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents activations
+### 0 agents activations (hidden)
 Usage: 0 agents activations [options] <id>
 
 List an Agent's recent runs
@@ -76,7 +55,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents archive
+### 0 agents archive (hidden)
 Usage: 0 agents archive [options] <id>
 
 Archive an Agent; its history stays
@@ -86,7 +65,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents budget
+### 0 agents budget (hidden)
 Usage: 0 agents budget [options] <id>
 
 Show an Agent's budget and the last 24 hours of spend
@@ -96,7 +75,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents create
+### 0 agents create (hidden)
 Usage: 0 agents create [options]
 
 Create an Agent from a preset or a JSON definition
@@ -110,7 +89,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents delete
+### 0 agents delete (hidden)
 Usage: 0 agents delete [options] <id>
 
 Delete an Agent; its automations are detached, not deleted
@@ -121,22 +100,18 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents files
+### 0 agents files (hidden)
 Usage: 0 agents files [options] [command]
 
 Read and edit an Agent's instructions and memory files
 
 Options:
-  -h, --help                 display help for command
+  -h, --help      display help for command
 
 Commands:
-  list [options] <id>        List files
-  get [options] <id> <path>  Print a file's content
-  put [options] <id> <path>  Create or replace a file from --file or --content
-  rm [options] <id> <path>   Delete a file
-  help [command]             display help for command
+  help [command]  display help for command
 
-### 0 agents files get
+### 0 agents files get (hidden)
 Usage: 0 agents files get [options] <id> <path>
 
 Print a file's content
@@ -146,7 +121,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents files list
+### 0 agents files list (hidden)
 Usage: 0 agents files list [options] <id>
 
 List files
@@ -156,7 +131,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents files put
+### 0 agents files put (hidden)
 Usage: 0 agents files put [options] <id> <path>
 
 Create or replace a file from --file or --content
@@ -168,7 +143,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents files rm
+### 0 agents files rm (hidden)
 Usage: 0 agents files rm [options] <id> <path>
 
 Delete a file
@@ -190,7 +165,7 @@ Options:
   --db-path <path>   Control database (default: the user database)
   -h, --help         display help for command
 
-### 0 agents pause
+### 0 agents pause (hidden)
 Usage: 0 agents pause [options] <id>
 
 Pause an Agent
@@ -200,7 +175,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents presets
+### 0 agents presets (hidden)
 Usage: 0 agents presets [options]
 
 List Agent presets
@@ -210,7 +185,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents resume
+### 0 agents resume (hidden)
 Usage: 0 agents resume [options] <id>
 
 Resume a paused Agent
@@ -250,7 +225,7 @@ Options:
   --db-path <path>   Control database (default: the user database)
   -h, --help         display help for command
 
-### 0 agents show
+### 0 agents show (hidden)
 Usage: 0 agents show [options] <id>
 
 Show an Agent (full or prefix ID)
@@ -260,26 +235,18 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents triggers
+### 0 agents triggers (hidden)
 Usage: 0 agents triggers [options] [command]
 
 Control what starts an Agent's automations
 
 Options:
-  -h, --help                           display help for command
+  -h, --help      display help for command
 
 Commands:
-  list [options] <id>                  List triggers
-  add [options] <id>                   Add a trigger for an automation the Agent owns; disabled
-                                       unless --enable --yes
-  enable [options] <id> <trigger-id>   Enable a trigger after reviewing it
-  disable [options] <id> <trigger-id>  Pause a trigger
-  check [options] <id> <trigger-id>    Poll a pull request trigger now instead of waiting for its
-                                       next poll
-  rm [options] <id> <trigger-id>       Delete a trigger
-  help [command]                       display help for command
+  help [command]  display help for command
 
-### 0 agents triggers add
+### 0 agents triggers add (hidden)
 Usage: 0 agents triggers add [options] <id>
 
 Add a trigger for an automation the Agent owns; disabled unless --enable --yes
@@ -300,7 +267,7 @@ Options:
   --db-path <path>        Control database (default: the user database)
   -h, --help              display help for command
 
-### 0 agents triggers check
+### 0 agents triggers check (hidden)
 Usage: 0 agents triggers check [options] <id> <trigger-id>
 
 Poll a pull request trigger now instead of waiting for its next poll
@@ -310,7 +277,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents triggers disable
+### 0 agents triggers disable (hidden)
 Usage: 0 agents triggers disable [options] <id> <trigger-id>
 
 Pause a trigger
@@ -320,7 +287,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents triggers enable
+### 0 agents triggers enable (hidden)
 Usage: 0 agents triggers enable [options] <id> <trigger-id>
 
 Enable a trigger after reviewing it
@@ -331,7 +298,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents triggers list
+### 0 agents triggers list (hidden)
 Usage: 0 agents triggers list [options] <id>
 
 List triggers
@@ -341,7 +308,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents triggers rm
+### 0 agents triggers rm (hidden)
 Usage: 0 agents triggers rm [options] <id> <trigger-id>
 
 Delete a trigger
@@ -358,27 +325,23 @@ Usage: 0 agents webhook [options] [command]
 GitHub webhook for pull request Agents (server mode)
 
 Options:
-  -h, --help        display help for command
+  -h, --help      display help for command
 
 Commands:
-  status [options]  Show whether the webhook is set up and the last deliveries
-  secret            Manage the webhook secret
-  help [command]    display help for command
+  help [command]  display help for command
 
-### 0 agents webhook secret
+### 0 agents webhook secret (hidden)
 Usage: 0 agents webhook secret [options] [command]
 
 Manage the webhook secret
 
 Options:
-  -h, --help        display help for command
+  -h, --help      display help for command
 
 Commands:
-  rotate [options]  Create the secret, or replace it; the old one keeps working for 5 minutes.
-                    Printed once.
-  help [command]    display help for command
+  help [command]  display help for command
 
-### 0 agents webhook secret rotate
+### 0 agents webhook secret rotate (hidden)
 Usage: 0 agents webhook secret rotate [options]
 
 Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
@@ -389,7 +352,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents webhook status
+### 0 agents webhook status (hidden)
 Usage: 0 agents webhook status [options]
 
 Show whether the webhook is set up and the last deliveries
@@ -399,7 +362,7 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 api
+### 0 api (hidden)
 Usage: 0 api [options] [path]
 
 Call a trusted engine API with deterministic JSON output (defaults to its handshake)
@@ -413,7 +376,7 @@ Options:
   --engines-config <path>    Operator engine registry JSON file
   -h, --help                 display help for command
 
-### 0 automation
+### 0 automation (hidden)
 Usage: 0 automation|automations [options] [command]
 
 Discover templates, inspect saved automations, and run an automation
@@ -624,24 +587,21 @@ Options:
 ### 0 computers
 Usage: 0 computers|worker [options] [command]
 
-Add and manage remote computers
+Remote computers that run 0
 
 Options:
-  -h, --help                     display help for command
+  -h, --help            display help for command
 
 Commands:
-  list [options]                 List registered remote computers
-  deploy|add [options]           Add a remote computer: deploy 0 onto a Linux server (Lima VM or
-                                 any SSH host) and register it
-  repair|reconnect <backend-id>  Reconnect a managed remote computer's tunnel and start its
-                                 retained engine when needed
-  stop <backend-id>              Stop a managed remote computer and its owned tunnel; retain remote
-                                 files and registration
-  hosts                          List SSH hosts discovered from ~/.ssh/config as deploy candidates
-  help [command]                 display help for command
+  list [options]        List registered remote computers
+  add|deploy [options]  Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH
+                        host) and register it
+  stop <backend-id>     Stop a managed remote computer and its owned tunnel; retain remote files
+                        and registration
+  help [command]        display help for command
 
-### 0 computers deploy
-Usage: 0 computers deploy|add [options]
+### 0 computers add
+Usage: 0 computers add|deploy [options]
 
 Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH host) and register it
 
@@ -659,7 +619,7 @@ Options:
   --engines-config <path>  Engine registry path
   -h, --help               display help for command
 
-### 0 computers hosts
+### 0 computers hosts (hidden)
 Usage: 0 computers hosts [options]
 
 List SSH hosts discovered from ~/.ssh/config as deploy candidates
@@ -677,7 +637,7 @@ Options:
   --engines-config <path>  Engine registry path
   -h, --help               display help for command
 
-### 0 computers repair
+### 0 computers repair (hidden)
 Usage: 0 computers repair|reconnect [options] <backend-id>
 
 Reconnect a managed remote computer's tunnel and start its retained engine when needed
@@ -696,30 +656,18 @@ Options:
 ### 0 config
 Usage: 0 config [options] [command]
 
-Inspect, export, and import engine configuration (global and project layers)
+Settings, API keys, team and setup checks (config doctor)
 
 Options:
-  -h, --help                   display help for command
+  -h, --help                    display help for command
 
 Commands:
-  show [options]               Show the effective config with the source layer
-                               (default/global/project) per key
-  list [options]               Alias of show
-  get [options] <key>          Print the effective value of one setting
-  set [options] <key> <value>  Change one setting (global by default, --project for this folder)
-  reset [options] [keys...]    Reset settings to defaults (all engine settings when no key is
-                               given)
-  export [options] [file]      Write the effective (or --global) config as shareable JSON (stdout
-                               if no file)
-  import [options] <file>      Merge a shared config into the global (default) or --project layer
-  audit-log [options]          Show the local log of privileged actions (connections, settings,
-                               plugins)
-  team                         Provision opt-in local team workspace accounts
-  db                           Manage the local 0 database
-  github                       Check or connect the GitHub account used to publish fixes
-  help [command]               display help for command
+  get [options] <key>           Print the effective value of one setting
+  set [options] <key> <value>   Change one setting (global by default, --project for this folder)
+  doctor [options] [checks...]  Check this machine and the engine, then suggest the next command
+  help [command]                display help for command
 
-### 0 config audit-log
+### 0 config audit-log (hidden)
 Usage: 0 config audit-log [options]
 
 Show the local log of privileged actions (connections, settings, plugins)
@@ -731,21 +679,18 @@ Options:
   --json         Print JSON
   -h, --help     display help for command
 
-### 0 config db
+### 0 config db (hidden)
 Usage: 0 config db [options] [command]
 
 Manage the local 0 database
 
 Options:
-  -h, --help        display help for command
+  -h, --help      display help for command
 
 Commands:
-  repair [options]  Back up a malformed local SQLite database and recreate a clean one
-  reset [options]   Delete the local SQLite database and optionally reseed the verification
-                    workbench
-  help [command]    display help for command
+  help [command]  display help for command
 
-### 0 config db repair
+### 0 config db repair (hidden)
 Usage: 0 config db repair [options]
 
 Back up a malformed local SQLite database and recreate a clean one
@@ -754,7 +699,7 @@ Options:
   --db-path <path>  Path to SQLite database
   -h, --help        display help for command
 
-### 0 config db reset
+### 0 config db reset (hidden)
 Usage: 0 config db reset [options]
 
 Delete the local SQLite database and optionally reseed the verification workbench
@@ -764,7 +709,16 @@ Options:
   --seed <preset>   Seed preset to load after reset (default: "verification")
   -h, --help        display help for command
 
-### 0 config export
+### 0 config doctor
+Usage: 0 config doctor [options] [checks...]
+
+Check this machine and the engine, then suggest the next command
+
+Options:
+  --fix       Repair the local database
+  -h, --help  display help for command
+
+### 0 config export (hidden)
 Usage: 0 config export [options] [file]
 
 Write the effective (or --global) config as shareable JSON (stdout if no file)
@@ -782,21 +736,18 @@ Options:
   --json      Print JSON with the source layer
   -h, --help  display help for command
 
-### 0 config github
+### 0 config github (hidden)
 Usage: 0 config github [options] [command]
 
 Check or connect the GitHub account used to publish fixes
 
 Options:
-  -h, --help         display help for command
+  -h, --help      display help for command
 
 Commands:
-  status [options]   Show whether GitHub is signed in
-  connect [options]  Sign in with a personal access token (from an env var or stdin)
-  repos [options]    List repositories the signed-in account can reach
-  help [command]     display help for command
+  help [command]  display help for command
 
-### 0 config github connect
+### 0 config github connect (hidden)
 Usage: 0 config github connect [options]
 
 Sign in with a personal access token (from an env var or stdin)
@@ -807,7 +758,7 @@ Options:
   --json           Print JSON
   -h, --help       display help for command
 
-### 0 config github repos
+### 0 config github repos (hidden)
 Usage: 0 config github repos [options]
 
 List repositories the signed-in account can reach
@@ -818,7 +769,7 @@ Options:
   --json           Print JSON
   -h, --help       display help for command
 
-### 0 config github status
+### 0 config github status (hidden)
 Usage: 0 config github status [options]
 
 Show whether GitHub is signed in
@@ -827,7 +778,7 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 config import
+### 0 config import (hidden)
 Usage: 0 config import [options] <file>
 
 Merge a shared config into the global (default) or --project layer
@@ -838,7 +789,7 @@ Options:
   --yes       Accept changes to security-sensitive settings (required to flip them)
   -h, --help  display help for command
 
-### 0 config list
+### 0 config list (hidden)
 Usage: 0 config list [options]
 
 Alias of show
@@ -847,7 +798,7 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 config reset
+### 0 config reset (hidden)
 Usage: 0 config reset [options] [keys...]
 
 Reset settings to defaults (all engine settings when no key is given)
@@ -868,7 +819,7 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 config show
+### 0 config show (hidden)
 Usage: 0 config show [options]
 
 Show the effective config with the source layer (default/global/project) per key
@@ -877,21 +828,18 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 config team
+### 0 config team (hidden)
 Usage: 0 config team [options] [command]
 
 Provision opt-in local team workspace accounts
 
 Options:
-  -h, --help          display help for command
+  -h, --help      display help for command
 
 Commands:
-  init [options]      Create a private team configuration; does not enable it on a running engine
-  add-user [options]  Add a password account to an existing private configuration
-  list [options]      List workspace accounts without credentials
-  help [command]      display help for command
+  help [command]  display help for command
 
-### 0 config team add-user
+### 0 config team add-user (hidden)
 Usage: 0 config team add-user [options]
 
 Add a password account to an existing private configuration
@@ -903,7 +851,7 @@ Options:
   --role <role>          owner, editor or viewer
   -h, --help             display help for command
 
-### 0 config team init
+### 0 config team init (hidden)
 Usage: 0 config team init [options]
 
 Create a private team configuration; does not enable it on a running engine
@@ -915,7 +863,7 @@ Options:
   --display-name <name>  Owner display name
   -h, --help             display help for command
 
-### 0 config team list
+### 0 config team list (hidden)
 Usage: 0 config team list [options]
 
 List workspace accounts without credentials
@@ -924,7 +872,7 @@ Options:
   --config <path>  Team configuration
   -h, --help       display help for command
 
-### 0 doctor
+### 0 doctor (hidden)
 Usage: 0 doctor [options] [command]
 
 Check local runtime prerequisites and suggest the next command
@@ -1149,33 +1097,26 @@ Options:
 ### 0 findings
 Usage: 0 findings [options] [command]
 
-Browse and manage persisted findings
+Browse findings and change their status
 
 Options:
-  --db-path <path>           Path to SQLite database
-  --scan <scanId>            Filter by scan ID
-  --severity <severity>      Filter by severity: critical, high, medium, low, info
-  --category <category>      Filter by attack category
-  --status <status>          Filter by status: discovered, verified, confirmed, scored, reported,
-                             fixed, false-positive
-  --triage <triage>          Filter by triage: new, accepted, suppressed
-  --limit <n>                Max findings/groups to show (default: "50")
-  --all                      Show raw finding rows instead of grouped fingerprints (default: false)
-  -h, --help                 display help for command
+  --db-path <path>       Path to SQLite database
+  --scan <scanId>        Filter by scan ID
+  --severity <severity>  Filter by severity: critical, high, medium, low, info
+  --category <category>  Filter by attack category
+  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported,
+                         fixed, false-positive
+  --triage <triage>      Filter by triage: new, accepted, suppressed
+  --limit <n>            Max findings/groups to show (default: "50")
+  --all                  Show raw finding rows instead of grouped fingerprints (default: false)
+  -h, --help             display help for command
 
 Commands:
-  list [options]             List findings from the database
-  show [options] <id>        Show detailed information about a finding
-  accept [options] <id>      Mark a finding family as accepted
-  suppress [options] <id>    Suppress a finding family across duplicate occurrences
-  reopen [options] <id>      Reset a finding family back to new
-  triage                     Triage findings and manage false-positive memories
-  export [options] [ids...]  Export findings or a whole scan as json, md, sarif, html or pdf
-  keys                       Manage read-only API access keys for the findings API
-  reports                    Import retained CI reports for browser review, or export a share-safe
-                             copy of one
+  list [options]         List findings from the database
+  show [options] <id>    Show detailed information about a finding
+  update [options] <id>  Change a finding's status
 
-### 0 findings accept
+### 0 findings accept (hidden)
 Usage: 0 findings accept [options] <id>
 
 Mark a finding family as accepted
@@ -1188,7 +1129,7 @@ Options:
   --note <text>     Optional triage note
   -h, --help        display help for command
 
-### 0 findings export
+### 0 findings export (hidden)
 Usage: 0 findings export [options] [ids...]
 
 Export findings or a whole scan as json, md, sarif, html or pdf
@@ -1201,21 +1142,18 @@ Options:
   --json               Print the result of writing a file as JSON
   -h, --help           display help for command
 
-### 0 findings keys
+### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]
 
 Manage read-only API access keys for the findings API
 
 Options:
-  -h, --help               display help for command
+  -h, --help      display help for command
 
 Commands:
-  list [options]           List API access keys (secrets are never shown)
-  create [options] <name>  Create a read-only API access key; the secret is printed once
-  revoke [options] <id>    Revoke an API access key
-  help [command]           display help for command
+  help [command]  display help for command
 
-### 0 findings keys create
+### 0 findings keys create (hidden)
 Usage: 0 findings keys create [options] <name>
 
 Create a read-only API access key; the secret is printed once
@@ -1226,7 +1164,7 @@ Options:
   --json               Print JSON
   -h, --help           display help for command
 
-### 0 findings keys list
+### 0 findings keys list (hidden)
 Usage: 0 findings keys list [options]
 
 List API access keys (secrets are never shown)
@@ -1236,7 +1174,7 @@ Options:
   --json            Print JSON
   -h, --help        display help for command
 
-### 0 findings keys revoke
+### 0 findings keys revoke (hidden)
 Usage: 0 findings keys revoke [options] <id>
 
 Revoke an API access key
@@ -1263,7 +1201,7 @@ Options:
   --limit <n>            Max findings/groups to show
   -h, --help             display help for command
 
-### 0 findings reopen
+### 0 findings reopen (hidden)
 Usage: 0 findings reopen [options] <id>
 
 Reset a finding family back to new
@@ -1276,21 +1214,18 @@ Options:
   --note <text>     Optional triage note
   -h, --help        display help for command
 
-### 0 findings reports
+### 0 findings reports (hidden)
 Usage: 0 findings reports [options] [command]
 
 Import retained CI reports for browser review, or export a share-safe copy of one
 
 Options:
-  -h, --help                 display help for command
+  -h, --help      display help for command
 
 Commands:
-  import [options] <report>
-  export [options] <report>  Write a share-safe copy of a report: an allowlist of fields, with no
-                             evidence, PoC, transcripts or local paths. Nothing is sent anywhere.
-  help [command]             display help for command
+  help [command]  display help for command
 
-### 0 findings reports export
+### 0 findings reports export (hidden)
 Usage: 0 findings reports export [options] <report>
 
 Write a share-safe copy of a report: an allowlist of fields, with no evidence, PoC, transcripts or
@@ -1304,7 +1239,7 @@ Options:
   --output <path>        Write the share-safe report to a file instead of stdout
   -h, --help             display help for command
 
-### 0 findings reports import
+### 0 findings reports import (hidden)
 Usage: 0 findings reports import [options] <report>
 
 Arguments:
@@ -1327,7 +1262,7 @@ Options:
   --db-path <path>  Path to SQLite database
   -h, --help        display help for command
 
-### 0 findings suppress
+### 0 findings suppress (hidden)
 Usage: 0 findings suppress [options] <id>
 
 Suppress a finding family across duplicate occurrences
@@ -1340,20 +1275,18 @@ Options:
   --note <text>     Suppression reason
   -h, --help        display help for command
 
-### 0 findings triage
+### 0 findings triage (hidden)
 Usage: 0 findings triage [options] [command]
 
 Triage findings and manage false-positive memories
 
 Options:
-  -h, --help                      display help for command
+  -h, --help      display help for command
 
 Commands:
-  memory                          Manage Semgrep-style triage memories
-  mark-fp [options] <finding-id>  Mark a finding as false positive and auto-create a memory
-  help [command]                  display help for command
+  help [command]  display help for command
 
-### 0 findings triage mark-fp
+### 0 findings triage mark-fp (hidden)
 Usage: 0 findings triage mark-fp [options] <finding-id>
 
 Mark a finding as false positive and auto-create a memory
@@ -1368,21 +1301,18 @@ Options:
   --db-path <path>       Path to SQLite database
   -h, --help             display help for command
 
-### 0 findings triage memory
+### 0 findings triage memory (hidden)
 Usage: 0 findings triage memory [options] [command]
 
 Manage Semgrep-style triage memories
 
 Options:
-  -h, --help             display help for command
+  -h, --help      display help for command
 
 Commands:
-  add [options]          Create a memory from an existing finding
-  list [options]         List all triage memories
-  remove [options] <id>  Delete a memory by id
-  help [command]         display help for command
+  help [command]  display help for command
 
-### 0 findings triage memory add
+### 0 findings triage memory add (hidden)
 Usage: 0 findings triage memory add [options]
 
 Create a memory from an existing finding
@@ -1395,7 +1325,7 @@ Options:
   --db-path <path>       Path to SQLite database
   -h, --help             display help for command
 
-### 0 findings triage memory list
+### 0 findings triage memory list (hidden)
 Usage: 0 findings triage memory list [options]
 
 List all triage memories
@@ -1406,7 +1336,7 @@ Options:
   --db-path <path>       Path to SQLite database
   -h, --help             display help for command
 
-### 0 findings triage memory remove
+### 0 findings triage memory remove (hidden)
 Usage: 0 findings triage memory remove [options] <id>
 
 Delete a memory by id
@@ -1417,6 +1347,15 @@ Arguments:
 Options:
   --db-path <path>  Path to SQLite database
   -h, --help        display help for command
+
+### 0 findings update
+Usage: 0 findings update [options] <id>
+
+Change a finding's status
+
+Options:
+  --status <status>  accepted | suppressed | open | false-positive
+  -h, --help         display help for command
 
 ### 0 lab (hidden)
 Usage: 0 lab [options] [command]
@@ -3107,20 +3046,18 @@ Options:
 ### 0 memory
 Usage: 0 memory [options] [command]
 
-List, disable, export and import what 0 remembers across threads
+What 0 remembers across threads
 
 Options:
-  -h, --help               display help for command
+  -h, --help                   display help for command
 
 Commands:
-  list [options]           List memories
-  disable [options] <id>   Stop using a memory in future threads
-  enable [options] <id>    Use a disabled memory again
-  export [options]         Export memories as a portable archive
-  import [options] <file>  Import a memory archive; imported memories start disabled
-  help [command]           display help for command
+  list [options]               List memories
+  set [options] [id] [on|off]  Turn a memory on or off, or load memories with --import <file>
+  export [options]             Export memories as a portable archive
+  help [command]               display help for command
 
-### 0 memory disable
+### 0 memory disable (hidden)
 Usage: 0 memory disable [options] <id>
 
 Stop using a memory in future threads
@@ -3130,7 +3067,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 memory enable
+### 0 memory enable (hidden)
 Usage: 0 memory enable [options] <id>
 
 Use a disabled memory again
@@ -3152,7 +3089,7 @@ Options:
   --db-path <path>     Use this engine database instead of the default
   -h, --help           display help for command
 
-### 0 memory import
+### 0 memory import (hidden)
 Usage: 0 memory import [options] <file>
 
 Import a memory archive; imported memories start disabled
@@ -3175,39 +3112,52 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
+### 0 memory set
+Usage: 0 memory set [options] [id] [on|off]
+
+Turn a memory on or off, or load memories with --import <file>
+
+Options:
+  --import <file>  Import memories from a file
+  -h, --help       display help for command
+
 ### 0 models
 Usage: 0 models [options] [command]
 
-List available models and choose the default (the web Models page)
+Models and provider connections
 
 Options:
-  -h, --help                 display help for command
+  -h, --help                    display help for command
 
 Commands:
-  list [options]             List models offered by connected providers
-  default [options] [model]  Show the default model, or set it (requires --provider)
-  recommended [options]      Show the recommended model per role from your connected providers
-  connections                Manage model provider connections (the web Connections page)
-  usage [options]            Show spend and tokens of the open missions, by model or by mission
-  help [command]             display help for command
+  list [options]                List models offered by connected providers
+  set [options] [model]         Show or choose the default model
+  connect [options] [provider]  Add, list, test or remove a provider connection
+  help [command]                display help for command
 
-### 0 models connections
+### 0 models connect
+Usage: 0 models connect [options] [provider]
+
+Add, list, test or remove a provider connection
+
+Options:
+  --list      List connections
+  --test      Test a connection
+  --remove    Remove a connection
+  -h, --help  display help for command
+
+### 0 models connections (hidden)
 Usage: 0 models connections [options] [command]
 
 Manage model provider connections (the web Connections page)
 
 Options:
-  -h, --help                   display help for command
+  -h, --help      display help for command
 
 Commands:
-  list [options]               List providers and their connection status
-  add [options] <provider>     Save and verify an API key for a provider (key from an env var or
-                               stdin)
-  test [options] <provider>    Check that a connected provider answers and lists models
-  remove [options] <provider>  Remove a provider's saved credentials
-  help [command]               display help for command
+  help [command]  display help for command
 
-### 0 models connections add
+### 0 models connections add (hidden)
 Usage: 0 models connections add [options] <provider>
 
 Save and verify an API key for a provider (key from an env var or stdin)
@@ -3221,7 +3171,7 @@ Options:
   --json             Print JSON
   -h, --help         display help for command
 
-### 0 models connections list
+### 0 models connections list (hidden)
 Usage: 0 models connections list [options]
 
 List providers and their connection status
@@ -3230,7 +3180,7 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 models connections remove
+### 0 models connections remove (hidden)
 Usage: 0 models connections remove [options] <provider>
 
 Remove a provider's saved credentials
@@ -3241,7 +3191,7 @@ Options:
   --json          Print JSON
   -h, --help      display help for command
 
-### 0 models connections test
+### 0 models connections test (hidden)
 Usage: 0 models connections test [options] <provider>
 
 Check that a connected provider answers and lists models
@@ -3250,7 +3200,7 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 models default
+### 0 models default (hidden)
 Usage: 0 models default [options] [model]
 
 Show the default model, or set it (requires --provider)
@@ -3270,7 +3220,7 @@ Options:
   --json           Print JSON
   -h, --help       display help for command
 
-### 0 models recommended
+### 0 models recommended (hidden)
 Usage: 0 models recommended [options]
 
 Show the recommended model per role from your connected providers
@@ -3279,7 +3229,16 @@ Options:
   --json      Print JSON
   -h, --help  display help for command
 
-### 0 models usage
+### 0 models set
+Usage: 0 models set [options] [model]
+
+Show or choose the default model
+
+Options:
+  --provider <provider>  Provider of the model
+  -h, --help             display help for command
+
+### 0 models usage (hidden)
 Usage: 0 models usage [options]
 
 Show spend and tokens of the open missions, by model or by mission
@@ -3289,7 +3248,7 @@ Options:
   --json                Print JSON
   -h, --help            display help for command
 
-### 0 plugin
+### 0 plugin (hidden)
 Usage: 0 plugin [options] [command]
 
 Find, install, enable, inspect, run, and author plugins
@@ -3538,35 +3497,21 @@ Options:
   -h, --help  display help for command
 
 ### 0 scan
-Usage: 0 scan [options] [command]
+Usage: 0 scan [options] <target> | <command>
 
-Assess a target: live web/MCP, source repository, package, deep review, or repair loop
+Scan a target (URL, repository, package) or work a finding: fix, verify, disclose
 
 Options:
   -h, --help                      display help for command
 
 Commands:
-  web [options]                   Run autonomous pentest against a URL, web app, or MCP server
-  source [options] <repo>         Deep source code security review of a repository
-  package [options] <package>     Run a package scan (compatibility shortcut)
-  deep [options] <target>         Seedless deep security review of a source tree. Emits leads to
-                                  verify, not confirmed bugs.
-  repair [options] <repo>         Find, reproduce, fix, and verify vulnerabilities in a repo;
-                                  optionally open repair PRs
-  campaign [options]              Run a self-directed long-running pentest campaign as
-                                  console-visible chats
   fix [options] <repo>            Generate and optionally apply a fix for one reproduced finding
   verify [options] [finding]      Deterministically replay a finding's PoC steps and emit a
                                   verification_result JSON.
-  deps                            Scan and remediate project dependencies for known vulnerabilities
-  eval [options]                  Run adversarial safety eval against an AI/LLM endpoint and
-                                  produce a scorecard
-  agent-assure [options]          Test whether untrusted MCP content can trigger a prohibited agent
-                                  action
   disclose [options] [findingId]  Assemble GHSA-ready advisory drafts from persisted findings
   help [command]                  display help for command
 
-### 0 scan agent-assure
+### 0 scan agent-assure (hidden)
 Usage: 0 scan agent-assure [options]
 
 Test whether untrusted MCP content can trigger a prohibited agent action
@@ -3597,7 +3542,7 @@ Options:
   --output <directory>           Evidence bundle directory; defaults to agent-assurance-<run-id>
   -h, --help                     display help for command
 
-### 0 scan campaign
+### 0 scan campaign (hidden)
 Usage: 0 scan campaign [options]
 
 Run a self-directed long-running pentest campaign as console-visible chats
@@ -3637,7 +3582,7 @@ Options:
                                     --docs-url is provided)
   -h, --help                        display help for command
 
-### 0 scan deep
+### 0 scan deep (hidden)
 Usage: 0 scan deep [options] <target>
 
 Seedless deep security review of a source tree. Emits leads to verify, not confirmed bugs.
@@ -3667,7 +3612,7 @@ Options:
   --timeout <ms>             Cloud agent timeout budget in milliseconds (default: "600000")
   -h, --help                 display help for command
 
-### 0 scan deps
+### 0 scan deps (hidden)
 Usage: 0 scan deps [options] [command]
 
 Scan and remediate project dependencies for known vulnerabilities
@@ -3676,11 +3621,9 @@ Options:
   -h, --help      display help for command
 
 Commands:
-  scan [options]  Run the native advisory database scanner for the current project
-  fix [options]   Apply the ecosystem package manager's supported vulnerability fixes
   help [command]  display help for command
 
-### 0 scan deps fix
+### 0 scan deps fix (hidden)
 Usage: 0 scan deps fix [options]
 
 Apply the ecosystem package manager's supported vulnerability fixes
@@ -3691,7 +3634,7 @@ Options:
   --yes               Apply changes; without this flag print the command only
   -h, --help          display help for command
 
-### 0 scan deps scan
+### 0 scan deps scan (hidden)
 Usage: 0 scan deps scan [options]
 
 Run the native advisory database scanner for the current project
@@ -3708,62 +3651,43 @@ Usage: 0 scan disclose [options] [command] [findingId]
 Assemble GHSA-ready advisory drafts from persisted findings
 
 Arguments:
-  findingId                               Finding ID (or prefix). Omit to batch every finding at or
-                                          above --severity-floor.
+  findingId                    Finding ID (or prefix). Omit to batch every finding at or above
+                               --severity-floor.
 
 Options:
-  --db-path <path>                        Path to SQLite database
-  --scan <scanId>                         Restrict to findings from this scan
-  --output-dir <path>                     Directory to write advisories into (default
-                                          ~/0/disclosures/scan-<id>)
-  --severity-floor <severity>             In batch mode, only draft findings at or above this
-                                          severity (default: "medium")
-  --no-screenshots                        Skip terminal-screenshot rendering even when freeze is
-                                          available
-  --repo <path>                           Local git checkout of the target repo to re-verify
-                                          findings against
-  --ref <tag>                             Git ref (tag/sha/branch) to check out before verifying —
-                                          defaults to the repo's current HEAD
-  --drop-fixed                            Move findings whose status is 'fixed' or 'file-removed'
-                                          into _dropped/ with a reason file instead of drafting an
-                                          advisory for them (default: false)
-  --reverify                              Behaviourally re-verify each finding's PoC step graph
-                                          against a live target. Requires --target-url. (default:
-                                          false)
-  --target-url <url>                      Base URL the behavioural re-verify runtime dispatches
-                                          http actions against (e.g. http://localhost:3108)
-  --target-env <kv...>                    Repeated KEY=VALUE pairs added to the shell-action
-                                          environment for behavioural re-verify
-  --target-timeout-ms <ms>                Per-step timeout for behavioural re-verify, in
-                                          milliseconds (default 30000)
-  --keep-unrun                            Route `could_not_run` behavioural verdicts to
-                                          needs-review instead of dropping them. Default-off
-                                          because unverified PoCs should never auto-file. (default:
-                                          false)
-  --reverify-rps <n>                      Per-host requests-per-second cap for behavioural reverify
-                                          (default 2). Honours 429 Retry-After.
-  --scope-allowlist <hosts>               Comma-separated host allowlist for reverify. Supports
-                                          `*.domain.com` wildcard (matches subdomains, NOT the
-                                          apex). Out-of-scope http/shell steps fail closed.
-  --dry-run                               Show what would be written without writing files
-                                          (default: false)
-  -h, --help                              display help for command
+  --db-path <path>             Path to SQLite database
+  --scan <scanId>              Restrict to findings from this scan
+  --output-dir <path>          Directory to write advisories into (default
+                               ~/0/disclosures/scan-<id>)
+  --severity-floor <severity>  In batch mode, only draft findings at or above this severity
+                               (default: "medium")
+  --no-screenshots             Skip terminal-screenshot rendering even when freeze is available
+  --repo <path>                Local git checkout of the target repo to re-verify findings against
+  --ref <tag>                  Git ref (tag/sha/branch) to check out before verifying — defaults to
+                               the repo's current HEAD
+  --drop-fixed                 Move findings whose status is 'fixed' or 'file-removed' into
+                               _dropped/ with a reason file instead of drafting an advisory for
+                               them (default: false)
+  --reverify                   Behaviourally re-verify each finding's PoC step graph against a live
+                               target. Requires --target-url. (default: false)
+  --target-url <url>           Base URL the behavioural re-verify runtime dispatches http actions
+                               against (e.g. http://localhost:3108)
+  --target-env <kv...>         Repeated KEY=VALUE pairs added to the shell-action environment for
+                               behavioural re-verify
+  --target-timeout-ms <ms>     Per-step timeout for behavioural re-verify, in milliseconds (default
+                               30000)
+  --keep-unrun                 Route `could_not_run` behavioural verdicts to needs-review instead
+                               of dropping them. Default-off because unverified PoCs should never
+                               auto-file. (default: false)
+  --reverify-rps <n>           Per-host requests-per-second cap for behavioural reverify (default
+                               2). Honours 429 Retry-After.
+  --scope-allowlist <hosts>    Comma-separated host allowlist for reverify. Supports `*.domain.com`
+                               wildcard (matches subdomains, NOT the apex). Out-of-scope http/shell
+                               steps fail closed.
+  --dry-run                    Show what would be written without writing files (default: false)
+  -h, --help                   display help for command
 
-Commands:
-  evidence-pack [options] <finding.json>  Assemble a DRAFT vendor-notification
-                                          (what/where/impact/repro/remediation) from a single
-                                          finding JSON. Emits the mandatory 'DRAFT — NOT SENT'
-                                          banner. Never sends. #928
-  track [options] <findingId>             Drive the disclosure tracking state machine. With no
-                                          --record, opens a fresh draft record; with --record +
-                                          --to, applies one legal transition. Records intent only —
-                                          sends nothing.
-  review [options] <finding.json>         Render a local reproducibility manifest for a verified
-                                          finding. The manifest is deterministic, redacted, and
-                                          safe for human inspection. Never sends or publishes
-                                          anything.
-
-### 0 scan disclose evidence-pack
+### 0 scan disclose evidence-pack (hidden)
 Usage: 0 scan disclose evidence-pack [options] <finding.json>
 
 Assemble a DRAFT vendor-notification (what/where/impact/repro/remediation) from a single finding
@@ -3781,7 +3705,7 @@ Options:
   --out <file>          Write the DRAFT markdown to a file instead of stdout
   -h, --help            display help for command
 
-### 0 scan disclose review
+### 0 scan disclose review (hidden)
 Usage: 0 scan disclose review [options] <finding.json>
 
 Render a local reproducibility manifest for a verified finding. The manifest is deterministic,
@@ -3798,7 +3722,7 @@ Options:
   --out <file>          Write manifest to a file instead of stdout
   -h, --help            display help for command
 
-### 0 scan disclose track
+### 0 scan disclose track (hidden)
 Usage: 0 scan disclose track [options] <findingId>
 
 Drive the disclosure tracking state machine. With no --record, opens a fresh draft record; with
@@ -3818,7 +3742,7 @@ Options:
   --out <file>             Write the record JSON to a file instead of stdout
   -h, --help               display help for command
 
-### 0 scan eval
+### 0 scan eval (hidden)
 Usage: 0 scan eval [options]
 
 Run adversarial safety eval against an AI/LLM endpoint and produce a scorecard
@@ -3863,7 +3787,7 @@ Options:
   --output <path>               Write the validated apply_patch DSL to this path
   -h, --help                    display help for command
 
-### 0 scan package
+### 0 scan package (hidden)
 Usage: 0 scan package [options] <package>
 
 Run a package scan (compatibility shortcut)
@@ -3895,7 +3819,7 @@ Options:
   --timeout <ms>               AI agent timeout in milliseconds (default: "600000")
   -h, --help                   display help for command
 
-### 0 scan repair
+### 0 scan repair (hidden)
 Usage: 0 scan repair [options] <repo>
 
 Find, reproduce, fix, and verify vulnerabilities in a repo; optionally open repair PRs
@@ -3930,7 +3854,7 @@ Options:
   --format <format>          Output format: json (default: "json")
   -h, --help                 display help for command
 
-### 0 scan source
+### 0 scan source (hidden)
 Usage: 0 scan source [options] <repo>
 
 Deep source code security review of a repository
@@ -4091,7 +4015,7 @@ Options:
   --wall-clock <duration>      Wall-clock budget for --kernel-finding (e.g. 30m, 90s; default 30m).
   -h, --help                   display help for command
 
-### 0 scan web
+### 0 scan web (hidden)
 Usage: 0 scan web [options]
 
 Run autonomous pentest against a URL, web app, or MCP server
@@ -4168,26 +4092,16 @@ Options:
 ### 0 skills
 Usage: 0 skills [options] [command]
 
-Browse, add, create, edit, import, export and link skills
+Skills, plugins and connectors: list, add, run
 
 Options:
   -h, --help                          display help for command
 
 Commands:
   list [options]                      List installed skills and linked folders
-  show [options] <id-or-name>         Show a skill's SKILL.md and files
-  new [options] <file>                Create a skill from a SKILL.md file
-  edit [options] <id>                 Replace a skill's SKILL.md with the contents of --file
-  copy [options] <id>                 Save a workspace copy of a skill under a new name
-  delete [options] <id>               Delete a skill from the workspace library
-  import [options] <bundle>           Import a skill bundle (.skill.json) or a folder with SKILL.md
-  export [options] <id>               Export a skill as a bundle
-  link [options] <folder>             Link a folder of skills; they stay where they are
-  unlink [options] <id>               Unlink a folder by its link id (see `0 skills list --json`)
-  catalog [options]                   Browse the skills catalog
   add [options] <catalog-id-or-repo>  Add a skill from the catalog or GitHub (owner/repo[/path]);
                                       shows a review first
-  remove [options] <name>             Remove a skill that was added from GitHub or the catalog
+  run <name> [tool] [pairs...]        Run a skill or a plugin tool
   help [command]                      display help for command
 
 ### 0 skills add
@@ -4202,7 +4116,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills catalog
+### 0 skills catalog (hidden)
 Usage: 0 skills catalog [options]
 
 Browse the skills catalog
@@ -4213,7 +4127,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills copy
+### 0 skills copy (hidden)
 Usage: 0 skills copy [options] <id>
 
 Save a workspace copy of a skill under a new name
@@ -4224,7 +4138,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills delete
+### 0 skills delete (hidden)
 Usage: 0 skills delete [options] <id>
 
 Delete a skill from the workspace library
@@ -4235,7 +4149,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills edit
+### 0 skills edit (hidden)
 Usage: 0 skills edit [options] <id>
 
 Replace a skill's SKILL.md with the contents of --file
@@ -4246,7 +4160,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills export
+### 0 skills export (hidden)
 Usage: 0 skills export [options] <id>
 
 Export a skill as a bundle
@@ -4257,7 +4171,7 @@ Options:
   --db-path <path>     Use this engine database instead of the default
   -h, --help           display help for command
 
-### 0 skills import
+### 0 skills import (hidden)
 Usage: 0 skills import [options] <bundle>
 
 Import a skill bundle (.skill.json) or a folder with SKILL.md
@@ -4267,7 +4181,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills link
+### 0 skills link (hidden)
 Usage: 0 skills link [options] <folder>
 
 Link a folder of skills; they stay where they are
@@ -4287,7 +4201,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills new
+### 0 skills new (hidden)
 Usage: 0 skills new [options] <file>
 
 Create a skill from a SKILL.md file
@@ -4297,7 +4211,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills remove
+### 0 skills remove (hidden)
 Usage: 0 skills remove [options] <name>
 
 Remove a skill that was added from GitHub or the catalog
@@ -4308,7 +4222,15 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills show
+### 0 skills run
+Usage: 0 skills run [options] <name> [tool] [pairs...]
+
+Run a skill or a plugin tool
+
+Options:
+  -h, --help  display help for command
+
+### 0 skills show (hidden)
 Usage: 0 skills show [options] <id-or-name>
 
 Show a skill's SKILL.md and files
@@ -4318,7 +4240,7 @@ Options:
   --db-path <path>  Use this engine database instead of the default
   -h, --help        display help for command
 
-### 0 skills unlink
+### 0 skills unlink (hidden)
 Usage: 0 skills unlink [options] <id>
 
 Unlink a folder by its link id (see `0 skills list --json`)
@@ -4331,38 +4253,18 @@ Options:
 ### 0 threads
 Usage: 0 threads [options] [command]
 
-Inspect and control threads on the selected engine
+Start, follow and stop threads
 
 Options:
-  -h, --help                           display help for command
+  -h, --help                  display help for command
 
 Commands:
-  list [options]                       List live engine threads
-  show [options] <id>                  Read a live thread, including its usage and cost, without
-                                       recreating it
-  create [options]                     Create a thread within the engine's admission grants
-  send [options] <id> <text>           Send a message to a live thread
-  continue [options] <id> [text]       Continue a live thread
-  cancel [options] <id>                Explicitly cancel the thread's active work
-  force-stop [options] <id>            Explicitly force stop qualified owned execution for this
-                                       exact live thread
-  events [options] <id>                Read thread events after an optional cursor
-  resume [options] <saved-id>          Restore a retained snapshot as a new thread under current
-                                       admission grants
-  decide [options] <id> <decision-id>  Respond to a pending thread decision
-  start [options] <prompt>             Create a thread, send the first prompt and print its ID
-  stop [options] <id>                  Cancel a thread's active work
-  retry [options] <id>                 Re-run the last turn of a thread
-  set [options] <id>                   Change a thread's model, effort, access or folder
-  rename [options] <id> [title]        Rename a thread, or regenerate its title
-  clear [options] <id>                 Erase a thread's conversation but keep the thread
-  close [options] <id>                 Stop and close a live thread; its saved copy is kept
-  archive [options] <id>               Archive a thread
-  delete [options] <id>                Permanently delete a thread
-  export [options] <id>                Export a thread transcript
-  help [command]                       display help for command
+  list [options]              List live engine threads
+  send [options] <id> <text>  Send a message to a live thread
+  stop [options] <id>         Cancel a thread's active work
+  help [command]              display help for command
 
-### 0 threads archive
+### 0 threads archive (hidden)
 Usage: 0 threads archive [options] <id>
 
 Archive a thread
@@ -4377,7 +4279,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads cancel
+### 0 threads cancel (hidden)
 Usage: 0 threads cancel [options] <id>
 
 Explicitly cancel the thread's active work
@@ -4392,7 +4294,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads clear
+### 0 threads clear (hidden)
 Usage: 0 threads clear [options] <id>
 
 Erase a thread's conversation but keep the thread
@@ -4407,7 +4309,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads close
+### 0 threads close (hidden)
 Usage: 0 threads close [options] <id>
 
 Stop and close a live thread; its saved copy is kept
@@ -4421,7 +4323,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads continue
+### 0 threads continue (hidden)
 Usage: 0 threads continue [options] <id> [text]
 
 Continue a live thread
@@ -4436,7 +4338,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads create
+### 0 threads create (hidden)
 Usage: 0 threads create [options]
 
 Create a thread within the engine's admission grants
@@ -4452,7 +4354,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads decide
+### 0 threads decide (hidden)
 Usage: 0 threads decide [options] <id> <decision-id>
 
 Respond to a pending thread decision
@@ -4468,7 +4370,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads delete
+### 0 threads delete (hidden)
 Usage: 0 threads delete [options] <id>
 
 Permanently delete a thread
@@ -4484,7 +4386,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads events
+### 0 threads events (hidden)
 Usage: 0 threads events [options] <id>
 
 Read thread events after an optional cursor
@@ -4500,7 +4402,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads export
+### 0 threads export (hidden)
 Usage: 0 threads export [options] <id>
 
 Export a thread transcript
@@ -4517,7 +4419,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads force-stop
+### 0 threads force-stop (hidden)
 Usage: 0 threads force-stop [options] <id>
 
 Explicitly force stop qualified owned execution for this exact live thread
@@ -4548,7 +4450,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads rename
+### 0 threads rename (hidden)
 Usage: 0 threads rename [options] <id> [title]
 
 Rename a thread, or regenerate its title
@@ -4563,7 +4465,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads resume
+### 0 threads resume (hidden)
 Usage: 0 threads resume [options] <saved-id>
 
 Restore a retained snapshot as a new thread under current admission grants
@@ -4578,7 +4480,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads retry
+### 0 threads retry (hidden)
 Usage: 0 threads retry [options] <id>
 
 Re-run the last turn of a thread
@@ -4607,7 +4509,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads set
+### 0 threads set (hidden)
 Usage: 0 threads set [options] <id>
 
 Change a thread's model, effort, access or folder
@@ -4625,7 +4527,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 threads show
+### 0 threads show (hidden)
 Usage: 0 threads show [options] <id>
 
 Read a live thread, including its usage and cost, without recreating it
@@ -4641,7 +4543,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads start
+### 0 threads start (hidden)
 Usage: 0 threads start [options] <prompt>
 
 Create a thread, send the first prompt and print its ID
@@ -4680,7 +4582,7 @@ Options:
   --json                     Print the engine response as JSON
   -h, --help                 display help for command
 
-### 0 web
+### 0 web (hidden)
 Usage: 0 web [options]
 
 Run the local browser console and operations workspace

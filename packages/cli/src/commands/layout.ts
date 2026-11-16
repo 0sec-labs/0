@@ -4,6 +4,7 @@
  * print `0 --help` without loading any command module or the engine.
  */
 import type { Command, Help } from "commander";
+import { GROUP_DESCRIPTIONS, TOP_LEVEL_COMMANDS, VISIBLE_SUBCOMMANDS } from "./manifest.js";
 
 export type Registrar = (parent: Command) => void;
 
@@ -40,9 +41,8 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["scan", "findings", "threads", "agents", "automation"]],
-  ["Setup", ["models", "computers", "skills", "plugin", "memory", "config"]],
-  ["Run", ["web", "doctor", "api"]],
+  ["Work", ["scan", "findings", "threads", "agents"]],
+  ["Setup", ["skills", "memory", "models", "computers", "config"]],
 ];
 
 /** Root `--help`: the visible commands grouped by purpose instead of one flat list. */
@@ -69,4 +69,74 @@ export function configureGroupedHelp(program: Command): void {
       return out.join("\n").replace(/\n+$/, "\n");
     },
   });
+}
+
+interface NewFormStub { readonly name: string; readonly args: string; readonly description: string; readonly options?: readonly (readonly [string, string])[] }
+
+/** Visible subcommands that have no implementation command of their own: `command-compat.ts` rewrites them before parsing, so the action only runs on incomplete input. */
+const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
+  findings: [{ name: "update", args: "<id>", description: "Change a finding's status", options: [["--status <status>", "accepted | suppressed | open | false-positive"]] }],
+  skills: [{ name: "run", args: "<name> [tool] [pairs...]", description: "Run a skill or a plugin tool" }],
+  memory: [{ name: "set", args: "[id] [on|off]", description: "Turn a memory on or off, load memories with --import, or manage triage memories with --add and --remove <id>", options: [["--import <file>", "Import memories from a file"], ["--add", "Add a triage memory (see findings triage)"], ["--remove", "Remove a triage memory"]] }],
+  models: [
+    { name: "set", args: "[model]", description: "Show or choose the default model", options: [["--provider <provider>", "Provider of the model"]] },
+    { name: "connect", args: "[provider]", description: "Add, list, test or remove a provider connection", options: [["--list", "List connections"], ["--test", "Test a connection"], ["--remove", "Remove a connection"]] },
+  ],
+  config: [{ name: "doctor", args: "[checks...]", description: "Check this machine and the engine, then suggest the next command", options: [["--fix", "Repair the local database"]] }],
+};
+
+/** Flags the new grammar adds to commands that already existed; shown at the end of their help. */
+const NEW_FORM_HELP: Readonly<Record<string, string>> = {
+  scan: "A target is a URL, a folder or repository, or npm:<name>, pypi:<name>, cargo:<name>, oci:<ref>. `--module deep|repair|campaign|deps|deps-fix` picks a module that has no target-detecting form.",
+  "scan disclose": "Also: --pack <finding.json>, --track <id>, --review <finding.json>",
+  "threads list": "With an id: show that thread. Then --events, --export, --rename <title>, --set, --clear, --close, --archive or --delete act on it.",
+  "threads send": "`send new <prompt>` starts a thread. With an id: --retry, --resume or --decide <decision-id>.",
+  "agents list": "With an id: show that Agent. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
+  "agents run": "--history lists past activations. --automation runs a saved automation or template.",
+  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --budget, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|triggers|versions|rollback> ...` manages saved automations.",
+  "skills list": "With a name: show that skill. Then --info, --enable or --disable act on a plugin, --mcp-test and --mcp-remove on an MCP server. Also: --catalog browses the catalog, --connectors lists connectors, --mcp lists MCP servers.",
+  "skills add": "<src> may be a catalog id, a repository, a folder or a bundle. Also: --plugin or --local installs a plugin, --new <name> scaffolds one, --validate and --submit check or package a folder, --mcp <url> adds an MCP server, --connect <service>, --disconnect <service>, --remove <name>.",
+  "memory list": "--triage lists the triage memories that suppress repeat findings.",
+  "models list": "Also: --usage shows tokens and cost, --recommended the suggested models.",
+  "computers list": "--hosts lists SSH hosts you could add.",
+  "computers add": "--repair <id> reconnects a computer.",
+  "config get": "No key: show the configuration. --all lists every setting, --export [file] writes it. Namespaces: audit, team, github, api.keys.",
+  "config set": "--from-file <file> imports, --reset [keys...] resets. Namespaces: api.key <name> [--revoke <id>], team <init|add-user>, db <repair|reset>, github <connect|repos>.",
+  "findings list": "Also: --format sarif|json|md exports, --import <report> imports a report.",
+};
+
+function setHidden(command: Command, hidden: boolean): void {
+  (command as unknown as { _hidden: boolean })._hidden = hidden;
+}
+
+/** Make `top` the 0.35 surface: its description, only the listed subcommands visible, and the new-grammar help. Everything old stays registered but hidden. */
+export function applyNewSurface(top: Command): void {
+  const visible = VISIBLE_SUBCOMMANDS[top.name()];
+  const description = GROUP_DESCRIPTIONS[top.name()];
+  if (!visible || !description) {
+    if (TOP_LEVEL_COMMANDS.some((entry) => entry.name === top.name() && entry.hidden)) setHidden(top, true);
+    return;
+  }
+  top.description(description);
+  if (top.name() === "scan") top.usage("[options] <target> | <command>");
+  const topHelp = NEW_FORM_HELP[top.name()];
+  if (topHelp) top.addHelpText("after", `\n${topHelp}\n`);
+  for (const stub of NEW_FORM_STUBS[top.name()] ?? []) {
+    if (top.commands.some((command) => command.name() === stub.name)) continue;
+    const added = top.createCommand(stub.name).description(stub.description).arguments(stub.args).allowUnknownOption().allowExcessArguments();
+    for (const [flags, text] of stub.options ?? []) added.option(flags, text);
+    added.action(() => { throw new Error(`Incomplete: run \`0 ${top.name()} ${stub.name} --help\``); });
+    top.addCommand(added);
+  }
+  // Visible subcommands first, in the documented order.
+  const rank = (command: Command): number => { const at = visible.indexOf(command.name()); return at < 0 ? visible.length : at; };
+  (top.commands as Command[]).sort((a, b) => rank(a) - rank(b));
+  for (const command of top.commands) {
+    const keep = visible.includes(command.name());
+    setHidden(command, !keep);
+    const hide = (node: Command): void => { for (const child of node.commands) { setHidden(child, true); hide(child); } };
+    hide(command);
+    const extra = NEW_FORM_HELP[`${top.name()} ${command.name()}`];
+    if (extra && keep) command.addHelpText("after", `\n${extra}\n`);
+  }
 }

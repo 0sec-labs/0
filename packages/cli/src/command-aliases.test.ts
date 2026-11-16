@@ -20,19 +20,19 @@ function resolves(program: Command, path: readonly string[]): boolean {
 }
 
 describe("command tree", () => {
-  it("keeps the visible top-level surface at 14 commands plus hidden `lab`", () => {
+  it("keeps nine visible top-level commands plus the hidden old names and `lab`", () => {
     const program = tree();
     const visible = program.commands.filter((command) => !(command as unknown as { _hidden: boolean })._hidden).map((command) => command.name());
-    expect(visible.sort()).toEqual(["agents", "api", "automation", "computers", "config", "doctor", "findings", "memory", "models", "plugin", "scan", "skills", "threads", "web"].sort());
-    expect(program.commands.map((command) => command.name()).sort()).toEqual([...visible, "lab"].sort());
+    expect(visible.sort()).toEqual(["agents", "computers", "config", "findings", "memory", "models", "scan", "skills", "threads"]);
+    expect(program.commands.map((command) => command.name()).sort()).toEqual([...visible, "api", "automation", "doctor", "lab", "plugin", "web"].sort());
   });
 
-  it("groups the root help by purpose and hides lab", () => {
+  it("groups the root help by purpose and hides lab and the old names", () => {
     const program = tree();
     configureGroupedHelp(program);
     const help = program.helpInformation();
-    expect(help).toMatch(/Work:\n\s+scan[\s\S]*Setup:\n\s+models[\s\S]*Run:\n\s+web/);
-    expect(help).not.toMatch(/^\s+lab\b/m);
+    expect(help).toMatch(/Work:\n\s+scan[\s\S]*Setup:\n\s+skills/);
+    for (const hidden of ["lab", "web", "doctor", "plugin", "automation", "api"]) expect(help).not.toMatch(new RegExp(`^\\s+${hidden}\\b`, "m"));
   });
 
   it("registers the nested groups", () => {

@@ -9,12 +9,15 @@ import { SLASH_COMMANDS } from "@0/engine/shared";
 import { registerCommandTree } from "../tree.js";
 
 /** Nouns that make no sense in a chat composer. */
-const CLI_ONLY = new Set(["scan", "api", "web"]);
+const CLI_ONLY = new Set(["scan"]);
 
+const isHidden = (command: Command): boolean => (command as unknown as { _hidden?: boolean })._hidden === true;
+
+/** The visible command a `cli` path names; the trailing `--flags` are the new-grammar options and are not part of the path. */
 function resolve(root: Command, path: string): Command | undefined {
   let node: Command | undefined = root;
-  for (const word of path.split(" ")) {
-    node = node?.commands.find((c) => c.name() === word || c.aliases().includes(word));
+  for (const word of path.split(" ").filter((part) => !part.startsWith("-"))) {
+    node = node?.commands.find((c) => c.name() === word && !isHidden(c));
     if (!node) return undefined;
   }
   return node;
@@ -29,8 +32,8 @@ describe("slash commands match the CLI", () => {
     expect(missing).toEqual([]);
   });
 
-  it("a command named like a CLI path points at that path", () => {
-    for (const c of SLASH_COMMANDS.filter((x) => x.name.includes(" ") || x.name === "doctor")) expect(c.cli, c.name).toBe(c.name);
+  it("a command named like a visible CLI path points at that path", () => {
+    for (const c of SLASH_COMMANDS.filter((x) => x.name.includes(" ") && resolve(program, x.name))) expect(c.cli?.split(" --")[0], c.name).toBe(c.name);
   });
 
   it("every visible top-level CLI noun has a slash entry or is explicitly CLI-only", () => {

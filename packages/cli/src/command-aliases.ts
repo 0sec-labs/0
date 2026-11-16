@@ -76,7 +76,7 @@ export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | und
   if (renamed) rest[0] = renamed;
   return {
     args: [...target, ...rest],
-    notice: SILENT.has(first!) ? "" : `[0] \`0 ${first}\` moved to \`0 ${target.join(" ")}\`; the old name will be removed in a future release.`,
+    notice: SILENT.has(first!) ? "" : `moved: use \`0 ${target.join(" ")}\``,
   };
 }
 
