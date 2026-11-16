@@ -24,10 +24,12 @@ permissions:
 
 concurrency:
   group: 0-main-${{ github.ref }}
-  # A superseded run is worthless, main included: the newest commit contains
-  # the older one. Tag runs are never cancelled. A cancelled Main publishes
-  # nothing (docker-publish requires conclusion == success).
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # Runs on main and tags are never cancelled: a burst of pushes used to cancel
+  # every run before it finished, so no commit ever got a verdict. Within one
+  # group GitHub keeps the run in progress and only the newest queued run, so the
+  # cost stays bounded. A cancelled Main publishes nothing (docker-publish
+  # requires conclusion == success).
+  cancel-in-progress: false
 
 jobs:
   changes:
