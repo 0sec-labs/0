@@ -40,3 +40,14 @@ The product now runs a verifier the Agent cannot claim. What exists:
 - The second-Agent check is shown as Corroborated.
 
 Not in this slice: retry with the log tail, patch-hash staleness, the `--allow-unverified` block on PR creation, advisory snapshots, and running verifiers declared by community `SKILL.md` files (they parse and show, but only built-in skills run until install-time approval exists). Slice 2 is the dependency and secrets skills (`setup` with network then cut, and a generated canary for gitleaks).
+
+### First real run (gpt-6-luna, 2 public repos, USD 0.01 total)
+
+`threads start --skill workflow-hardening` on fatih/color and google/gson, with the check running in pinned zizmor and actionlint images:
+
+| Repo | Agent said | Harness result |
+| --- | --- | --- |
+| fatih/color | pinned 3 actions, `contents: read`, `persist-credentials: false` | Verified by: zizmor and actionlint passed, 10 to 4 findings (0.4s); canary flagged |
+| google/gson | `read-all` narrowed; could not pin two `@master` actions, said so | Verified by: zizmor and actionlint passed, 18 to 17 findings (0.5s); canary flagged |
+
+Before the gate, "verified" was the Agent's sentence (7 of 8 merge-ready in the experiment, judged by a person afterwards). With the gate, both replies carry a recorded line with counts. A first attempt with no reachable container runtime (the Docker context lived under a different HOME) ended with "Not verified: no container runtime is available", as designed. n=2 is a demonstration, not a rate. Known gap: "improves" accepts a partial fix (17 findings remain on gson); slice 2 should check the target findings are gone and print what remains.
