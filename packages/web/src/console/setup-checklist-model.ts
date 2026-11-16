@@ -50,3 +50,12 @@ export function canSeeSetupCards(team: { enabled: boolean; user?: { role: string
 export function showSetupCard(progress: SetupProgress | null, dismissed: boolean): progress is SetupProgress {
   return progress !== null && !progress.complete && !dismissed;
 }
+
+/**
+ * Has the person ever had a thread with a message? Live threads are only the ones open in this run of the app:
+ * after a restart earlier threads are saved, so both lists count. Undefined until a list that could say yes has loaded.
+ */
+export function firstThreadStarted(live: readonly { messageCount?: number }[] | undefined, saved: readonly { messageCount?: number }[] | undefined): boolean | undefined {
+  if (live?.some(thread => (thread.messageCount ?? 0) > 0) || saved?.some(thread => (thread.messageCount ?? 0) > 0)) return true;
+  return live === undefined || saved === undefined ? undefined : false;
+}

@@ -10,7 +10,7 @@ import { onOpenWhatsNew, releaseIndex, shouldAutoOpenWhatsNew } from "@/lib/what
 import { useProviders } from "@/components/console-control/connections-control";
 import { useTeamAccess } from "@/components/team-access";
 import { providerUnusable } from "@/console/provider-health";
-import { canSeeSetupCards, deriveSetupProgress, showSetupCard } from "@/console/setup-checklist-model";
+import { canSeeSetupCards, deriveSetupProgress, firstThreadStarted, showSetupCard } from "@/console/setup-checklist-model";
 import { Button } from "@/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/ui/components/dialog";
 
@@ -70,9 +70,10 @@ export function WhatsNewDialog({ open, onOpenChange, version, onVersionChange }:
 /** Owns the dialog: auto-opens once per version (never over the first-run setup card) and reopens from the palette, menu and sidebar card. */
 export function WhatsNewHost() {
   const team = useTeamAccess();
-  const { client, listConsoleSessions } = useBackendApi();
+  const { client, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
   const providers = useProviders();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
+  const saved = useQuery({ queryKey: queryKeys.consoleSaved(), queryFn: ({ signal }) => listSavedConsoleSessions(signal), staleTime: 15_000, retry: false });
   const [setupDismissed] = usePersistentState<boolean>(STORAGE_KEYS.setupCardDismissed, false);
   const [seen, setSeen] = usePersistentState<string>(STORAGE_KEYS.whatsNewSeen, "");
   const [autoOpened, setAutoOpened] = usePersistentState<string>(STORAGE_KEYS.whatsNewAutoOpened, "");
@@ -81,7 +82,7 @@ export function WhatsNewHost() {
 
   const progress = deriveSetupProgress({
     providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid && !providerUnusable(provider)),
-    missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
+    missionStarted: firstThreadStarted(sessions.data, saved.data),
   });
   const known = !canSeeSetupCards(team) || progress !== null;
   const setupCardVisible = canSeeSetupCards(team) && showSetupCard(progress, setupDismissed);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MISSION_PROMPT, canSeeSetupCards, deriveSetupProgress, showSetupCard } from "./setup-checklist-model";
+import { MISSION_PROMPT, canSeeSetupCards, deriveSetupProgress, firstThreadStarted, showSetupCard } from "./setup-checklist-model";
 import { normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
 
 const none = { providerConnected: false, missionStarted: false };
@@ -63,5 +63,15 @@ describe("update status", () => {
     expect(showUpdateCard(status, "0.5.0")).toBe(false);
     expect(showUpdateCard(status, "0.4.9")).toBe(true);
     expect(showUpdateCard(null, "")).toBe(false);
+  });
+});
+
+describe("firstThreadStarted", () => {
+  it("counts saved threads after a restart, and stays unknown until the lists could say yes", () => {
+    expect(firstThreadStarted([], [{ messageCount: 2 }])).toBe(true);
+    expect(firstThreadStarted([{ messageCount: 1 }], undefined)).toBe(true);
+    expect(firstThreadStarted([{ messageCount: 0 }], [{ messageCount: 0 }])).toBe(false);
+    expect(firstThreadStarted([], undefined)).toBeUndefined();
+    expect(firstThreadStarted(undefined, [])).toBeUndefined();
   });
 });

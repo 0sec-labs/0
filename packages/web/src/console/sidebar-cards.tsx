@@ -12,7 +12,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { useTeamAccess } from "@/components/team-access";
 import { useProviders } from "@/components/console-control/connections-control";
 import { CapyCheckIcon, CapyCloseIcon } from "@/ui/icons/capy";
-import { canSeeSetupCards, deriveSetupProgress, showSetupCard, type SetupStep } from "./setup-checklist-model";
+import { canSeeSetupCards, deriveSetupProgress, firstThreadStarted, showSetupCard, type SetupStep } from "./setup-checklist-model";
 import { providerUnusable } from "./provider-health";
 import { SidebarWhatsNewCard } from "@/components/sidebar-whats-new-card";
 import {
@@ -143,10 +143,11 @@ function readPending(): PendingUpdate | null {
 
 function SetupChecklistCard() {
   const navigate = useNavigate();
-  const { client, listConsoleSessions } = useBackendApi();
+  const { client, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
   const [dismissed, setDismissed] = usePersistentState<boolean>(STORAGE_KEYS.setupCardDismissed, false);
   const providers = useProviders();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
+  const saved = useQuery({ queryKey: queryKeys.consoleSaved(), queryFn: ({ signal }) => listSavedConsoleSessions(signal), staleTime: 15_000, retry: false });
   const { pathname } = useLocation();
   const missionId = /^\/chats\/([^/]+)$/.exec(pathname)?.[1];
   // Home is the new-mission screen: the bare route, or a mission that has no messages yet.
@@ -154,7 +155,7 @@ function SetupChecklistCard() {
   const onHome = pathname === "/" || pathname === "/chats" || (missionId !== undefined && sessions.data?.some(session => session.id === missionId && (session.messageCount ?? 0) > 0) !== true);
   const progress = dismissed || !onHome ? null : deriveSetupProgress({
     providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid && !providerUnusable(provider)),
-    missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
+    missionStarted: firstThreadStarted(sessions.data, saved.data),
   });
   if (!showSetupCard(progress, dismissed) || !progress.next) return null;
   const next: SetupStep = progress.next;
