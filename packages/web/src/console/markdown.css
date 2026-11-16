@@ -42,3 +42,24 @@
   from { opacity: 0.2; }
   to { opacity: 1; }
 }
+
+/* Task-list boxes: the native disabled control renders an unchecked item as a dark filled square. */
+.console-markdown input[type="checkbox"] {
+  appearance: none;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0 0.45em 0 -0.1em;
+  vertical-align: -0.12em;
+  border: 1.5px solid var(--muted-foreground-2, currentColor);
+  border-radius: 0.22em;
+  background: transparent;
+}
+.console-markdown input[type="checkbox"]:checked {
+  border-color: var(--foreground, currentColor);
+  background: var(--foreground, currentColor);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+}
+.dark .console-markdown input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+}

@@ -56,6 +56,10 @@ This release makes Memory one thing, puts Settings > Appearance on one page, rep
 - The Extensions page scope row says On with no switch only when a scope is defined.
 - The docs pin the current release, and `node scripts/bump-docs-pins.mjs --check` fails when a pin lags.
 - `0 usage --by` takes `model` or `thread`, and leftover mentions of plugins and Sentinels in command help were reworded.
+- A command that needs your approval now names the command ("Run touch approved.txt") instead of "Confirm tool action", and the closed line keeps it, so you can tell which action you allowed or declined.
+- Messages queued before you pressed Stop now say they are paused and offer Send now, instead of "sends after the current response" while nothing is running.
+- Links in replies are underlined so they can be told from plain text, narrow table headers no longer break mid-word, and unchecked task-list items no longer look like dark filled squares.
+- A thread no longer says its model "is no longer available" when the provider's model list could not be loaded for a moment, and a chat cost under half a cent reads "<$0.01" instead of "$0.00".
 
 ## [0.37.0] - 2026-11-16
 
