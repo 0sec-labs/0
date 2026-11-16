@@ -66,6 +66,11 @@ Scan, finding, automation, run, chat, plugin and engine are defined in
 [Concepts](../src/content/docs/concepts.md). Use those terms in code, CLI help
 and docs.
 
+## Tools
+
+The default model-visible tool list is a small core with skill-provided packs; see
+[Tool philosophy](tool-philosophy.md) and [Core toolset](core-toolset.md).
+
 ## Where tests live
 
 - `packages/engine`: `src/**/*.test.ts` beside the code and `src/__tests__/`

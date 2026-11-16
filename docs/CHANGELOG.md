@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to 0 (the open-source CLI + agent harness) are tracked
+All notable changes to 0 (the open-source CLI) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
 onwards. Entries before v0.13.0 predate the pwnkit → 0 rename and keep the
@@ -15,6 +15,12 @@ on the GitHub Release tag.
 ### Added
 
 - Choose the animated background behind a new thread in **Settings > Appearance > Background** (or the command palette's Change background). Dither stays the default; Aurora, Grid, Topography, Constellation, Scanline, Code rain, Waves, Ripple and None are live previews that follow the colour theme, stay at or under 30 fps, pause when the tab is hidden or off screen, freeze under Reduce motion and are capped so text keeps AA contrast.
+
+### Changed
+
+- Threads and Agents now give the model 11 tools by default (`bash`, `read_file`, `list_files`, `search_files`, `str_replace`, `apply_patch`, `save_finding`, `update_finding`, `ask_operator`, `load_skill`, `done`) instead of 17 plus a catalog of about 40 more. Specialist tools (browser, HTTP probes, cloud, OAST, proxy, binary, kernel, AD and Entra, source-audit engines, delegation) load only when a skill that needs them is loaded. Read-only, scope and approval checks are unchanged. Set `ZERO_TOOLSET=full` to get the previous list; scans keep the full list.
+- `load_skill` with no skill ID now lists the available skills, which replaces advertising `list_skills`. Old tool names keep working for saved threads.
+- Help text says Agents and threads instead of Sentinels and missions, and the top-level description is now "Security agents for your repositories. Run 0 to open the console."
 
 ### Fixed
 
