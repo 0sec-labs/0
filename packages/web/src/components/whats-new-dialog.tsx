@@ -33,7 +33,7 @@ export function WhatsNewDialog({ open, onOpenChange, version, onVersionChange }:
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="gap-0 p-0 sm:max-w-[480px]">
-        <ReleaseHero release={release} className="aspect-[16/9] shrink-0" />
+        {release.image ? <ReleaseHero release={release} className="aspect-[16/9] shrink-0" /> : null}
         <div className="space-y-5 p-6">
           <div className="space-y-1.5">
             <DialogTitle className="text-lg leading-tight">{release.title}</DialogTitle>

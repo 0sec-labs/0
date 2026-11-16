@@ -12,7 +12,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-16",
     title: "Verified means checked",
     summary: "A fix is only called Verified when 0 ran a check for it, the Findings board is back, and the sidebar, Skills page and docs are simpler.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ShieldCheck", title: "Verified means checked", text: "A skill can declare a check that 0 runs in a container before anything is called Verified. Fixes and threads end with Verified by or Not verified, and the second-Agent check is now called Corroborated." },
       { icon: "ListChecks", title: "Findings board", text: "Switch Findings between List and Board and drag a finding between columns. The Agents list is back in the sidebar, next to a Threads toggle." },
@@ -24,7 +23,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-15",
     title: "Extensions",
     summary: "Extensions replace plugins. They connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit, with one decision point before every command.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "Puzzle", title: "Extensions", text: "Add an extension pinned to a commit with 0 skills add <repo>@<sha>. A prompt shows what it can do and the diff on update, and the new Extensions page replaces Explore." },
       { icon: "ShieldCheck", title: "Safer MCP servers and scope", text: "MCP servers live inside extensions and start on demand, every tool is pinned and blocked until you approve a change, and scope is on by default whenever a scope is set." },
@@ -36,7 +34,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-15",
     title: "Nine commands, one mode",
     summary: "The CLI is down to nine commands, 0 opens the console, and Threads and Agents have shell access with a small core tool list.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ListChecks", title: "Nine commands", text: "Run 0 to open the console. scan, findings, threads, agents, skills, memory, models, computers and config cover the rest, and old commands still work for one release with a short moved note." },
       { icon: "ShieldCheck", title: "One mode with shell access", text: "Read-only and Can make changes are gone. Scope, budget, the sandbox and the Ask before running commands setting limit what Threads and Agents can do." },
@@ -48,7 +45,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-15",
     title: "Updates that finish themselves",
     summary: "The console can update and restart itself, pull request Agents react to GitHub straight away in server mode, and plugin reviews show which tools changed.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "RefreshCw", title: "Update and restart in one click", text: "The Update available card downloads, checks and installs the new version, then restarts and reconnects by itself. With Updates set to Automatic it installs in the background once nothing is running." },
       { icon: "Cloud", title: "Faster pull request Agents", text: "In server mode, GitHub can tell 0 about a new pull request the moment it opens, so an Agent starts reviewing without waiting for the next check." },
@@ -60,7 +56,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-15",
     title: "Two kinds of access",
     summary: "Threads, Agents, automations and scans are now Read-only or Can make changes, and asking first is one global setting.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ShieldCheck", title: "Two kinds of access: Read-only or Can make changes", text: "Agents and threads that asked first now follow one setting, Ask before running commands, which is off by default. Turn it on in Settings to keep confirmations." },
       { icon: "Wrench", title: "The same choice in the CLI", text: "Use --access read-only or --access changes on 0 agents create, 0 threads start and 0 lab console. The old flags still work." },
@@ -72,7 +67,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-15",
     title: "Simpler approvals, calmer Threads",
     summary: "Threads run commands without asking by default, slash commands match the CLI, and the sidebar has seven items.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ShieldCheck", title: "Simpler approvals", text: "Threads and Agents run commands automatically. One setting, Ask before running commands, turns the questions back on. Agents are Read-only, Can run commands or Can open pull requests." },
       { icon: "Wrench", title: "Slash commands match the CLI", text: "/threads list, /findings list and /config get work like their 0 commands, and the old names still work." },
@@ -85,7 +79,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-14",
     title: "Threads, Agents and a leaner CLI",
     summary: "Missions are now Threads, Sentinels are now Agents, and the CLI has 14 commands.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ListChecks", title: "Threads and Agents", text: "Missions are now Threads and Sentinels are now Agents. The old CLI names still work, and Memory has its name back." },
       { icon: "Wrench", title: "A leaner CLI", text: "14 top-level commands now cover threads, agents, automation, models, skills, memory and plugins, with the old names kept as aliases." },
@@ -98,7 +91,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-14",
     title: "Simpler navigation, GitHub sign-in",
     summary: "A shorter sidebar, a Models page, a guided GitHub connection and ready-made Automations.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "ListChecks", title: "A shorter sidebar", text: "New mission, Findings, Automations and Explore, with Skills and Plugins inside Explore and Lessons under More." },
       { icon: "KeyRound", title: "Connect GitHub your way", text: "Reuse your GitHub CLI login, sign in with a code, or follow a guided token. You see what permissions are missing." },
@@ -111,7 +103,6 @@ export const RELEASES: readonly Release[] = [
     date: "2026-11-14",
     title: "A new look",
     summary: "A calmer console in the Capy style, with Themes, Computers and a skills directory.",
-    image: "/releases/0.29.0.jpg",
     highlights: [
       { icon: "Palette", title: "New look and Themes", text: "The console follows the Capy style with a neutral accent. Pick a Theme, or switch back to orange, in Settings." },
       { icon: "Laptop", title: "Computers and Sentinels", text: "Connect and manage the machines missions run on, and start from ten Sentinel presets such as Fix Engineer and Secrets Hunter." },

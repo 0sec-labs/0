@@ -1,8 +1,14 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { RELEASES } from "./releases";
 import { compareVersions, releaseIndex, shouldAutoOpenWhatsNew, showWhatsNewCard } from "./whats-new";
 
 describe("release data", () => {
+  it("only shows a picture a release really has: an image is optional and must exist in public/", () => {
+    for (const release of RELEASES) if (release.image) expect(existsSync(join(__dirname, "../../public", release.image)), `${release.version} image ${release.image}`).toBe(true);
+    expect(RELEASES.filter((release) => release.image).map((release) => release.image)).not.toContain("/releases/0.29.0.jpg");
+  });
   it("is newest first with unique versions", () => {
     for (let i = 1; i < RELEASES.length; i++) expect(compareVersions(RELEASES[i - 1]!.version, RELEASES[i]!.version)).toBe(1);
   });
