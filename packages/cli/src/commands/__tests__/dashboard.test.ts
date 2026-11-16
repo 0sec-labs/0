@@ -755,13 +755,20 @@ describe("dashboard — argument validation", () => {
     expect(httpState.listenCalls).toHaveLength(0);
   });
 
-  it("throws if the dashboard asset dir cannot be located", async () => {
+  it("throws if the dashboard asset dir cannot be located and a browser would be opened", async () => {
     // Clear all candidate asset-dir hits.
     fsState.existsPaths.clear();
-    const err = await runCli(["web", "--no-open"]);
+    const err = await runCli(["web"]);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/Dashboard assets not found/);
     expect(httpState.listenCalls).toHaveLength(0);
+  });
+
+  it.each(["--no-open", "--headless"])("%s starts without dashboard assets and serves the API only", async flag => {
+    fsState.existsPaths.clear();
+    const err = await runCli(["web", flag]);
+    expect(err).toBeUndefined();
+    expect(httpState.listenCalls).toHaveLength(1);
   });
 
   it("uses explicit dashboard assets before checkout-relative candidates", async () => {

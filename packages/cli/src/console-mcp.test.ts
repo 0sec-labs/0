@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { createConsoleSession, type NativeRuntime, type NativeRuntimeResult } from "@0/engine";
 import { consoleMcpConfig, connectConsoleMcp } from "./console-mcp.js";
 const homes: string[] = [];
@@ -25,6 +25,18 @@ test("explicit broken source/environment is reported instead of silently losing 
   const { home, root } = fixture(); rmSync(join(root, ".venv/bin/python"));
   expect(() => consoleMcpConfig(home, { ZERO_0VERSE_RUNTIME_CONFIG: join(home, "absent-runtime") })).toThrow(/local environment/);
   expect(() => consoleMcpConfig(home, { ZERO_0VERSE_ROOT: join(home, "missing") })).toThrow(/source not found/);
+});
+
+test("a missing 0verse environment is skipped with one log line instead of failing the console", async () => {
+  const { home, root } = fixture(); rmSync(join(root, ".venv/bin/python"));
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const env = { ZERO_0VERSE_RUNTIME_CONFIG: join(home, "absent-runtime"), ZERO_0VERSE_ROOT: root };
+    await expect(connectConsoleMcp(home, env)).resolves.toBeUndefined();
+    await connectConsoleMcp(home, env);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toContain("0verse MCP skipped");
+  } finally { warn.mockRestore(); }
 });
 
 test.runIf(process.env.ZERO_TEST_LOCAL_0VERSE === "1")("real local MCP handshake discovers tools without a model request", async () => {

@@ -48,9 +48,18 @@ export function consoleMcpConfig(workspaceRoot: string, env: NodeJS.ProcessEnv =
   return [{ id: "zeroverse", command: python, args: ["-m", "zeroverse.mcp"], cwd: resolve(workspaceRoot), env: childEnv }];
 }
 
-/** Local auto-setup fails visibly; a broken engine must not look like zero tools. */
+let skipLogged = false;
+/** 0verse is optional: a missing or broken environment skips it with one log line and never stops a thread or the console. */
+function skipZeroverse(error: unknown): void {
+  if (skipLogged) return; skipLogged = true;
+  console.warn(`[console] 0verse MCP skipped: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+/** The optional 0verse engine is skipped (one log line) when its environment is missing; `ZERO_MCP` configuration errors still fail. */
 export async function connectConsoleMcp(workspaceRoot: string, env: NodeJS.ProcessEnv = process.env): Promise<McpHost | undefined> {
-  const configs = consoleMcpConfig(workspaceRoot, env);
+  let configs: McpServerConfig[];
+  try { configs = consoleMcpConfig(workspaceRoot, env); }
+  catch (error) { if (env.ZERO_MCP !== undefined) throw error; skipZeroverse(error); return connectMcpServers([]); }
   if (env.ZERO_MCP !== undefined || configs.length === 0) return connectMcpServers(configs);
   const host = new McpHost();
   try {
@@ -67,7 +76,7 @@ export async function connectConsoleMcp(workspaceRoot: string, env: NodeJS.Proce
     return host;
   } catch (error) {
     await host.closeAll();
-    throw new Error(`0verse MCP could not start: ${error instanceof Error ? error.message : String(error)}. Run the local 0verse setup or set ZERO_0VERSE_MCP=0 to disable it.`);
+    skipZeroverse(error); return connectMcpServers([]);
   }
 }
 

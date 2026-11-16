@@ -59,6 +59,7 @@ type DashboardOptions = {
   assetDir?: string;
   devUrl?: string;
   readyJson?: boolean;
+  headless?: boolean;
   enginesConfig?: string;
   teamConfig?: string;
   engineTokenEnv?: string;
@@ -112,7 +113,9 @@ export function registerDashboardCommand(program: Command): void {
     .option("--shutdown-timeout <seconds>", "Server mode: seconds to finish in-flight requests on SIGTERM (default 20)")
     .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
+    .option("--headless", "Serve the API only: no browser, and no dashboard assets needed (use with `0 threads`)")
     .action(async (opts: DashboardOptions) => {
+      if (opts.headless) opts.open = false;
       const serverMode = opts.serverMode === true || process.env.ZERO_SERVER_MODE === "1";
       const host = opts.host?.trim() || "127.0.0.1";
       const port = parseInt(opts.port ?? "48123", 10);
@@ -239,7 +242,13 @@ export function registerDashboardCommand(program: Command): void {
       let startupSentinels: WebSentinelService | undefined;
       let startupAssetCleanup: (() => void) | undefined;
       try {
-        const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(import.meta.url, opts.assetDir);
+        // Without a browser to serve (--headless or --no-open) the console works from the API alone, so missing dashboard assets are not fatal.
+        let assetDir: string | undefined; let cleanupAssetDir: (() => void) | undefined;
+        try { ({ path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(import.meta.url, opts.assetDir)); }
+        catch (error) {
+          if (opts.open !== false || serverMode || opts.devUrl) throw error;
+          console.log(chalk.gray("  Dashboard assets not found: serving the API only."));
+        }
         startupAssetCleanup = cleanupAssetDir;
         const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
@@ -583,6 +592,7 @@ export function registerDashboardCommand(program: Command): void {
               res.end(req.method === "HEAD" ? undefined : body);
               return;
             }
+            if (!assetDir) { json(res, 404, { error: "This console serves the API only; the dashboard is not installed." }); return; }
             const explicitAsset = resolveAssetPath(assetDir, requestUrl.pathname);
             if (explicitAsset) {
               sendFile(res, explicitAsset, controlToken);
