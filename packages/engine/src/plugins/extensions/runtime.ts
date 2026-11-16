@@ -8,7 +8,7 @@ import { extensionEnv } from "./core/env.js";
 import { BUILTIN_EXTENSIONS } from "./core/builtins.js";
 import { parseManifest, type ExtensionManifest } from "./core/manifest.js";
 import { isEnabledFor, statusOf, type RowStatus } from "./core/state.js";
-import type { ExtensionStore } from "./ports.js";
+import type { ConnectionSecrets, ExtensionStore } from "./ports.js";
 import { readVerified } from "./verify.js";
 
 export interface LoadedExtension {
@@ -19,7 +19,18 @@ export interface LoadedExtension {
 export type RefusalCode = "tampered" | "capabilities_changed" | "not_approved" | "missing" | "legacy" | "state";
 export interface LoadResult { extensions: LoadedExtension[]; builtins: string[]; refused: Array<{ name: string; code: RefusalCode; reason: string }> }
 
-export function loadable(store: ExtensionStore, projectKey: string | null): LoadResult {
+/**
+ * The connection's secret for the variables this extension's connector declared, and nothing else. It is only a source:
+ * `extensionEnv` still passes a name only if it is declared AND approved. An explicit variable in the parent wins.
+ */
+function connectionFill(extension: string, declared: readonly string[], secrets: ConnectionSecrets | undefined, parent: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+  if (!secrets || !declared.length) return parent;
+  const fill: Record<string, string | undefined> = { ...parent };
+  for (const name of declared) if (typeof parent[name] !== "string") { const v = secrets.read(extension, name); if (v !== undefined) fill[name] = v; }
+  return fill;
+}
+
+export function loadable(store: ExtensionStore, projectKey: string | null, secrets?: ConnectionSecrets): LoadResult {
   const state = store.read();
   if (!state.ok) return { extensions: [], builtins: [], refused: [{ name: "*", code: "state", reason: state.error.message }] };
   const out: LoadResult = { extensions: [], builtins: BUILTIN_EXTENSIONS.filter(b => state.value.builtins[b.name]?.enabled !== false).map(b => b.name), refused: [] };
@@ -36,7 +47,7 @@ export function loadable(store: ExtensionStore, projectKey: string | null): Load
     const capabilities = capabilitiesOf(manifest.value);
     if (capabilityKey(capabilities) !== record.approvedCapabilityKey) { out.refused.push({ name: entry.name, code: "capabilities_changed", reason: "its capabilities differ from what was approved" }); continue; }
     const dir = store.revisionPath(entry.name, entry.active, record.location); const approvedEnv = record.approvedEnv;
-    out.extensions.push({ name: entry.name, revision: entry.active, dir, manifest: manifest.value, capabilities, approvedEnv, env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: approvedEnv, parent, extra: { ZERO_EXTENSION_NAME: entry.name, ZERO_EXTENSION_DIR: dir } }) });
+    out.extensions.push({ name: entry.name, revision: entry.active, dir, manifest: manifest.value, capabilities, approvedEnv, env: (parent = process.env) => extensionEnv({ declared: capabilities.env, approved: approvedEnv, parent: connectionFill(entry.name, manifest.value.connector?.env ?? [], secrets, parent), extra: { ZERO_EXTENSION_NAME: entry.name, ZERO_EXTENSION_DIR: dir } }) });
   }
   return out;
 }

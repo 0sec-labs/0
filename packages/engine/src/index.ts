@@ -922,6 +922,9 @@ export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,
   ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
 } from "./plugins/extensions/index.js";
+// Connector contract (extension manifest `connector`): declaration, auth port, token adapter, secret store.
+export { listConnectors, defaultAdapter, TokenConnector, FsConnectionSecrets, GITHUB_CONNECTOR, hostAllowed } from "./plugins/extensions/index.js";
+export type { ConnectorDecl, ConnectorStatus, ConnectorState, ConnectorAuthPort, ConnectionSecrets, ConnectorEntry } from "./plugins/extensions/index.js";
 // Plugin wire protocol (pure). Message shapes + total decoders shared by the
 // host, tests, and any third-party plugin SDK.
 export {

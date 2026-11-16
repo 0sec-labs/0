@@ -4,6 +4,7 @@
  */
 import { BUILTIN_EXTENSIONS } from "./core/builtins.js";
 import { canDoLines, capabilitiesOf } from "./core/capabilities.js";
+import type { ConnectorDecl } from "./core/connector.js";
 import { parseManifest } from "./core/manifest.js";
 import type { ImportReport } from "./core/state.js";
 import type { ExtensionStore } from "./ports.js";
@@ -22,6 +23,8 @@ export interface ExtensionOverviewRow {
   /** What it can do, one plain line each. */
   canDo: string[];
   skills: string[];
+  /** The connector contract it declares (what it reads and writes, how it connects), when it is a connector. */
+  connector: ConnectorDecl | null;
   refusal: { code: RefusalCode; reason: string } | null;
   note: string;
 }
@@ -37,16 +40,16 @@ export function extensionOverview(store: ExtensionStore, projectKey: string | nu
   const rows = listed.rows.map((row): ExtensionOverviewRow => {
     const builtin = BUILTIN_EXTENSIONS.find(b => b.name === row.name);
     const entry = row.kind === "built-in" ? undefined : state.value.extensions[row.name];
-    let canDo: string[] = builtin ? [...builtin.canDo] : []; let skills: string[] = []; let description = builtin?.description ?? row.detail;
+    let canDo: string[] = builtin ? [...builtin.canDo] : []; let skills: string[] = [...(builtin?.skills ?? [])]; let connector: ConnectorDecl | null = builtin?.connector ?? null; let description = builtin?.description ?? row.detail;
     if (entry && !entry.legacy && entry.active) {
       const files = readVerified(store, entry, entry.active);
       const manifest = files.ok ? parseManifest(files.value, { fallbackName: entry.name }) : null;
-      if (manifest?.ok) { const caps = capabilitiesOf(manifest.value); canDo = canDoLines(caps); skills = caps.skills; description = manifest.value.description || description; }
+      if (manifest?.ok) { const caps = capabilitiesOf(manifest.value); canDo = canDoLines(caps); skills = caps.skills; connector = manifest.value.connector; description = manifest.value.description || description; }
     }
     const refusal = refused.get(row.name) ?? null;
     return {
       name: row.name, builtin: row.kind === "built-in", kind: row.kind, version: row.version, description, status: refusal && row.status !== "unmigrated" ? "refused" : row.status,
-      enabled: row.enabled, revision: row.revision, sourceLabel: sourceLabel(entry?.source ?? null), canDo, skills, refusal: refusal ? { code: refusal.code, reason: refusal.reason } : null,
+      enabled: row.enabled, revision: row.revision, sourceLabel: sourceLabel(entry?.source ?? null), canDo, skills, connector, refusal: refusal ? { code: refusal.code, reason: refusal.reason } : null,
       note: row.kind === "built-in" ? "" : row.detail,
     };
   });

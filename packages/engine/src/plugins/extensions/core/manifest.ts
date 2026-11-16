@@ -9,13 +9,14 @@
  */
 import { posix } from "node:path";
 import { z } from "zod";
+import { connectorProblem, connectorShape, toConnectorDecl, type ConnectorDecl } from "./connector.js";
 import { isSafeExtensionEnvName } from "./env.js";
 import { type FolderFile, textOf } from "./files.js";
 import { err, ok, type Result } from "./result.js";
 
 export type ManifestFormat = "extension" | "claude" | "plugin-json" | "skill-folder";
 export interface McpServerDecl { name: string; transport: "stdio" | "http" | "sse"; command?: string; args: string[]; url?: string; env: string[]; headers: string[] }
-export interface ConnectorDecl { service: string; auth: "token" | "oauth-device" | "cli"; env: string[]; hosts: string[]; read: string[]; write: string[]; surface: string | null }
+export type { ConnectorDecl } from "./connector.js";
 export interface SkillDecl { name: string; description: string; path: string }
 export interface ExtensionManifest {
   format: ManifestFormat; manifestPath: string | null;
@@ -39,10 +40,7 @@ const text = z.string().min(1).max(512).refine(s => !s.includes("\0"));
 const relPath = text.refine(p => !p.includes("\\") && !p.startsWith("/") && !/^[A-Za-z]:/.test(p) && ![".", ".."].includes(posix.normalize(p)) && !posix.normalize(p).startsWith("../"), "must be a relative path inside the extension").transform(p => posix.normalize(p).replace(/^\.\//, "").replace(/\/$/, ""));
 const list = <T extends z.ZodType>(item: T, max = 64) => z.array(item).max(max).default([]);
 
-const connectorSchema = z.object({
-  service: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/), auth: z.enum(["token", "oauth-device", "cli"]), env: list(envName), hosts: list(z.string().regex(/^[a-z0-9*]([a-z0-9.*-]*[a-z0-9])?$/i), 32),
-  access: z.object({ read: list(text), write: list(text) }).default({ read: [], write: [] }), surface: relPath.optional(),
-});
+const connectorSchema = connectorShape.extend({ surface: relPath.optional() });
 const zeroSchema = z.object({
   connector: connectorSchema.optional(), scope: relPath.optional(), verify: relPath.optional(),
   requires: z.object({ bins: list(text, 32), env: list(envName), "0": z.string().max(32).optional() }).default({ bins: [], env: [] }),
@@ -130,7 +128,9 @@ function fromJson(tree: Tree, raw: unknown, format: ManifestFormat, manifestPath
   const z0 = zero.data;
   for (const [label, path] of [["verify", z0.verify], ["scope", z0.scope]] as const) if (path && !tree.has(path)) return bad(`${label} points at ${path}, which does not exist.`);
   if (z0.connector?.surface && !tree.has(z0.connector.surface) && !tree.dir(z0.connector.surface)) return bad(`connector.surface points at ${z0.connector.surface}, which does not exist.`);
-  const connector: ConnectorDecl | null = z0.connector ? { service: z0.connector.service, auth: z0.connector.auth, env: [...new Set(z0.connector.env)].sort(), hosts: z0.connector.hosts, read: z0.connector.access.read, write: z0.connector.access.write, surface: z0.connector.surface ?? null } : null;
+  const problem = z0.connector ? connectorProblem(z0.connector) : null;
+  if (problem) return bad(problem);
+  const connector: ConnectorDecl | null = z0.connector ? toConnectorDecl(z0.connector) : null;
   const ignored = ["hooks", "commands", "agents"].filter(k => record[k] !== undefined || tree.dir(k));
   return ok({
     format, manifestPath, name, version: m.version ?? "0.0.0", description: (m.description ?? "").slice(0, 500), license: m.license?.slice(0, 100) ?? null,

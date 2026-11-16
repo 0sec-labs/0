@@ -8,6 +8,7 @@ import type { Result } from "./core/result.js";
 import type { ExtensionState, ImportReport, RevisionRecord } from "./core/state.js";
 import type { ExtensionManifest } from "./core/manifest.js";
 import type { Capabilities } from "./core/capabilities.js";
+import type { ConnectorStatus } from "./core/connector.js";
 
 /** One immutable revision of an extension's files. */
 export interface Snapshot { readonly revision: string; readonly files: readonly FolderFile[]; readonly treeHash: string; readonly source: SourceRecord }
@@ -66,3 +67,29 @@ export interface Installer {
 export interface Importer { run(options?: { force?: boolean }): Result<ImportReport & { alreadyDone: boolean }> }
 
 export interface ApprovedView { name: string; revision: string; dir: string; manifest: ExtensionManifest; capabilities: Capabilities }
+
+/**
+ * Where the secret a token connection fills is kept, per extension and variable name. A value leaves this port only
+ * through `extensionEnv` (declared AND approved) or the connector's own health probe; it is never listed or logged.
+ */
+export interface ConnectionSecrets {
+  read(extension: string, name: string): string | undefined;
+  has(extension: string, name: string): boolean;
+  write(extension: string, name: string, value: string): Result<void>;
+  remove(extension: string, name: string): Result<void>;
+}
+
+/**
+ * How one connector signs in and reports its state. The contract decides WHICH methods exist (`methods`); an adapter
+ * does the work for a service (`gh` for GitHub, the secret store for a token). Optional operations a connector's
+ * methods do not need are absent.
+ */
+export interface ConnectorAuthPort {
+  status(): Promise<ConnectorStatus>;
+  /** `oauth-device`: start the sign-in; the status carries the one-time code while it waits. */
+  signIn?(): Promise<ConnectorStatus>;
+  /** `token`: validate the token, store it, report the new status. The token is never returned. */
+  connectToken?(token: string): Promise<ConnectorStatus>;
+  cancel?(): Promise<ConnectorStatus>;
+  disconnect?(): Promise<ConnectorStatus>;
+}

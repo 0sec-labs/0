@@ -22,7 +22,7 @@ function oldHome(): string {
       { id: "custom-docs", name: "docs", transport: "stdio", command: "npx", args: ["-y", "docs-mcp"], cwd: null, env: { DOCS_TOKEN: "SECRET-ENV-VALUE-123" }, url: null, headers: {}, enabled: true, approvedFingerprint: "f" },
       { id: "custom-remote", name: "remote", transport: "http", command: null, args: [], env: {}, url: "https://mcp.example.com/mcp", headers: { Authorization: "Bearer SECRET-HEADER-VALUE-456" }, enabled: false, approvedFingerprint: null },
     ]),
-    "service-plugins.json": JSON.stringify([{ id: "github", enabled: true, fields: { token: "ghp_SECRET_TOKEN_789" }, tools: [], testedAt: "" }, { id: "slack", enabled: true, fields: { token: "xoxb-SECRET" }, tools: [], testedAt: "" }]),
+    "service-plugins.json": JSON.stringify([{ id: "github", enabled: true, fields: { token: "ghp_SECRET_TOKEN_789" }, tools: [], testedAt: "" }, { id: "slack", enabled: true, fields: { token: "xoxb-SECRET" }, tools: [], testedAt: "" }, { id: "elastic", enabled: true, fields: { url: "https://k.example.com", apiKey: "ELASTIC-SECRET" }, tools: [], testedAt: "" }]),
     "skills-library/skills/gh-skill/SKILL.md": SKILL("gh-skill"), "skills-library/skills/gh-skill/scripts/run.sh": "echo\n",
     "skills-library/provenance/gh-skill.json": JSON.stringify({ repo: "acme/skills", path: "", ref: "main", sha: SKILL_SHA, licence: "MIT", licenceSource: "spdx", catalogId: null, publisher: "acme", installedAt: "2026-02-03T00:00:00.000Z", revision: "r".repeat(64) }),
     "skills-library/skills/sub-skill/SKILL.md": SKILL("sub-skill"),
@@ -52,8 +52,17 @@ describe("one-time importer", () => {
     expect(gh.enabled).toEqual({ global: false, projects: [] });
     expect(s.value.extensions["hand-made"]!.legacy?.kind).toBe("executable-other");
     expect(s.value.extensions["model-tool"]!.legacy?.kind).toBe("model-authored");
-    expect(report.notMigrated.map(i => `${i.kind}:${i.name}`)).toEqual(expect.arrayContaining(["github-plugin:gh-plug", "plugin:hand-made", "model-authored:model-tool", "connection:slack"]));
+    expect(report.notMigrated.map(i => `${i.kind}:${i.name}`)).toEqual(expect.arrayContaining(["github-plugin:gh-plug", "plugin:hand-made", "model-authored:model-tool", "connection:elastic"]));
     expect(report.notMigrated.find(i => i.name === "gh-plug")?.detail).toContain(`acme/gh-plug@${SHA.slice(0, 12)}`);
+
+    // A token-only service connection becomes a token connector extension: needs approval, declares its variable, never carries the token.
+    const slack = s.value.extensions["slack"]!;
+    expect(slack).toMatchObject({ enabled: { global: true, projects: [] }, importedFrom: "service-plugins" }); expect(slack.revisions[slack.active!]).toMatchObject({ approvedAt: null });
+    const slackJson = JSON.parse(readFileSync(join(home, ".0", "extensions", "slack", slack.active!, "extension.json"), "utf8"));
+    expect(slackJson.connector).toMatchObject({ service: "slack", auth: "token", env: ["SLACK_TOKEN"] });
+    expect(report.migrated.map(i => `${i.kind}:${i.name}`)).toContain("connection:slack");
+    expect(report.notMigrated.find(i => i.name === "elastic")?.detail).toMatch(/more than a token/);
+    expect(s.value.extensions["elastic"]).toBeUndefined();
 
     // MCP servers become local extensions, need re-approval, keep their enabled flag, never carry secret values.
     const docs = s.value.extensions["docs"]!;
@@ -61,7 +70,7 @@ describe("one-time importer", () => {
     expect(s.value.extensions["remote"]!.enabled.global).toBe(false);
     const stored = readFileSync(join(home, ".0", "extensions", "docs", docs.active!, ".mcp.json"), "utf8");
     expect(stored).toContain("${DOCS_TOKEN}");
-    for (const file of Object.values(snapshot(join(home, ".0", "extensions"), "never"))) for (const secret of ["SECRET-ENV-VALUE-123", "SECRET-HEADER-VALUE-456", "ghp_SECRET_TOKEN_789"]) expect(file).not.toContain(secret);
+    for (const file of Object.values(snapshot(join(home, ".0", "extensions"), "never"))) for (const secret of ["SECRET-ENV-VALUE-123", "SECRET-HEADER-VALUE-456", "ghp_SECRET_TOKEN_789", "xoxb-SECRET", "ELASTIC-SECRET"]) expect(file).not.toContain(secret);
 
     // Skills: GitHub provenance (pinned SHA + approval time) carried over; subpath installs keep provenance in the note; custom skills adopted.
     const skill = s.value.extensions["gh-skill"]!;

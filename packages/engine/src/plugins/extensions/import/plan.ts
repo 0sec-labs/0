@@ -9,6 +9,7 @@ import { isExtensionName, parseManifest, sanitizeName } from "../core/manifest.j
 import { newEntry, type ExtensionEntry, type ImportReportItem } from "../core/state.js";
 import type { LegacyData, LegacyMcp } from "./legacy-reader.js";
 import { redactArgs, redactUrl } from "./redact.js";
+import { connectorFolder, tokenConnectorOf } from "./connector-folder.js";
 
 export interface PlannedEntry { entry: ExtensionEntry; revision?: { id: string; files: FolderFile[]; treeHash: string } }
 export interface ImportPlan { entries: PlannedEntry[]; migrated: ImportReportItem[]; notMigrated: ImportReportItem[]; notes: string[] }
@@ -78,8 +79,19 @@ export function planImport(data: LegacyData, taken: ReadonlySet<string>, now: st
     plan.migrated.push({ kind: "mcp-server", name, detail: `imported as a local extension${s.enabled ? " (was enabled)" : ""}; needs re-approval` });
   }
   for (const s of data.services) {
-    if (s.id === "github") plan.migrated.push({ kind: "connection", name: "github", detail: "kept: the built-in github extension uses the existing connection and token" });
-    else plan.notMigrated.push({ kind: "connection", name: s.id, detail: "connector extension not yet available; the stored token is untouched" });
+    if (s.id === "github") { plan.migrated.push({ kind: "connection", name: "github", detail: "kept: the built-in github extension uses the existing connection and token" }); continue; }
+    const token = tokenConnectorOf(s.id);
+    if (!token) { plan.notMigrated.push({ kind: "connection", name: s.id, detail: "needs more than a token (a URL or identifiers): reported only; the stored credentials are untouched" }); continue; }
+    if (already(`service-plugins:${s.id}`, "connection", s.id)) continue;
+    const name = claim(s.id, "connector"); const files = connectorFolder(name, token); const treeHash = gitTreeHash(files); const revision = `local-${treeHash.slice(0, 16)}`;
+    const manifest = parseManifest(files, { fallbackName: name });
+    if (!manifest.ok) { plan.notMigrated.push({ kind: "connection", name: s.id, detail: manifest.error.message }); continue; }
+    const entry = newEntry(name, null); entry.importKey = `service-plugins:${s.id}`;
+    entry.active = revision; entry.enabled.global = s.enabled; entry.importedFrom = "service-plugins";
+    entry.note = `imported connection: connect it again to fill ${token.env}; the old token stays in service-plugins.json and its tools keep working there`;
+    entry.revisions[revision] = { version: "0.0.0", format: manifest.value.format, treeHash, installedAt: now, location: { kind: "store" }, approvedAt: null, approvedCapabilities: null, approvedCapabilityKey: null, approvedEnv: [] };
+    plan.entries.push({ entry, revision: { id: revision, files, treeHash } });
+    plan.migrated.push({ kind: "connection", name, detail: `imported as a token connector extension${s.enabled ? " (was enabled)" : ""}; needs approval; the token itself was not copied` });
   }
   for (const s of data.skills) {
     if (already(`skills-library:${s.name}`, "skill", s.name)) continue;

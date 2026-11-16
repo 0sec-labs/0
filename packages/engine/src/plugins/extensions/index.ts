@@ -10,6 +10,7 @@
 import { projectKeyOf } from "./project-key.js";
 import { DefaultSourceResolver } from "./adapters/source-resolver.js";
 import { FsExtensionStore } from "./adapters/fs-store.js";
+import { FsConnectionSecrets } from "./adapters/fs-connection-secrets.js";
 import { LegacyImporter } from "./import/index.js";
 import { ExtensionInstaller } from "./installer.js";
 import { listRows, loadable } from "./runtime.js";
@@ -19,7 +20,7 @@ import { parseManifest } from "./core/manifest.js";
 import { capabilitiesOf } from "./core/capabilities.js";
 import { buildInstallPrompt, type InstallPrompt } from "./core/prompt.js";
 import { err, ok, type Result } from "./core/result.js";
-import type { Clock, ExtensionStore, Installer, Importer, SourceResolver } from "./ports.js";
+import type { Clock, ConnectionSecrets, ExtensionStore, Installer, Importer, SourceResolver } from "./ports.js";
 
 export { ExtensionFailure, unwrap, type ExtensionError, type ExtensionErrorCode, type Result } from "./core/result.js";
 export type { Capabilities } from "./core/capabilities.js";
@@ -39,11 +40,17 @@ export { GitSource } from "./adapters/git-source.js";
 export { LocalSource } from "./adapters/local-source.js";
 export { LegacyImporter } from "./import/index.js";
 export { loadable, listRows, type LoadResult, type LoadedExtension, type ListRow } from "./runtime.js";
+export { FsConnectionSecrets } from "./adapters/fs-connection-secrets.js";
+export { TokenConnector } from "./adapters/token-connector.js";
+export { listConnectors, defaultAdapter, type ConnectorEntry } from "./connectors.js";
+export { GITHUB_CONNECTOR } from "./core/builtins.js";
+export { CONNECTOR_AUTHS, connectorCanDo, hostAllowed, type ConnectorAuth, type ConnectorDecl, type ConnectorHealth, type ConnectorState, type ConnectorStatus } from "./core/connector.js";
+export type { ConnectionSecrets, ConnectorAuthPort } from "./ports.js";
 export { readRepoSuggestions, type Suggestion } from "./suggestions.js";
 
 
 export interface ExtensionService {
-  store: ExtensionStore; installer: Installer; importer: Importer; sources: SourceResolver;
+  store: ExtensionStore; secrets: ConnectionSecrets; installer: Installer; importer: Importer; sources: SourceResolver;
   list(project?: string): ReturnType<typeof listRows>;
   loadable(project?: string): ReturnType<typeof loadable>;
   /** Everything the Extensions page lists, in one read-only call. */
@@ -57,11 +64,12 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
   const clock = options.clock ?? { now: () => new Date() };
   const store = new FsExtensionStore(options.home, clock);
   const sources = options.sources ?? new DefaultSourceResolver(options.home);
+  const secrets = new FsConnectionSecrets(options.home);
   const installer = new ExtensionInstaller({ store, sources, clock, projectKey: projectKeyOf });
   return {
-    store, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
+    store, secrets, installer, sources, importer: new LegacyImporter({ store, clock }, options.home),
     list: project => listRows(store, project ? projectKeyOf(project) : null),
-    loadable: project => loadable(store, project ? projectKeyOf(project) : null),
+    loadable: project => loadable(store, project ? projectKeyOf(project) : null, secrets),
     overview: project => extensionOverview(store, project ? projectKeyOf(project) : null),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
