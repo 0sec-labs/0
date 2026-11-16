@@ -94,7 +94,7 @@ describe("0 findings keys", () => {
 
 describe("console client transport", () => {
   it("fails clearly when no engine is running", async () => {
-    await expect(openConsole({}, { connectLocal: async () => null })).rejects.toThrow(/No running engine/);
+    await expect(openConsole({}, { connectLocal: async () => null })).rejects.toThrow(/No console running/);
   });
   it("rejects conflicting transport flags", async () => {
     await expect(openConsole({ engineUrl: "http://127.0.0.1:1", computer: "x" })).rejects.toThrow(/cannot be combined/);
