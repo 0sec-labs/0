@@ -297,6 +297,8 @@ export function registerFindingsCommand(program: Command): void {
     findingsCmd
       .command("list")
       .description("List findings from the database")
+      // No default: with positional options the parent never sees a flag typed after `list`, and a default here would clobber the parent's `--all`.
+      .option("--all", "Show raw finding rows instead of grouped fingerprints")
   ).action(async (opts: FindingsListOptions, command: Command) => {
     const resolved = resolveFindingsOptions(opts, command);
     await renderFindingsList(resolved);

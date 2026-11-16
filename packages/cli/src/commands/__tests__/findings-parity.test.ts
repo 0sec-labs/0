@@ -47,9 +47,19 @@ describe("0 findings export", () => {
     await runFindingsExport([], { scan: "scan1", format: "md", dbPath }, h.deps);
     expect(Buffer.concat(h.stdout).toString("utf8")).toContain("Finding abc12345");
   });
+  it("exports every finding when no IDs are given, narrowed by a filter", async () => {
+    const h = exportDeps();
+    await runFindingsExport([], { format: "json", dbPath }, h.deps);
+    expect(process.exitCode).toBe(0);
+    expect(Buffer.concat(h.stdout).toString("utf8")).toContain("Finding abd99999");
+    const high = exportDeps();
+    await runFindingsExport([], { format: "md", dbPath, severity: "high" }, high.deps);
+    expect(Buffer.concat(high.stdout).toString("utf8")).toContain("Finding abc12345");
+  });
   it("reports usage errors with exit 2 and missing findings with exit 1", async () => {
     const h = exportDeps();
-    await runFindingsExport([], { format: "json", dbPath }, h.deps); expect(process.exitCode).toBe(2);
+    await runFindingsExport([], { format: "json", dbPath, severity: "low" }, h.deps); expect(process.exitCode).toBe(1); // nothing matches the filter
+    process.exitCode = 0;
     process.exitCode = 0; await runFindingsExport(["ab"], { format: "json", dbPath }, h.deps); expect(process.exitCode).toBe(2); // ambiguous prefix
     process.exitCode = 0; await runFindingsExport(["zzz"], { format: "json", dbPath }, h.deps); expect(process.exitCode).toBe(1);
     process.exitCode = 0; await runFindingsExport(["abc1"], { format: "pdf", dbPath }, h.deps); expect(process.exitCode).toBe(2);
