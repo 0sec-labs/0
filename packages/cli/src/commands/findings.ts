@@ -10,6 +10,7 @@ import {
   resolveOsecRunStorage,
 } from "@0/engine/storage";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
+import { findingDatabasePaths } from "../finding-focus.js";
 
 type FindingsListOptions = {
   dbPath?: string;
@@ -124,6 +125,20 @@ function resolveFindingByPrefix(rows: FindingRow[], id: string): FindingRow | un
     throw new Error(`Finding prefix '${id}' is ambiguous.`);
   }
   return matches[0];
+}
+
+/** Opens the database that holds this finding (scans keep one database per run); the shared one when none does. */
+function openDatabaseHolding(id: string, selectedDbPath?: string): { db: osecDB; dbPath: string | undefined } {
+  if (selectedDbPath) return { db: new osecDB(selectedDbPath), dbPath: selectedDbPath };
+  for (const path of findingDatabasePaths()) {
+    const db = new osecDB(path);
+    try {
+      const rows = db.listFindings({ limit: 5000 }) as FindingRow[];
+      if (rows.some((row) => row.id.startsWith(id))) return { db, dbPath: path };
+    } catch { /* An unreadable run database cannot hold the finding. */ }
+    db.close();
+  }
+  return { db: new osecDB(), dbPath: undefined };
 }
 
 function triageColor(status?: string | null) {
@@ -259,7 +274,7 @@ async function mutateTriage(
   triageNote: string | undefined,
   dbPath?: string,
 ): Promise<void> {
-  const db = new osecDB(dbPath);
+  const { db } = openDatabaseHolding(id, dbPath);
   try {
     const rows = db.listFindings({ limit: 5000 }) as FindingRow[];
     const finding = resolveFindingByPrefix(rows, id);
@@ -310,8 +325,7 @@ export function registerFindingsCommand(program: Command): void {
     .argument("<id>", "Finding ID (full or prefix)")
     .option("--db-path <path>", "Path to SQLite database")
     .action(async (id: string, opts: { dbPath?: string }, command: Command) => {
-      const selectedDbPath = resolveDbPath(opts, command);
-      const db = new osecDB(selectedDbPath);
+      const { db, dbPath: selectedDbPath } = openDatabaseHolding(id, resolveDbPath(opts, command));
 
       try {
         const all = db.listFindings({ limit: 5000 }) as FindingRow[];

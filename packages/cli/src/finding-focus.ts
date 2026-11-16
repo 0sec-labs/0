@@ -31,7 +31,8 @@ function parseJson(value: unknown): unknown {
   }
 }
 
-function databasePaths(dbPath?: string): string[] {
+/** Every database that can hold findings: one per scan run plus the shared one, or only the one given. */
+export function findingDatabasePaths(dbPath?: string): string[] {
   if (dbPath?.trim()) return [resolve(dbPath)];
 
   return [...new Set([
@@ -92,7 +93,7 @@ export function loadFindingFocus(id: string, options: { dbPath?: string } = {}):
   if (!requestedId) throw new Error("--finding requires a finding id");
 
   const matches: Array<{ row: PersistedFindingRow; target: string | undefined; dbPath: string }> = [];
-  for (const dbPath of databasePaths(options.dbPath)) {
+  for (const dbPath of findingDatabasePaths(options.dbPath)) {
     if (!existsSync(dbPath)) {
       if (options.dbPath?.trim()) throw new Error(`Database does not exist: ${dbPath}`);
       continue;

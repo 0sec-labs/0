@@ -17,6 +17,10 @@ on the GitHub Release tag.
 - The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
 - The long data-collection paragraph is gone from Settings. The two switches stay, and `ZERO_NO_TELEMETRY=1` still turns both off.
 
+### Fixed
+
+- `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
+
 ## [0.38.0] - 2026-11-16
 
 This release makes Memory one thing, puts Settings > Appearance on one page, replaces the backgrounds with six new scenes and puts every page on one width.
