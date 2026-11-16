@@ -12,31 +12,45 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-16
+
+This release makes Memory one thing, gives Settings > Appearance a live preview, replaces the backgrounds with six new scenes and puts every page on one width.
+
+### Added
+
+- Memory is one set of plain notes, per folder or global, that threads read at the start of each turn. There is one Memory page and one `0 memory` command: `list`, `add`, `remove`, `clear`, `export`, `import` and `proposed`.
+- A thread that has read untrusted content can only propose notes. They wait in a Proposed inbox for you to accept, and are not used until you do.
+- Secrets and hidden characters are never saved as notes. 0 saves at most 5 notes per thread and 20 per day.
+- Worktrees and clones of one repository share notes.
+- `0 memory export --to AGENTS.md` writes the notes you wrote or accepted as a file you can review and commit.
+
 ### Changed
 
-- Settings > Appearance > Background has new backgrounds: Dither (now Dither flow, still the default), Contours, Glyph contours, Fish school, Plankton and Ink, plus None. The old Aurora, Grid, Scanline, Code rain, Waves, Ripple, Constellation and Topography were removed, and a saved choice of any of them falls back to Dither. Each tile shows a real frame and plays on hover.
-- There is now one Memory: short plain notes 0 remembers across threads, per folder or everywhere. They are Markdown files under `~/.0/memory/`, and the Memory page lists every note, including the ones the old page hid. Threads read the notes at the start of each turn as untrusted context and have one `memory` tool (remember, forget).
-- `0 memory` is now `list`, `add`, `remove`, `clear`, `export` and `import`. `0 findings update --status false-positive` remembers why as an `avoid` note, and scans show `avoid` notes to the verifier. `0 findings triage memory add|list|remove` still works for one release with a `moved:` line.
-- Migration: the first time Memory opens, the older stores (source lessons in hunt memory, craft memory files, lessons and triage memories in the database) are copied into notes once. Nothing is deleted. The report is in `~/.0/memory/import-report.json`; a lesson you had switched off is not imported.
-- Settings > Appearance is now one page with a live preview of a new thread at the top. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do: theme cards are miniatures of the app in that theme, and every Background tile is a real frame of that background (Aurora is no longer an empty tile). The profile menu has a single Appearance item, and the command palette has Change theme, Change background and Switch to light, dark or system mode.
-
-- Memory is safer to leave on. A thread that has read web pages, files, shell output or MCP and extension results can only propose notes: they wait in a Proposed inbox (Memory page, a dot on the sidebar item, `0 memory proposed list|accept|reject`) and are not used until you accept them. Notes you type (`remember that ...`, `0 memory add`, the Add button) are saved at once. 0 saves at most 5 notes per thread and 20 per day, refuses secrets and hidden characters, returns the existing id for a near-duplicate, and has an `update` action. Only `avoid` notes you wrote or accepted reach the scan verifier. Every note records its source, thread and whether the thread had read untrusted content.
-- Memory keys folders by the repository (normalised `origin` remote, else the real path), so worktrees and clones share notes; older path-keyed notes are still read. Ranking no longer uses a "last used" time that was set on every turn (files are no longer rewritten each turn). When notes do not fit the budget, the model, `0 memory list` and the Memory page say how many were left out. `0 memory export --to AGENTS.md` writes the notes you wrote or accepted as a section you review and commit; 0 never imports from a repository.
+- Settings > Appearance is one page with a live preview of the new thread screen. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do.
+- Theme cards are small copies of the app in that theme, and each Background tile is a real frame of that background.
+- Theme and mode live in one place. The profile menu has one Appearance item and the command palette has fewer entries.
+- Six new backgrounds replace the old eight: Dither flow (still the default), Contours, Glyph contours, Fish school, Plankton and Ink. A saved choice of a removed background falls back to Dither.
+- All pages share one width. Agents, Skills, Memory, Computers, Extensions and the rest line up, and Settings sections are narrower.
+- `0 findings update --status false-positive` remembers why as an `avoid` note, and only `avoid` notes you wrote or accepted reach the scan verifier.
+- `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, next to the new `ZERO_DISABLE_MEMORY`.
+- The first time Memory opens, the older stores are imported into notes once. Nothing is deleted, and the report is in `~/.0/memory/import-report.json`.
+- Memory is not available inside an isolated workbench for now.
 
 ### Removed
 
-- The separate memory stores: hunt memory (including recorded findings and the prior-findings count), craft memory and the CyberGym `CYBERGYM_MEMORY_DB` option, the source-lesson `remember_codebase` tool, lesson capture from chat turns, and the triage-memory repository. `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, alongside the new `ZERO_DISABLE_MEMORY`.
+- The older memory stores: hunt memory, craft memory, triage memories as a separate store, and lesson capture with the lesson pages. They are imported once into Memory and left untouched on disk.
+- The `remember_codebase` tool and the `CYBERGYM_MEMORY_DB` option.
 - The two learning-comparison bench scripts, which measured the old hunt memory.
-- Memory is not available inside an isolated workbench for now.
 
 ### Fixed
 
-- The docs pin the current release (0.37.0) in the image tags, the GitHub Action and the compose example, and a check (`node scripts/bump-docs-pins.mjs --check`, part of `pnpm docs:check`) fails when a pin lags the CLI version.
-- What's new no longer shows an old screenshot for every release; a release without its own picture shows none.
-- The Extensions page learns from the server whether a scope is defined: the scope row says On with no switch when one is, and has a switch only when none is.
-- Refusing an approval run by a thread is one plain sentence ("This command was run by a thread, not by you. Run it yourself in a terminal to approve.") instead of naming an internal variable.
-- A command that runs from another folder than the running console says "This console is for <folder>. Run the command there, or add --db-path <path>."
-- `0 usage --by` takes `model` or `thread`; the README and docs description no longer repeat a sentence; leftover mentions of plugins and Sentinels in command help were reworded.
+- The new-thread skeleton race that made CI flaky is now a deterministic test.
+- The What's new dialog no longer shows an old screenshot.
+- Refusing an approval run by a thread says "This command was run by a thread, not by you. Run it yourself in a terminal to approve." instead of naming an internal variable.
+- A command run from another folder than the console says "This console is for <folder>. Run the command there, or add --db-path <path>."
+- The Extensions page scope row says On with no switch only when a scope is defined.
+- The docs pin the current release, and `node scripts/bump-docs-pins.mjs --check` fails when a pin lags.
+- `0 usage --by` takes `model` or `thread`, and leftover mentions of plugins and Sentinels in command help were reworded.
 
 ## [0.37.0] - 2026-11-16
 
