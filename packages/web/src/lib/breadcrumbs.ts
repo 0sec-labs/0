@@ -34,21 +34,17 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
   }
   switch (root) {
     case "findings": return list("Findings", "/findings", "Finding");
-    case "automations": return list("Automations", "/automations", "Automation");
-    case "agents": case "sentinels": return list(VOCAB.sentinel.Plural, "/agents", VOCAB.sentinel.Singular);
-    case "plugins":
-      if (second === "skills" && path.split("/")[3] === "catalog") return [{ label: "Skills", to: "/plugins/skills" }, { label: "Browse", to: "/plugins/skills?tab=browse" }, { label: label ?? "Skill" }];
-      if (second === "skills") {
+    case "agents": return list(VOCAB.sentinel.Plural, "/agents", VOCAB.sentinel.Singular);
+    case "skills":
+      if (second === "catalog") return [{ label: "Skills", to: "/skills" }, { label: "Browse", to: "/skills?tab=browse" }, { label: label ?? "Skill" }];
+      {
         const browse = new URLSearchParams(search).get("tab") === "browse";
-        if (label) return [{ label: "Skills", to: "/plugins/skills" }, { label: "Installed", to: "/plugins/skills" }, { label }];
-        return [{ label: "Skills", to: "/plugins/skills" }, { label: browse ? "Browse" : "Installed" }];
+        if (label) return [{ label: "Skills", to: "/skills" }, { label: "Installed", to: "/skills" }, { label }];
+        return [{ label: "Skills", to: "/skills" }, { label: browse ? "Browse" : "Installed" }];
       }
-      return [{ label: "Extensions" }];
     case "extensions": return [{ label: "Extensions" }];
-    case "computers": case "engines": return list("Computers", "/computers");
+    case "computers": return list("Computers", "/computers");
     case "memory": return list("Memory", "/memory");
-    case "scope": return list("Reports", "/scope");
-    case "runs": return [{ label: "Findings", to: "/findings" }, { label: label ?? "Report" }];
     case "api-access": return [{ label: "Findings", to: "/findings" }, { label: "API access" }];
     case "team": return [{ label: "Settings", to: "/settings" }, { label: "Members" }];
     default: return null;

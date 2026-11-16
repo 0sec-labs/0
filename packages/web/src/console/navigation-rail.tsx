@@ -26,7 +26,6 @@ import { SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS, canonicalWorkspacePath, i
 import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
-import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
 /** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except formatted editors, where ⌘B is bold. */
 export function useSidebarShortcut(toggle: () => void) {
@@ -100,7 +99,7 @@ export function ConsoleNavigationRail({
     refetchOnWindowFocus: true,
   });
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
-  // Seven items, no overflow menu: New thread, Findings, Automations, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
+  // Seven items, no overflow menu: New thread, Findings, Agents, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
   const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const active = (to: string) => isSidebarDestinationActive(to, currentPath);
 
@@ -170,7 +169,6 @@ export function ConsoleNavigationRail({
           </NavLink>
         ))}
       </SidebarGroup>
-      <SentinelSidebarSection />
       <SidebarScroll id="navigation-chat-history">
         <div ref={onHistorySlot} className="flex h-full min-h-0 flex-col" />
       </SidebarScroll>

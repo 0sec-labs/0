@@ -9,7 +9,7 @@ import { cn } from "../lib/utils.js"
 export const NOT_FOUND_SECTIONS = {
   findings: { to: "/findings", label: "Back to findings", noun: "finding" },
   sentinels: { to: "/agents", label: "Back to agents", noun: "agent" },
-  automations: { to: "/automations", label: "Back to automations", noun: "automation" },
+  automations: { to: "/agents", label: "Back to agents", noun: "automation" },
 } as const
 
 export type NotFoundSection = keyof typeof NOT_FOUND_SECTIONS

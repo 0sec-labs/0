@@ -8,7 +8,7 @@ const SRC = join(__dirname, "..", "src");
 const ROUNDED_ALLOWED: Record<string, string> = {
   "components/appearance/theme-gallery.tsx": "Theme preview tiles are miniature app windows and keep the panel radius.",
   "components/sentinels/sentinel-avatar.tsx": "Large agent avatar tile is a deliberate squircle, like other avatars.",
-  "components/explore/cells.tsx": "Catalog logo tiles are avatars and scale their radius with size.",
+  "components/skills/cells.tsx": "Catalog logo tiles are avatars and scale their radius with size.",
   "ui/components/toast.tsx": "Toast is a popover surface and uses the 8px menu radius from DESIGN.md.",
 };
 

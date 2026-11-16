@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { v } from "@/lib/vocabulary";
 import { PageContent } from "@/components/page-header";
@@ -14,6 +14,10 @@ import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sent
 import { SentinelFiles } from "@/components/sentinels/sentinel-files";
 import { SentinelActivations, SentinelAutomations, SentinelOverview, SentinelSettings } from "@/components/sentinels/sentinel-views";
 import { GitHubWebhookControl } from "@/components/console-control/github-webhook-control";
+import { AutomationEditor } from "@/components/automations/automation-editor";
+import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
+import { useAutomationRows } from "@/components/automations/use-automations";
+import { relativeAge } from "@/components/automations/automation-model";
 import { useSentinel, useSentinels } from "@/sentinels/api";
 import { SENTINEL_VIEWS, orderSentinels, parseView, sentinelHref, type SentinelView } from "@/sentinels/model";
 
@@ -27,15 +31,25 @@ export function SentinelsPage() {
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
   const creating = search.get("new") === "1";
+  const [newAutomation, setNewAutomation] = useState(false);
+  const automations = useAutomationRows();
+  const workflowId = search.get("workflow");
   const setCreating = (open: boolean) => setSearch(previous => { const next = new URLSearchParams(previous); if (open) next.set("new", "1"); else next.delete("new"); return next; }, { replace: true });
+  // Old "Set up" links carried the owner in the query; the automation now lives in that Agent's page.
+  const legacyOwner = search.get("owner");
+  if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner, "automations")} replace />;
   if (isLoading) return <PageContent><LoadingState label="Loading" /></PageContent>;
   if (error) return <PageContent><ErrorState error={error} onRetry={() => void refetch()} /></PageContent>;
   if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></PageContent>;
   const rows = orderSentinels(sentinels);
+  const nameOf = new Map(sentinels.map(item => [item.id, item.name]));
+  const hrefFor = (id: string, owner?: string | null) => owner && nameOf.has(owner) ? `${sentinelHref(owner, "automations")}&workflow=${encodeURIComponent(id)}` : `/agents?workflow=${encodeURIComponent(id)}`;
+  const owners = new Map(automations.definitions.map(item => [item.id, item.ownerSentinelId]));
+  if (workflowId) return <PageContent width="wide"><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></PageContent>;
   return <PageContent width="wide" className="gap-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <h1 className="font-sans text-2xl font-medium tracking-tight">{v("{Sentinels}")}</h1>
-      {!readOnly && rows.length > 0 && <Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button>}
+      {!readOnly && rows.length > 0 && <div className="flex gap-2"><Button type="button" variant="ghost" onClick={() => setNewAutomation(true)}>New automation</Button><Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button></div>}
     </header>
     {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} action={readOnly ? undefined : <Button type="button" variant="secondary" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
       : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -44,7 +58,14 @@ export function SentinelsPage() {
           <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No thread yet."}</span>
         </Link></li>)}
       </ul>}
+    {automations.rows.length > 0 && <section aria-label="Automations" className="space-y-2">
+      <h2 className="text-sm font-medium">Automations</h2>
+      <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
+        {automations.rows.map(item => { const owner = owners.get(item.id); return <li key={item.id}><Link to={hrefFor(item.id, owner)} className="flex items-center gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="hidden truncate text-xs text-muted-foreground-1 sm:block">{owner ? nameOf.get(owner) : ""}</span><span className="hidden w-40 truncate text-xs text-muted-foreground-1 md:block">{item.trigger}</span><span className="w-20 text-right text-xs tabular-nums text-muted-foreground-1">{relativeAge(item.lastRunAt, Date.now())}</span></Link></li>; })}
+      </ul>
+    </section>}
     {!readOnly && <GitHubWebhookControl />}
+    <NewAutomationDialog open={newAutomation} onOpenChange={setNewAutomation} sentinels={sentinels} onCreated={(owner, id) => navigate(hrefFor(id, owner))} />
     <CreateSentinelDialog open={creating} onOpenChange={setCreating} onCreated={sentinel => navigate(sentinelHref(sentinel.id))} />
   </PageContent>;
 }

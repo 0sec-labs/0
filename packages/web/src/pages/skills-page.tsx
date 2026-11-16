@@ -19,7 +19,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/console/markdown";
 import { SkillsLibrary } from "@/components/skills-library";
 import { skillSourceLabel } from "@/components/skills-model";
-import { SkillsBrowse } from "@/components/explore/skills-browse";
+import { SkillsBrowse } from "@/components/skills/skills-browse";
 import { EditorChat } from "@/components/editor-chat";
 import { errorText } from "@/lib/api-error";
 

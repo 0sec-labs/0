@@ -5,8 +5,8 @@ import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashed
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: VOCAB.mission.Plural, icon: CapyThreadListIcon },
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
-  { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
-  { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },
+  { to: "/agents", label: "Agents", icon: CapyAutomationsIcon },
+  { to: "/skills", label: "Skills", icon: CapySparkleFourIcon },
   { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
   { to: "/extensions", label: "Extensions", icon: CapyPuzzleIcon },
@@ -15,9 +15,9 @@ export const WORKSPACE_DESTINATIONS = [
 
 /**
  * The sidebar: "New thread" (an action, not a route) followed by these six destinations, in this order. There is no More menu.
- * Skills is active on /plugins/skills* (installed, browse, catalog detail); Extensions on /extensions.
+ * Automations live inside Agents; Skills is active on /skills* (installed, browse, catalog detail); Extensions on /extensions.
  */
-export const SIDEBAR_DESTINATIONS = ["/findings", "/automations", "/plugins/skills", "/memory", "/computers", "/extensions"] as const;
+export const SIDEBAR_DESTINATIONS = ["/findings", "/agents", "/skills", "/memory", "/computers", "/extensions"] as const;
 
 /** Whether a sidebar destination is highlighted for the (canonical, basename-free) current path. */
 export function isSidebarDestinationActive(to: string, currentPath: string): boolean {
@@ -30,30 +30,25 @@ export function isSidebarDestinationActive(to: string, currentPath: string): boo
  * - "path": keep the rest of the path, the query and the hash (`/threads/abc?x=1` becomes `/findings/abc?x=1`);
  * - "query": land on `to` and keep only the query and the hash;
  * - "none": land on `to` as written.
- * Sunset: these exist for bookmarks, old emails, docs and CLI output from before the current names. Drop a row once no
- * supported release prints that URL; the 404 page then takes over. The current names are the ones in WORKSPACE_DESTINATIONS
- * plus /agents, /findings, /scope and /runs/:scanId.
+ * Sunset: these exist for bookmarks, old emails, docs and CLI output from 0.33 and later. Rows for pages that were deleted
+ * (reports, scans, engagements, the automations list, Explore and Plugins) land on the page that replaced them. Drop a row
+ * once no supported release prints that URL; the 404 page then takes over. The current names are the ones in
+ * WORKSPACE_DESTINATIONS plus /findings, /models, /settings, /team and /api-access.
  */
 export interface LegacyRedirect { readonly from: string; readonly routes: readonly string[]; readonly to: string; readonly keep: "path" | "query" | "none" }
 export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/onboarding", routes: ["/onboarding", "/setup", "/console/setup", "/console/onboarding"], to: "/chats", keep: "none" },
   { from: "/learning", routes: ["/learning", "/lessons"], to: "/memory", keep: "query" },
-  { from: "/runs", routes: ["/runs", "/dashboard", "/live"], to: "/findings", keep: "none" },
+  { from: "/runs", routes: ["/runs", "/runs/:scanId", "/dashboard", "/live", "/operations", "/scans", "/scans/:scanId", "/scope", "/engagements", "/engagements/*"], to: "/findings", keep: "none" },
   { from: "/sentinels", routes: ["/sentinels", "/sentinels/:sentinelId"], to: "/agents", keep: "path" },
-  { from: "/operations", routes: ["/operations"], to: "/dashboard", keep: "path" },
   { from: "/threads", routes: ["/threads", "/threads/:fingerprint"], to: "/findings", keep: "path" },
-  { from: "/scans", routes: ["/scans", "/scans/:scanId"], to: "/runs", keep: "path" },
-  { from: "/workflows", routes: ["/workflows"], to: "/automations", keep: "path" },
-  { from: "/audits", routes: ["/audits"], to: "/automations", keep: "path" },
-  { from: "/launcher", routes: ["/launcher"], to: "/automations", keep: "path" },
-  { from: "/launch", routes: ["/launch"], to: "/automations", keep: "path" },
+  { from: "/automations", routes: ["/automations", "/workflows", "/audits", "/launcher", "/launch"], to: "/agents", keep: "query" },
   { from: "/console", routes: ["/console", "/console/*"], to: "/chats", keep: "path" },
   { from: "/workers", routes: ["/workers", "/workers/*"], to: "/computers", keep: "path" },
   { from: "/engines", routes: ["/engines"], to: "/computers", keep: "path" },
-  { from: "/engagements", routes: ["/engagements", "/engagements/*"], to: "/scope", keep: "path" },
   { from: "/explore", routes: ["/explore", "/plugins/explore"], to: "/extensions", keep: "none" },
+  { from: "/plugins/skills", routes: ["/plugins/skills", "/plugins/skills/*"], to: "/skills", keep: "path" },
   { from: "/plugins", routes: ["/plugins", "/plugins/:pluginId"], to: "/extensions", keep: "none" },
-  { from: "/skills", routes: ["/skills", "/skills/*"], to: "/plugins/skills", keep: "path" },
 ];
 
 /** Compatibility URLs remain accepted, but share one canonical page identity. */

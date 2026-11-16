@@ -9,7 +9,7 @@ describe("settings pages", () => {
     expect(settingsRedirect("repositories")).toBe("/settings?section=git");
     expect(settingsRedirect("finding-states")).toBe("/findings");
     expect(settingsRedirect("integrations")).toBe("/plugins");
-    expect(settingsRedirect("skills")).toBe("/plugins/skills");
+    expect(settingsRedirect("skills")).toBe("/skills");
     expect(settingsRedirect("members")).toBe("/team");
     expect(settingsRedirect("git")).toBeUndefined();
     expect(settingsRedirect(null)).toBeUndefined();

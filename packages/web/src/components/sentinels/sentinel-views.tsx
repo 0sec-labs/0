@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { errorText } from "@/lib/api-error";
-import { Link, useNavigate } from "react-router-dom";
-import { ExternalLink } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { v } from "@/lib/vocabulary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,12 @@ import { sentinelHref } from "@/sentinels/model";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
 import { AddTriggerDialog } from "./add-trigger-dialog";
+import { AutomationEditor } from "@/components/automations/automation-editor";
+import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
+import { useCreateAutomation } from "@/components/automations/use-automations";
 
 const ACTIVATION_TONE: Record<SentinelActivation["status"], "success" | "warning" | "danger" | "info" | "neutral"> = { queued: "neutral", running: "info", completed: "success", failed: "danger", cancelled: "neutral", skipped: "neutral" };
 const ago = (iso: string) => formatRelativeAge(Date.parse(iso));
-/** Opens the new-automation flow already owned by this Sentinel, from the preset's suggested template. */
-export const setupAutomationHref = (sentinelId: string, item: { templateId?: string; runIn: string }) => `/automations?template=${encodeURIComponent(item.templateId ?? "")}&owner=${encodeURIComponent(sentinelId)}&runIn=${encodeURIComponent(item.runIn)}`;
 const chatHref = (missionId: string | null | undefined) => (missionId ? `/chats/${encodeURIComponent(missionId)}` : undefined);
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -163,14 +164,21 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
 export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: Sentinel; readOnly?: boolean }) {
   const owned = useSentinelAutomations(sentinel.id);
   const presets = useSentinelPresets();
+  const create = useCreateAutomation();
+  const [search, setSearch] = useSearchParams();
+  const [creating, setCreating] = useState(false);
+  const workflowId = search.get("workflow");
+  const open = (id: string | null) => setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); return next; });
+  const setUp = (item: { templateId?: string; runIn: string }) => { if (item.templateId) void create.fromTemplate(item.templateId, { ownerSentinelId: sentinel.id, runIn: item.runIn as "sentinel-home" | "new-mission" }).then(definition => open(definition.id)).catch(cause => toast({ title: "Unable to set up the automation", description: errorText(cause, "Try again."), kind: "error" })); };
   const preset = presets.data?.find(item => item.id === sentinel.role);
   const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
+  if (workflowId) return <AutomationEditor workflowId={workflowId} onClose={() => open(null)} />;
   return <div className="space-y-8">
-    <Section title="Owned automations" action={(owned.data ?? []).length > 0 ? <Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button> : undefined}>
+    <Section title="Automations" action={readOnly ? undefined : <Button size="xs" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />New automation</Button>}>
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
-        ? <EmptyState title="No automations yet" action={readOnly ? undefined : <Button size="sm" variant="secondary" render={<Link to="/automations" />}>Open Automations</Button>} />
+        ? <EmptyState title="No automations yet" />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
-          {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
+          {owned.data!.map(item => <li key={item.id}><button type="button" onClick={() => open(item.id)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</button></li>)}
         </ul>}
     </Section>
     {(owned.data ?? []).length > 0 && <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />}
@@ -179,11 +187,12 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
         {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
           <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground-1">{item.trigger.kind === "schedule" ? item.trigger.cadence : item.trigger.kind}</span></span>
           {item.templateId && !ownedTemplates.has(item.templateId)
-            ? <Button size="sm" variant="secondary" render={<Link to={setupAutomationHref(sentinel.id, item)} />}>Set up</Button>
+            ? <Button size="sm" variant="secondary" disabled={readOnly} onClick={() => setUp(item)}>Set up</Button>
             : <Badge variant={item.templateId && ownedTemplates.has(item.templateId) ? "success" : "neutral"}>{item.templateId && ownedTemplates.has(item.templateId) ? "Added" : "Manual"}</Badge>}
         </li>)}
       </ul>
     </Section>}
+    <NewAutomationDialog open={creating} onOpenChange={setCreating} sentinels={[sentinel]} sentinelId={sentinel.id} onCreated={(_, id) => open(id)} />
   </div>;
 }
 

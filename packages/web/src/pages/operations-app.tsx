@@ -2,7 +2,7 @@ import { WhatsNewHost } from "@/components/whats-new-dialog";
 import { queryKeys } from "@/queries";
 import { pollInterval } from "@/lib/polling";
 import { v } from "@/lib/vocabulary";
-import { Suspense, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
@@ -14,8 +14,8 @@ import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
-  CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
-  ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
+  CommandPalette, ConsolePage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, SavedConversationPage,
+  ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
@@ -24,11 +24,11 @@ import { usePageTitle } from "@/lib/page-title";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 
 export function OperationsApp() {
-  const { client, getDashboard, getScans } = useBackendApi();
+  const { client, getDashboard } = useBackendApi();
   const location = useLocation();
   useRoutePrefetch();
   usePageTitle(location.pathname);
-  const operationsVisible = /^\/(?:operations|threads|findings|runs|scans)(?:\/|$)/.test(location.pathname);
+  const findingsVisible = /^\/findings(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
   const rememberSearchFocus = () => { searchReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
   const [searchMode, setSearchMode] = useState<SearchMode>("all");
@@ -36,8 +36,7 @@ export function OperationsApp() {
   // Mounted on first open and kept, so cmdk and the palette stay out of every route's first load.
   const [paletteMounted, setPaletteMounted] = useState(false);
   useEffect(() => { if (paletteOpen) setPaletteMounted(true); }, [paletteOpen]);
-  const scansQuery = useQuery({ queryKey: queryKeys.scans(client.backendId), queryFn: getScans, enabled: operationsVisible || paletteOpen, refetchInterval: query => pollInterval(query.state.data?.some(scan => scan.status === "running") ?? true, 5000, 30_000) });
-  const dashboardQuery = useQuery({ queryKey: queryKeys.dashboard(client.backendId), queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: pollInterval(scansQuery.data?.some(scan => scan.status === "running") ?? true, 5000, 30_000) });
+  const dashboardQuery = useQuery({ queryKey: queryKeys.dashboard(client.backendId), queryFn: getDashboard, enabled: findingsVisible || paletteOpen, refetchInterval: query => pollInterval(query.state.data?.scans.some(scan => scan.status === "running") ?? true, 5000, 30_000) });
   const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
     const hit = matchShortcut(event);
     if (hit?.handler !== "palette.toggle") return;
@@ -67,27 +66,20 @@ export function OperationsApp() {
     return () => { window.removeEventListener("keydown", listener); window.removeEventListener("zero:open-search", openSearch); };
   }, [handleHotkey]);
 
-  const operations = (content: ReactNode) => {
-    if (dashboardQuery.isLoading || scansQuery.isLoading) return <LoadingState label="Loading" />;
-    const error = dashboardQuery.error ?? scansQuery.error;
-    if (error) return <ErrorState error={error} />;
-    return content;
-  };
   const legacyRedirect = ({ from, to, keep }: typeof LEGACY_REDIRECTS[number]) => (
     <Navigate to={{ pathname: keep === "path" ? `${to}${location.pathname.slice(from.length)}` : to, ...(keep === "none" ? {} : { search: location.search, hash: location.hash }) }} replace />
   );
   const dashboard = dashboardQuery.data;
-  const scans = scansQuery.data ?? [];
   const startChat = (
     <Button variant="accent" size="sm" render={<NavLink to="/chats" />}>{v("Start {a mission}")}</Button>
   );
-  const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
+  const findings = dashboardQuery.isLoading ? <LoadingState label="Loading" /> : dashboardQuery.error ? <ErrorState error={dashboardQuery.error} /> : dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />;
   return (
     <DashboardPanelProvider>
       <MissionNotifications />
       <WhatsNewHost />
       <AppShell>
-        {paletteMounted && <RouteErrorBoundary silent resetKey={String(paletteOpen)}><Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense></RouteErrorBoundary>}
+        {paletteMounted && <RouteErrorBoundary silent resetKey={String(paletteOpen)}><Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} /></Suspense></RouteErrorBoundary>}
         <RouteErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<PageFallback />}>
         <Routes>
@@ -98,20 +90,17 @@ export function OperationsApp() {
           {["connections", "models", "settings", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
-          <Route path="/automations" element={<WorkflowsPage />} />
           <Route path="/agents" element={<SentinelsPage />} />
           <Route path="/agents/:sentinelId" element={<SentinelPage />} />
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
-          <Route path="/plugins/skills" element={<SkillsPage />} />
-          <Route path="/plugins/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
+          <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
           <Route path="/extensions" element={<ExtensionsPage />} />
           <Route path="/memory" element={<LearningPage />} />
-          <Route path="/scope" element={<EngagementsPage />} />
           <Route path="/findings" element={findings} />
           <Route path="/computers" element={<WorkersPage />} />
           <Route path="/findings/:fingerprint" element={findings} />
-          <Route path="/runs/:scanId" element={operations(<ReportPage scans={scans} />)} />
           {LEGACY_REDIRECTS.flatMap(row => row.routes.map(route => <Route key={route} path={route} element={legacyRedirect(row)} />))}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

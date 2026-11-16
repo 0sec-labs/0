@@ -6,11 +6,8 @@ const loaders = {
   findings: () => import("@/pages/findings-page"),
   console: () => import("@/pages/console-page"),
   palette: () => import("@/components/command-palette"),
-  scans: () => import("@/pages/scans-page"),
   saved: () => import("@/pages/saved-conversation-page"),
   learning: () => import("@/pages/learning-page"),
-  engagements: () => import("@/pages/engagements-page"),
-  workflows: () => import("@/pages/workflows-page"),
   apiAccess: () => import("@/pages/findings-api-access-page"),
   team: () => import("@/pages/team-settings-page"),
   skills: () => import("@/pages/skills-page"),
@@ -41,11 +38,8 @@ function lazyRoute<P extends object>(load: () => Promise<ComponentType<P>>): Com
 export const FindingsPage = lazyRoute(() => loaders.findings().then((m) => m.FindingsPage));
 export const ConsolePage = lazyRoute(() => loaders.console().then((m) => m.ConsolePage));
 export const CommandPalette = lazyRoute(() => loaders.palette().then((m) => m.CommandPalette));
-export const ReportPage = lazyRoute(() => loaders.scans().then((m) => m.ReportPage));
 export const SavedConversationPage = lazyRoute(() => loaders.saved().then((m) => m.SavedConversationPage));
 export const LearningPage = lazyRoute(() => loaders.learning().then((m) => m.LearningPage));
-export const EngagementsPage = lazyRoute(() => loaders.engagements().then((m) => m.EngagementsPage));
-export const WorkflowsPage = lazyRoute(() => loaders.workflows().then((m) => m.WorkflowsPage));
 export const FindingsApiAccessPage = lazyRoute(() => loaders.apiAccess().then((m) => m.FindingsApiAccessPage));
 export const TeamSettingsPage = lazyRoute(() => loaders.team().then((m) => m.TeamSettingsPage));
 export const SkillsPage = lazyRoute(() => loaders.skills().then((m) => m.SkillsPage));
@@ -66,28 +60,23 @@ export function prefetchRoute(name: RouteName) {
 const CONTROL_ROUTES = ["connections", "models", "settings", "doctor", "tools", "project", "fix"];
 export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
-  if (first === "console") return second === "saved" ? "saved" : undefined;
   if (first === "chats") return second === "saved" ? "saved" : "console";
-  if (first === "plugins" && second === "skills") return "skills";
-  if (first === "extensions") return "extensions";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {
-    case "automations": return "workflows";
-    case "sentinels": return "sentinels";
+    case "agents": return "sentinels";
     case "api-access": return "apiAccess";
     case "team": return "team";
     case "skills": return "skills";
-    case "learning": return "learning";
-    case "engagements": return "engagements";
+    case "memory": return "learning";
+    case "extensions": return "extensions";
     case "findings": return "findings";
-    case "workers": return "workers";
-    case "runs": return "scans";
+    case "computers": return "workers";
     default: return undefined;
   }
 }
 
 /** Chunks that carry dockview/markdown: fetched on navigation or hover only, never by idle warming. */
-const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "learning", "skills", "workflows", "sentinels"]);
+const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "learning", "skills", "sentinels"]);
 
 /** Warm the other routes once the browser is idle, then on link hover/focus. */
 export function useRoutePrefetch() {

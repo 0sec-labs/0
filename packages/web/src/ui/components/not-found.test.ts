@@ -5,7 +5,7 @@ describe("not found mapping", () => {
   it("links each section back to its list page", () => {
     expect(NOT_FOUND_SECTIONS.findings.to).toBe("/findings")
     expect(NOT_FOUND_SECTIONS.sentinels.to).toBe("/agents")
-    expect(NOT_FOUND_SECTIONS.automations.to).toBe("/automations")
+    expect(NOT_FOUND_SECTIONS.automations.to).toBe("/agents")
   })
   it("names the missing entity", () => {
     expect(notFoundMessage("sentinels")).toContain("agent")

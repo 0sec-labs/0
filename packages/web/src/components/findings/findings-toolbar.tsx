@@ -32,7 +32,6 @@ export type FindingsToolbarProps = {
   onSearch: (value: string) => void;
   exportPath: string;
   exportCount: number;
-  onOpenReports: () => void;
   searchRef?: React.Ref<HTMLInputElement>;
 };
 
@@ -75,7 +74,6 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
           <DropdownMenu>
             <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" className={iconButton} />}><MoreHorizontal /></DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" className="w-56">
-              <DropdownMenu.Item icon={<FileText />} onClick={props.onOpenReports}>Assessment reports</DropdownMenu.Item>
               <DropdownMenu.Label>Export {props.exportCount} finding{props.exportCount === 1 ? "" : "s"}</DropdownMenu.Label>
               {REPORT_FORMATS.map(([format, label]) => (
                 <DropdownMenu.Item key={format} icon={<Download />} disabled={props.exportCount === 0 || exporting.busy} onClick={() => void exporting.download(format)}>{label}</DropdownMenu.Item>

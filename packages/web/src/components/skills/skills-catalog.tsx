@@ -110,7 +110,7 @@ export function AddFromGithubSheet({ open, onOpenChange }: { open: boolean; onOp
       <Button type="submit" variant="outline" className="self-start" disabled={!source.trim() || preview.isFetching}>{preview.isFetching ? "Reading…" : "Review"}</Button>
     </form>
     {request && preview.error && <Feedback error={preview.error} />}
-    {added && <div className="flex flex-col items-start gap-3"><Feedback message={`Added ${added}.`} /><Button variant="outline" size="sm" render={<Link to="/plugins/skills" />}>Open installed skills</Button></div>}
+    {added && <div className="flex flex-col items-start gap-3"><Feedback message={`Added ${added}.`} /><Button variant="outline" size="sm" render={<Link to="/skills" />}>Open installed skills</Button></div>}
     {data && !added && <section aria-label="Review" className="flex min-w-0 flex-col gap-4">
       <div className="min-w-0"><h3 className="text-base font-medium break-words text-foreground">{data.title}</h3><p className="text-sm text-muted-foreground-1">{data.description}</p></div>
       <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">

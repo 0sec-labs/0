@@ -38,7 +38,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     const next = new URLSearchParams(location.search); next.delete("section");
     const [path, own] = redirect.split("?");
     const merged = new URLSearchParams(own); next.forEach((value, key) => { if (!merged.has(key)) merged.set(key, value); });
-    const keep = path === "/settings" || path.startsWith("/plugins/skills") ? `?${merged}` : "";
+    const keep = path === "/settings" || path.startsWith("/skills") ? `?${merged}` : "";
     return <Navigate replace to={{ pathname: path, search: keep, hash: location.hash }} />;
   }
 

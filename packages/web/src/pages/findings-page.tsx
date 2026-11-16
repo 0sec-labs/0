@@ -268,7 +268,6 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
         onSearch={setSearch}
         exportPath={exportPath(visible)}
         exportCount={visible.length}
-        onOpenReports={() => navigate("/scope")}
         searchRef={searchRef}
       />
       <div className="relative flex min-h-0 flex-1">

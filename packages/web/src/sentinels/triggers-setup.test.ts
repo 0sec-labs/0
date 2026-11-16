@@ -1,18 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { sentinelOwnership } from "../components/automations/automation-model";
 import { statusLockedByReview } from "../components/findings/findings-model";
-import { setupAutomationHref } from "../components/sentinels/sentinel-views";
 import { blankTriggerDraft, triggerRequestFromDraft } from "./model";
 
 describe("agent automation setup", () => {
-  it("carries ownership from the Set up link into the new automation", () => {
-    const href = setupAutomationHref("sen_1", { templateId: "repository-review", runIn: "sentinel-home" });
-    const params = new URL(href, "http://x").searchParams;
-    expect(params.get("template")).toBe("repository-review");
-    expect(sentinelOwnership(params)).toEqual({ ownerSentinelId: "sen_1", runIn: "sentinel-home" });
-    expect(sentinelOwnership(new URLSearchParams("template=x"))).toBeNull();
-    expect(sentinelOwnership(new URLSearchParams("owner=a b"))).toBeNull();
-  });
   it("builds schedule and github-pr trigger requests and validates input", () => {
     const base = blankTriggerDraft("auto-1");
     expect(triggerRequestFromDraft({ ...base, automationId: "" }).ok).toBe(false);

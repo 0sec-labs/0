@@ -25,7 +25,7 @@ const SMALL_WORDS = new Set(["to", "of", "and", "for", "the", "a", "an", "in", "
 /** "mcp-builder" -> "MCP Builder". */
 export const titleCase = (name: string) => name.split(/[-_\s]+/).filter(Boolean).map((word, index) => ACRONYMS[word.toLowerCase()] ?? (index > 0 && SMALL_WORDS.has(word.toLowerCase()) ? word.toLowerCase() : word[0]!.toUpperCase() + word.slice(1))).join(" ");
 
-export const catalogSkillPath = (id: string) => `/plugins/skills/catalog/${encodeURIComponent(id)}`;
+export const catalogSkillPath = (id: string) => `/skills/catalog/${encodeURIComponent(id)}`;
 export const githubTreeUrl = (repo: string, sha: string, path: string) => `https://github.com/${repo}${path ? `/tree/${sha}/${path}` : `/tree/${sha}`}`;
 export const githubCommitUrl = (repo: string, sha: string) => `https://github.com/${repo}/commit/${sha}`;
 

@@ -155,14 +155,6 @@ export function validateAutomationDraft(draft: { name: string }): { name?: strin
   return draft.name.trim() ? {} : { name: "Name is required" };
 }
 
-/** Ownership a Sentinel's "Set up" link carries into the new automation. Anything else is ignored. */
-export function sentinelOwnership(params: URLSearchParams): { ownerSentinelId: string; runIn?: "sentinel-home" | "new-mission" } | null {
-  const owner = params.get("owner")?.trim();
-  if (!owner || !/^[A-Za-z0-9_.:-]{1,128}$/.test(owner)) return null;
-  const runIn = params.get("runIn");
-  return { ownerSentinelId: owner, ...(runIn === "sentinel-home" || runIn === "new-mission" ? { runIn } : {}) };
-}
-
 /** Model and reasoning choices on the automation form. An empty value means the Computer's current selection. */
 export const AUTOMATION_REASONING_OPTIONS = [
   { value: "", label: "Default" }, { value: "low", label: "Low" }, { value: "medium", label: "Medium" },

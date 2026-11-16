@@ -2,9 +2,8 @@ import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { accessMilestoneFromArtifact, appendAccessMilestone, visibleAccessMilestones } from "@0/engine/shared/access-milestone";
-import { Link } from "react-router-dom";
 import type { AccessMilestone } from "@0/engine/shared/access-milestone";
-export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: AccessMilestone; scanId: string; at?: number }) {
+export function AccessMilestoneBanner({ milestone, at }: { milestone: AccessMilestone; at?: number }) {
   const verifiedAt = milestone.verifiedAt ?? at;
   const date = verifiedAt !== undefined && Number.isFinite(verifiedAt) && Math.abs(verifiedAt) <= 8_640_000_000_000_000 ? new Date(verifiedAt) : null;
   const cleanupDate = milestone.cleanupAt !== undefined && Number.isFinite(milestone.cleanupAt) && Math.abs(milestone.cleanupAt) <= 8_640_000_000_000_000 ? new Date(milestone.cleanupAt) : null;
@@ -27,8 +26,6 @@ export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: Ac
     </p>
     {milestone.prerequisites?.length ? <p className="mt-2 text-xs text-muted-foreground">Prerequisites: {milestone.prerequisites.join("; ")}</p> : null}
     {milestone.limitations?.length ? <p className="mt-1 text-xs text-muted-foreground">Limitations: {milestone.limitations.join(" ")}</p> : null}
-    <Link className="mt-2 inline-block text-sm underline" to={`/runs/${encodeURIComponent(scanId)}#${milestone.evidenceEventId ? `evidence-${encodeURIComponent(milestone.evidenceEventId)}` : "activity"}`}>View retained evidence</Link>
-    {milestone.cleanupEvidenceEventId && <Link className="ml-4 text-sm underline" to={`/runs/${encodeURIComponent(scanId)}#evidence-${encodeURIComponent(milestone.cleanupEvidenceEventId)}`}>View cleanup observation</Link>}
   </section>;
 }
 
@@ -41,5 +38,5 @@ export function AssessmentAccessMilestones({ scanId }: { scanId: string }) {
     return milestone ? appendAccessMilestone(items, { milestone, at: event.timestamp }) : items;
   }, []);
   if (!milestones.length) return null;
-  return <section className="space-y-3" aria-label="Assessment access milestones"><h3 className="text-sm font-medium">Assessment access milestones</h3>{visibleAccessMilestones(milestones).map(({ milestone, at }) => <AccessMilestoneBanner key={milestone.key} milestone={milestone} scanId={scanId} at={at} />)}</section>;
+  return <section className="space-y-3" aria-label="Assessment access milestones"><h3 className="text-sm font-medium">Assessment access milestones</h3>{visibleAccessMilestones(milestones).map(({ milestone, at }) => <AccessMilestoneBanner key={milestone.key} milestone={milestone} at={at} />)}</section>;
 }

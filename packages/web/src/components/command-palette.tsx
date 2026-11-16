@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import type { DashboardResponse, ScanRecord } from "@/types";
+import type { DashboardResponse } from "@/types";
 import type { SecurityWorkflow } from "@0/engine/shared";
 import { searchSettings, settingsHref, settingsPages } from "./console-control/settings-index";
 import type { LearningResponse } from "./learning-panel";
@@ -63,7 +63,6 @@ export function CommandPalette({
   open,
   onOpenChange,
   dashboard,
-  scans,
   mode = "all",
   onModeChange,
   returnFocus,
@@ -71,7 +70,6 @@ export function CommandPalette({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dashboard?: DashboardResponse;
-  scans?: ScanRecord[];
   mode?: SearchMode;
   onModeChange?: (mode: SearchMode) => void;
   returnFocus?: React.RefObject<HTMLElement | null>;
@@ -91,7 +89,7 @@ export function CommandPalette({
   // Each source is fetched only while its own tab is active, or on All once a term is typed.
   const sourceEnabled = (own: SearchTab) => open && (tab === own || (tab === "all" && Boolean(searchQuery)));
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: queryKeys.appSearch(...scope, name), queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
-  const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "automations"));
+  const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "sentinels"));
   const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
   const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
@@ -176,8 +174,8 @@ export function CommandPalette({
     const base: PaletteAction[] = [
       ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
         id: `page-${to.slice(1)}`, group: "Pages", label, icon, href: to,
-        meta: to === "/automations" ? "Edit automations and manage schedules" : `Open ${label.toLowerCase()}`,
-        keywords: [label, to.slice(1), ...(to === "/automations" ? ["automations workflows schedules audit"] : [])],
+        meta: to === "/agents" ? "Agents, their automations and schedules" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/agents" ? ["automations workflows schedules audit"] : [])],
         run: () => {
           const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
           navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
@@ -193,30 +191,12 @@ export function CommandPalette({
         href: "/chats?new=1",
         run: () => navigate("/chats?new=1"),
       },
-      ...[
-        ["models", "Models", "Providers and the models 0 uses"],
-        ["engagements", "Reports", "Assessment reports and handoff notes"],
-        ["doctor", "Diagnostics", "Check that everything works"],
-        ["tools", "Tools", "What 0 can use"],
-        ["project", "Folder", "Folder and scope"],
-        ["fix", "Fix", "Review and apply a code fix"],
-      ].map(([route, label, meta]): PaletteAction => ({
-        id: `control-${route}`, group: "Pages", href: `/${route}`, label: label!, meta: meta!, icon: route === "settings" ? CapySettingsIcon : route === "workers" ? CapyDevicesIcon : CapySlidersIcon,
-        keywords: [route!, label!],
+      {
+        id: "control-models", group: "Pages", href: "/models", label: "Models", meta: "Providers and the models 0 uses", icon: CapySlidersIcon, keywords: ["models", "providers", "connections"],
         run: () => {
           const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
-          navigate(`/${route}${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
+          navigate(`/models${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
         },
-      })),
-      {
-        id: "page-control",
-        group: "Pages",
-        label: "Overview",
-        meta: "What 0 is doing",
-        icon: CapyThreadListIcon,
-        keywords: ["operations dashboard overview workers queue"],
-        href: "/dashboard",
-        run: () => navigate("/dashboard"),
       },
     ];
 
@@ -224,7 +204,7 @@ export function CommandPalette({
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
-      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyShieldIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/sentinels?new=1") });
+      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyShieldIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
         id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyShieldIcon,
         keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),
@@ -305,14 +285,14 @@ export function CommandPalette({
       run: () => navigate(row.href),
     });
     for (const workflow of workflowsQuery.data?.definitions ?? []) base.push({
-      id: `workflow-${workflow.id}`, group: "Automations", href: `/automations?workflow=${encodeURIComponent(workflow.id)}`, label: workflow.name, meta: workflow.target || "Automation", icon: CapyAutomationsIcon,
+      id: `workflow-${workflow.id}`, group: "Agents", href: `/agents?workflow=${encodeURIComponent(workflow.id)}`, label: workflow.name, meta: workflow.target || "Automation", icon: CapyAutomationsIcon,
       keywords: searchKeywords(workflow.id, workflow.target, workflow.instructions, "automation workflow schedules scheduled"),
-      run: () => navigate(`/automations?workflow=${encodeURIComponent(workflow.id)}`),
+      run: () => navigate(`/agents?workflow=${encodeURIComponent(workflow.id)}`),
     });
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
-      id: `skill-${skill.id}`, group: "Skills", href: `/plugins/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: CapySparkleFourIcon,
+      id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: CapySparkleFourIcon,
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
-      run: () => navigate(`/plugins/skills?skill=${encodeURIComponent(skill.id)}`),
+      run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
     });
     for (const memory of memoryQuery.data?.knowledge ?? []) base.push({
       id: `memory-${memory.id}`, group: "Memory", label: memory.title || memory.summary || "Saved memory", meta: memory.status, icon: CapyDatabaseIcon,
@@ -367,7 +347,7 @@ export function CommandPalette({
   const filteredItems = useMemo(() => filterAppSearch(items, deferredQuery, tab), [deferredQuery, items, tab]);
   const inventories = [workflowsQuery, skillsQuery, memoryQuery];
   const inventoryLoading = inventories.some(result => result.isFetching && !result.data) || (sentinelsQuery.isFetching && !sentinelsQuery.data);
-  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "automations", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
+  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "agents", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
 
   const orderedItems = useMemo(() => GROUPS.flatMap(group => filteredItems.filter(item => item.group === group)), [filteredItems]);
   const firstResult = orderedItems[0]?.id ?? "";
@@ -481,7 +461,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>{v("Search {missions}, pages and settings")}</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, agents, skills, Memory, computers and settings. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

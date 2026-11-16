@@ -4,25 +4,22 @@ const SUFFIX = "0security";
 
 const TITLES: Array<[RegExp, string]> = [
   [/^\/chats(?:\/|$)/, "Home"],
-  [/^\/(?:findings|threads|operations)(?:\/|$)/, "Findings"],
-  [/^\/(?:runs|scans)(?:\/|$)/, "Report"],
-  [/^\/(?:automations|workflows|audits|launcher|launch)(?:\/|$)/, "Automations"],
-  [/^\/(?:agents|sentinels)(?:\/|$)/, "Agents"],
-  [/^\/plugins\/skills(?:\/|$)/, "Skills"],
+  [/^\/findings(?:\/|$)/, "Findings"],
+  [/^\/agents(?:\/|$)/, "Agents"],
+  [/^\/skills(?:\/|$)/, "Skills"],
   [/^\/extensions(?:\/|$)/, "Extensions"],
   [/^\/(?:settings|project|fix)(?:\/|$)/, "Settings"],
-  [/^\/connections(?:\/|$)/, "Models"],
-  [/^\/models(?:\/|$)/, "Models"],
+  [/^\/(?:connections|models)(?:\/|$)/, "Models"],
   [/^\/doctor(?:\/|$)/, "Diagnostics"],
   [/^\/tools(?:\/|$)/, "Tools"],
   [/^\/api-access(?:\/|$)/, "API access"],
   [/^\/team(?:\/|$)/, "Team"],
   [/^\/memory(?:\/|$)/, "Memory"],
-  [/^\/scope(?:\/|$)/, "Reports"],
-  [/^\/(?:computers|engines|workers)(?:\/|$)/, "Computers"],
+  [/^\/computers(?:\/|$)/, "Computers"],
 ];
 
-const KNOWN = /^\/(?:onboarding|setup|console|dashboard|live|engagements|skills)(?:\/|$)|^\/$/;
+/** Paths that only redirect (see LEGACY_REDIRECTS) read as the app while the redirect lands. */
+const KNOWN = /^\/$/;
 
 /** Per-route document title, e.g. "Findings · 0security". Unknown paths read as a 404. */
 export function pageTitleFor(pathname: string): string {

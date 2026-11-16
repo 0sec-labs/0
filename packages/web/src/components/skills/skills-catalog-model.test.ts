@@ -38,12 +38,12 @@ describe("rows and links", () => {
     expect(catalogSummary("word ".repeat(60)).length).toBeLessThanOrEqual(110);
   });
   it("builds the detail route and a pinned GitHub tree link", () => {
-    expect(catalogSkillPath("trailofbits~skills~semgrep")).toBe("/plugins/skills/catalog/trailofbits~skills~semgrep");
+    expect(catalogSkillPath("trailofbits~skills~semgrep")).toBe("/skills/catalog/trailofbits~skills~semgrep");
     expect(githubTreeUrl("o/r", "abc", "skills/x")).toBe("https://github.com/o/r/tree/abc/skills/x");
   });
   it("shows Skills > Browse > name for a catalog skill", () => {
-    expect(resolveCrumbs("/plugins/skills/catalog/o~r~x", "", "Semgrep Scan")).toEqual([{ label: "Skills", to: "/plugins/skills" }, { label: "Browse", to: "/plugins/skills?tab=browse" }, { label: "Semgrep Scan" }]);
-    expect(resolveCrumbs("/plugins/skills", "")).toEqual([{ label: "Skills", to: "/plugins/skills" }, { label: "Installed" }]);
+    expect(resolveCrumbs("/skills/catalog/o~r~x", "", "Semgrep Scan")).toEqual([{ label: "Skills", to: "/skills" }, { label: "Browse", to: "/skills?tab=browse" }, { label: "Semgrep Scan" }]);
+    expect(resolveCrumbs("/skills", "")).toEqual([{ label: "Skills", to: "/skills" }, { label: "Installed" }]);
   });
 });
 

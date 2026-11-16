@@ -12,8 +12,8 @@ import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
 import { Feedback } from "@/components/console-control/control-ui";
 import { CardHeaderRow } from "@/components/console-control/connection-ui";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
-import { AddSkillDialog, CatalogTile, SkillMarkdown, useSkillsCatalog, usePreview } from "@/components/explore/skills-catalog";
-import { cleanSummary, abbreviateStars, githubCommitUrl, githubTreeUrl, VERIFIED_BY_0, VERIFIED_HINT } from "@/components/explore/skills-catalog-model";
+import { AddSkillDialog, CatalogTile, SkillMarkdown, useSkillsCatalog, usePreview } from "@/components/skills/skills-catalog";
+import { cleanSummary, abbreviateStars, githubCommitUrl, githubTreeUrl, VERIFIED_BY_0, VERIFIED_HINT } from "@/components/skills/skills-catalog-model";
 
 function RailFact({ label, children }: { label: string; children: ReactNode }) {
   return <div className="flex min-w-0 flex-col gap-1"><dt className="text-sm text-muted-foreground-2">{label}</dt><dd className="min-w-0 text-sm break-words text-foreground">{children}</dd></div>;
