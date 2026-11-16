@@ -449,8 +449,8 @@ export function registerMcpServerCommand(program: Command): void {
       }
       const scope = opts.scope ? loadScope(opts.scope) : undefined;
       console.error(getScopeEnforcementState().message);
-      if (target && isScopeEnforcementEnabled() && scope) {
-        const verdict = scope.match(target);
+      if (target && scope) {
+        const verdict = scope.enforce(target);
         if (!verdict.allowed) {
           throw new Error(`--target ${target} is out of scope per ${opts.scope}: ${verdict.reason}`);
         }

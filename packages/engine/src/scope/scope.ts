@@ -2,7 +2,7 @@
 //
 // Loads JSON scope policy ({ in_scope, out_of_scope }) into one matcher.
 // `match` is pure (including credential/attribution boundaries); runtime
-// authorization uses `enforce`, controlled by the first-party scope plugin.
+// authorization uses `enforce`, controlled by the first-party scope extension.
 // Three venue-independent rule shapes are recognized:
 //
 //   1. Exact host        — "api.example.com" matches `api.example.com`
@@ -23,7 +23,7 @@
 
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
-import { isScopeEnforcementEnabled, type ScopeEnforcementState } from "./activation.js";
+import { getScopeEnforcementState, type ScopeEnforcementState } from "./activation.js";
 
 export type ScopeRule = string;
 
@@ -73,9 +73,12 @@ export class ScopePolicy {
 
   /** Authorization verdict; pure `match` remains available for credential boundaries. */
   enforce(url: string, state?: ScopeEnforcementState): ScopeMatch {
-    return (state?.enabled ?? isScopeEnforcementEnabled())
+    // A policy object is a defined scope: it always decides, and with the scope
+    // plugin disabled it fails closed instead of allowing.
+    const current = state ?? getScopeEnforcementState(undefined, undefined, true);
+    return current.pluginEnabled
       ? this.match(url)
-      : { allowed: true, reason: "scope plugin disabled; authorization not enforced" };
+      : { allowed: false, reason: "scope extension disabled while a scope is defined; denied (fail closed)" };
   }
 
   /**

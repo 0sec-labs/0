@@ -7,6 +7,8 @@ export interface BuiltinPlugin {
   readonly version: string;
   readonly description: string;
   readonly capabilities: readonly PluginCapability[];
+  /** On for every install and project until an operator explicitly turns it off. */
+  readonly defaultEnabled?: boolean;
 }
 
 export const SCOPE_PLUGIN_ID = "scope";
@@ -15,9 +17,10 @@ export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = Object.freeze([
   Object.freeze({
     id: SCOPE_PLUGIN_ID,
     name: "Scope enforcement",
-    version: "1.0.0",
-    description: "Enforces engagement host/path authorization, exclusions and local filesystem scope. Disabled until explicitly enabled for this project. Credential protection, sandboxing and resource limits remain independent.",
+    version: "1.1.0",
+    description: "Enforces engagement host/path authorization, exclusions and local filesystem scope. On by default: it enforces whenever a scope is defined and allows everything when none is. Credential protection, sandboxing and resource limits remain independent.",
     capabilities: Object.freeze([]),
+    defaultEnabled: true,
   }),
 ]);
 

@@ -43,6 +43,8 @@ import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleU
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, dispatchPluginTool, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
 import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
+import { runBeforeCommand } from "../../agent/before-command.js";
+import { beforeCommandInputForCall } from "./before-command.js";
 import { executionPolicy, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
 
 /**
@@ -77,7 +79,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
   // Ask-first is the global setting, not a mode. An older "standard" value passed here still asks.
   let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(cp?.autonomyMode) ? "ask" : "auto");
-  let sessionScopeEnforcement = getScopeEnforcementState();
+  const scopeIsDefined = () => !!(sessionScope || configuredScope || toolContext.publicNetwork?.scope);
+  let sessionScopeEnforcement = getScopeEnforcementState(undefined, undefined, !!(cp ? cp.grantedScope ?? cp.configuredScope : config.scope));
 
   // In-memory mutable scope state — updated by requestScope, NEVER written
   // to disk. Seeded from checkpoint when provided.
@@ -593,7 +596,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (customSystemPrompt === undefined) {
         systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
       }
-      notify?.(`Target set to ${target}; scope plugin is disabled, authorization is not enforced.`);
+      notify?.(`Target set to ${target}; scope extension is disabled and no scope is defined, authorization is not enforced.`);
       return;
     }
     const host = hostOf(target)!;
@@ -1146,7 +1149,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // engine cannot invent an operator to ask, and this mirrors every other gate's
   // "no callback → defer to the layers beneath" contract.
   async function maybeApproveTool(call: ToolCall): Promise<"approved" | ToolResult> {
-    if (approvals !== "ask") return "approved";
     const approveTool = config.approveTool;
     if (!approveTool) return "approved";
     if (readOnlyTools[call.name]) return "approved";
@@ -1223,11 +1225,20 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           message: "Draft saved. Inspect it in Automations and use its explicit Run action to execute it." } };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow draft could not be saved." }; }
     }
+    // One decision point: scope (deny/ask) and the Ask-before-running setting (ask).
+    const hook = await runBeforeCommand(beforeCommandInputForCall(call, {
+      threadId: scanId, target: sessionTarget, cwd: workspaceRoot,
+      scope: toolContext.publicNetwork ? toolContext.publicNetwork.scope : sessionScope,
+      approvals, networkCapable: networkCapableTools[call.name] === true,
+      readOnly: readOnlyTools[call.name] === true,
+      canAskScope: allowScopeExpansion && config.requestScope !== undefined && executionPolicy(approvals).scopeExpansion === "ask",
+    }));
+    if (hook.decision === "deny") return { success: false, output: null, error: `Tool "${call.name}" denied: ${hook.reason}` };
     const scope = await maybeResolveScope(call, notify, allowScopeExpansion);
     if (scope !== "approved") return scope;
     const local = await maybeResolveLocalScope(call, notify, allowScopeExpansion);
     if (local !== "approved") return local;
-    const approval = await maybeApproveTool(call);
+    const approval = hook.asks.some(ask => ask.policyId === "approvals") ? await maybeApproveTool(call) : "approved";
     if (approval !== "approved") return approval;
     const guard = evaluateGuards(WIRED_GUARDS, guardContextFor(call));
     if (!guard.allowed) {
@@ -1247,7 +1258,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   function send(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
     if (!turnInProgress) {
-      sessionScopeEnforcement = getScopeEnforcementState();
+      sessionScopeEnforcement = getScopeEnforcementState(undefined, undefined, scopeIsDefined());
       toolContext.scopeEnforcement = sessionScopeEnforcement;
     }
     return withScopeEnforcement(sessionScopeEnforcement, () => sendWithContribution(userText, callbacks, opts));

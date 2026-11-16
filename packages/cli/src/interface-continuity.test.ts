@@ -33,7 +33,7 @@ async function continuityHost() {
   const context = {
     runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
     model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "changes", role: "audit",
-    scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: workspace, message: "Fixture" },
+    scopeEnforcement: { pluginId: "scope", enabled: false, pluginEnabled: true, explicit: false, scopeDefined: false, denied: false, projectPath: workspace, message: "Fixture" },
   } as ConsoleExecutionContext;
   vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context);
   vi.spyOn(gateway, "authorizeWorkflowTarget").mockResolvedValue(context);

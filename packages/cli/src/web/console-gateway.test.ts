@@ -58,7 +58,7 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
     setWorkerPolicy: policy => { currentWorkerPolicy = structuredClone(policy); },
     scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages,
     get approvals() { return currentApprovals; }, get target() { return currentTarget; }, get scope() { return currentScope; },
-    scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
+    scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
     configureWorkspace: path => { currentFolder = path; },
     get webSearchEnabled() { return currentSearch; },
     setWebSearchEnabled: (enabled) => { currentSearch = enabled; },
@@ -545,7 +545,7 @@ describe("ConsoleGateway", () => {
     const created = instance.create({ target: "https://example.test", title: "Scheduled review" });
     vi.spyOn(instance, "getExecutionContext").mockResolvedValue({
       target: "https://example.test", role: "audit", autonomyMode: "changes",
-      scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Enabled" },
+      scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/fixture", message: "Enabled" },
       authorization: { deniedHosts: [], deniedLocalPaths: [], scopedAuditGrants: [], scopedAuditDenials: [] },
     } as unknown as ConsoleExecutionContext);
     await expect(instance.authorizeWorkflowTarget(created.id, { target: "https://another.test", kind: "web" }, undefined, "scheduled", { interactive: false })).rejects.toThrow("Target approval required");
@@ -2126,7 +2126,7 @@ describe("confirmed mode changes and pending tool actions", () => {
     expect(instance.get(chat.id).pendingDecisions.map(item => item.kind).sort()).toEqual(["audit-escalation", "local-scope", "operator-question", "scope"]);
     for (const decision of instance.get(chat.id).pendingDecisions) instance.resolveDecision(chat.id, decision.id, { approve: false });
     await permissions; await idle(instance, chat.id);
-    vi.spyOn(instance, "getExecutionContext").mockResolvedValue({ target: "https://fixture", role: "attack", autonomyMode: "changes", scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Enabled" }, authorization: { deniedHosts: [], deniedLocalPaths: [], scopedAuditGrants: [], scopedAuditDenials: [] } } as unknown as ConsoleExecutionContext);
+    vi.spyOn(instance, "getExecutionContext").mockResolvedValue({ target: "https://fixture", role: "attack", autonomyMode: "changes", scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/fixture", message: "Enabled" }, authorization: { deniedHosts: [], deniedLocalPaths: [], scopedAuditGrants: [], scopedAuditDenials: [] } } as unknown as ConsoleExecutionContext);
     const request = instance.authorizeWorkflowTarget(chat.id, { target: "npm:fixture", kind: "package" });
     const declined = expect(request).rejects.toThrow("authorization was declined");
     await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));

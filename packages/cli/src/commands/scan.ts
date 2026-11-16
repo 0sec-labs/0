@@ -488,7 +488,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       // a missing or malformed scope file is exactly the configuration
       // error that should block the scan from starting (see 0#215).
       let scopeFile: string | undefined;
-      const scopeEnforcement = getScopeEnforcementState();
+      const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!opts.scope);
       console.error(chalk.dim(scopeEnforcement.message));
       if (opts.scope) {
         scopeFile = String(opts.scope);

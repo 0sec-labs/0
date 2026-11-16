@@ -4,7 +4,7 @@
  * The `http_audit` scan mode (worker-driven, env-configured) layers three
  * NEW guarantees on top of the existing host-only `ScopePolicy` (#215) and
  * per-host `RateLimiter` (#214):
- * Path authorization is controlled by the scope plugin; rate and wall-clock
+ * Path authorization is controlled by the scope extension; rate and wall-clock
  * resource limits remain independent of activation.
  *
  *   1. Path-PREFIX allowlist — `ScopePolicy` only matches HOSTS. In
@@ -27,7 +27,7 @@
  */
 
 import type { AuthConfig, EnforcementSummary } from "../shared/index.js";
-import { isScopeEnforcementEnabled } from "./activation.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled } from "./activation.js";
 
 /**
  * The frozen `enforcement_summary` block emitted in the http_audit report.
@@ -92,11 +92,12 @@ export class PathPolicy {
   /** Serializable effective prefixes, not constructor inputs. Empty means unrestricted. */
   snapshot(): string[] { return [...this.prefixes]; }
 
-  /** Apply the path authorization only while the first-party scope plugin is active. */
+  /** Apply the path authorization only while the first-party scope extension is active. */
   enforce(url: string): PathMatch {
-    return isScopeEnforcementEnabled()
+    if (this.allowAll && !isScopeEnforcementEnabled()) return { allowed: true, reason: "no path restriction" };
+    return getScopeEnforcementState(undefined, undefined, true).pluginEnabled
       ? this.match(url)
-      : { allowed: true, reason: "scope plugin disabled; path authorization not enforced" };
+      : { allowed: false, reason: "scope extension disabled while a path scope is defined; denied (fail closed)" };
   }
 
   /**

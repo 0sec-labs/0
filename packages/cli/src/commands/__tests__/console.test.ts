@@ -34,7 +34,7 @@ vi.mock("@0/engine", async (importOriginal) => {
   return {
     ...actual,
     connectMcpServers: async () => undefined,
-    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   };
 });
 

@@ -12,10 +12,10 @@ vi.mock("@0/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@0/engine")>();
   return {
     ...actual,
-    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
     isScopeEnforcementEnabled: () => true,
     bucketInScope: (...args: Parameters<typeof actual.bucketInScope>) => actual.withScopeEnforcement(
-      { pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" },
+      { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" },
       () => actual.bucketInScope(...args),
     ),
     probeS3Bucket: probeS3BucketMock,

@@ -43,7 +43,7 @@ vi.mock("@0/engine", () => ({
   validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
   createNativeApiRuntime: () => ({ resolvedProvider: () => "openai", getConfigurationDiagnostics: () => ({ valid: true }) }),
   LlmApiRuntime: class { resolvedProvider() { return "openai"; } getConfigurationDiagnostics() { return { valid: true }; } },
-  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
   resolveAttribution: resolveAttributionMock,

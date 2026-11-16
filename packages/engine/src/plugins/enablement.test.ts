@@ -177,9 +177,10 @@ describe("reconcile", () => {
 // ── fs layer: totality + permissions + round-trip ────────────────────────────
 
 describe("fs layer", () => {
-  it("readEnablement returns empty for a missing store, never throwing", () => {
+  it("readEnablement of a missing store yields only the default-on built-in, never throwing", () => {
     const rec = readEnablement(project, home);
-    expect(rec.enabled).toEqual({});
+    expect(Object.keys(rec.enabled)).toEqual(["scope"]);
+    expect(rec.enabled.scope.origin).toBe("default");
   });
 
   it("round-trips through disk with 0600/0700 perms", () => {
@@ -203,11 +204,11 @@ describe("fs layer", () => {
     );
   });
 
-  it("readEnablement degrades to empty on corrupt / non-JSON files", () => {
+  it("readEnablement degrades to the defaults on corrupt / non-JSON files", () => {
     const path = enablementFilePath(project, home);
     mkdirSync(join(home, ".0", "plugin-enablement"), { recursive: true });
     writeFileSync(path, "this is not json {{{");
-    expect(readEnablement(project, home).enabled).toEqual({});
+    expect(Object.keys(readEnablement(project, home).enabled)).toEqual(["scope"]);
   });
 
   it("coerce drops unsafe keys and unknown capabilities without throwing", () => {

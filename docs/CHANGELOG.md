@@ -12,6 +12,12 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Scope is a built-in extension that is on by default. It enforces whenever a scope is set (`--scope`, a thread, Agent or automation scope, a pull request checkout) and allows everything when none is, so a fresh install no longer runs scoped work unenforced. This reverses 0.33's "scope is off until enabled" and the rule that a scope file alone never activates checks.
+- If the scope extension is turned off or errors while a scope is set, commands are denied instead of allowed. Projects that had scope enabled stay enabled, including its requirement of a scope for live targets; projects that never enabled it get the new default.
+- Bash commands, network targets and the **Ask before running commands** setting now go through one `beforeCommand` decision point: any deny wins, then any ask. A scope denial beats a prompt.
+
 ## [0.35.0] - 2026-11-15
 
 This release shrinks the CLI to nine commands, makes `0` open the console, and gives Threads and Agents one mode with shell access and a small core tool list.

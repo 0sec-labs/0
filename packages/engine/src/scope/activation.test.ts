@@ -6,7 +6,7 @@ import { getScopeEnforcementState, withScopeEnforcement } from "./activation.js"
 import { ScopePolicy } from "./scope.js";
 import { PathPolicy } from "./enforcement.js";
 import { resolveScopedPath } from "../agent/tools/scope-path.js";
-import { disable, emptyEnablement, enable, writeEnablement } from "../plugins/enablement.js";
+import { disable, emptyEnablement, enable, readEnablement, writeEnablement } from "../plugins/enablement.js";
 
 let root: string;
 let project: string;
@@ -23,57 +23,60 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe("first-party scope activation", () => {
-  it("requires explicit project approval, enforces exclusions while active, and deactivates cleanly", () => {
+  it("is on by default: no scope allows, a defined scope enforces exclusions, strict approval enforces without one", () => {
     const policy = ScopePolicy.fromJson({ in_scope: ["*.example.com"], out_of_scope: ["excluded.example.com"] });
     const paths = new PathPolicy(["/api"]);
-    const off = getScopeEnforcementState(project, home);
-    withScopeEnforcement(off, () => {
-      expect(policy.enforce("https://excluded.example.com/outside").allowed).toBe(true);
-      expect(paths.enforce("https://example.com/outside").allowed).toBe(true);
+    const idle = getScopeEnforcementState(project, home);
+    expect(idle.enabled).toBe(false);
+    withScopeEnforcement(idle, () => {
       expect(resolveScopedPath(project, "../outside.txt")).toBe(join(root, "outside.txt"));
       // Credential/attribution boundaries use the pure matcher, not activation.
       expect(policy.match("https://excluded.example.com/outside").allowed).toBe(false);
     });
 
-    const approval = enable(emptyEnablement(project), "scope", { version: "1.0.0", capabilities: [], now: 1 });
-    if (!approval.ok) throw new Error(approval.error);
-    expect(writeEnablement(project, approval.record, home)).toBe(true);
-    const on = getScopeEnforcementState(project, home);
-    expect(on.enabled).toBe(true);
-    withScopeEnforcement(on, () => {
+    const defined = getScopeEnforcementState(project, home, true);
+    expect(defined.enabled).toBe(true);
+    withScopeEnforcement(defined, () => {
       expect(policy.enforce("https://allowed.example.com/api").allowed).toBe(true);
       expect(policy.enforce("https://excluded.example.com/api").allowed).toBe(false);
       expect(paths.enforce("https://allowed.example.com/outside").allowed).toBe(false);
       expect(() => resolveScopedPath(project, "../outside.txt")).toThrow();
     });
 
-    expect(writeEnablement(project, disable(approval.record, "scope"), home)).toBe(true);
-    const deactivated = getScopeEnforcementState(project, home);
-    expect(deactivated.enabled).toBe(false);
-    withScopeEnforcement(deactivated, () => {
-      expect(policy.enforce("https://excluded.example.com/api").allowed).toBe(true);
-    });
-  });
-
-  it("does not activate another project or reuse stale first-party approval", () => {
-    const approval = enable(emptyEnablement(project), "scope", { version: "0.0.1", capabilities: [], now: 1 });
+    const approval = enable(emptyEnablement(project), "scope", { version: "1.1.0", capabilities: [], now: 1 });
     if (!approval.ok) throw new Error(approval.error);
     expect(writeEnablement(project, approval.record, home)).toBe(true);
-    expect(getScopeEnforcementState(project, home).enabled).toBe(false);
+    expect(getScopeEnforcementState(project, home).enabled).toBe(true);
+  });
+
+  it("fails closed when disabled while a scope is defined", () => {
+    const policy = ScopePolicy.fromJson({ in_scope: ["*.example.com"] });
+    expect(writeEnablement(project, disable(readEnablement(project, home), "scope"), home)).toBe(true);
+    const off = getScopeEnforcementState(project, home, true);
+    expect(off.denied).toBe(true);
+    withScopeEnforcement(off, () => {
+      expect(policy.enforce("https://allowed.example.com").allowed).toBe(false);
+    });
+    expect(getScopeEnforcementState(project, home).denied).toBe(false);
+  });
+
+  it("does not activate another project", () => {
+    const approval = enable(emptyEnablement(project), "scope", { version: "1.1.0", capabilities: [], now: 1 });
+    if (!approval.ok) throw new Error(approval.error);
+    expect(writeEnablement(project, approval.record, home)).toBe(true);
+    expect(getScopeEnforcementState(project, home).enabled).toBe(true);
     expect(getScopeEnforcementState(root, home).enabled).toBe(false);
   });
 
   it("keeps approval changes from weakening authorization in the middle of an execution", async () => {
-    const approval = enable(emptyEnablement(project), "scope", { version: "1.0.0", capabilities: [], now: 1 });
-    if (!approval.ok) throw new Error(approval.error);
-    writeEnablement(project, approval.record, home);
     const policy = ScopePolicy.fromJson({ in_scope: ["allowed.example.com"] });
-    const admitted = getScopeEnforcementState(project, home);
+    const admitted = getScopeEnforcementState(project, home, true);
     await withScopeEnforcement(admitted, async () => {
-      writeEnablement(project, disable(approval.record, "scope"), home);
+      writeEnablement(project, disable(readEnablement(project, home), "scope"), home);
       await Promise.resolve();
       expect(policy.enforce("https://foreign.example.com").allowed).toBe(false);
+      expect(policy.enforce("https://allowed.example.com").allowed).toBe(true);
     });
-    expect(getScopeEnforcementState(project, home).enabled).toBe(false);
+    expect(getScopeEnforcementState(project, home, true).denied).toBe(true);
   });
 });

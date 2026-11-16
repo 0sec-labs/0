@@ -102,9 +102,11 @@ function parsePositiveMilliseconds(raw: string, field: string): number {
 }
 
 function assertInScope(scope: ScopePolicy | undefined, endpoint: string, label: string): void {
-  if (!isScopeEnforcementEnabled()) return;
-  if (!scope) throw new Error("agent-assure requires --scope while the scope plugin is enabled");
-  const match = scope.match(endpoint);
+  if (!scope) {
+    if (isScopeEnforcementEnabled()) throw new Error("agent-assure requires --scope while the scope extension is enabled");
+    return;
+  }
+  const match = scope.enforce(endpoint);
   if (!match.allowed) {
     throw new Error(`agent-assure: ${label} is ${match.reason}`);
   }

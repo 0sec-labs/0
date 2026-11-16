@@ -77,7 +77,7 @@ describe("scope-path containment logic", () => {
   describe("authorization gate composition", () => {
     it.runIf(process.platform !== "win32")("accepts root descendants with engagement scope enforcement enabled", () => {
       const child = createTempDir("0-test-scope-engagement-");
-      withScopeEnforcement({ pluginId: "scope", enabled: true, projectPath: "/", message: "test approval" }, () => {
+      withScopeEnforcement({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/", message: "test approval" }, () => {
         expect(resolveScopedPath("/", child)).toBe(child);
       });
     });

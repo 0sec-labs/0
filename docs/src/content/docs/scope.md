@@ -9,7 +9,9 @@ Only test systems you own or are authorized to test. A scope file encodes that a
 
 ## Set up scope
 
-Scope enforcement is a built-in plugin. It is **off by default**. Turn it on per project:
+Scope enforcement is a built-in extension. It is **on by default**, in every project. Scope is on whenever a scope is set: with no scope nothing is restricted, and the moment you set one (`--scope`, a thread, Agent or automation scope, or a pull request checkout) its hosts, paths and exclusions are enforced.
+
+If the scope extension is turned off or fails while a scope is set, commands are **denied**, not allowed. To also require a scope for every live target, enable it explicitly for the project:
 
 ```bash
 0 skills list scope --enable
@@ -31,9 +33,9 @@ Pass it to the scan:
   --depth quick --cost-ceiling 2
 ```
 
-With the plugin on, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
+With the extension enabled explicitly, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
 
-With the plugin off, host checks, exclusions and local filesystem boundaries are **not enforced**. Credential protection, sandboxing and resource limits apply either way. Turn it off with `0 skills list scope`. --disable
+With no scope set, host checks, exclusions and local filesystem boundaries have nothing to enforce. Credential protection, sandboxing and resource limits apply either way. Turning the extension off (`0 skills list scope --disable`) makes any scope you set deny commands until you turn it back on.
 
 ## Matching rules
 
@@ -74,7 +76,7 @@ A redirect or a linked third-party host does not become in scope because the sta
 
 | Input | What it controls |
 | --- | --- |
-| `--scope` | Which hosts may be reached, once the plugin is on. |
+| `--scope` | Which hosts may be reached, once a scope is set. |
 | `--auth` | Credentials for the target. Not permission to test it. |
 | `--model` and your provider key | Which model does the work. |
 | `--engagement-profile conservative` | A quieter testing posture. Not a new scope. |
@@ -86,7 +88,7 @@ With the plugin on, generic scanner wrappers (sqlmap, nikto and similar) are hid
 <span id="requirements-differ-by-command"></span>
 ### What each command enforces
 
-| Command | With the scope plugin on |
+| Command | With a scope set |
 | --- | --- |
 | `scan web` (HTTP, HTTPS, MCP) | Needs a matching scope file before it starts. |
 | `recon --active`, `js-recon`, `cloud`, `agent-assure` | Need `--scope`; candidates are checked before live work. |
@@ -103,9 +105,9 @@ There is no access setting: a thread or Agent has shell access, and scope, budge
 
 Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
 
-In threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
+In threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply whenever a scope is set. Private-network restrictions always apply.
 
-To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the plugin to be on; neither turns it on.
+To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the scope extension to be on, which it is by default.
 
 ## Execution boundary
 

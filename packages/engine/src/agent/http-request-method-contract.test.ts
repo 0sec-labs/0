@@ -10,7 +10,7 @@ let server: Server;
 let executor: ToolExecutor;
 let target: string;
 let requests: Array<{ method: string; authorization?: string; body: string }>;
-const approval = { pluginId: "scope" as const, enabled: true, projectPath: process.cwd(), message: "Synthetic loopback fixture approval" };
+const approval = { pluginId: "scope" as const, enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Synthetic loopback fixture approval" };
 function request(method?: string, url = `${target}/probe`) {
   return withScopeEnforcement(approval, () => executor.execute({ name: "http_request", arguments: { url, ...(method === undefined ? {} : { method }) } }));
 }

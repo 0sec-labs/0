@@ -188,7 +188,7 @@ const getToolsForRoleMock = vi.fn(() => fakeTools);
 vi.mock("@0/engine", async () => ({
   EngineAssessmentSchema: (await import(new URL("../../../../engine/src/engine-service.ts", import.meta.url).href)).EngineAssessmentSchema,
   isScopeEnforcementEnabled: () => true,
-  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   ToolExecutor: FakeToolExecutor,
   getToolsForRole: getToolsForRoleMock,
   loadScope: loadScopeMock,

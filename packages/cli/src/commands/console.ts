@@ -183,7 +183,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       const approvals: ApprovalsChoice = autonomyResolution.approvals;
-      const scopeEnforcement = getScopeEnforcementState();
+      const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!opts.scope);
       console.error(chalk.dim(scopeEnforcement.message));
 
       let scope;

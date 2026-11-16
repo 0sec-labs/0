@@ -11,7 +11,7 @@ vi.mock("@0/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@0/engine")>();
   return {
     ...actual,
-    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
     isScopeEnforcementEnabled: () => true,
     runJsRecon: runJsReconMock,
     fetchScoped: fetchScopedMock,

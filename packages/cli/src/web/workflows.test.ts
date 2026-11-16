@@ -16,7 +16,7 @@ const directories: string[] = [];
 let count = 0;
 const context: WebWorkflowExecutionContext = {
   runtime: {} as NativeRuntime, model: "synthetic-model", providerId: "synthetic", target: "https://example.test",
-  status: "ready", autonomyMode: "changes", scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: "/fixture", message: "Fixture" },
+  status: "ready", autonomyMode: "changes", scopeEnforcement: { pluginId: "scope", enabled: false, pluginEnabled: true, explicit: false, scopeDefined: false, denied: false, projectPath: "/fixture", message: "Fixture" },
 };
 function service(path = ":memory:", overrides: Partial<WebWorkflowExecutionContext> = {}) {
   const authorize = vi.fn(async () => ({ ...context, ...overrides }));

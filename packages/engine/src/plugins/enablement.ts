@@ -80,7 +80,14 @@ export const ENABLEMENT_DIR_NAME = "plugin-enablement";
 export const ENABLEMENT_DIR_MODE = 0o700;
 export const ENABLEMENT_FILE_MODE = 0o600;
 /** Bump only on an incompatible on-disk shape change. */
-export const ENABLEMENT_SCHEMA_VERSION = 1;
+export const ENABLEMENT_SCHEMA_VERSION = 2;
+/**
+ * Schema 1 records (and a missing, unreadable or corrupt file) predate default-on
+ * built-ins: for them a built-in absent from `enabled` simply means "never
+ * touched", so {@link withBuiltinDefaults} turns it on. In schema 2 an absent
+ * built-in means an operator explicitly disabled it.
+ */
+const LEGACY_SCHEMA_VERSION = 1;
 /** Largest enablement file we will read off disk. */
 const MAX_ENABLEMENT_BYTES = 1024 * 1024;
 
@@ -97,6 +104,8 @@ export interface EnabledPluginRecord {
   capabilities: PluginCapability[];
   /** Injected approval timestamp (ms). Never read from a clock in this module. */
   enabledAt: number;
+  /** `default` marks a built-in turned on by default, not by an explicit operator approval. */
+  origin?: "default";
 }
 
 export interface EnablementRecord {
@@ -331,9 +340,30 @@ export function coerceEnablementRecord(raw: unknown, project: string): Enablemen
     const capsRaw = Array.isArray(rec.capabilities) ? rec.capabilities : [];
     const capabilities = PLUGIN_CAPABILITIES.filter((c) => capsRaw.includes(c));
 
-    base.enabled[pluginId] = { version, capabilities, enabledAt };
+    base.enabled[pluginId] = rec.origin === "default"
+      ? { version, capabilities, enabledAt, origin: "default" }
+      : { version, capabilities, enabledAt };
   }
   return base;
+}
+
+/**
+ * Apply the default-on built-ins (scope). Legacy records gain a default entry for
+ * every built-in they never mentioned and keep an explicit approval as it is
+ * (explicit = strict, as before). Built-in approvals always carry the current
+ * version, so a first-party version bump never strands a user's choice.
+ */
+export function withBuiltinDefaults(record: EnablementRecord, legacy: boolean): EnablementRecord {
+  const enabled = { ...record.enabled };
+  for (const builtin of BUILTIN_PLUGINS) {
+    const current = enabled[builtin.id];
+    if (current) {
+      enabled[builtin.id] = { ...current, version: builtin.version, capabilities: [...builtin.capabilities] };
+    } else if (legacy && builtin.defaultEnabled) {
+      enabled[builtin.id] = { version: builtin.version, capabilities: [...builtin.capabilities], enabledAt: 0, origin: "default" };
+    }
+  }
+  return { schema: ENABLEMENT_SCHEMA_VERSION, project: record.project, enabled };
 }
 
 // ── fs layer (never throws) ──────────────────────────────────────────────────
@@ -368,20 +398,26 @@ export function readEnablement(projectPath: string, homeDir?: string): Enablemen
     real = resolve(projectPath);
   }
   const path = enablementFilePath(projectPath, homeDir);
+  // A missing, unreadable, oversized or corrupt file is a legacy record: the
+  // default-on built-ins stay on (scope must not switch off because a file broke).
+  const legacyEmpty = (): EnablementRecord => withBuiltinDefaults(emptyEnablement(real), true);
   let text: string;
   try {
     text = readFileSync(path, "utf-8");
   } catch {
-    return emptyEnablement(real);
+    return legacyEmpty();
   }
-  if (text.length > MAX_ENABLEMENT_BYTES) return emptyEnablement(real);
+  if (text.length > MAX_ENABLEMENT_BYTES) return legacyEmpty();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return emptyEnablement(real);
+    return legacyEmpty();
   }
-  return coerceEnablementRecord(parsed, real);
+  const schema = typeof parsed === "object" && parsed !== null && typeof (parsed as { schema?: unknown }).schema === "number"
+    ? (parsed as { schema: number }).schema
+    : LEGACY_SCHEMA_VERSION;
+  return withBuiltinDefaults(coerceEnablementRecord(parsed, real), schema < ENABLEMENT_SCHEMA_VERSION);
 }
 
 /**

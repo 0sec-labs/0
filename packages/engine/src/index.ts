@@ -19,7 +19,12 @@ export {
   BUILTIN_PLUGINS,
   getBuiltinPlugin,
 } from "./plugins/builtin.js";
-export { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
+export { getBuiltinPluginState } from "./plugins/builtin-state.js";
+export type { BuiltinPluginState } from "./plugins/builtin-state.js";
+export { evaluateBeforeCommand } from "./hooks/before-command.js";
+export type { BeforeCommandDecision, BeforeCommandInput, BeforeCommandOutcome, BeforeCommandPolicy, BeforeCommandThread } from "./hooks/before-command.js";
+export { runBeforeCommand } from "./agent/before-command.js";
+export { getScopeEnforcementState, scopeCheckMode, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
 export type { ScopeEnforcementState } from "./scope/activation.js";
 export {
   withWorkflowAuditExecutionPolicy,

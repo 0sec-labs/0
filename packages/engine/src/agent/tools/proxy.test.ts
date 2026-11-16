@@ -87,8 +87,8 @@ function seededHost(): ProxyHost {
 }
 
 it("a retained proxy listener honors the next host-owned activation snapshot, not its creation context", async () => {
-  const enabled: ScopeEnforcementState = { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "enabled" };
-  const disabled: ScopeEnforcementState = { ...enabled, enabled: false, message: "disabled" };
+  const enabled: ScopeEnforcementState = { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/fixture", message: "enabled" };
+  const disabled: ScopeEnforcementState = { ...enabled, enabled: false, pluginEnabled: false, explicit: false, denied: true, message: "disabled" };
   const ctx = { ...scopedCtx(), scopeEnforcement: enabled };
   let gate: ((host: string) => boolean) | undefined;
   const driver = fakeDriver();
@@ -101,7 +101,9 @@ it("a retained proxy listener honors the next host-owned activation snapshot, no
     expect(started.success).toBe(true);
     expect(gate?.("excluded.example")).toBe(false);
     ctx.scopeEnforcement = disabled;
-    expect(gate?.("excluded.example")).toBe(true);
+    // Disabled while a scope is defined fails closed: the snapshot is honoured and denies.
+    expect(gate?.("excluded.example")).toBe(false);
+    expect(gate?.("allowed.example")).toBe(false);
     ctx.scopeEnforcement = enabled;
     expect(gate?.("excluded.example")).toBe(false);
   });

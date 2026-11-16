@@ -8,7 +8,7 @@ const loadScopeMock = vi.fn();
 vi.mock("@0/engine", () => ({
   loadScope: loadScopeMock,
   isScopeEnforcementEnabled: () => true,
-  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
 }));
 
 const mcpAgentTargetMock = vi.fn();

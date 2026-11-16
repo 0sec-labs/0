@@ -147,7 +147,7 @@ async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
  * with a decoded-byte ceiling and one deadline through DNS, headers and body.
  */
 export function fetchScoped(input: string, init: RequestInit, policy: ScopedHttpPolicy): Promise<Response> {
-  return withScopeEnforcement(getScopeEnforcementState(), () => fetchScopedInternal(input, init, policy));
+  return withScopeEnforcement(getScopeEnforcementState(undefined, undefined, !!(policy.scope || policy.deniedHosts?.size)), () => fetchScopedInternal(input, init, policy));
 }
 
 async function fetchScopedInternal(

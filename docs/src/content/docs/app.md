@@ -103,7 +103,7 @@ Slash commands never skip a confirmation. Anything that changes or deletes asks 
 
 Threads never ask before running a command. There is no approvals control in the composer. The agent reads and edits files and runs commands as you, in the folder you chose.
 
-> **Security note.** There is one mode: the agent has shell access. On a local computer, commands run as your user with no confirmation unless you turn on **Ask before running commands**. What limits a run is its scope, its budget (cost ceiling and time cap) and the sandbox, which isolates commands when you use it. Third-party target authorization stays an optional plugin; see [Scope](/scope/).
+> **Security note.** There is one mode: the agent has shell access. On a local computer, commands run as your user with no confirmation unless you turn on **Ask before running commands**. What limits a run is its scope, its budget (cost ceiling and time cap) and the sandbox, which isolates commands when you use it. Scope is on whenever a scope is set, as a built-in extension; see [Scope](/scope/).
 
 To get a safety valve, open **Settings, Helpers** and turn on **Ask before running commands**. New turns then ask you to approve each command or change. The same switch is the `approvals` setting (`0 config set approvals ask`) and the `--approvals ask|auto` option of `0 lab console`. It applies to this computer, and a project cannot change it.
 

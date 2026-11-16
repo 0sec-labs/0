@@ -146,7 +146,7 @@ Layers, highest first: project, global, default. Unknown keys are dropped and in
 
 Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development source updates, `executionProfile` and `approvals`.
 
-`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under Settings, Helpers, and `--approvals ask|auto` on `0 lab console` overrides it for one run. It is the only place asking first is decided: threads and Agents have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone.
+`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under Settings, Helpers, and `--approvals ask|auto` on `0 lab console` overrides it for one run. It is the only place asking first is decided: threads and Agents have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
 
 `0 config set --from-file <file>` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 

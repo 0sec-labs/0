@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { withScopeEnforcement, type ScopeEnforcementState } from "./activation.js";
 import { describeScopeGuards, isScopeRequired, targetRequiresScope } from "./scope-guard.js";
 
-const active: ScopeEnforcementState = { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "enabled" };
+const active: ScopeEnforcementState = { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: "/fixture", message: "enabled" };
 const inactive: ScopeEnforcementState = { ...active, enabled: false, message: "disabled" };
 
 describe("scope activation visibility", () => {

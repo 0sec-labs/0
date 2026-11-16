@@ -1,6 +1,6 @@
 import { getScopeEnforcementState } from "./activation.js";
 
-/** Authorization checks supplied by the first-party scope plugin. */
+/** Authorization checks supplied by the first-party scope extension. */
 export const SCOPE_DEPENDENT_BASH_GUARDS = [
   "bash_out_of_scope_url_refusal",
   "bash_http_audit_path_allowlist",
@@ -8,7 +8,7 @@ export const SCOPE_DEPENDENT_BASH_GUARDS = [
 ] as const;
 
 export interface ScopeGuardStatus {
-  /** Whether the operator explicitly activated the scope plugin. */
+  /** Whether the operator explicitly activated the scope extension. */
   pluginEnabled: boolean;
   /** Whether a configured policy is actually being enforced. */
   active: boolean;
@@ -37,7 +37,7 @@ export function targetRequiresScope(target: string): boolean {
 
 export function networkScopeRequiredRefusal(target: string): string {
   return (
-    `scan refused: live network target '${target}' requires an engagement scope while the scope plugin is enabled. ` +
+    `scan refused: live network target '${target}' requires an engagement scope while the scope extension is enabled. ` +
     "Pass --scope <file> or use http_audit with an operator-provided host policy."
   );
 }
@@ -46,7 +46,7 @@ export function describeScopeGuards(
   scopeConfigured: boolean,
   env: NodeJS.ProcessEnv = process.env,
 ): ScopeGuardStatus {
-  const state = getScopeEnforcementState();
+  const state = getScopeEnforcementState(undefined, undefined, scopeConfigured);
   const required = state.enabled && isScopeRequired(env);
   if (!state.enabled) {
     return { pluginEnabled: false, active: false, required: false, inertGuards: SCOPE_DEPENDENT_BASH_GUARDS, message: state.message };
@@ -59,13 +59,13 @@ export function describeScopeGuards(
     active: false,
     required,
     inertGuards: SCOPE_DEPENDENT_BASH_GUARDS,
-    message: "Scope plugin enabled, but no engagement scope is configured. Bash scope guards are inert; pass --scope <file> to enforce host authorization. Live network scans are refused until a scope is configured.",
+    message: "Scope extension enabled, but no engagement scope is configured. Bash scope guards are inert; pass --scope <file> to enforce host authorization. Live network scans are refused until a scope is configured.",
   };
 }
 
 export function scopeRequiredRefusal(site: string): string {
   return (
-    `${site} refused: the scope plugin is enabled and ZERO_REQUIRE_SCOPE is set but no engagement scope is configured. ` +
+    `${site} refused: the scope extension is enabled and ZERO_REQUIRE_SCOPE is set but no engagement scope is configured. ` +
     "Pass --scope <file>, or unset ZERO_REQUIRE_SCOPE to run local modes with visibly inert scope guards."
   );
 }

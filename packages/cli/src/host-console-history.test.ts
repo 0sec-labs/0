@@ -38,7 +38,7 @@ createReadStream(null,{fd:3}).on('data',chunk=>{pending+=chunk;let i;while((i=pe
   const identity = runtime.connectionIdentity(), callback = vi.fn(), snapshots = vi.fn();
   const scope = ScopePolicy.fromJson({ in_scope: ["fixture.invalid"] });
   const session = createHostConsoleSession({ config: { runtime, scanId: "review-history", workspaceRoot: root, target: "https://fixture.invalid", scope, autonomyMode: "standard", initialMessages: [{ role: "user", content: [{ type: "text", text: "Earlier context" }] }], askOperator: callback }, onSnapshot: snapshots, executionEnvironment: {},
-    scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: root, message: "Fixture scope" },
+    scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: root, message: "Fixture scope" },
     launch: { command: process.execPath, args: [entry], cwd: root, env: { PATH: process.env.PATH, HOME: root }, graceMs: 250, confirmationMs: 1000 } });
   sessions.push(session); return { session, started, runtime, identity, callback, snapshots, scope };
 }

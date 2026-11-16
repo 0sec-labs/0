@@ -406,12 +406,12 @@ describe("list / disable / info", () => {
     expect(joined(out)).toMatch(/acme_probe/);
   });
 
-  it("does not describe a stale first-party approval as active authorization", () => {
-    const stale = core.enable(core.emptyEnablement(project), "scope", {
-      version: "0.0.1", capabilities: [], now: 12345,
-    });
-    if (!stale.ok) throw new Error(stale.error);
-    expect(core.writeEnablement(project, stale.record, home)).toBe(true);
+  it("shows the built-in scope extension as on by default, off after an explicit disable", () => {
+    runInfo("scope", deps());
+    expect(joined(out)).toMatch(/Enabled for this project:.*yes/);
+    out = [];
+    runDisable("scope", deps());
+    out = [];
     runInfo("scope", deps());
     expect(joined(out)).toMatch(/Enabled for this project:.*no/);
     out = [];

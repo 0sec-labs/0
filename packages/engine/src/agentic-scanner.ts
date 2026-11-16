@@ -57,7 +57,7 @@ export type { AgentOutput } from "./agentic/phase-runners.js";
 
 export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
   if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(opts.nativeRuntime ?? { type: opts.config.runtime ?? "api" });
-  return withScopeEnforcement(getScopeEnforcementState(), () => {
+  return withScopeEnforcement(getScopeEnforcementState(undefined, undefined, !!(opts.scope || opts.config.scopeFile)), () => {
     const plan = opts.config.plan;
     if (!plan) return agenticScanInternal(opts);
     return executeScanPlan({
@@ -2165,7 +2165,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
         session: resolveIdentities(config).length ? new SessionEngine(resolveIdentities(config)) : undefined,
         accessControlFixtures: config.accessControlFixtures,
         scope: resolveScopeForConfig(config),
-        scopeEnforcement: getScopeEnforcementState(),
+        scopeEnforcement: getScopeEnforcementState(undefined, undefined, !!(resolveScopeForConfig(config) || resolveEnforcementForConfig(config))),
         enforcement: resolveEnforcementForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
         attribution: buildAttributionForConfig(config),

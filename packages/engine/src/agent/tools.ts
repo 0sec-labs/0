@@ -20,10 +20,11 @@ import type { OastHandle } from "../oast/types.js";
 import { confirmOast, categoryToOastClass, deriveProbe, type OastClass, type OastVerdict } from "../oast/index.js";
 import type { ScopePolicy } from "../scope/scope.js";
 import { extractUrls } from "../scope/scope.js";
+import { runBeforeCommand } from "./before-command.js";
 import { classifyResponse, runEvasionCampaign, type HttpRequestParts, type WafResponseLike } from "../scope/waf-detect.js";
 import { detectScannerBinary } from "../scope/scanner-binaries.js";
 import { describeScopeGuards, scopeRequiredRefusal } from "../scope/scope-guard.js";
-import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../scope/activation.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, scopeCheckMode, withScopeEnforcement } from "../scope/activation.js";
 import { isWafEvasionLadderEnabled } from "../scope/engagement-profile.js";
 import { applyAttribution, formatUserAgent } from "../scope/attribution.js";
 import { sendPrompt, extractResponseText, fetchScoped } from "../http.js";
@@ -676,7 +677,7 @@ export class ToolExecutor {
     const assertAuthority = ownAuthority && inheritedAuthority && ownAuthority !== inheritedAuthority
       ? () => { inheritedAuthority(); ownAuthority(); }
       : ownAuthority ?? inheritedAuthority;
-    const scopeEnforcement = getScopeEnforcementState();
+    const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!(this.ctx.scope || this.ctx.publicNetwork?.scope || this.ctx.enforcement));
     this.ctx.scopeEnforcement = scopeEnforcement;
     return withLocalSourceBoundary(this._localSourceBoundary ?? getLocalSourceBoundary(), () => withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
     try {
@@ -3053,6 +3054,12 @@ export class ToolExecutor {
       return { success: false, output: null, error: "Command is required" };
     }
     const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+    // Fail closed before anything else (including repository acquisition): a scope is
+    // defined but the scope extension is disabled.
+    if (scopeCheckMode(networkScope !== undefined || (this.ctx.enforcement?.pathPolicy.snapshot().length ?? 0) > 0) === "deny") {
+      this.ctx.enforcement?.noteOutOfScopeBlocked();
+      return { success: false, output: null, error: `bash refused: ${getScopeEnforcementState().message}` };
+    }
     const acquisition = parseRepositoryAcquisition(command);
     if (this.ctx.consoleSession && acquisition && !repositoryIdentityMatchesTarget(this.ctx.target, acquisition.url)) {
       return {
@@ -3087,31 +3094,28 @@ export class ToolExecutor {
     // catches the common case (`curl https://evil.com/x`); a cleverer
     // agent that hides the URL behind base64 / DNS / a temp file is NOT
     // caught here, and that gap is documented as a follow-up.
+    // The single beforeCommand decision point. Here only a deny matters (an ask is
+    // answered by the console session's prompts, which run before dispatch).
+    const beforeCommand = await runBeforeCommand({
+      kind: "bash",
+      command,
+      argv: command.split(/\s+/).filter(Boolean),
+      cwd: this.ctx.workspaceRoot ?? process.cwd(),
+      hosts: [],
+      paths: [],
+      thread: {
+        scope: networkScope,
+        pathPrefixes: this.ctx.enforcement?.pathPolicy.snapshot(),
+        canAskScope: false,
+      },
+    });
+    if (beforeCommand.decision === "deny") {
+      this.ctx.enforcement?.noteOutOfScopeBlocked();
+      return { success: false, output: null, error: `bash refused: ${beforeCommand.reason}` };
+    }
     if (isScopeEnforcementEnabled() && networkScope) {
-      const urls = extractUrls(command);
-      for (const url of urls) {
-        const verdict = networkScope.enforce(url)
-        if (!verdict.allowed) {
-          this.ctx.enforcement?.noteOutOfScopeBlocked();
-          return {
-            success: false,
-            output: null,
-            error: `bash refused: command references out-of-scope URL '${url}' (${verdict.reason})`,
-          };
-        }
-        // http_audit path allowlist on bash-extracted URLs (FROZEN CONTRACT).
-        if (this.ctx.enforcement) {
-          const pathVerdict = this.ctx.enforcement.pathPolicy.enforce(url);
-          if (!pathVerdict.allowed) {
-            this.ctx.enforcement.noteOutOfScopeBlocked();
-            return {
-              success: false,
-              output: null,
-              error: `bash refused: command references out-of-path URL '${url}' (${pathVerdict.reason})`,
-            };
-          }
-        }
-      }
+      // Host and http_audit path checks on URLs in the command are decided once by
+      // the beforeCommand hook above (scope/before-command.ts).
 
       // Generic-scanner-traffic suppression (0#217). When scope is
       // loaded the engagement is presumed to be a coordinated-disclosure

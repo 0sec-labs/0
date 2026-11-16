@@ -38,7 +38,7 @@ export function registerReconCommand(program: Command): void {
         timeout = parsed;
       }
 
-      const scopeEnforcement = getScopeEnforcementState();
+      const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!opts.scope);
       console.error(chalk.dim(scopeEnforcement.message));
       let scope: ScopePolicy | undefined;
       if (opts.scope) {

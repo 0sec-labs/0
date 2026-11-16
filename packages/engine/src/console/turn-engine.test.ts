@@ -1134,7 +1134,7 @@ describe("Console autonomy — yolo still enforces scope", () => {
     const outcome = await session.send("go");
     expect(outcome.toolCalls).toHaveLength(1);
     expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("Configured scope");
+    expect(outcome.toolCalls[0].result.error).toContain("out-of-scope URL");
   });
 });
 

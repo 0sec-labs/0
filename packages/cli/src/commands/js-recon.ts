@@ -86,7 +86,7 @@ export function registerJsReconCommand(program: Command): void {
       // Step 1: fetch the page and extract its <script src> bundle URLs. The
       // page fetch itself is scope-gated — an out-of-scope page yields no
       // script URLs and therefore no JS sweep.
-      if (isScopeEnforcementEnabled() && scope && !scope.match(url).allowed) {
+      if (scope && !scope.enforce(url).allowed) {
         console.error(chalk.red(`Target page '${url}' is out of scope — refusing (deny-by-default).`));
         process.exitCode = 2;
         return;
