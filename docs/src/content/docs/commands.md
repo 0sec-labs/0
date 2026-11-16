@@ -4002,7 +4002,7 @@ Every command works with the app running or on its own, and takes `--json`. Addi
 
 Guide: [Read the workflow](/skills/).
 
-Subcommands: [list](#skills-list) · [add](#skills-add) · [run](#skills-run) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [remove](#skills-remove).
+Subcommands: [list](#skills-list) · [add](#skills-add) · [run](#skills-run) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [extensions](#skills-extensions) · [remove](#skills-remove).
 
 #### skills list
 
@@ -4193,17 +4193,170 @@ Browse the skills catalog
 Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
 
 ```text
-0 skills add [options] <catalog-id-or-repo>
+0 skills add [options] <source>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `catalog-id-or-repo` | Yes |  |
+| `source` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--preview` | — | Only show the review |
 | `--yes` | — | Install the reviewed commit |
+| `--enable` | — | Extensions: also enable it |
+| `--project <dir>` | — | Extensions: with --enable, enable for this project only |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions
+
+Installed extensions: list, info, enable, disable, update, remove (install with `0 skills add`)
+
+```text
+0 skills extensions
+```
+
+Subcommands: [add](#skills-extensions-add) · [list](#skills-extensions-list) · [info](#skills-extensions-info) · [enable](#skills-extensions-enable) · [disable](#skills-extensions-disable) · [remove](#skills-extensions-remove) · [update](#skills-extensions-update) · [import](#skills-extensions-import).
+
+#### skills extensions add
+
+Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
+
+```text
+0 skills extensions add [options] <source>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `source` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preview` | — | Only show the install prompt |
+| `--yes` | — | Install the exact revision shown |
+| `--enable` | — | Also enable it |
+| `--project <dir>` | — | With --enable: enable for this project only |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions list
+
+List installed extensions and built-ins
+
+```text
+0 skills extensions list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <dir>` | — | Show enablement for this project |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions info
+
+Show the install prompt for an installed extension
+
+```text
+0 skills extensions info [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions enable
+
+Enable globally, or for one project with --project
+
+```text
+0 skills extensions enable [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <dir>` | — | Enable for this project only |
+| `--yes` | — | Approve an unapproved revision (for example an imported one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions disable
+
+Disable globally, or for one project with --project
+
+```text
+0 skills extensions disable [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <dir>` | — | Disable for this project only |
+| `--yes` | — | Confirm disabling a built-in |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions remove
+
+Remove an installed extension and its stored revisions
+
+```text
+0 skills extensions remove [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions update
+
+Show the diff and install prompt for a newer revision; --yes --to <sha> approves it
+
+```text
+0 skills extensions update [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--to <sha>` | — | Full commit SHA to update to (default: the remote HEAD) |
+| `--yes` | — | Approve the revision given by --to |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills extensions import
+
+Import earlier plugins, MCP servers and skills (runs once automatically); shows what could not be migrated
+
+```text
+0 skills extensions import [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--force` | — | Run the importer again |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 
