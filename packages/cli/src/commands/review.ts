@@ -1,5 +1,4 @@
 import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
@@ -182,8 +181,6 @@ export function registerReviewCommand(program: Command, name = "review"): void {
     .option("--verbose", "Show detailed output", false)
     .option("--timeout <ms>", "AI agent timeout in milliseconds", "600000")
     .action(async (repo: string, opts: Record<string, string | boolean>, command: Command) => {
-      // A path-shaped target that is not there is a typo: say so before the engine reports a bare syscall error.
-      if (/^(\.{1,2}\/|\/)/.test(repo) && !existsSync(repo)) throw new Error(`No such folder: ${repo}`);
       assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime, opts.provider, { apiKey: opts.apiKey as string | undefined, model: opts.model as string | undefined });
       let costCeilingUsd: number | undefined;
       const ceilingSource =
