@@ -14,7 +14,7 @@ export const BACKDROPS = [
 export type BackdropKind = (typeof BACKDROPS)[number]["id"]
 export const DEFAULT_BACKDROP: BackdropKind = "dither"
 
-/** Backdrops that existed before Dither flow, Contours and the organic scenes replaced them; saved choices of these fall back to Dither. */
+/** Backdrops that existed before Dither (flow), Contours and the organic scenes replaced them; saved choices of these fall back to Dither. */
 export const REMOVED_BACKDROPS = ["aurora", "grid", "scanline", "code-rain", "waves", "ripple", "constellation", "topography"] as const
 
 export const isBackdrop = (value: unknown): value is BackdropKind => BACKDROPS.some(item => item.id === value)

@@ -46,7 +46,7 @@ Settings > Appearance > Background offers None plus six scenes. Each is a canvas
 | Option | What it is | Cap |
 | --- | --- | --- |
 | None | Nothing behind the thread | |
-| Dither (default) | Dither flow v2: a domain-warped noise field, lit by three drifting lights, ordered-dithered in two tones with sparse accent dots | 12 fps |
+| Dither (flow), the default | Dither flow v2: a domain-warped noise field, lit by three drifting lights, ordered-dithered in two tones with sparse accent dots | 12 fps |
 | Contours | A printed survey map: marching squares on a drifting field, minor, major and index lines, dot-tally elevation marks | 10 fps |
 | Glyph contours | A field of monospace punctuation chosen from a density ramp, densest along the ridges of drifting noise | 10 fps |
 | Fish school | Three depth layers of boids drawn as tapered fish with trails, dithered | 20 fps |

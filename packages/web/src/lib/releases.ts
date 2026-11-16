@@ -11,10 +11,10 @@ export const RELEASES: readonly Release[] = [
     version: "0.38.0",
     date: "2026-11-16",
     title: "One Memory, one Appearance",
-    summary: "Memory is one set of plain notes you can review, Appearance has a live preview, and there are six new backgrounds.",
+    summary: "Memory is one set of plain notes you can review, Appearance is one page, and there are six new backgrounds.",
     highlights: [
       { icon: "ListChecks", title: "One Memory", text: "Plain notes per folder or global that threads read each turn. Notes a thread adds after reading untrusted content wait in a Proposed inbox until you accept them, and secrets are never saved." },
-      { icon: "Palette", title: "Appearance with a preview", text: "Settings > Appearance is one page with a live preview of the new thread screen, and six new backgrounds: Dither flow, Contours, Glyph contours, Fish school, Plankton and Ink." },
+      { icon: "Palette", title: "Appearance in one place", text: "Settings > Appearance is one page, and six new backgrounds: Dither (flow), Contours, Glyph contours, Fish school, Plankton and Ink." },
       { icon: "Wrench", title: "One width everywhere", text: "Agents, Skills, Memory, Computers and Extensions line up on one page width. `0 memory export --to AGENTS.md` writes your notes as a file you can review." },
     ],
   },

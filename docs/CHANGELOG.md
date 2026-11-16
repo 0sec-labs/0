@@ -19,7 +19,7 @@ on the GitHub Release tag.
 
 ## [0.38.0] - 2026-11-16
 
-This release makes Memory one thing, gives Settings > Appearance a live preview, replaces the backgrounds with six new scenes and puts every page on one width.
+This release makes Memory one thing, puts Settings > Appearance on one page, replaces the backgrounds with six new scenes and puts every page on one width.
 
 ### Added
 
@@ -31,10 +31,10 @@ This release makes Memory one thing, gives Settings > Appearance a live preview,
 
 ### Changed
 
-- Settings > Appearance is one page with a live preview of the new thread screen. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do.
+- Settings > Appearance is one page. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do.
 - Theme cards are small copies of the app in that theme, and each Background tile is a real frame of that background.
 - Theme and mode live in one place. The profile menu has one Appearance item and the command palette has fewer entries.
-- Six new backgrounds replace the old eight: Dither flow (still the default), Contours, Glyph contours, Fish school, Plankton and Ink. A saved choice of a removed background falls back to Dither.
+- Six new backgrounds replace the old eight: Dither (flow) (still the default), Contours, Glyph contours, Fish school, Plankton and Ink. A saved choice of a removed background falls back to Dither.
 - All pages share one width. Agents, Skills, Memory, Computers, Extensions and the rest line up, and Settings sections are narrower.
 - `0 findings update --status false-positive` remembers why as an `avoid` note, and only `avoid` notes you wrote or accepted reach the scan verifier.
 - `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, next to the new `ZERO_DISABLE_MEMORY`.
