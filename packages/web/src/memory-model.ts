@@ -9,14 +9,18 @@ export interface MemoryNote {
 export interface MemoryOverflow { folder?: string; count: number; ids: string[]; reason?: string }
 export interface MemoryResponse { enabled: boolean; notes: MemoryNote[]; proposed: MemoryNote[]; overflow: MemoryOverflow[]; folders: string[]; kinds: NoteKind[] }
 
-/** The last two path segments, enough to tell folders apart in a list. A repository (`git:host/owner/name`) is shown as `owner/name`. */
-export function folderLabel(folder: string): string {
-  const repo = folder.startsWith("git:");
-  const parts = folder.replace(/^git:/, "").split(/[\\/]/).filter(Boolean).slice(repo ? 1 : 0);
-  return parts.slice(-2).join("/") || folder;
+/**
+ * How a note's folder reads in a list. A repository (`git:host/owner/name`) is shown as `owner/name`; a path is shown whole with its
+ * leading slash, and the home directory collapsed to `~` (`home` when known, else the usual `/Users/x`, `/home/x` and `/root`).
+ */
+export function folderLabel(folder: string, home?: string): string {
+  if (folder.startsWith("git:")) return folder.slice(4).split("/").filter(Boolean).slice(1).join("/") || folder;
+  const root = home?.replace(/\/+$/, "");
+  if (root && (folder === root || folder.startsWith(`${root}/`))) return `~${folder.slice(root.length)}`;
+  return folder.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)|^\/root(?=\/|$)/, "~");
 }
 
-const WRITERS = { user: "You", model: "0", import: "Imported" } as const;
+const WRITERS = { user: "You", model: "Suggested by a thread", import: "Imported" } as const;
 
 /** "Everywhere" for global notes, the folder name otherwise, then the kind and who wrote it. */
 export function noteDetail(note: MemoryNote): string {
@@ -29,9 +33,12 @@ export function filterNotes(notes: readonly MemoryNote[], filter: string, search
   return notes.filter(note => (filter === "all" || (filter === "global" ? note.scope === "global" : note.folder === filter)) && (!q || note.text.toLowerCase().includes(q)));
 }
 
+/** Why a note is in Proposed: its thread had read content that is not the person's own. */
+export const TAINT_REASON = "This thread read web pages or other outside content before suggesting this note.";
+
 /** Where a proposal came from, in plain words: it read outside content, or it did not. */
 export function proposalDetail(note: MemoryNote): string {
-  return [noteDetail(note), note.tainted ? "Read web pages, files or tool output" : ""].filter(Boolean).join(" · ");
+  return [noteDetail(note), note.tainted ? TAINT_REASON : ""].filter(Boolean).join(" · ");
 }
 
 /** The sentence for notes the model is not shown, for the selected filter; empty when everything fits. */

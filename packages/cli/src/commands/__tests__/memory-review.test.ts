@@ -75,3 +75,12 @@ describe("0 memory review and export", () => {
     expect(store.list({ folder: repo })).toHaveLength(2); // nothing was read back from the file
   });
 });
+
+describe("folderPlace", () => {
+  it("shows a repository as owner/name and a path whole, with the home directory as ~", async () => {
+    const { folderPlace } = await import("../memory.js");
+    expect(folderPlace("git:github.com/acme/app", "/Users/me")).toBe("acme/app");
+    expect(folderPlace("/Users/me/code/app", "/Users/me")).toBe("~/code/app");
+    expect(folderPlace("/private/tmp/work", "/Users/me")).toBe("/private/tmp/work");
+  });
+});

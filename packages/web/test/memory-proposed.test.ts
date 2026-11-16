@@ -14,7 +14,7 @@ describe("Proposed section", () => {
     const markup = html([note({}), note({ id: "m_p2", text: "Skip the flaky suite" })]);
     expect(markup).toContain("Proposed"); expect(markup).toContain("Deploys need the staging flag"); expect(markup).toContain("Skip the flaky suite");
     expect(markup.match(/>Accept</g)).toHaveLength(2); expect(markup).toContain(">Edit<"); expect(markup).toContain(">Reject<");
-    expect(markup).toContain("Read web pages, files or tool output"); expect(markup).toContain("not used until you accept");
+    expect(markup).toContain("This thread read web pages or other outside content before suggesting this note."); expect(markup).toContain("not used until you accept");
   });
   it("hides the actions for a read-only viewer", () => {
     const markup = html([note({})]);

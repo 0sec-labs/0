@@ -4,19 +4,23 @@ import { filterNotes, folderLabel, noteDetail, overflowNotice, proposalDetail, t
 const note = (over: Partial<MemoryNote>): MemoryNote => ({ id: "m_1", text: "Run tests with pnpm test", scope: "global", source: "user", status: "live", created: "2026-01-01T00:00:00.000Z", ...over });
 
 describe("memory model", () => {
-  it("names a folder by its last two segments", () => {
-    expect(folderLabel("/Users/me/code/app")).toBe("code/app");
+  it("shows the real path with its leading slash, the home directory as ~, and a repository by name", () => {
+    expect(folderLabel("/Users/me/code/app")).toBe("~/code/app");
+    expect(folderLabel("/home/me")).toBe("~");
+    expect(folderLabel("/private/tmp/work")).toBe("/private/tmp/work");
+    expect(folderLabel("/srv/app", "/srv")).toBe("~/app");
     expect(folderLabel("/")).toBe("/");
+    expect(folderLabel("git:github.com/acme/app")).toBe("acme/app");
   });
   it("describes where a note applies, its kind and who wrote it, in plain words", () => {
     expect(noteDetail(note({}))).toBe("Everywhere · You");
-    expect(noteDetail(note({ scope: "folder", folder: "/a/b/c", kind: "avoid", source: "model" }))).toBe("b/c · Avoid · 0");
+    expect(noteDetail(note({ scope: "folder", folder: "/a/b/c", kind: "avoid", source: "model" }))).toBe("/a/b/c · Avoid · Suggested by a thread");
     expect(noteDetail(note({ source: "import" }))).toBe("Everywhere · Imported");
   });
   it("labels a repository identity as owner/name and says when a proposal read outside content", () => {
     expect(folderLabel("git:github.com/acme/app")).toBe("acme/app");
-    expect(proposalDetail(note({ source: "model", status: "proposed", tainted: true }))).toBe("Everywhere · 0 · Read web pages, files or tool output");
-    expect(proposalDetail(note({ source: "model", status: "proposed" }))).toBe("Everywhere · 0");
+    expect(proposalDetail(note({ source: "model", status: "proposed", tainted: true }))).toBe("Everywhere · Suggested by a thread · This thread read web pages or other outside content before suggesting this note.");
+    expect(proposalDetail(note({ source: "model", status: "proposed" }))).toBe("Everywhere · Suggested by a thread");
   });
   it("says how many notes the model is not shown, for the selected filter", () => {
     const overflow = [{ count: 2, ids: ["m_1", "m_2"], reason: "the memory budget of 2000 tokens is full; older notes are left out first" }, { folder: "/a", count: 3, ids: ["m_2", "m_3", "m_4"] }];

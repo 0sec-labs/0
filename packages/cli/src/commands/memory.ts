@@ -1,6 +1,7 @@
 // `0 memory`: the one list of short notes 0 remembers across threads, per folder and global.
 // The notes are plain files under ~/.0/memory, so this command works with no engine running.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import { NOTE_KINDS, applyExportSection, canonicalFolder, exportArchive, exportable, importArchive, isArchive, isKind, lineChanges, memoryOverview, openMemory, overflowLine, renderExportSection, type Note, type NoteKind, type NoteStore } from "@0/engine";
@@ -8,7 +9,12 @@ import { EXIT_FAILURE, EXIT_USAGE, UsageError, defaultIo, emit, renderTable, req
 
 interface Common { json?: boolean; dbPath?: string }
 const common = (command: Command): Command => command.option("--json", "Print machine-readable JSON").option("--db-path <path>", "Engine database to import older memories from");
-const place = (note: Note) => (note.scope === "global" ? "global" : note.folder ?? "folder");
+/** A folder as shown in lists: `owner/name` for a repository, else the real path with the home directory as `~`. */
+export function folderPlace(folder: string, home = homedir()): string {
+  if (folder.startsWith("git:")) return folder.slice(4).split("/").filter(Boolean).slice(1).join("/") || folder;
+  return home && home !== "/" && (folder === home || folder.startsWith(`${home}/`)) ? `~${folder.slice(home.length)}` : folder;
+}
+const place = (note: Note) => (note.scope === "global" ? "global" : note.folder ? folderPlace(note.folder) : "folder");
 
 export function registerMemoryCommand(program: Command, io: CommandIo = defaultIo()): void {
   const memory = program.command("memory").description("List, add, remove, review, export and import what 0 remembers across threads");
@@ -98,7 +104,7 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
         const changes = lineChanges(before ?? "", after);
         writeFileSync(file, after);
         emit(io, options, { ok: true, file: options.to, notes: notes.length, added: changes.added.length, removed: changes.removed.length }, () =>
-          [`Updated ${options.to} with ${notes.length} note${notes.length === 1 ? "" : "s"}. Review with git diff, then commit it. 0 never reads notes back from a repository.`, ...changes.removed.map(line => `- ${line}`), ...changes.added.map(line => `+ ${line}`)].join("\n"));
+          [`Updated ${options.to} with ${notes.length} note${notes.length === 1 ? "" : "s"}. Review with git diff, then commit it. 0security never reads notes back from a repository.`, ...changes.removed.map(line => `- ${line}`), ...changes.added.map(line => `+ ${line}`)].join("\n"));
         return;
       }
       const archive = exportArchive(store, options.folder);

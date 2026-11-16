@@ -73,7 +73,7 @@ export function MemoryPage() {
         <select aria-label="Kind" className="h-8 rounded-md border border-input bg-background px-2" value={draft?.kind} onChange={event => setDraft(current => current && { ...current, kind: event.target.value as Draft["kind"] })}><option value="">No kind</option>{(Object.keys(NOTE_KIND_LABELS) as NoteKind[]).map(kind => <option key={kind} value={kind}>{NOTE_KIND_LABELS[kind]}</option>)}</select>
       </div>}
     </FormDialog>
-    <ConfirmDialog open={forgetting !== null} onOpenChange={open => { if (!open) setForgetting(null); }} title={forgetting === "all" ? "Forget every note?" : "Forget this note?"} description={forgetting === "all" ? "0 will no longer remember any of these." : "0 will no longer remember it."}
+    <ConfirmDialog open={forgetting !== null} onOpenChange={open => { if (!open) setForgetting(null); }} title={forgetting === "all" ? "Forget every note?" : "Forget this note?"} description={forgetting === "all" ? "0security will no longer remember any of these." : "0security will no longer remember it."}
       confirmLabel="Forget" destructive pending={change.isPending} onConfirm={forget} />
   </>;
 }
