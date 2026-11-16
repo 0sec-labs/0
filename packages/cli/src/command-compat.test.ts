@@ -107,6 +107,9 @@ describe("the notice", () => {
     expect(resolveInvocation(["automations", "list"]).notice).toBe("moved: use `0 agents list --automation`");
     expect(resolveInvocation(["doctor"]).notice).toBe("");
     expect(resolveInvocation(["--port", "8080"])).toEqual({ args: ["web", "--port", "8080"], notice: "" });
+    expect(resolveInvocation(["--headless", "--ready-json"])).toEqual({ args: ["web", "--headless", "--ready-json"], notice: "" });
+    expect(resolveInvocation(["--host=0.0.0.0", "--server-mode"]).args[0]).toBe("web");
+    expect(resolveInvocation(["-p", "hello"]).args).toEqual(["-p", "hello"]);
     expect(resolveInvocation(["hunt", "x"]).notice).toBe("moved: use `0 lab research hunt`");
   });
 });
@@ -218,5 +221,8 @@ describe("the new grammar reaches the implementation commands", () => {
     }
     expect(rewriteNewForms(["findings", "update", "f1", "--status", "bogus"])).toBeUndefined();
     expect(rewriteNewForms(["findings", "update", "--help"])).toBeUndefined();
+    expect(rewriteNewForms(["models", "connect", "--help"])).toBeUndefined();
+    expect(rewriteNewForms(["agents", "list", "--automation", "--help"])).toEqual(["automation", "list", "--help"]);
+    expect(rewriteNewForms(["config", "doctor", "--help"])).toEqual(["doctor", "--help"]);
   });
 });

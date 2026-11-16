@@ -47,7 +47,7 @@ interface InstallProbe extends Origin {
 
 export const DOCKER_UPDATE_COMMAND = "docker pull ghcr.io/0sec-labs/0security:latest";
 export const SOURCE_UPDATE_COMMAND = "git pull";
-export const BINARY_UPDATE_COMMAND = "0 doctor upgrade";
+export const BINARY_UPDATE_COMMAND = "0 config doctor upgrade";
 
 function runningInContainer(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env["ZERO_IN_DOCKER"] === "1") return true;

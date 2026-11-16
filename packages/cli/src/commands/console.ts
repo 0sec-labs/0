@@ -136,13 +136,13 @@ export function registerConsoleCommand(program: Command): void {
   const consoleCommand = program
     .command("console")
     .description(
-      "Run a headless chat prompt; interactive conversations use 0 web",
+      "Run a headless chat prompt; interactive conversations use 0",
     )
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
-    .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
+    .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 skills list scope --enable`")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding mode: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
@@ -173,7 +173,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       if (opts.print === undefined) {
-        console.log("Interactive conversations are in the browser. Run 0 web (no account required). For automation use 0 lab console -p \"your request\" or 0 -p \"your request\".");
+        console.log("Interactive conversations are in the browser. Run 0 (no account required). For automation use 0 lab console -p \"your request\" or 0 -p \"your request\".");
         return;
       }
       let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
@@ -286,7 +286,7 @@ export function registerConsoleCommand(program: Command): void {
           resumedModel = stored.model;
           resumedTarget = stored.target;
         } else {
-          console.error("Choose a saved session id with --resume <id>, or open saved conversations in 0 web.");
+          console.error("Choose a saved session id with --resume <id>, or open saved conversations in 0.");
           process.exitCode = 2;
           return;
         }

@@ -42,7 +42,7 @@ const triggerRows = (triggers: Trigger[]) => renderTable(triggers, [
 /** Create, edit, copy, version, rollback and delete saved automations, plus their schedules. */
 export function registerAutomationManageCommands(automation: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
   consoleFlags(automation.command("create").description("Create an automation from a template or a JSON definition")
-    .option("--template <id>", "Start from a template (see `0 automation list --templates`)")
+    .option("--template <id>", "Start from a template (see `0 agents list --automation --templates`)")
     .option("--file <path>", "Definition JSON object")
     .option("--name <name>", "Name for the new automation")
     .option("--target <target>", "Target the automation runs against"))
@@ -84,7 +84,7 @@ export function registerAutomationManageCommands(automation: Command, deps: Cons
     }, ({ versions }) => renderTable(versions, [{ header: "REVISION", value: v => v.revision }, { header: "NAME", value: v => v.name }, { header: "SAVED", value: v => v.updatedAt ?? v.createdAt }])));
 
   consoleFlags(automation.command("rollback <id>").description("Restore an earlier revision as a new revision")
-    .requiredOption("--revision <n>", "Revision to restore (see `0 automation versions`)"))
+    .requiredOption("--revision <n>", "Revision to restore (see `0 agents set --automation versions`)"))
     .action((id: string, options: ConsoleFlags & { revision: string }) => withConsole(options, deps, async client => {
       const revision = revisionOption(options.revision)!;
       const current = await definition(client, id);

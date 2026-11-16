@@ -104,7 +104,7 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
         if (flags.folder) await client.request("PATCH", `/api/console/sessions/${missionId(id)}/configuration`, { workspacePath: flags.folder });
         await client.request("POST", `/api/console/sessions/${missionId(id)}/messages`, { text: prompt });
       } catch (error) {
-        throw new Error(`${error instanceof Error ? error.message : String(error)} (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`);
+        throw new Error(`${error instanceof Error ? error.message : String(error)} (thread ${id} was created; remove it with \`0 threads list ${id} --delete --yes\`)`);
       }
       if (!flags.wait) { print(options, { session: created }, id); return; }
       const deadline = Date.now() + Number(flags.timeout) * 1000;

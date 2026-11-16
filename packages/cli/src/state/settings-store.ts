@@ -30,7 +30,7 @@
  * `scope: "project"`; otherwise it writes the GLOBAL file. `setSettings` (the
  * whole-object write the settings screen uses) always writes the global base.
  * The provenance of every effective value is exposed via `getSettingSources` so
- * `0 config show` can label each key default/global/project.
+ * `0 config get` can label each key default/global/project.
  */
 
 import {

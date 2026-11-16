@@ -59,10 +59,10 @@ async function setupWorkbench(options: WorkbenchSetupOptions, home: string = pro
   const workspaceRoot = options.workspace === undefined ? previous?.workspaceRoot : realpathSync(resolve(options.workspace));
   if (workspaceRoot !== undefined && !lstatSync(workspaceRoot).isDirectory()) throw new Error("Workbench workspace must be a directory.");
   const providers = options.provider ?? previous?.providers ?? [];
-  for (const id of providers) if (!PROVIDERS.some((provider) => provider.id === id)) throw new Error(`Unknown provider grant: ${id}. Use 0 doctor workbench providers.`);
+  for (const id of providers) if (!PROVIDERS.some((provider) => provider.id === id)) throw new Error(`Unknown provider grant: ${id}. Use 0 config doctor workbench providers.`);
   // Reuse only a saved operator-approved image, never an archive found in a checkout.
   const imageArchive = options.image ? resolve(options.image) : previous?.image;
-  if (!imageArchive) throw new Error("No approved workbench image is available. Supply a locally provisioned archive with 0 doctor workbench setup --image <archive>. Docker is only needed to build an image, never to run this profile.");
+  if (!imageArchive) throw new Error("No approved workbench image is available. Supply a locally provisioned archive with 0 config doctor workbench setup --image <archive>. Docker is only needed to build an image, never to run this profile.");
   const cpus = resource(options.cpus, previous?.cpus ?? 2, 64, "CPUs");
   const memoryMb = resource(options.memory, previous?.memoryMb ?? 4096, 262144, "Memory (MiB)");
   const storageGb = resource(options.storage, previous?.storageGb ?? 20, 1024, "Storage (GiB)");
@@ -139,7 +139,7 @@ export function registerWorkbenchCommand(program: Command): void {
         console.log(`Sandbox image grants: ${config.approvedImages?.map((image) => image.reference).join(", ") || "none (no additional image references are granted)"}`);
         console.log(`Network: ${workbenchNetworkEnabled() ? "online" : "offline (explicit ZERO_OFFLINE restriction)"}`);
         console.log(`Isolated sandbox hard ceilings: ${JSON.stringify(DEFAULT_WORKBENCH_BROKER_LIMITS)}`);
-        console.log("Run 0 console or 0 web. Terminal/browser controls stay on the host; selected agent work executes inside SmolVM.");
+        console.log("Run 0. Terminal/browser controls stay on the host; selected agent work executes inside SmolVM.");
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -170,7 +170,7 @@ export function registerWorkbenchCommand(program: Command): void {
     .action(async (options: { provider?: string; github?: boolean; currentWorkspace?: boolean; sandboxImage?: string[]; clearSandboxImages?: boolean }) => {
       try {
         const config = loadWorkbenchConfig();
-        if (!config) throw new Error("No workbench is configured. Run 0 doctor workbench setup first.");
+        if (!config) throw new Error("No workbench is configured. Run 0 config doctor workbench setup first.");
         if (options.provider !== undefined) config.providers = options.provider === "none" ? [] : options.provider.split(",").map((id) => id.trim());
         if (options.github !== undefined) config.github = options.github;
         if (options.currentWorkspace) delete config.workspaceRoot;

@@ -2,7 +2,7 @@
  * The one-time telemetry disclosure.
  *
  * Telemetry is automatic by default, so every install is told exactly once, on
- * the first interactive run of the CLI or `0 web`, what is sent and how to turn
+ * the first interactive run of the CLI or `0`, what is sent and how to turn
  * it off. The notice goes to STDERR only, and only when it cannot corrupt
  * machine output or a pipeline: stderr must be a TTY, the arguments must not
  * ask for a machine format, CI is silent, and nothing is printed when

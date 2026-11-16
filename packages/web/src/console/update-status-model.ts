@@ -39,7 +39,7 @@ export function showUpdateCard(status: UpdateStatus | null, dismissedVersion: st
   return status !== null && status.latest !== dismissedVersion;
 }
 
-export const UPDATE_COMMAND = "0 doctor upgrade";
+export const UPDATE_COMMAND = "0 config doctor upgrade";
 export const DOCKER_UPDATE_COMMAND = "docker pull ghcr.io/0sec-labs/0security:latest";
 export const SOURCE_UPDATE_COMMAND = "git pull";
 export const NPM_UPDATE_COMMAND = "npm uninstall -g 0sec-cli && curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash";

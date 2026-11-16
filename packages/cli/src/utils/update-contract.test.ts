@@ -149,7 +149,7 @@ describe("install kind", () => {
     expect(detectInstallKind({ execPath: "/usr/local/bin/0", argv1: "/$bunfs/root/0", inContainer: no, writable: yes, platform: "darwin" }))
       .toEqual({ kind: "binary", managed: true, dir: "/usr/local/bin" });
     expect(detectInstallKind({ execPath: "/usr/local/bin/0", argv1: "/$bunfs/root/0", inContainer: no, writable: no, platform: "linux" }))
-      .toMatchObject({ kind: "binary", managed: false, instruction: "0 doctor upgrade" });
+      .toMatchObject({ kind: "binary", managed: false, instruction: "0 config doctor upgrade" });
     expect(detectInstallKind({ execPath: "/c/0/0.exe", argv1: "B:/~BUN/root/0", inContainer: no, writable: yes, platform: "win32" })).toMatchObject({ kind: "binary", managed: false });
   });
   it("never self-updates Docker, npm or a source checkout, and says what to run instead", () => {

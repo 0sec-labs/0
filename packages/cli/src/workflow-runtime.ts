@@ -61,7 +61,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
         return existing.startRun({ ...request, ...(timeCapMs !== undefined ? { timeCapMs } : {}), ...(costCapUsd !== undefined ? { costCapUsd } : {}) });
       } };
     }
-    if (options.requireEngine) throw new Error("No console running. Start one with: 0 web --headless");
+    if (options.requireEngine) throw new Error("No console running. Start one with: 0 --headless");
   }
   const ownsHost = !dependencies.host;
   const gateway = dependencies.host?.gateway ?? new ConsoleGateway({ projectPath: workspace, dbPath: options.dbPath });

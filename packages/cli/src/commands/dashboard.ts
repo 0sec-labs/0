@@ -148,7 +148,7 @@ export function registerDashboardCommand(program: Command): void {
 
 
       if (!serverMode && port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
-        console.log(chalk.gray(`  0 web is already running: ${origin}`));
+        console.log(chalk.gray(`  0 is already running: ${origin}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
         if (opts.open !== false) openBrowser(`${origin}/chats`);
         return;
@@ -626,11 +626,11 @@ export function registerDashboardCommand(program: Command): void {
         server.on("error", (error: NodeJS.ErrnoException) => {
           if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort) {
             retriedPort = true;
-            console.log(chalk.gray(`  Port ${port} is in use; opening 0 web on a free port.`));
+            console.log(chalk.gray(`  Port ${port} is in use; opening the web console on a free port.`));
             server.listen(0, host, onListening);
             return;
           }
-          console.error(`Unable to start 0 web: ${error.message}`);
+          console.error(`Unable to start the web console: ${error.message}`);
           cleanupDashboardAssets();
           process.exit(1);
         });
@@ -676,7 +676,7 @@ export function registerDashboardCommand(program: Command): void {
           updates.stop();
           // Stop accepting, end long-lived streams, let ordinary requests finish within the deadline, then dispose and exit 0.
           const drainMs = shutdownSeconds * 1000;
-          const failsafe = setTimeout(() => { console.error("0 web: shutdown deadline exceeded; exiting."); process.exit(1); }, drainMs + 10_000); failsafe.unref();
+          const failsafe = setTimeout(() => { console.error("0: shutdown deadline exceeded; exiting."); process.exit(1); }, drainMs + 10_000); failsafe.unref();
           const closed = new Promise<void>(resolveClosed => server.close(() => resolveClosed()));
           server.closeIdleConnections();
           for (const response of activeResponses) if (String(response.getHeader("content-type") ?? "").includes("text/event-stream")) response.end();

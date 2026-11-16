@@ -74,7 +74,7 @@ describe("apply", () => {
       { kind: "docker" as const, managed: false, instruction: "docker pull ghcr.io/0sec-labs/0security:latest" },
       { kind: "source" as const, managed: false, instruction: "git pull" },
       { kind: "npm" as const, managed: false, instruction: "migrate" },
-      { kind: "binary" as const, managed: false, instruction: "0 doctor upgrade" },
+      { kind: "binary" as const, managed: false, instruction: "0 config doctor upgrade" },
     ]) {
       const { manager, calls } = make({ install });
       await expect(manager.apply({ confirm: true })).rejects.toMatchObject({ status: 409, code: "not_managed" });

@@ -59,10 +59,10 @@ export interface UpdateManagerOptions {
 export interface ApplyResult { restarting: true; version: string; supervised: boolean }
 
 /**
- * Keeps a long-running `0 web` current. It checks every six hours (jittered, offline-safe, never blocking),
+ * Keeps a long-running `0` current. It checks every six hours (jittered, offline-safe, never blocking),
  * installs a verified release in the background when nothing is running (policy automatic), and restarts on
  * request, or on its own after ten idle minutes when the policy is automatic and server mode is off.
- * The installer is the same one `0 doctor upgrade` uses: checksum verification and an atomic swap in the folder
+ * The installer is the same one `0 config doctor upgrade` uses: checksum verification and an atomic swap in the folder
  * of the running binary.
  */
 export class UpdateManager {

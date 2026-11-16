@@ -92,7 +92,7 @@ describe("config import", () => {
     const cap = capture(); runConfigImport(file, cap.deps({ homeDir: home, projectDir: project }));
     expect(process.exitCode).toBe(1);
     expect(cap.err.join("\n")).toContain("Retired terminal settings");
-    expect(cap.err.join("\n")).toContain("0 web");
+    expect(cap.err.join("\n")).toContain("web console");
     expect(loadGlobalSettings(home)).toEqual(before);
     const shown = capture(); runConfigShow(shown.deps({ homeDir: home, projectDir: project }));
     expect(shown.out.join("\n")).not.toMatch(/theme|density|transcriptStyle/);

@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { exitWhenDone, expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
 interface Account { available: boolean; connected: boolean; account: string | null; missingScopes: string[]; refreshCommand: string | null }
-const describe = (a: Account) => !a.available ? "GitHub CLI (gh) is not installed." : a.connected ? `Signed in as ${a.account}.${a.missingScopes.length ? ` Missing scopes: ${a.missingScopes.join(", ")}.` : ""}` : "Not signed in. Run `0 config github connect --key-env <VAR>`.";
+const describe = (a: Account) => !a.available ? "GitHub CLI (gh) is not installed." : a.connected ? `Signed in as ${a.account}.${a.missingScopes.length ? ` Missing scopes: ${a.missingScopes.join(", ")}.` : ""}` : "Not signed in. Run `0 config set github connect --key-env <VAR>`.";
 
 export function runGithubStatus(options: JsonOption, deps: ConsoleCommandDeps = {}) {
   return runConsoleCommand(options, deps, async (client, io) => {
@@ -28,7 +28,7 @@ export function runGithubRepos(options: JsonOption & { search?: string; refresh?
     const needle = options.search?.toLowerCase();
     const repositories = (data.repositories as { nameWithOwner: string; visibility: string; defaultBranch: string }[]).filter(r => !needle || r.nameWithOwner.toLowerCase().includes(needle));
     if (options.json) return printJson(io, { ...data, repositories });
-    if (!data.connected) throw new Error(data.available ? "Not signed in to GitHub. Run `0 config github connect`." : "GitHub CLI (gh) is not installed.");
+    if (!data.connected) throw new Error(data.available ? "Not signed in to GitHub. Run `0 config set github connect`." : "GitHub CLI (gh) is not installed.");
     if (data.error) throw new Error(data.error);
     io.out(repositories.length ? renderTable(["REPOSITORY", "VISIBILITY", "BRANCH"], repositories.map(r => [r.nameWithOwner, r.visibility, r.defaultBranch])) : "No matching repositories.");
   });

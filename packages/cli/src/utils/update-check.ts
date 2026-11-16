@@ -306,7 +306,7 @@ async function maybeNotifyUpdate(currentVersion: string, options: NotifyOptions 
   const candidate = tag ? parseVersion(tag) : null;
   if (!tag || !candidate?.complete || candidate.prerelease.length > 0 || compareVersions(tag, currentVersion) <= 0) return;
   if (policy !== "automatic" || isNpmStyleInstall()) {
-    process.stderr.write(`[0] Update available: ${currentVersion} → ${tag}. Run 0 doctor upgrade.\n`);
+    process.stderr.write(`[0] Update available: ${currentVersion} → ${tag}. Run 0 config doctor upgrade.\n`);
     if (isNpmStyleInstall()) process.stderr.write(`[0] ${NPM_MIGRATION_HINT}\n`);
     return;
   }

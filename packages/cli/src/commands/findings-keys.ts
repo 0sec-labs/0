@@ -59,7 +59,7 @@ export function registerFindingsKeysCommand(parent: Command, deps: FindingsKeysD
     const credential = store.revoke(id!);
     deps.out(options.json ? JSON.stringify({ credential }, null, 2) : `Revoked ${credential.id} (${credential.name})`);
   }, (options, [id]) => {
-    if (!/^[a-f0-9-]{36}$/.test(id ?? "")) throw new UsageError("Key ID must be a UUID from `0 findings keys list`.");
+    if (!/^[a-f0-9-]{36}$/.test(id ?? "")) throw new UsageError("Key ID must be a UUID from `0 config get api.keys`.");
     if (!options.yes) throw new UsageError("Revoking a key is irreversible. Re-run with --yes to confirm.");
   });
 }

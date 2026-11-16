@@ -24,9 +24,9 @@ const BACKEND_LIST_MS = 60_000;
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
-  if (response.status === 404) throw new Error("The running computer does not support computers. Restart 0 web from the current build, then reload this page.");
+  if (response.status === 404) throw new Error("The running computer does not support computers. Restart 0 from the current build, then reload this page.");
   if (!response.ok) throw new Error(`Connection service returned ${response.status}.`);
-  if (!response.headers.get("content-type")?.includes("json")) throw new Error("Connection discovery returned a page instead of engine data. Open the URL printed by 0 web, rather than a standalone frontend development server.");
+  if (!response.headers.get("content-type")?.includes("json")) throw new Error("Connection discovery returned a page instead of engine data. Open the URL printed by 0, rather than a standalone frontend development server.");
   return response.json() as Promise<unknown>;
 }
 

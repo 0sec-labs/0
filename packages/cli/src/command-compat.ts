@@ -299,18 +299,27 @@ function scan(a: Args): string[] | undefined {
 
 const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, memory, models, computers, config, scan };
 
-/** The implementation argv for a new-grammar invocation, or undefined when `args` is not one. Help requests are never rewritten. */
+/** The implementation argv for a new-grammar invocation, or undefined when `args` is not one. */
 export function rewriteNewForms(args: Args): string[] | undefined {
   const first = args[0];
-  if (first === undefined || args.includes("--help") || args.includes("-h")) return undefined;
-  if (!Object.hasOwn(NEW_FORMS, first)) return undefined;
+  if (first === undefined || !Object.hasOwn(NEW_FORMS, first)) return undefined;
+  // `--help` asks about the command as typed, except where the flag picks the command: `agents list --automation --help`, `config doctor --help`.
+  if (args.includes("--help") || args.includes("-h")) {
+    if (first === "agents") return automations(args);
+    return first === "config" && args[1] === "doctor" ? config(args) : undefined;
+  }
   return NEW_FORMS[first]!(args);
 }
 
-/** What a bare `0 --port 8080` means: the web console with its two kept flags. */
+/** The flags of the web console. `0 --headless`, `0 --port 8080` and the rest mean `0 web ...`; bare `0` with none of them opens the console. */
+const CONSOLE_FLAGS = new Set([
+  "--db-path", "--port", "--host", "--asset-dir", "--dev-url", "--team-config", "--engine-token-env", "--engine-workspace", "--engine-scope", "--engine-target",
+  "--engine-allow-apply", "--engine-time-cap", "--engine-cost-cap", "--server-mode", "--allowed-host", "--trusted-proxy", "--public-url", "--access-token-env",
+  "--shutdown-timeout", "--ready-json", "--no-open", "--headless", "--engines-config", "--backends-config",
+]);
 export function rewriteBareConsoleFlags(args: Args): string[] | undefined {
-  const first = args[0];
-  return first !== undefined && /^--(port|host)(=|$)/.test(first) ? ["web", ...args] : undefined;
+  const first = args[0]?.split("=")[0];
+  return first !== undefined && CONSOLE_FLAGS.has(first) ? ["web", ...args] : undefined;
 }
 
 /** One old command and what to run instead. `old` matches the leading words of the invocation. */
@@ -348,7 +357,7 @@ export const LEGACY: readonly LegacyRow[] = rows([
   ["automation create", "0 agents set --automation create"], ["automation edit", "0 agents set --automation edit <id>"], ["automation duplicate", "0 agents set --automation duplicate <id>"],
   ["automation delete", "0 agents set --automation delete <id>"], ["automation triggers", "0 agents set --automation triggers <list|enable|disable|remove>"],
   ["automation versions", "git history (this command is removed after 0.35)"], ["automation rollback", "git (this command is removed after 0.35)"],
-  ["automation", "0 agents --automation"],
+  ["automation", "0 agents list --automation"],
   // models, plugins, computers
   ["models default", "0 models set <model>"], ["models recommended", "0 models list --recommended"], ["models connections", "0 models connect <provider>"], ["models usage", "0 models list --usage"],
   ["computers deploy", "0 computers add"], ["computers repair", "0 config doctor"], ["computers hosts", "0 computers list --hosts"],

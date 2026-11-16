@@ -72,7 +72,7 @@ export async function openConsole(raw: ConsoleTransportOptions, deps: OpenConsol
   } else {
     const connect = deps.connectLocal ?? (async (o: { dbPath?: string }) => (await import("./local-engine.js")).connectLocalConsoleRegistry({ ...o, homeDir: deps.homeDir }));
     const local = await connect({ dbPath: options.dbPath });
-    if (!local) throw new Error("No console running. Start one with: 0 web --headless (or pass --engine-url or --computer).");
+    if (!local) throw new Error("No console running. Start one with: 0 --headless (or pass --engine-url or --computer).");
     ({ registry, backendId } = local);
   }
   const abort = new AbortController();

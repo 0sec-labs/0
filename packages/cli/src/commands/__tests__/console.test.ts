@@ -65,7 +65,7 @@ describe("console launch authorization", () => {
   it("directs interactive console users to the account-free browser", async () => {
     const notice = vi.spyOn(console, "log").mockImplementation(() => {});
     await launch();
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining("Run 0 web (no account required)"));
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining("Run 0 (no account required)"));
     expect(startup.showConsole).not.toHaveBeenCalled();
     expect(process.exitCode).toBeUndefined();
     const program = new Command();

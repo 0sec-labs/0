@@ -2,7 +2,7 @@
  * Last-resort crash capture for the 0security engine.
  *
  * Installed once, as early as possible, by the shared entry point
- * (`index.ts`), so the terminal and `0 web` (the same engine in-process) report
+ * (`index.ts`), so the terminal and `0` (the same engine in-process) report
  * through one path to one Sentry project, distinguished only by `surface`.
  *
  * Observable behavior on a crash is exactly what Node does by default:

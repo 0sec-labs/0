@@ -224,7 +224,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
     .option("--access-control-fixtures <file>", "JSON file of known private resource ownership fixtures for IDOR verification")
     .option("--identities <file>", "Restricted JSON file with named test identities for access-control replay")
     .option("--auth <json>", "Auth credentials: JSON string or path (bearer, cookie, basic, header)")
-    .option("--scope <path>", "Path to a JSON scope policy (enable with `0 plugin enable scope`)")
+    .option("--scope <path>", "Path to a JSON scope policy (enable with `0 skills list scope --enable`)")
     .option("--allow-scanners", "Expose generic scanner tools in scope-enforced scans", false)
     .option("--require-scope", "Refuse unscoped scans while the scope plugin is enabled", false)
     .option(

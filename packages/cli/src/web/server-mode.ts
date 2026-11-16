@@ -1,4 +1,4 @@
-// Server mode for `0 web`: the explicit, opt-in way to serve the console to a network behind a TLS proxy.
+// Server mode for `0`: the explicit, opt-in way to serve the console to a network behind a TLS proxy.
 //
 // Loopback behaviour lives in dashboard-http.ts and is untouched. Everything here only runs when the
 // operator passes --server-mode. The invariants (see docs/design/deployment-packaging.md, threat model):

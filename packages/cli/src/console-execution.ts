@@ -33,7 +33,7 @@ export function createIsolatedConsoleSession(
 ): ConsoleSession | undefined {
   if (consoleExecutionProfile(options.homeDir) !== "smolvm") return undefined;
   const workbench = loadWorkbenchConfig(options.homeDir);
-  if (!workbench) throw new Error("SmolVM is selected but no workbench is configured. Run 0 doctor workbench setup --image <approved archive>. Host fallback is refused.");
+  if (!workbench) throw new Error("SmolVM is selected but no workbench is configured. Run 0 config doctor workbench setup --image <approved archive>. Host fallback is refused.");
   const requestedWorkspace = options.workspaceRoot ?? config.workspaceRoot;
   if (workbench.workspaceRoot && requestedWorkspace && realpathSync(workbench.workspaceRoot) !== realpathSync(requestedWorkspace)) throw new Error("This chat folder differs from the configured SmolVM workspace grant. Start a chat in the granted folder or explicitly reconfigure the workbench before execution.");
   if (config.pluginHost || config.mcpHost) throw new Error("Host plugin and MCP resources cannot be forwarded into SmolVM. Configure tools inside the approved guest image.");

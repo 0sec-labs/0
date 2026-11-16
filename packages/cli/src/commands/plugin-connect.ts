@@ -1,4 +1,4 @@
-// `0 plugin connectors|connect|disconnect|mcp` and `0 plugin install github:owner/repo`: what the
+// `0 skills list --connectors|connect|disconnect|mcp` and `0 skills add github:owner/repo`: what the
 // Plugins page does for service connectors, custom MCP servers and GitHub plugins. Each step that
 // the web asks you to review shows the same review here and needs --yes to go ahead.
 import type { Command } from "commander";
@@ -21,7 +21,7 @@ function pairs(values: string[] | undefined, flag: string, env: NodeJS.ProcessEn
   return result;
 }
 
-/** `0 plugin install github:owner/repo`: review the pinned commit and its permissions, then install on --yes. Never enables. */
+/** `0 skills add github:owner/repo`: review the pinned commit and its permissions, then install on --yes. Never enables. */
 export async function runInstallGithub(spec: string, options: OutputOptions & { ref?: string; yes?: boolean; replace?: boolean }, io: CommandIo = defaultIo()): Promise<void> {
   await runConsole(io, options, async client => {
     const repo = spec.replace(/^github:/, "");
@@ -58,7 +58,7 @@ export function registerPluginConnectCommands(plugin: Command, io: CommandIo = d
       const fields = { ...pairs(options.set, "--set", process.env, false), ...pairs(options.secretEnv, "--secret-env", process.env, true) };
       const list = record(expectOk(await client.request("GET", "/api/console/service-plugins")));
       const item = ((list.items ?? []) as Array<{ id: string; name: string; fields: Array<{ key: string; type: string }> }>).find(row => row.id === service);
-      if (!item) throw new UsageError(`Unknown connector ${service}. See \`0 plugin connectors\`.`);
+      if (!item) throw new UsageError(`Unknown connector ${service}. See \`0 skills list --connectors\`.`);
       const unknown = Object.keys(fields).filter(key => !item.fields.some(field => field.key === key));
       if (unknown.length) throw new UsageError(`${item.name} has no field ${unknown.join(", ")}. Fields: ${item.fields.map(field => `${field.key}${field.type === "secret" ? " (secret, use --secret-env)" : ""}`).join(", ")}.`);
       requireYes(options.yes, `This connects ${item.name} and tests it with the credentials given.`);
@@ -91,7 +91,7 @@ export function registerPluginConnectCommands(plugin: Command, io: CommandIo = d
     .action((name: string, command: string[], options: OutputOptions & { url?: string; transport?: string; cwd?: string; env?: string[]; envFrom?: string[]; header?: string[]; headerFrom?: string[]; enable?: boolean; allowDangerousEnv?: boolean; yes?: boolean }) => run(options, async client => {
       const transport = options.transport ?? (options.url ? "http" : "stdio");
       if (!["stdio", "http", "sse"].includes(transport)) throw new UsageError("--transport must be stdio, http or sse.");
-      if (transport === "stdio" ? !command.length || options.url : !options.url || command.length) throw new UsageError(transport === "stdio" ? "Give a command after `--`, for example: 0 plugin mcp add docs -- npx some-mcp-server." : "Remote servers need --url and no command.");
+      if (transport === "stdio" ? !command.length || options.url : !options.url || command.length) throw new UsageError(transport === "stdio" ? "Give a command after `--`, for example: 0 skills add --mcp docs -- npx some-mcp-server." : "Remote servers need --url and no command.");
       const env = { ...pairs(options.env, "--env", process.env, false), ...pairs(options.envFrom, "--env-from", process.env, true) };
       const headers = { ...pairs(options.header, "--header", process.env, false), ...pairs(options.headerFrom, "--header-from", process.env, true) };
       const config = transport === "stdio" ? { name, transport, command: command[0], args: command.slice(1), ...(options.cwd ? { cwd: options.cwd } : {}), env } : { name, transport, url: options.url, headers };
@@ -101,7 +101,7 @@ export function registerPluginConnectCommands(plugin: Command, io: CommandIo = d
       if (approval.dangerousEnv.length && options.allowDangerousEnv !== true) throw new UsageError(`This sets ${approval.dangerousEnv.join(", ")}, which change which code loads. Add --allow-dangerous-env to approve them.`);
       const data = record(expectOk(await client.request("POST", "/api/console/mcp-servers", { config, approvedFingerprint: approval.fingerprint, approvedDangerousEnv: approval.dangerousEnv, enable: options.enable === true })));
       const item = record(data.item);
-      emit(io, options, { item }, () => `Added ${String(item.id)}${options.enable ? " (enabled)" : ". Run `0 plugin mcp test " + String(item.id) + "` to try it."}`);
+      emit(io, options, { item }, () => `Added ${String(item.id)}${options.enable ? " (enabled)" : ". Run `0 skills list " + String(item.id) + " --mcp-test` to try it."}`);
     }));
 
   consoleOptions(mcp.command("test <id>").description("Start the server and list its tools")).action((id: string, options: OutputOptions) => run(options, async client => {

@@ -451,7 +451,7 @@ export async function runCampaign(options: CampaignOptions, deps: CampaignDepend
     out(chalk.green("[campaign] attached to the local engine — sessions stream live in the console view\n"));
   } else {
     err(chalk.yellow(
-      `[campaign] no local engine is running for ${options.dbPath} — falling back to headless chat children; sessions will NOT stream in the console view. Run \`0 web\` with the same --db-path for live streaming.\n`,
+      `[campaign] no local engine is running for ${options.dbPath} — falling back to headless chat children; sessions will NOT stream in the console view. Run \`0\` with the same --db-path for live streaming.\n`,
     ));
   }
 

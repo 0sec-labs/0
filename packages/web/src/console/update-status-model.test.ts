@@ -52,7 +52,7 @@ describe("updateCardView", () => {
       docker: "docker pull ghcr.io/0sec-labs/0security:latest",
       source: "git pull",
       npm: "npm uninstall -g 0sec-cli && curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash",
-      binary: "0 doctor upgrade",
+      binary: "0 config doctor upgrade",
     };
     for (const kind of Object.keys(expected) as InstallKind[]) {
       const view = updateCardView(status({ canApply: false, install: { kind, managed: false } }), idle);

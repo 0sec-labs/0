@@ -42,7 +42,7 @@ export function registerDoctorCommand(program: Command): void {
         console.log("");
       }
       if (waiting > 0) {
-        console.log(`  ${waiting} crash report${waiting === 1 ? " is" : "s are"} waiting for review: open 0 web → Settings → Feedback, or discard with 0 doctor --discard-reports`);
+        console.log(`  ${waiting} crash report${waiting === 1 ? " is" : "s are"} waiting for review: open the web console (0) → Settings → Feedback, or discard with 0 config doctor --discard-reports`);
         console.log("");
       }
 
@@ -54,9 +54,9 @@ export function registerDoctorCommand(program: Command): void {
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));
         console.log(chalk.gray("  Try one of:"));
-        console.log(chalk.gray("    0 scan web --target https://example.com"));
-        console.log(chalk.gray("    0 scan source ."));
-        console.log(chalk.gray("    0 scan package express"));
+        console.log(chalk.gray("    0 scan https://example.com"));
+        console.log(chalk.gray("    0 scan ."));
+        console.log(chalk.gray("    0 scan npm:express"));
       } else {
         console.log(chalk.yellow("  Next step: install Claude/Codex CLI or set an API key."));
       }

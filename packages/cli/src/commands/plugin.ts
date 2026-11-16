@@ -412,7 +412,7 @@ export async function runInstall(id: string, deps: PluginCommandDeps): Promise<v
     return;
   }
   if (d.core.getBuiltinPlugin(id)) {
-    d.err(chalk.red(`"${id}" is built in and cannot be replaced by registry code. Use 0 plugin enable ${id}.`));
+    d.err(chalk.red(`"${id}" is built in and cannot be replaced by registry code. Use 0 skills list ${id} --enable.`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -467,8 +467,8 @@ function installEntry(d: ResolvedDeps, entry: InstallableEntryView, source: stri
     d.out(chalk.yellow("This plugin is INSTALLED, NOT ENABLED. No plugin code has run."));
   }
   d.out("  Inspect the installed code before loading it; approve or renew approval explicitly:");
-  d.out(chalk.cyan(`    0 plugin info ${entry.id}`));
-  d.out(chalk.cyan(`    0 plugin enable ${entry.id}`));
+  d.out(chalk.cyan(`    0 skills list ${entry.id} --info`));
+  d.out(chalk.cyan(`    0 skills list ${entry.id} --enable`));
   process.exitCode = EXIT_OK;
 }
 
@@ -546,7 +546,7 @@ export function runEnable(id: string, deps: PluginCommandDeps): void {
     const discovered = d.core.readInstalledPlugin(d.core.pluginsRootDir(d.homeDir), id);
     if (!discovered.ok || !discovered.plugin) {
       d.err(chalk.red(`Plugin "${id}" is not installed. Install it first:`));
-      d.err(chalk.cyan(`    0 plugin install ${id}`));
+      d.err(chalk.cyan(`    0 skills add ${id}`));
       if (discovered.errors) for (const e of discovered.errors) d.err(chalk.dim(`  ${e}`));
       process.exitCode = EXIT_USER_ERROR;
       return;
@@ -635,8 +635,8 @@ export function runInfo(id: string, deps: PluginCommandDeps): void {
     d.out("  Source: built into 0 (no installed files or child process)");
     d.out(`  Enabled for this project: ${enabled ? chalk.green("yes") : chalk.dim("no")}`);
     if (reconciled?.reason) d.out(chalk.yellow(`  ${reconciled.reason}`));
-    d.out(`  Activate: 0 plugin enable ${id}`);
-    d.out(`  Deactivate: 0 plugin disable ${id}`);
+    d.out(`  Activate: 0 skills list ${id} --enable`);
+    d.out(`  Deactivate: 0 skills list ${id} --disable`);
     process.exitCode = EXIT_OK;
     return;
   }
@@ -735,7 +735,7 @@ export async function runRun(
     return;
   }
   if (d.core.getBuiltinPlugin(id)) {
-    d.err(chalk.red(`"${id}" is built-in host authorization, not a runnable tool. Use 0 plugin enable ${id}.`));
+    d.err(chalk.red(`"${id}" is built-in host authorization, not a runnable tool. Use 0 skills list ${id} --enable.`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -754,7 +754,7 @@ export async function runRun(
   const record = d.core.readEnablement(d.projectPath, d.homeDir);
   if (!d.core.isEnabled(record, id)) {
     d.err(chalk.red(`Plugin "${id}" is not enabled for this project.`));
-    d.err(chalk.cyan(`    0 plugin enable ${id}`));
+    d.err(chalk.cyan(`    0 skills list ${id} --enable`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -764,7 +764,7 @@ export async function runRun(
     const r = reconciled.find((x) => x.pluginId === id);
     d.err(chalk.red(`Plugin "${id}" cannot run: it needs re-approval.`));
     if (r?.reason) d.err(chalk.yellow(`  ${r.reason}`));
-    d.err(chalk.cyan(`    0 plugin enable ${id}`));
+    d.err(chalk.cyan(`    0 skills list ${id} --enable`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

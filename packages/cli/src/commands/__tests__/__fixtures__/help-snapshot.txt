@@ -81,7 +81,7 @@ Usage: 0 agents create [options]
 Create an Agent from a preset or a JSON definition
 
 Options:
-  --preset <id>     Start from a preset (see `0 agents presets`)
+  --preset <id>     Start from a preset (see `0 agents list --presets`)
   --name <name>     Name
   --access <level>  Access: read-only | changes
   --file <path>     Agent JSON object (overrides preset fields)
@@ -403,7 +403,7 @@ Usage: 0 automation create [options]
 Create an automation from a template or a JSON definition
 
 Options:
-  --template <id>    Start from a template (see `0 automation list --templates`)
+  --template <id>    Start from a template (see `0 agents list --automation --templates`)
   --file <path>      Definition JSON object
   --name <name>      Name for the new automation
   --target <target>  Target the automation runs against
@@ -468,7 +468,7 @@ Usage: 0 automation rollback [options] <id>
 Restore an earlier revision as a new revision
 
 Options:
-  --revision <n>    Revision to restore (see `0 automation versions`)
+  --revision <n>    Revision to restore (see `0 agents set --automation versions`)
   --json            Print machine-readable JSON
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
@@ -995,8 +995,8 @@ Options:
   --install-dir <path>  Override the install directory (default: the folder of this binary, else
                         ~/.0/bin)
   --scan-dependencies   Scan the current project before upgrading
-  --fix-dependencies    Refuse upgrade when vulnerabilities are present; use `0 scan deps fix
-                        --yes` to remediate
+  --fix-dependencies    Refuse upgrade when vulnerabilities are present; use `0 scan . --module
+                        deps-fix --yes` to remediate
   -h, --help            display help for command
 
 ### 0 doctor workbench
@@ -1368,7 +1368,7 @@ Options:
 Commands:
   research              Run target-specific research engines
   improve               Benchmark, evolve and qualify 0's own detection and routing
-  console [options]     Run a headless chat prompt; interactive conversations use 0 web
+  console [options]     Run a headless chat prompt; interactive conversations use 0
   mcp-server [options]  Expose selected target tools or managed automations over MCP stdio
   runs                  Inspect security work and automation run history
   help [command]        display help for command
@@ -1376,7 +1376,7 @@ Commands:
 ### 0 lab console
 Usage: 0 lab console [options]
 
-Run a headless chat prompt; interactive conversations use 0 web
+Run a headless chat prompt; interactive conversations use 0
 
 Options:
   --engine-url <url>         Attach directly to a running trusted engine
@@ -1384,8 +1384,8 @@ Options:
   --format <format>          Output format: text, json, ndjson (default: "text")
   --target <url>             Engagement target the tools operate against (optional; can be named
                              in-chat)
-  --scope <file>             Initial policy for the optional scope plugin; activate with `0 plugin
-                             enable scope`
+  --scope <file>             Initial policy for the optional scope plugin; activate with `0 skills
+                             list scope --enable`
   --finding <id>             Focus the chat on one persisted finding
   --finding-intent <intent>  Finding mode: investigate, verify, or draft_fix
   --db-path <path>           Persistent findings database (defaults to ZERO_DB_PATH or the local
@@ -3053,7 +3053,8 @@ Options:
 
 Commands:
   list [options]               List memories
-  set [options] [id] [on|off]  Turn a memory on or off, or load memories with --import <file>
+  set [options] [id] [on|off]  Turn a memory on or off, load memories with --import, or manage
+                               triage memories with --add and --remove <id>
   export [options]             Export memories as a portable archive
   help [command]               display help for command
 
@@ -3115,10 +3116,13 @@ Options:
 ### 0 memory set
 Usage: 0 memory set [options] [id] [on|off]
 
-Turn a memory on or off, or load memories with --import <file>
+Turn a memory on or off, load memories with --import, or manage triage memories with --add and
+--remove <id>
 
 Options:
   --import <file>  Import memories from a file
+  --add            Add a triage memory (see findings triage)
+  --remove         Remove a triage memory
   -h, --help       display help for command
 
 ### 0 models
@@ -4060,8 +4064,8 @@ Options:
                                      access-control replay
   --auth <json>                      Auth credentials: JSON string or path (bearer, cookie, basic,
                                      header)
-  --scope <path>                     Path to a JSON scope policy (enable with `0 plugin enable
-                                     scope`)
+  --scope <path>                     Path to a JSON scope policy (enable with `0 skills list scope
+                                     --enable`)
   --allow-scanners                   Expose generic scanner tools in scope-enforced scans (default:
                                      false)
   --require-scope                    Refuse unscoped scans while the scope plugin is enabled

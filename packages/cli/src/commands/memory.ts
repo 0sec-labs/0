@@ -46,6 +46,6 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
       const summary = `${String(preview.importable)} of ${String(preview.total)} memories can be imported (${String(preview.duplicates)} duplicates).`;
       if (options.preview) { emit(io, options, { preview }, () => summary); return; }
       const result = record(record(expectOk(await client.request("POST", "/api/console/learning/import", { archive, digest: preview.digest }))).result);
-      emit(io, options, { preview, result }, () => `${summary}\nImported as disabled; enable one with \`0 memory enable <id>\`.`);
+      emit(io, options, { preview, result }, () => `${summary}\nImported as disabled; enable one with \`0 memory set <id> on\`.`);
     }));
 }

@@ -184,7 +184,7 @@ export function runConfigImport(
     : [];
   if (legacyKeys.length) {
     err(chalk.red(`Retired terminal settings cannot be imported: ${legacyKeys.join(", ")}. Nothing was written.`));
-    err("Use 0 web → Settings for browser appearance. Remove retired keys to import engine settings.");
+    err("Use the web console (0) → Settings for browser appearance. Remove retired keys to import engine settings.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -258,7 +258,7 @@ export function runConfigImport(
 // ── get / set / reset ─────────────────────────────────────────────────────────
 
 function publicKey(key: string): keyof TuiSettings {
-  if (!(CLI_CONFIG_KEYS as readonly string[]).includes(key)) throw new UsageError(`Unknown setting "${key}". Run \`0 config list\` for the available keys.`);
+  if (!(CLI_CONFIG_KEYS as readonly string[]).includes(key)) throw new UsageError(`Unknown setting "${key}". Run \`0 config get --all\` for the available keys.`);
   return key as keyof TuiSettings;
 }
 

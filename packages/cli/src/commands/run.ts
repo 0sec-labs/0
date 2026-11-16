@@ -772,7 +772,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     }
 
     if (reportAny.aiAnalysisSkipped && exitCode === 0) {
-      console.error(chalk.red("Partial result: AI analysis was skipped because no model was available, so only static results exist. Configure a provider (run `0 doctor`, or set an API key such as OPENROUTER_API_KEY or ANTHROPIC_API_KEY), or pass --static-only to run without AI."));
+      console.error(chalk.red("Partial result: AI analysis was skipped because no model was available, so only static results exist. Configure a provider (run `0 config doctor`, or set an API key such as OPENROUTER_API_KEY or ANTHROPIC_API_KEY), or pass --static-only to run without AI."));
       exitCode = 3;
     }
 

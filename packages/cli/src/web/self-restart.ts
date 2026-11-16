@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 export interface RestartCommand { command: string; args: string[] }
 
 /**
- * The command that starts this same `0 web` again: same executable, same arguments, and the port it actually
+ * The command that starts this same `0` again: same executable, same arguments, and the port it actually
  * bound (so `--port 0` or a fallback port is kept). `--no-open` stops a second browser tab from opening: the
  * page that asked for the update reconnects on its own.
  */

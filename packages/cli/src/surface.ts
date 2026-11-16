@@ -1,7 +1,7 @@
 /**
  * Which interface is running the one 0security engine.
  *
- * `0 web` (and a bare `0`, which opens the web console) is the `web` surface;
+ * `0` (and a bare `0`, which opens the web console) is the `web` surface;
  * every other command is `cli`. Crash reports and anonymous usage events both
  * use this single function so the two can never disagree.
  */

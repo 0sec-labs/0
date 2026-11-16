@@ -1,4 +1,4 @@
-// `0 config audit-log` — the local append-only log of privileged actions, as on the web Settings > Audit log page.
+// `0 config get audit` — the local append-only log of privileged actions, as on the web Settings > Audit log page.
 import type { Command } from "commander";
 import { listAudit, resolveOsecDbPath, type AuditEvent } from "@0/engine/storage";
 import { printJson, renderTable, sinks, UsageError, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
