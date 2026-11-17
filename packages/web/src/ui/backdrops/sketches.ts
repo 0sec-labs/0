@@ -1,15 +1,14 @@
-import { createCodeRain } from "./code-rain.js"
-import { createConstellation } from "./constellation.js"
-import { createGrid } from "./grid.js"
+import { createContours } from "./contours.js"
+import { createDitherFlow } from "./dither-flow.js"
+import { createDitherTop } from "./dither-top.js"
+import { createGlyph } from "./glyph.js"
+import { createInk } from "./ink.js"
 import type { BackdropKind } from "./kinds.js"
-import { createRipple } from "./ripple.js"
-import { createScanline } from "./scanline.js"
+import { createPlankton } from "./plankton.js"
+import { createSchool } from "./school.js"
 import type { Sketch } from "./sketch.js"
-import { createTopography } from "./topography.js"
-import { createWaves } from "./waves.js"
 
-/** The canvas kinds. Each factory builds one scene; `none`, `dither` and `aurora` are not sketches. */
-export const SKETCHES: Partial<Record<BackdropKind, () => Sketch>> = {
-  grid: createGrid, topography: createTopography, constellation: createConstellation, scanline: createScanline,
-  "code-rain": createCodeRain, waves: createWaves, ripple: createRipple,
+/** One scene factory for every backdrop except `none`; a missing entry is a type error. Every scene also renders a still frame. */
+export const SKETCHES: Record<Exclude<BackdropKind, "none">, () => Sketch> = {
+  "dither-top": createDitherTop, "dither-flow": createDitherFlow, contours: createContours, glyph: createGlyph, school: createSchool, plankton: createPlankton, ink: createInk,
 }

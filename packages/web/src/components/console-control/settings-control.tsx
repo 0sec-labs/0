@@ -24,7 +24,7 @@ import { SettingsRow, SettingsSection } from "./settings-section";
 import { StatusSettings } from "./status-row";
 import { isProtectedSetting, planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
-import { privacyDisclosure, settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
+import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
 export function useConsoleSettings() {
   const { client, webFetchJson } = useBackendApi();
@@ -148,7 +148,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id && !hiddenInto(def.key) && !(def.key === "compactionThreshold" && settings.data?.settings.autoCompaction === false));
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
       if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
-      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "privacy" ? privacyDisclosure : undefined} quiet={categoriesOfPage(category).length === 1}>
+      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} quiet={categoriesOfPage(category).length === 1}>
         {!presentationOnly && section.id === "agents" && settings.data?.accessUpgradeNotice && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
           <p className="min-w-0 text-muted-foreground-2">Threads and Agents now always have shell access; limits are scope, budget and the sandbox.</p>
           <Button type="button" variant="ghost" size="sm" disabled={dismissNotice.isPending} onClick={() => dismissNotice.mutate()}>Dismiss</Button>

@@ -4,7 +4,8 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
-import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
+import { SkillMarkIcon } from "@/components/skills/cells";
+import { CapyAgentIcon, CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openWhatsNew } from "@/lib/whats-new";
@@ -211,9 +212,9 @@ export function CommandPalette({
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
-      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyShieldIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
+      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
-        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyShieldIcon,
+        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyAgentIcon,
         keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),
       });
     }
@@ -297,7 +298,7 @@ export function CommandPalette({
       run: () => navigate(`/agents?workflow=${encodeURIComponent(workflow.id)}`),
     });
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
-      id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: CapySparkleFourIcon,
+      id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: skill.scope === "builtin" ? SkillMarkIcon : CapySparkleFourIcon,
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
       run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
     });
@@ -471,12 +472,12 @@ export function CommandPalette({
             {query && <Button variant="ghost" size="icon-sm" aria-label="Clear search" tooltip="Clear search" onClick={() => setQuery("")}><X className="size-3.5" /></Button>}
             <Select aria-label="Search in" size="sm" value={tab} onValueChange={value => chooseTab(value as SearchTab)} options={SEARCH_TABS.map(entry => ({ value: entry.id, label: entry.label }))} className="w-32 shrink-0" />
           </div>
-          <CommandPrimitive.List className={`max-h-[min(460px,60dvh)] min-w-0 w-full scroll-py-2 scroll-fade-y overflow-x-hidden overflow-y-auto px-2 pb-2 max-sm:max-h-[calc(100dvh-8.5rem)] ${loading && !orderedItems.length ? "min-h-32" : ""}`} aria-label="Search results" aria-busy={openingChat || loading}>
+          <CommandPrimitive.List className={`max-h-[min(432px,60dvh)] min-w-0 w-full scroll-py-2 scroll-fade-y overflow-x-hidden overflow-y-auto px-2 pb-2 max-sm:max-h-[calc(100dvh-8.5rem)] ${loading && !orderedItems.length ? "min-h-32" : ""}`} aria-label="Search results" aria-busy={openingChat || loading}>
             {GROUPS.map(group => {
               const entries = filteredItems.filter(item => item.group === group);
               if (!entries.length) return null;
-              return <CommandPrimitive.Group key={group} heading={headingFor(group)} className="min-w-0 max-w-full [&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:h-7 [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground-2">
-                {entries.map(item => <CommandPrimitive.Item key={item.id} value={item.id} disabled={openingChat} onSelect={() => void selectItem(item)} className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 min-h-7 py-1 rounded-[var(--radius-overlay,8px)] px-2.5 text-sm font-normal outline-none transition-colors data-[selected=true]:bg-[var(--popover-hover)] data-[disabled=true]:opacity-50 motion-reduce:transition-none">
+              return <CommandPrimitive.Group key={group} heading={headingFor(group)} className="min-w-0 max-w-full [&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:h-8 [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground-2">
+                {entries.map(item => <CommandPrimitive.Item key={item.id} value={item.id} disabled={openingChat} onSelect={() => void selectItem(item)} className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 min-h-10 py-1 rounded-[var(--radius-overlay,8px)] px-2.5 text-sm font-normal outline-none transition-colors data-[selected=true]:bg-[var(--popover-hover)] data-[disabled=true]:opacity-50 motion-reduce:transition-none">
                   <item.icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1"><span className="block truncate leading-5">{highlightParts(item.label, deferredQuery).map((part, index) => part.match ? <strong key={index} className="font-semibold">{part.text}</strong> : part.text)}</span>{item.preview && <span className="block truncate text-xs text-muted-foreground">{item.preview}</span>}</span>
                   {item.date && <span className="shrink-0 text-xs text-muted-foreground">{item.date}</span>}

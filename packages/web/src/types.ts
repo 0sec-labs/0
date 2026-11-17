@@ -159,6 +159,12 @@ export type ArtifactSummary = {
   summary: string;
 };
 
+/** Where a finding came from, as the engine recorded it. */
+export type FindingProvenance =
+  | { kind: "scan" | "thread" | "ci-import"; target: string; startedAt: string; scanId: string }
+  | { kind: "agent"; agent: string; target: string; startedAt: string; scanId: string }
+  | { kind: "unknown"; scanId: string };
+
 export type FindingGroup = {
   fingerprint: string;
   latest: FindingRecord;
@@ -166,6 +172,7 @@ export type FindingGroup = {
   scanCount: number;
   /** All originating scans; optional for compatibility with older engines. */
   sourceScanIds?: string[];
+  provenance?: FindingProvenance | null;
   workflow: FindingWorkflowSummary;
 };
 
@@ -183,6 +190,7 @@ export type FindingFamilyResponse = {
   case: CaseSummary | null;
   latest: FindingRecord;
   rows: FindingRecord[];
+  provenance?: FindingProvenance | null;
   workflow: FindingWorkflowSummary;
   workItems: WorkItemSummary[];
   artifacts: ArtifactSummary[];

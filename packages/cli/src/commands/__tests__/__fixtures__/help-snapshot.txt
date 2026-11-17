@@ -613,6 +613,8 @@ Options:
                            ssh.config)
   --engine-port <port>     Engine port on the remote server (default: stable port derived from
                            host)
+  --trust-new-host         Trust and remember the computer's SSH host key if it is not known yet
+                           (default: false)
   --forward-provider-key   Forward this computer's OPENAI_API_KEY to the remote engine (user-owned
                            hosts only) (default: false)
   --engines-config <path>  Engine registry path
@@ -633,6 +635,16 @@ List registered remote computers
 
 Options:
   --json                   Print JSON
+  --engines-config <path>  Engine registry path
+  -h, --help               display help for command
+
+### 0 computers remove (hidden)
+Usage: 0 computers remove [options] <backend-id>
+
+Remove a remote computer from this machine: closes the tunnel and forgets its saved connection
+(files on the remote computer stay)
+
+Options:
   --engines-config <path>  Engine registry path
   -h, --help               display help for command
 
@@ -3056,7 +3068,7 @@ Options:
   -h, --help             display help for command
 
 Commands:
-  list [options]         List notes
+  list [options]         List notes, and say which ones do not fit what the model is shown
   add [options] <text>   Remember a note
   remove [options] <id>  Forget a note
   help [command]         display help for command
@@ -3109,11 +3121,14 @@ Options:
 ### 0 memory export (hidden)
 Usage: 0 memory export [options]
 
-Write notes to a file
+Write notes to a file: JSON for 0 (default), or with --to a reviewable AGENTS.md section
 
 Options:
-  --folder <path>      Only this folder
-  -o, --output <file>  Write to a file instead of stdout
+  --folder <path>      Only this folder (default for --to: this folder)
+  -o, --output <file>  Write the JSON export to a file instead of stdout
+  --to <file>          Add accepted notes to this markdown file (for example AGENTS.md) as a
+                       section you review and commit
+  --markdown           Print the markdown section instead of JSON
   --json               Print machine-readable JSON
   --db-path <path>     Engine database to import older memories from
   -h, --help           display help for command
@@ -3131,12 +3146,55 @@ Options:
 ### 0 memory list
 Usage: 0 memory list [options]
 
-List notes
+List notes, and say which ones do not fit what the model is shown
 
 Options:
   --folder <path>   Only notes for this folder
   --global          Only global notes
   --search <text>   Only notes containing this text
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
+
+### 0 memory proposed (hidden)
+Usage: 0 memory proposed [options] [command]
+
+Review notes 0 proposed after reading web pages, files or tool output (they are not used until
+accepted)
+
+Options:
+  -h, --help      display help for command
+
+Commands:
+  help [command]  display help for command
+
+### 0 memory proposed accept (hidden)
+Usage: 0 memory proposed accept [options] <id>
+
+Accept a proposed note so it is used in new threads
+
+Options:
+  --text <text>     Correct the wording while accepting
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
+
+### 0 memory proposed list (hidden)
+Usage: 0 memory proposed list [options]
+
+List proposed notes
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Engine database to import older memories from
+  -h, --help        display help for command
+
+### 0 memory proposed reject (hidden)
+Usage: 0 memory proposed reject [options] <id>
+
+Discard a proposed note
+
+Options:
   --json            Print machine-readable JSON
   --db-path <path>  Engine database to import older memories from
   -h, --help        display help for command
@@ -3754,6 +3812,8 @@ Options:
   --apply                       Apply only a patch that passed isolated source recheck and
                                 regression command (default: false)
   --output <path>               Write the validated apply_patch DSL to this path
+  --cost-ceiling <usd>          Stop asking the model for patches once the estimated cost reaches
+                                this many USD
   -h, --help                    display help for command
 
 ### 0 scan package (hidden)

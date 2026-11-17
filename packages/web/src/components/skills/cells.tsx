@@ -1,9 +1,11 @@
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CapyCheckIcon as Check } from "@/ui/icons/capy";
+import { CapyCheckIcon as Check, CapyPuzzleIcon } from "@/ui/icons/capy";
 import { EntryLogo } from "@/components/console-control/entry-logo";
 import { LogoTile } from "@/ui/components/logo-tile";
 import { Tooltip } from "@/components/ui/tooltip";
+import { BrandGlyph } from "@/components/brand-glyph";
+import type { SkillTile } from "@/lib/installed-skills";
 import { safeLogo } from "@/components/console-control/connections-model";
 
 /** The small verified check at a tile corner. `hint` adds a tooltip; the accessible name is always `label`. */
@@ -23,6 +25,16 @@ export function Tile({ logo, avatar, icon, name, verified, verifiedLabel, verifi
       : <EntryLogo logo={logo} className={dimension} fallback={fallback} />}
     {verified && <VerifiedMark size={size === "lg" ? "md" : "sm"} {...(verifiedLabel ? { label: verifiedLabel } : {})} {...(verifiedHint ? { hint: verifiedHint } : {})} />}
   </span>;
+}
+
+/** The 0security mark as an icon component (follows the theme), for lists that take an icon. */
+export const SkillMarkIcon = ({ className }: { className?: string }) => <BrandGlyph className={className} />;
+
+/** The one place that decides how an installed skill looks: built-in = 0security mark, extension = puzzle, GitHub = publisher avatar, yours = initials. */
+export function InstalledTile({ tile, publisher }: { tile: SkillTile; publisher?: { name: string; avatar: string } }) {
+  if (tile.kind === "brand") return <Tile icon={<SkillMarkIcon className="size-6" />} />;
+  if (tile.kind === "extension") return <Tile icon={<CapyPuzzleIcon aria-hidden="true" className="size-4 text-muted-foreground-1" />} />;
+  return <Tile avatar={tile.kind === "publisher" ? publisher?.avatar ?? "" : ""} name={publisher?.name ?? tile.name} />;
 }
 
 /** One list row: tile, name and a single truncated line, 56px high. The whole row is a link; `onOpen` handles the click in place. */

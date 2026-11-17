@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Popover } from "@/ui/components/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ActivityMark, LoadingDots } from "./loading-state";
+import { presentToolCall } from "./tool-presentation";
 
 type ApprovalPanelProps = {
   decision: DesktopConsoleDecision & { resolved?: boolean; approved?: boolean };
@@ -285,6 +286,12 @@ export function rememberAnswer(id: string, answers: DesktopConsoleOperatorAnswer
 /** The request, in the words the waiting line shows after "Waiting on". */
 export function waitingRequest(decision: DesktopConsoleDecision): string {
   if (decision.kind === "operator-question") return decision.questions?.[0]?.header || decision.questions?.[0]?.question || decision.title;
+  // "Confirm tool action" alone never says what is being allowed, so name the command or tool.
+  if (decision.kind === "tool" && decision.call) {
+    const presented = presentToolCall({ id: decision.call.id ?? "", name: decision.call.name, arguments: decision.call.arguments, isRunning: false });
+    const title = presented.title.replace(/\s+/g, " ").trim();
+    if (title) return presented.command ? `Run ${title}` : `Use ${title}`;
+  }
   return decision.title || DECISION_PRESENTATION[decision.kind].label;
 }
 

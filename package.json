@@ -2,8 +2,8 @@
   "name": "0",
   "private": true,
   "type": "module",
-  "version": "0.37.0",
-  "description": "0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks.",
+  "version": "0.38.0",
+  "description": "0security is software infrastructure to deploy sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere.",
   "bin": {
     "0": "dist/0.js"
   },
@@ -38,6 +38,7 @@
     "hooks:install": "node scripts/install-git-hooks.mjs",
     "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
     "test:home-paint": "node scripts/home-paint.e2e.mjs",
+    "test:sidebar-layout": "node scripts/sidebar-layout.e2e.mjs",
     "test:web-cli-parity": "node scripts/web-cli-parity.e2e.mjs",
     "test:pr-agent-e2e": "node scripts/pr-agent.e2e.mjs",
     "test:webhook-e2e": "node scripts/webhook.e2e.mjs",

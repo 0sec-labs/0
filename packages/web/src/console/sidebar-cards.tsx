@@ -116,7 +116,7 @@ function UpdateRestartWatcher() {
     const poll = async () => {
       if (!live) return;
       if (Date.now() - pending.startedAt > PENDING_UPDATE_MAX_MS) {
-        toast({ id: "update-result", kind: "error", title: "0 did not come back after updating", description: pending.supervised ? "Check that your service manager restarts it, then reload this page." : "Reload this page, or start 0 again.", durationMs: 0 });
+        toast({ id: "update-result", kind: "error", title: "0security did not come back after updating", description: pending.supervised ? "Check that your service manager restarts it, then reload this page." : "Reload this page, or start 0 again.", durationMs: 0 });
         clear();
         return;
       }

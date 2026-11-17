@@ -567,4 +567,579 @@ describe("owned worker stop and drain", () => {
     }
   });
 
+  describe("batch subagent individual stop and execution lease lifecycle", () => {
+    it("1. targeted stop returns while an unrelated sibling remains active", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-target-stop");
+      const ctx = { ...context("audit-target-stop"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<string>();
+      const t2Started = deferred<void>();
+      const t2Finish = deferred<void>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+          return state();
+        } else {
+          t2Started.resolve();
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      const t1Id = await t1Started.promise;
+      await t2Started.promise;
+
+      // Stop ONLY task 1
+      let t1StopResolved = false;
+      const stopPromise = executor.stopPersistentAgent(t1Id).then((r) => {
+        t1StopResolved = true;
+        return r;
+      });
+
+      // Verify task 1 stop resolves promptly while task 2 is STILL running
+      const stopped = await stopPromise;
+      expect(stopped).toBe(true);
+      expect(t1StopResolved).toBe(true);
+
+      // Unblock task 2 and settle batch
+      t2Finish.resolve();
+      const result = await batch;
+
+      expect(result.success).toBe(true);
+      const out = result.output as any;
+      expect(out.agents[0].ok).toBe(false);
+      expect(out.agents[1].ok).toBe(true);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("2. a naturally completed worker releases its capacity before the batch finishes", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-capacity-release");
+      const ctx = { ...context("audit-capacity-release"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Done = deferred<void>();
+      const t1Released = deferred<void>();
+      const t2Started = deferred<void>();
+      const t2Finish = deferred<void>();
+
+      const origAcquire = tree.acquire.bind(tree);
+      tree.acquire = (id, parentId, meta) => {
+        const lease = origAcquire(id, parentId, meta);
+        const origRel = lease.release;
+        lease.release = () => {
+          origRel();
+          if (meta?.task === "task 1") t1Released.resolve();
+        };
+        return lease;
+      };
+
+      loop.run = async ({ config }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Done.resolve();
+          return state();
+        } else {
+          t2Started.resolve();
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      await t1Done.promise;
+      await t2Started.promise;
+      await t1Released.promise;
+
+      // While task 2 is still running, task 1 must have released its capacity
+      expect(tree.active).toBe(1);
+
+      t2Finish.resolve();
+      await batch;
+      expect(tree.active).toBe(0);
+      expect(tree.hasLiveWorkers()).toBe(false);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("3. completed workers no longer appear in peers() or snapshot() as live", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-peers-cleanup");
+      const ctx = { ...context("audit-peers-cleanup"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      let task1Id = "";
+      const t1Done = deferred<void>();
+      const t1Released = deferred<void>();
+      const t2Started = deferred<void>();
+      const t2Finish = deferred<void>();
+
+      const origAcquire = tree.acquire.bind(tree);
+      tree.acquire = (id, parentId, meta) => {
+        const lease = origAcquire(id, parentId, meta);
+        const origRel = lease.release;
+        lease.release = () => {
+          origRel();
+          if (meta?.task === "task 1") t1Released.resolve();
+        };
+        return lease;
+      };
+
+      loop.run = async ({ config }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          task1Id = config.scanId;
+          t1Done.resolve();
+          return state();
+        } else {
+          t2Started.resolve();
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      await t1Done.promise;
+      await t2Started.promise;
+      await t1Released.promise;
+
+      // Task 1 must not be in peers while task 2 is still running
+      const peers = tree.peers("audit-peers-cleanup");
+      expect(peers).not.toContain(task1Id);
+
+      // Snapshot must show task 1 as drained and not live
+      const snapshot = tree.snapshot("audit-peers-cleanup");
+      const t1Snap = snapshot.workers.find((w) => w.id === task1Id);
+      expect(t1Snap).toBeDefined();
+      expect(t1Snap?.live).toBe(false);
+      expect(t1Snap?.cleanup).toBe("drained");
+
+      t2Finish.resolve();
+      await batch;
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("4. writable checkout ownership is released when the individual worker ends", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-checkout-release");
+      const workspaceKey = process.cwd();
+      const ctx = { ...context("audit-checkout-release"), workerTree: tree, checkoutKeys: () => [workspaceKey] };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Done = deferred<void>();
+      const t1Released = deferred<void>();
+      const t2Started = deferred<void>();
+      const t2Finish = deferred<void>();
+
+      const origAcquire = tree.acquire.bind(tree);
+      tree.acquire = (id, parentId, meta) => {
+        const lease = origAcquire(id, parentId, meta);
+        const origRel = lease.release;
+        lease.release = () => {
+          origRel();
+          if (meta?.task === "task 1") t1Released.resolve();
+        };
+        return lease;
+      };
+
+      loop.run = async ({ config }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Done.resolve();
+          return state();
+        } else {
+          t2Started.resolve();
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2", read_only: true }] },
+      });
+
+      await t1Done.promise;
+      await t2Started.promise;
+      await t1Released.promise;
+
+      // While task 2 is still running, task 1's writable checkout lock has been released
+      // An external caller should be able to begin a local mutation without error
+      const releaseMutation = tree.beginLocalMutation("external-coordinator", workspaceKey, "write_file");
+      expect(typeof releaseMutation).toBe("function");
+      releaseMutation();
+
+      t2Finish.resolve();
+      await batch;
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("5. queued tasks behave correctly after an individual stop", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+      const tree = new AuditWorkerTree("audit-queued-stop");
+      const ctx = { ...context("audit-queued-stop"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<string>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+          return state();
+        }
+        return state();
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
+      });
+
+      const t1Id = await t1Started.promise;
+      const stopped = await executor.stopPersistentAgent(t1Id);
+      expect(stopped).toBe(true);
+
+      const result = await batch;
+      expect(result.success).toBe(true);
+      const out = result.output as any;
+      expect(out.spawned).toBe(3);
+      expect(out.succeeded).toBe(2);
+      expect(out.failed).toBe(1);
+      expect(out.agents[0].ok).toBe(false);
+      expect(out.agents[1].ok).toBe(true);
+      expect(out.agents[2].ok).toBe(true);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("6. stopAll() retains its existing cancellation and publication guarantees", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-stopall-guarantees");
+      const ctx = { ...context("audit-stopall-guarantees"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<void>();
+      const t2Started = deferred<void>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve();
+        } else if (config.systemPrompt?.includes("task 2")) {
+          t2Started.resolve();
+        }
+        await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+        return state();
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
+      });
+
+      await Promise.all([t1Started.promise, t2Started.promise]);
+      await executor.stopPersistentAgents();
+
+      const result = await batch;
+      expect(result.success).toBe(true);
+      expect(tree.hasLiveWorkers()).toBe(false);
+      expect(tree.active).toBe(0);
+      const out = result.output as any;
+      expect(out.succeeded).toBe(0);
+      expect(out.failed).toBe(3);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("7. no findings are merged after the relevant stop operation resolves", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-no-findings-after-stop");
+      const ctx = { ...context("audit-no-findings-after-stop"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<string>();
+      const t2Started = deferred<void>();
+      const t2Finish = deferred<void>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+          return state([{ id: "stale-finding-1" } as any]);
+        } else {
+          t2Started.resolve();
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      const t1Id = await t1Started.promise;
+      await t2Started.promise;
+
+      await executor.stopPersistentAgent(t1Id);
+
+      // Stop has resolved: ctx.findings must not have received task 1's findings
+      expect(ctx.findings.map((f) => f.id)).not.toContain("stale-finding-1");
+
+      t2Finish.resolve();
+      await batch;
+      expect(ctx.findings.map((f) => f.id)).not.toContain("stale-finding-1");
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("8. nested delegation can use capacity released by a completed worker", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+      // Limit tree to exactly 2 workers
+      const tree = new AuditWorkerTree("audit-nested-capacity", 2);
+      const ctx = { ...context("audit-nested-capacity"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      let nestedSuccess = false;
+
+      loop.run = async ({ config }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          return state();
+        } else if (config.systemPrompt?.includes("task 2")) {
+          // Task 1 has completed. Task 2 delegates a helper.
+          // If task 1 held its lease, this would throw "Audit worker capacity reached (2)".
+          const helperLease = tree.acquire("nested-helper", config.scanId);
+          nestedSuccess = true;
+          helperLease.release();
+          return state();
+        }
+        return state();
+      };
+
+      const result = await executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      expect(result.success).toBe(true);
+      expect(nestedSuccess).toBe(true);
+      expect(tree.hasLiveWorkers()).toBe(false);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("9. multiple concurrent stop requests remain safe", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-concurrent-stops");
+      const ctx = { ...context("audit-concurrent-stops"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<string>();
+      const t2Finish = deferred<void>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+          return state();
+        } else {
+          await t2Finish.promise;
+          return state();
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      const t1Id = await t1Started.promise;
+
+      // Dispatch 3 concurrent stop requests for the same worker
+      const [s1, s2, s3] = await Promise.all([
+        executor.stopPersistentAgent(t1Id),
+        executor.stopPersistentAgent(t1Id),
+        tree.stop(t1Id),
+      ]);
+
+      expect(s1).toBe(true);
+      expect(typeof s2).toBe("boolean");
+      expect(typeof s3).toBe("boolean");
+
+      t2Finish.resolve();
+      await batch;
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("10. lease release remains idempotent across normal completion, cancellation, and outer batch cleanup", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+      const tree = new AuditWorkerTree("audit-idempotent-leases");
+      const ctx = { ...context("audit-idempotent-leases"), workerTree: tree };
+
+      const leaseReleases = new Map<string, number>();
+      const originalAcquire = tree.acquire.bind(tree);
+      tree.acquire = (id: string, parentId: string, metadata?: any) => {
+        const lease = originalAcquire(id, parentId, metadata);
+        leaseReleases.set(id, 0);
+        const originalRelease = lease.release;
+        lease.release = () => {
+          leaseReleases.set(id, (leaseReleases.get(id) ?? 0) + 1);
+          originalRelease();
+        };
+        return lease;
+      };
+
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+      const t1Started = deferred<string>();
+      const t2Started = deferred<string>();
+
+      loop.run = async ({ config, signal }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          return state();
+        } else if (config.systemPrompt?.includes("task 2")) {
+          t2Started.resolve(config.scanId);
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+          return state();
+        }
+        return state();
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
+      });
+
+      await t1Started.promise;
+      const t2Id = await t2Started.promise;
+
+      // Stop task 2 while task 3 is queued
+      await executor.stopPersistentAgent(t2Id);
+
+      await batch;
+
+      // All 3 tasks must have their underlying lease released exactly once
+      expect(leaseReleases.size).toBe(3);
+      for (const [, count] of leaseReleases) {
+        expect(count).toBe(1);
+      }
+      expect(tree.hasLiveWorkers()).toBe(false);
+      expect(tree.active).toBe(0);
+      await executor.cleanup();
+      await tree.close();
+    });
+
+    it("11. targeted stop of an already-completed worker prevents late publication while sibling continues", async () => {
+      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+      const tree = new AuditWorkerTree("audit-stop-after-execution");
+      const ctx = { ...context("audit-stop-after-execution"), workerTree: tree };
+      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+      const t1Started = deferred<string>();
+      const t1Finished = deferred<void>();
+      const t1Released = deferred<void>();
+      const t2Started = deferred<string>();
+      const t2Finish = deferred<void>();
+
+      const origAcquire = tree.acquire.bind(tree);
+      tree.acquire = (id, parentId, meta) => {
+        const lease = origAcquire(id, parentId, meta);
+        const origRel = lease.release;
+        lease.release = () => {
+          origRel();
+          if (meta?.task === "task 1") t1Released.resolve();
+        };
+        return lease;
+      };
+
+      loop.run = async ({ config }) => {
+        if (config.systemPrompt?.includes("task 1")) {
+          t1Started.resolve(config.scanId);
+          const st = state([{ id: "finding-from-task-1" } as any]);
+          t1Finished.resolve();
+          return st;
+        } else {
+          t2Started.resolve(config.scanId);
+          await t2Finish.promise;
+          return state([{ id: "finding-from-task-2" } as any]);
+        }
+      };
+
+      const batch = executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
+      });
+
+      const t1Id = await t1Started.promise;
+      const t2Id = await t2Started.promise;
+      await t1Finished.promise;
+      await t1Released.promise;
+
+      // Task 1 execution has finished, capacity is freed (tree.active is 1 because only task 2 is running)
+      expect(tree.active).toBe(1);
+
+      // Request targeted stop of Task 1 while Task 2 is STILL RUNNING
+      let stopResolved = false;
+      const stopPromise = executor.stopPersistentAgent(t1Id).then((r) => {
+        stopResolved = true;
+        return r;
+      });
+
+      const stopped = await stopPromise;
+      expect(stopped).toBe(true);
+      expect(stopResolved).toBe(true);
+
+      // Verify that publication of task 1 is already cancelled
+      expect(tree.isPublicationCancelled(t1Id)).toBe(true);
+
+      // Now unblock task 2 and settle batch
+      t2Finish.resolve();
+      const result = await batch;
+
+      expect(result.success).toBe(true);
+      const out = result.output as any;
+      expect(out.succeeded).toBe(1);
+      expect(out.failed).toBe(1);
+      expect(out.agents[0]).toMatchObject({
+        agent_id: t1Id,
+        ok: false,
+        error: "Worker stopped by operator",
+      });
+      expect(out.agents[1]).toMatchObject({
+        agent_id: t2Id,
+        ok: true,
+      });
+
+      // Crucial: Task 1's findings MUST NOT be in ctx.findings, but Task 2's findings MUST be
+      expect(ctx.findings.map((f) => f.id)).not.toContain("finding-from-task-1");
+      expect(ctx.findings.map((f) => f.id)).toContain("finding-from-task-2");
+
+      // Stopping task 1 again after publication has fully settled returns false
+      const stoppedAgain = await executor.stopPersistentAgent(t1Id);
+      expect(stoppedAgain).toBe(false);
+
+      expect(tree.hasLiveWorkers()).toBe(false);
+      await executor.cleanup();
+      await tree.close();
+    });
+  });
+
 });

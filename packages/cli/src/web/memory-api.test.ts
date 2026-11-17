@@ -37,4 +37,23 @@ describe("memory API", () => {
     call("/api/console/memory/clear", "POST", {});
     expect(call("/api/console/memory/import", "POST", { archive }).data).toEqual({ added: 1, total: 1 });
   });
+  it("lists proposals apart from notes, accepts (optionally edited) and rejects them", () => {
+    const store = createFileNoteStore({ home });
+    const a = store.add({ text: "Proposed by a thread", source: "model", status: "proposed", tainted: true });
+    const b = store.add({ text: "Another proposal", source: "model", status: "proposed" });
+    const listed = call("/api/console/memory", "GET").data as { notes: unknown[]; proposed: Array<{ id: string }> };
+    expect(listed.notes).toEqual([]); expect(listed.proposed.map(n => n.id).sort()).toEqual([a.id, b.id].sort());
+    expect((call(`/api/console/memory/${a.id}/accept`, "POST", { text: "Proposed, then corrected" }).data as { note: { status: string; text: string } }).note).toMatchObject({ status: "live", text: "Proposed, then corrected" });
+    expect(call(`/api/console/memory/${a.id}/accept`, "POST", {}).status).toBe(404);
+    expect(call(`/api/console/memory/${b.id}`, "DELETE").status).toBe(200);
+    expect((call("/api/console/memory", "GET").data as { proposed: unknown[]; notes: unknown[] })).toMatchObject({ proposed: [], notes: [expect.anything()] });
+  });
+  it("reports notes that do not fit what the model is shown", () => {
+    for (let i = 0; i < 20; i++) call("/api/console/memory", "POST", { text: `${i} ${"x".repeat(470)}`, scope: "global" });
+    const data = call("/api/console/memory", "GET").data as { overflow: Array<{ count: number; reason: string; folder?: string }> };
+    expect(data.overflow[0]).toMatchObject({ reason: expect.stringContaining("budget") }); expect(data.overflow[0]!.count).toBeGreaterThan(0);
+  });
+  it("refuses a secret from the page", () => {
+    expect(call("/api/console/memory", "POST", { text: "token: abcdefghijklmnop1234", scope: "global" }).status).toBe(400);
+  });
 });

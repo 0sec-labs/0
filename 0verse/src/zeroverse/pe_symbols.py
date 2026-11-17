@@ -8,6 +8,7 @@ import shutil
 import struct
 import subprocess
 import uuid
+from bisect import bisect_right
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
@@ -419,15 +420,18 @@ def resolve_crash_frame(binary: str | Path, frames: list[str]) -> str:
     symbols = coff_functions(binary)
     if not symbols:
         return ""
+    # Sorted once so the nearest preceding function is a binary search per frame
+    # rather than a pass over every symbol.
+    addresses = sorted(symbols)
     for frame in frames:
         match = _IMAGE_RVA_RE.search(frame)
         if not match:
             continue
         rva = int(match.group(1), 16)
-        candidates = [address for address in symbols if address <= rva]
-        if not candidates:
+        position = bisect_right(addresses, rva)
+        if position == 0:
             continue
-        address = max(candidates)
+        address = addresses[position - 1]
         if rva - address <= 0x100000:
             return symbols[address]
     return ""

@@ -1188,7 +1188,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         fatalError:
           "Azure OpenAI runtime is selected, but the configuration is incomplete.\n" +
           `Missing: ${missing.join("; ")}\n` +
-          "0 will not guess Azure defaults because that can silently route to the wrong endpoint or deployment.",
+          "0security will not guess Azure defaults because that can silently route to the wrong endpoint or deployment.",
       };
     }
 

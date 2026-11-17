@@ -1,6 +1,6 @@
 import { useNow } from "@/ui/lib/use-now";
 import { memo, Fragment, useId, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { Markdown } from "./markdown";
 import { MessageClamp } from "./message-clamp";
 import { ToolActivity } from "./tool-activity";
@@ -55,6 +55,7 @@ function TurnWork({ turn, subagents, shimmer, children }: { turn: ReducedTurn; s
             {label.includes(",") ? label.slice(label.indexOf(",")) : ""}
           </span>
           {turn.isWorking && !turn.retry && time && <span className="tabular-nums">{time}</span>}
+          {failedCallCount(turn.toolCalls) > 0 && <X aria-hidden="true" data-turn-work-failed className="size-3 flex-none text-destructive" />}
           <ChevronRight
             aria-hidden="true"
             className="size-3 flex-none -rotate-90 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-0 group-data-[open]/work-head:opacity-100 [@media(hover:none)]:opacity-100"

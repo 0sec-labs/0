@@ -21,6 +21,8 @@ import { tmpdir } from "node:os";
 import type { Finding, VerificationResult } from "../shared/index.js";
 import { osecDB, restoreFindingReviewFields } from "./database.js";
 import { createShimmedDatabase } from "./wasm-shim.js";
+import * as schema from "./schema.js";
+import { eq } from "drizzle-orm";
 
 function makeFinding(overrides?: Partial<Finding>): Finding {
   return {
@@ -456,6 +458,15 @@ describe("pre-migration database files", () => {
 });
 
 describe("finding triage semantics", () => {
+  it("triages a legacy finding that has no fingerprint by id", () => {
+    withTempDb((db) => {
+      const scanId = seedScan(db);
+      db.saveFinding(scanId, makeFinding({ id: "f-tr-legacy" }));
+      (db as any).db.update(schema.findings).set({ fingerprint: null }).where(eq(schema.findings.id, "f-tr-legacy")).run();
+      db.updateFindingTriage("f-tr-legacy", "accepted", "legacy");
+      expect(db.getFinding("f-tr-legacy")?.triageStatus).toBe("accepted");
+    });
+  });
   it("accept records accepted risk without closing the finding; dismiss cancels it", () => {
     withTempDb((db) => {
       const scanId = seedScan(db);

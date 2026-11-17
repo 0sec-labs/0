@@ -39,6 +39,18 @@ export function retainedScanSnapshot(scanId: string, dbPath?: string, original?:
     };
   } finally { db.close(); }
 }
+/** One evidence collection from findings that live in different run databases. */
+export function mergeFindingSnapshots(snapshots: ScanReport[]): ScanReport {
+  const findings = snapshots.flatMap(snapshot => snapshot.findings);
+  return {
+    target: "Selected findings from multiple runs", scanDepth: "default",
+    startedAt: snapshots.map(snapshot => snapshot.startedAt).filter(Boolean).sort()[0] ?? "", completedAt: snapshots.map(snapshot => snapshot.completedAt).sort().at(-1) ?? "",
+    durationMs: 0, findings, summary: summary(findings),
+    warnings: [{ stage: "report", message: "Selected findings export. This is an evidence collection, not a complete assessment report." }],
+    ...(snapshots.some(snapshot => snapshot.executionSuccessful === false) ? { executionSuccessful: false, exitReason: "partial" as const } : {}),
+  };
+}
+
 export function retainedFindingSnapshot(ids: string[], dbPath?: string): ScanReport {
   if (!ids.length || ids.length > 500) throw new ReportArtifactError("Select between one and 500 findings to export.", 400);
   const db = new osecDB(dbPath);

@@ -35,16 +35,36 @@ interface WorkerNode {
   workspace?: WorkerWorkspace;
   localEffects: LocalEffectObservations;
   observation?: Partial<OwnedWorkerSnapshot>;
+  publication?: "pending" | "published" | "cancelled";
+  readonly publicationDone: Promise<void>;
+  readonly settlePublication: (published: boolean) => void;
 }
 
-function workerNode(id: string, depth: number, parentId?: string): WorkerNode {
+function workerNode(id: string, depth: number, parentId?: string, trackPublication = false): WorkerNode {
   let finish!: () => void;
   const done = new Promise<void>(resolve => { finish = resolve; });
-  return {
+  let resolvePub!: () => void;
+  const publicationDone = new Promise<void>(resolve => { resolvePub = resolve; });
+  let pubSettled = !trackPublication;
+  if (!trackPublication) {
+    resolvePub();
+  }
+  const node: WorkerNode = {
     id, parentId, depth, controller: new AbortController(),
     children: new Set(), done, finish, active: true, stopping: 0, evictedTerminal: 0,
     localEffects: { attempts: 0, tools: [], observedWrites: 0 },
+    publication: trackPublication ? "pending" : undefined,
+    publicationDone,
+    settlePublication: (published: boolean) => {
+      if (pubSettled) return;
+      pubSettled = true;
+      if (node.publication === "pending") {
+        node.publication = published ? "published" : "cancelled";
+      }
+      resolvePub();
+    },
   };
+  return node;
 }
 
 /**
@@ -58,6 +78,8 @@ export class AuditWorkerTree {
   private readonly mutations = new Map<string, Map<string, number>>();
   private closed = false;
   private readonly terminal = new Map<string, { worker: OwnedWorkerSnapshot; owners: Set<string> }>();
+  private readonly publicationGates = new Map<string, Set<Promise<void>>>();
+  private readonly cancelledPublications = new Set<string>();
 
   constructor(
     readonly rootId: string,
@@ -83,7 +105,7 @@ export class AuditWorkerTree {
     });
   }
 
-  acquire(id: string, parentId: string, metadata?: { name?: string; task?: string; workspace?: WorkerWorkspace }): { signal: AbortSignal; release: () => void } {
+  acquire(id: string, parentId: string, metadata?: { name?: string; task?: string; workspace?: WorkerWorkspace; publication?: boolean }): { signal: AbortSignal; release: () => void } {
     const parent = this.nodes.get(parentId);
     if (this.closed) throw new Error("Audit worker tree is closed");
     if (!parent?.active) throw new Error("Worker parent is no longer active");
@@ -99,7 +121,8 @@ export class AuditWorkerTree {
     const workspace = metadata?.workspace ? { ...metadata.workspace, guardedKeys: [...new Set(metadata.workspace.guardedKeys ?? [metadata.workspace.key])] } : undefined;
     if (parent.workspace?.readOnly && !workspace?.readOnly) throw new Error("A read-only worker cannot delegate writable work");
     if (workspace?.writeCapable) for (const key of workspace.guardedKeys!) this.assertCheckoutAvailable(key, id);
-    const node = workerNode(id, parent.depth + 1, parentId);
+    const trackPublication = metadata?.publication ?? false;
+    const node = workerNode(id, parent.depth + 1, parentId, trackPublication);
     node.workspace = workspace;
     node.observation = { status: "queued", ...(metadata?.name ? { name: metadata.name.slice(0, 256) } : {}), ...(metadata?.task ? { task: metadata.task.slice(0, 8000) } : {}) };
     this.nodes.set(id, node);
@@ -207,11 +230,21 @@ export class AuditWorkerTree {
     };
   }
 
+  private hasLiveSubtree(node: WorkerNode): boolean {
+    if (node.active || node.publication === "pending") return true;
+    for (const childId of node.children) {
+      const child = this.nodes.get(childId);
+      if (child && this.hasLiveSubtree(child)) return true;
+    }
+    return false;
+  }
+
   /** Stop a target subtree, never the caller itself or a foreign worker. */
   async stop(id: string, ownerId = this.rootId): Promise<boolean> {
     if (id === ownerId || id === this.rootId) return false;
     const target = this.nodes.get(id);
     if (!target || !this.belongsTo(target, ownerId)) return false;
+    if (!this.hasLiveSubtree(target)) return false;
     await this.drain(target, true);
     return true;
   }
@@ -226,6 +259,56 @@ export class AuditWorkerTree {
   async close(): Promise<void> {
     this.closed = true;
     await this.stopAll();
+    this.cancelledPublications.clear();
+  }
+
+  /** Check if a worker's publication has been cancelled by an individual or coordinator stop. */
+  isPublicationCancelled(workerId: string): boolean {
+    if (this.cancelledPublications.has(workerId)) return true;
+    const node = this.nodes.get(workerId);
+    if (!node) return false;
+    return node.publication === "cancelled" || node.controller.signal.aborted || node.stopping > 0;
+  }
+
+  /**
+   * Settle publication for a worker.
+   * Passing `published: true` marks the outcome as merged/published and unblocks pruning.
+   * Passing `published: false` marks publication cancelled and prevents subsequent publication.
+   */
+  settlePublication(workerId: string, published: boolean): void {
+    if (!published) {
+      this.cancelledPublications.add(workerId);
+    }
+    const node = this.nodes.get(workerId);
+    if (node) {
+      node.settlePublication(published);
+      this.prune(node);
+    }
+  }
+
+  /**
+   * Register a batch publication gate on an owner coordinator.
+   * `stopAll(ownerId)` waits for active descendants AND any registered publication gates to settle,
+   * guaranteeing that a resolved `stopAll` is never followed by late finding publication from a completed wave.
+   * Individual `stop(workerId)` calls drain only the targeted worker's subtree and are not blocked by this gate.
+   */
+  registerPublicationGate(ownerId = this.rootId): () => void {
+    let finish!: () => void;
+    const promise = new Promise<void>((resolve) => { finish = resolve; });
+    let gates = this.publicationGates.get(ownerId);
+    if (!gates) {
+      gates = new Set();
+      this.publicationGates.set(ownerId, gates);
+    }
+    gates.add(promise);
+    let settled = false;
+    return () => {
+      if (settled) return;
+      settled = true;
+      gates.delete(promise);
+      if (gates.size === 0) this.publicationGates.delete(ownerId);
+      finish();
+    };
   }
 
   /**
@@ -263,9 +346,30 @@ export class AuditWorkerTree {
     }
     try {
       for (const node of subtree) {
-        if (node.active) node.controller.abort(new DOMException("Worker stopped by operator", "AbortError"));
+        if (includeOwner) {
+          // Targeted stop: unconditionally abort and cancel publication for the targeted subtree
+          node.controller.abort(new DOMException("Worker stopped by operator", "AbortError"));
+          if (node.publication === "pending") {
+            this.cancelledPublications.add(node.id);
+            node.settlePublication(false);
+          }
+        } else {
+          // Coordinator-level stopAll: cancel active and queued workers, while retaining
+          // already-completed outcomes from earlier waves that settled before stopAll.
+          if (node.active) {
+            node.controller.abort(new DOMException("Worker stopped by operator", "AbortError"));
+            if (node.publication === "pending") {
+              this.cancelledPublications.add(node.id);
+              node.settlePublication(false);
+            }
+          }
+        }
       }
-      await Promise.all(subtree.map(node => node.done));
+      const gates = !includeOwner ? [...(this.publicationGates.get(owner.id) ?? [])] : [];
+      await Promise.all([
+        ...subtree.map(node => Promise.all([node.done, node.publicationDone])),
+        ...gates,
+      ]);
     } finally {
       owner.stopping--;
       this.prune(owner);
@@ -273,7 +377,13 @@ export class AuditWorkerTree {
   }
 
   private prune(node: WorkerNode): void {
-    while (node.parentId !== undefined && !node.active && !node.stopping && node.children.size === 0) {
+    while (
+      node.parentId !== undefined &&
+      !node.active &&
+      !node.stopping &&
+      node.publication !== "pending" &&
+      node.children.size === 0
+    ) {
       const parent = this.nodes.get(node.parentId);
       this.nodes.delete(node.id);
       parent?.children.delete(node.id);

@@ -12,27 +12,90 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- `0 computers remove <id>` takes a remote computer out of the list from the terminal, as the Computers page already could. Files on the computer stay.
+
 ### Changed
 
-- There is now one Memory: short plain notes 0 remembers across threads, per folder or everywhere. They are Markdown files under `~/.0/memory/`, and the Memory page lists every note, including the ones the old page hid. Threads read the notes at the start of each turn as untrusted context and have one `memory` tool (remember, forget).
-- `0 memory` is now `list`, `add`, `remove`, `clear`, `export` and `import`. `0 findings update --status false-positive` remembers why as an `avoid` note, and scans show `avoid` notes to the verifier. `0 findings triage memory add|list|remove` still works for one release with a `moved:` line.
-- Migration: the first time Memory opens, the older stores (source lessons in hunt memory, craft memory files, lessons and triage memories in the database) are copied into notes once. Nothing is deleted. The report is in `~/.0/memory/import-report.json`; a lesson you had switched off is not imported.
-- Settings > Appearance is now one page with a live preview of a new thread at the top. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do: theme cards are miniatures of the app in that theme, and every Background tile is a real frame of that background (Aurora is no longer an empty tile). The profile menu has a single Appearance item, and the command palette has Change theme, Change background and Switch to light, dark or system mode.
+- Agents use one robot-head glyph in the same line style as the other sidebar icons (the Agents toggle, the Agents entry in the rail, the New agent button, the empty state and the command palette) instead of a generic bot, a shield or the automations clock; new agents default to it.
+- The "Set up your coding agent" chip shows the Claude, OpenAI, Cursor and OpenCode marks again, small and muted, after the label.
+- The backdrops use less CPU while idle (Contours about 6% to 2.5% of a core, Dither flow, Ink and School about a third less in headless Chromium): Contours redraws at 5 frames a second on a coarser grid, Dither flow, School, Ink and Glyph run at 8 to 15 frames a second with the same look, noise is computed in batches with no per-frame allocation, and any backdrop halves its frame rate by itself when frames keep running slow or the battery is at 20% or less and unplugged.
+- Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
+- The thread view reads like Capy: replies are 13px text in a 660px column, the composer is 712px wide, time stamps appear only after a 30 minute gap, "Worked" rows show a red x when a call failed, and a thread waiting on you says "Needs you" in the accent colour.
+- The default look follows Capy's visual system: a blue accent (buttons, send, selection, focus ring, links) in dark and light, 3/6/8/12px radii, 0.8px control borders, 14px icons, 100ms colour-only control feedback with no press dim, and one-icon suggestion chips. Neutral stays as an accent choice. Tokens are listed in docs/design/tokens.md.
+- Pages open faster. Hovering or focusing a link or a finding row for 50 ms now loads its page code and first data, loading skeletons stay on screen for at least half a second once they appear (nothing shows for the first 250 ms), renaming a thread shows the new title at once and restores the old one if saving fails, and the app ships only the Latin font files (171 KB instead of 289 KB) with the main one preloaded.
+- The Agents | Threads switch is a small icon toggle on the list header, in line with search, new and options, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
+- Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
+- The original Dither background is back and is the default again: dots only in the top part of the screen, fading out downward, drawn on a small canvas that covers just that band and runs at 6 frames per second, pausing when the tab is hidden or off screen. The full-screen scene is now Dither flow in the Background list. A saved Dither choice shows the original Dither; pick Dither flow to keep the full-screen one.
+- The Computers page add flow drops the words Deploy, SSH host and target repository, says what the first add takes, shows a Reconnect button on a disconnected computer, and names the computer in its Stop menu item.
+
 
 ### Removed
 
-- The separate memory stores: hunt memory (including recorded findings and the prior-findings count), craft memory and the CyberGym `CYBERGYM_MEMORY_DB` option, the source-lesson `remember_codebase` tool, lesson capture from chat turns, and the triage-memory repository. `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, alongside the new `ZERO_DISABLE_MEMORY`.
-- The two learning-comparison bench scripts, which measured the old hunt memory.
-- Memory is not available inside an isolated workbench for now.
+- The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
+- The long data-collection paragraph is gone from Settings. The two switches stay, and `ZERO_NO_TELEMETRY=1` still turns both off.
 
 ### Fixed
 
-- The docs pin the current release (0.37.0) in the image tags, the GitHub Action and the compose example, and a check (`node scripts/bump-docs-pins.mjs --check`, part of `pnpm docs:check`) fails when a pin lags the CLI version.
-- What's new no longer shows an old screenshot for every release; a release without its own picture shows none.
-- The Extensions page learns from the server whether a scope is defined: the scope row says On with no switch when one is, and has a switch only when none is.
-- Refusing an approval run by a thread is one plain sentence ("This command was run by a thread, not by you. Run it yourself in a terminal to approve.") instead of naming an internal variable.
-- A command that runs from another folder than the running console says "This console is for <folder>. Run the command there, or add --db-path <path>."
-- `0 usage --by` takes `model` or `thread`; the README and docs description no longer repeat a sentence; leftover mentions of plugins and Sentinels in command help were reworded.
+- `0 scan` now says what is wrong with a target instead of "unknown command" or a clean result: a folder that does not exist (`No such folder`), an unsupported package source such as `pip:` (with the `pypi:` form to use), an unknown kind of target, a web address that refuses the connection or cannot be found (no scan is started), and a package that is not on npm, PyPI or crates.io.
+- `0 scan verify` skips a PoC that only has notes, with a message that says so, instead of failing the replay runner with exit 3.
+- `0 scan fix` now prints where the patch was written and the estimated model cost, accepts `--cost-ceiling` and says when it stopped at it, and `--finding-id` takes the `fp:` fingerprint that `0 findings` prints. A scan that stops at its cost ceiling now says how much was spent and to raise `--cost-ceiling`.
+- The web Findings page now lists every finding: results of `0 scan` runs (one database per run) appear next to findings from threads and Agents, de-duplicated by fingerprint. Moving a finding on the board, accepting or dismissing it, notes, impact assessments and exports are saved in the database that holds it, and a finding's detail says where it came from (a scan and its date, an Agent, a thread). `0 findings` uses the same merged view. Older runs beyond 300 databases or 2 GB are skipped, newest kept.
+- Model calls now recover after a broken connection for real. The earlier fix never took effect on Node 24 and later, or in the compiled binary, so after a TLS `bad_record_mac` every call failed until you restarted the console. Each recovery now uses a new connection pool with no TLS session reuse, and `/healthz` shows the last failure code and whether a session was reused.
+- The thread list now says "Can’t reach this computer" instead of "No threads yet" while the engine is unreachable, so a restart no longer looks like lost threads.
+- `0 computers add` now says what to do when the repository has not been bundled yet (`pnpm run build:bundle`), and finds the files to copy from `ZERO_WORKER_ASSETS` or next to the program when it runs as an installed binary. Before, it stopped with an unexplained "run pnpm build".
+- Adding a computer now explains the common SSH problems in plain words: an unknown computer identity (with `--trust-new-host` and a matching checkbox on the Computers page to trust it the first time), a refused sign-in, a refused connection and an unreachable name. The Computers page shows that message instead of "Worker deployment failed", and `0 computers add` prints what it is doing while it works.
+- A thread started on another computer without a ChatGPT sign-in on this one, or on a computer without a model key, now says what is missing instead of `RuntimeConfig.provider=... has no configured credentials`.
+- Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
+- `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
+- When the computer behind the console stops answering without closing the connection, the page now shows Reconnecting after about a minute and recovers when it answers again. Before, it looked frozen with no notice.
+- A thread now keeps your prompt the moment a turn starts. Before, stopping or crashing the console during a turn lost the prompt and left an empty thread.
+- Restarting the console while a thread is open no longer sends the tab to Home with "That thread isn't available here." The tab stays on the thread, which shows your prompt and a Retry button.
+
+## [0.38.0] - 2026-11-16
+
+This release makes Memory one thing, puts Settings > Appearance on one page, replaces the backgrounds with six new scenes and puts every page on one width.
+
+### Added
+
+- Memory is one set of plain notes, per folder or global, that threads read at the start of each turn. There is one Memory page and one `0 memory` command: `list`, `add`, `remove`, `clear`, `export`, `import` and `proposed`.
+- A thread that has read untrusted content can only propose notes. They wait in a Proposed inbox for you to accept, and are not used until you do.
+- Secrets and hidden characters are never saved as notes. 0 saves at most 5 notes per thread and 20 per day.
+- Worktrees and clones of one repository share notes.
+- `0 memory export --to AGENTS.md` writes the notes you wrote or accepted as a file you can review and commit.
+
+### Changed
+
+- Settings > Appearance is one page. Mode, Theme, Accent, Background, Text and layout, and Motion each show what they do.
+- Theme cards are small copies of the app in that theme, and each Background tile is a real frame of that background.
+- Theme and mode live in one place. The profile menu has one Appearance item and the command palette has fewer entries.
+- Six new backgrounds replace the old eight: Dither (flow) (still the default), Contours, Glyph contours, Fish school, Plankton and Ink. A saved choice of a removed background falls back to Dither.
+- All pages share one width. Agents, Skills, Memory, Computers, Extensions and the rest line up, and Settings sections are narrower.
+- `0 findings update --status false-positive` remembers why as an `avoid` note, and only `avoid` notes you wrote or accepted reach the scan verifier.
+- `ZERO_DISABLE_HUNT_MEMORY` still turns Memory off, next to the new `ZERO_DISABLE_MEMORY`.
+- The first time Memory opens, the older stores are imported into notes once. Nothing is deleted, and the report is in `~/.0/memory/import-report.json`.
+- Memory is not available inside an isolated workbench for now.
+
+### Removed
+
+- The older memory stores: hunt memory, craft memory, triage memories as a separate store, and lesson capture with the lesson pages. They are imported once into Memory and left untouched on disk.
+- The `remember_codebase` tool and the `CYBERGYM_MEMORY_DB` option.
+- The two learning-comparison bench scripts, which measured the old hunt memory.
+
+### Fixed
+
+- The new-thread skeleton race that made CI flaky is now a deterministic test.
+- The What's new dialog no longer shows an old screenshot.
+- Refusing an approval run by a thread says "This command was run by a thread, not by you. Run it yourself in a terminal to approve." instead of naming an internal variable.
+- A command run from another folder than the console says "This console is for <folder>. Run the command there, or add --db-path <path>."
+- The Extensions page scope row says On with no switch only when a scope is defined.
+- The docs pin the current release, and `node scripts/bump-docs-pins.mjs --check` fails when a pin lags.
+- `0 usage --by` takes `model` or `thread`, and leftover mentions of plugins and Sentinels in command help were reworded.
+- A command that needs your approval now names the command ("Run touch approved.txt") instead of "Confirm tool action", and the closed line keeps it, so you can tell which action you allowed or declined.
+- Messages queued before you pressed Stop now say they are paused and offer Send now, instead of "sends after the current response" while nothing is running.
+- Links in replies are underlined so they can be told from plain text, narrow table headers no longer break mid-word, and unchecked task-list items no longer look like dark filled squares.
+- A thread no longer says its model "is no longer available" when the provider's model list could not be loaded for a moment, and a chat cost under half a cent reads "<$0.01" instead of "$0.00".
 
 ## [0.37.0] - 2026-11-16
 

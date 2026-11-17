@@ -160,9 +160,21 @@ function deriveCounts(
   maxEntries: number,
 ): Map<bigint, number> {
   const sorted = [...new Set(allSymbolVaddrs)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // First symbol strictly above `vaddr`: binary search over the sorted list
+  // (O(log symbols) per table) instead of a linear find from the start.
+  const nextSymbolAfter = (vaddr: bigint): bigint | undefined => {
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (sorted[mid]! > vaddr) hi = mid;
+      else lo = mid + 1;
+    }
+    return sorted[lo];
+  };
   const counts = new Map<bigint, number>();
   for (const t of tables) {
-    const next = sorted.find((v) => v > t.vaddr);
+    const next = nextSymbolAfter(t.vaddr);
     const sec = sections.find((s) => t.vaddr >= s.vaddr && t.vaddr < s.vaddr + s.vsize);
     const secEnd = sec ? sec.vaddr + sec.vsize : undefined;
     let end = next ?? secEnd;

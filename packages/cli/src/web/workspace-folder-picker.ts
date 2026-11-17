@@ -79,7 +79,7 @@ export async function chooseWorkspaceFolder(input?: unknown, dependencies: Picke
   const platform = dependencies.platform ?? process.platform;
   if (platform !== "darwin") return { supported: false, path: null };
   if (dependencies.local === false) return unsupported("The folder chooser opens on the computer that runs 0, not on this one. Browse the folders below or enter a path.");
-  if (!(dependencies.interactive ?? hasDesktopSession)()) return unsupported("0 is running without a desktop session (for example, started over SSH), so it can't open a folder chooser. Browse the folders below or enter a path.");
+  if (!(dependencies.interactive ?? hasDesktopSession)()) return unsupported("0security is running without a desktop session (for example, started over SSH), so it can't open a folder chooser. Browse the folders below or enter a path.");
   if (pickerActive) return failed("A folder chooser is already open on this Mac. Finish or close it first.");
   pickerActive = true;
   try {

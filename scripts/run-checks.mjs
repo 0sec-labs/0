@@ -27,6 +27,7 @@ export const GROUPS = {
     "node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs",
     "pnpm test:ci-report-browser",
     "pnpm test:home-paint",
+    "pnpm test:sidebar-layout",
     "pnpm test:web-cli-parity",
     "pnpm test:pr-agent-e2e",
     "pnpm test:webhook-e2e",

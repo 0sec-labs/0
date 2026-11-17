@@ -223,3 +223,25 @@ contains a `/` and the classifier only accepted `[A-Za-z0-9_]`. It is not tool-l
 arm only hit it sooner because it ran more requests per minute. Fix: model calls use a dedicated
 HTTP/1.1 dispatcher recreated after any connection failure (`runtime/llm-api/transport.ts`), the cause
 code is shown, and `/healthz` reports the failure counters.
+
+That first fix did not actually take effect, and the failure came back after about 50 turns of one
+console process (every call failing with `bad_record_mac` until restart; `failedCalls` and `recycles`
+both 102). Reproducer: 4 parallel 100-150KB POSTs per turn through `modelFetch` against the real API.
+Findings:
+
+- Node 24+/26 bundle undici 8 and keep the real global Agent under `undici.globalDispatcher.2`; `.1`
+  is a `Dispatcher1Wrapper`. The transport read only `.1`, found no `Agent`, and installed no
+  dispatcher, so calls still shared one HTTP/2 session and a "recycle" only incremented a counter.
+  The unfixed transport failed with `ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC` at turn 11 and then
+  `ERR_HTTP2_INVALID_SESSION` on every call.
+- The compiled binary runs under Bun, whose fetch ignores `dispatcher`; its keep-alive pool was never
+  dropped either. Bun gets `keepalive: false` (one connection per request).
+- TLS session resumption was ruled out: sessions were never reused (`isSessionReused()` false on
+  every connection). Resumption is nevertheless disabled and every dispatcher gets its own
+  `SecureContext`, so nothing can carry across a recycle.
+- undici can report a TLS alert on an HTTP/1.1 socket only as "other side closed"; the transport keeps
+  the socket's own error code so `/healthz` `modelTransport.lastFailureCode` names it, and reports
+  `lastSessionReused`.
+- A recycle closes the old pool (healthy in-flight siblings finish) and destroys it 30 seconds later.
+  Failed calls are still not replayed unless the existing policy proves the request was not sent
+  (now including TLS errors on a connection that wrote 0 bytes).

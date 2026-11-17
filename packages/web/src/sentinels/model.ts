@@ -53,6 +53,21 @@ export interface SentinelPresetAutomation {
   trigger: { kind: SentinelTriggerKind; cadence?: "hourly" | "daily" | "weekly" };
   runIn: "new-mission" | "sentinel-home";
 }
+/** The disabled schedule a "Set up" suggestion starts with: 09:00 local time, Mondays for weekly. The operator reviews it before enabling. */
+export function suggestedSchedule(cadence: "hourly" | "daily" | "weekly" | undefined, timezone: string): SentinelSchedule | undefined {
+  if (cadence === "hourly") return { frequency: "hourly", timezone };
+  if (cadence === "daily") return { frequency: "daily", time: "09:00", timezone };
+  if (cadence === "weekly") return { frequency: "weekly", weekday: 1, time: "09:00", timezone };
+  return undefined;
+}
+
+/** Which suggestions already have an automation. Suggestions can share a template, so each owned automation covers one suggestion. */
+export function addedSuggestions(items: readonly SentinelPresetAutomation[], ownedTemplateIds: readonly string[]): boolean[] {
+  const remaining = new Map<string, number>();
+  for (const id of ownedTemplateIds) remaining.set(id, (remaining.get(id) ?? 0) + 1);
+  return items.map(item => { const left = item.templateId ? remaining.get(item.templateId) ?? 0 : 0; if (item.templateId && left > 0) remaining.set(item.templateId, left - 1); return left > 0; });
+}
+
 export interface SentinelPreset {
   id: string;
   name: string;

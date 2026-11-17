@@ -26,6 +26,7 @@ import { v } from "@/lib/vocabulary";
 import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import type { FindingFamilyResponse, FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
+import { provenanceLabel } from "./finding-provenance";
 import {
   SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, SEVERITY_LABELS, STATUS_LABEL, buildActivity, findingCode, findingStatus, normalizeSeverity, type FindingStatus,
 } from "./findings-model";
@@ -192,6 +193,7 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
   const firstSeen = family?.rows.length ? Math.min(...family.rows.map(row => row.timestamp)) : null;
   const confidence = typeof latest.confidence === "number" && Number.isFinite(latest.confidence) ? Math.round(latest.confidence <= 1 ? latest.confidence * 100 : latest.confidence) : null;
   const count = group?.count ?? family?.rows.length ?? 1;
+  const sourceLabel = provenanceLabel(family?.provenance ?? group?.provenance);
   const missionHref = useMissionHref(latest.scanId);
   const missionLabelText = missionName ?? `${v("{Mission}")} ${latest.scanId.slice(0, 8)}`;
   return (
@@ -226,6 +228,7 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
       <Prop label="Business impact"><span className="px-2">{priority.label}</span></Prop>
       <Prop label="Category"><span className="min-w-0 truncate px-2">{latest.category || "Uncategorized"}</span></Prop>
       {confidence !== null ? <Prop label="Confidence"><span className="px-2 tabular-nums">{confidence}%</span></Prop> : null}
+      {sourceLabel ? <Prop label="Source"><span className="min-w-0 truncate px-2">{sourceLabel}</span></Prop> : null}
       <Prop label={v("{Mission}")}>
         {missionHref ? (
           <Button variant="ghost" size="sm" className={valueButton} render={<Link to={missionHref} />}><span className="min-w-0 truncate">{missionLabelText}</span></Button>

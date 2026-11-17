@@ -8,7 +8,8 @@ import { ProviderRejectedNotice } from "./provider-rejected-notice";
 import { TurnTimeline } from "./turn-timeline";
 import { InlineImage } from "./inline-image";
 import { ApprovalPanel } from "./approvals";
-import { DayStamp, MessageToolbar, dayKey } from "./message-toolbar";
+import { DayStamp, MessageToolbar } from "./message-toolbar";
+import { needsStamp } from "./transcript-stamps";
 import { ActivityIndicator } from "./loading-state";
 import { AgentOnboarding } from "./agent-onboarding";
 import { BrandMark } from "@/components/brand-mark";
@@ -103,8 +104,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
     <>
       {turns.length ? (
         turns.map((turn, turnIndex) => {
-          const stamp =
-            dayKey(turn.startedAt) !== undefined && dayKey(turn.startedAt) !== dayKey(turns[turnIndex - 1]?.startedAt);
+          const stamp = needsStamp(turns[turnIndex - 1]?.startedAt, turn.startedAt);
           const synthetic = turn.user.attachments?.length ? undefined : classifySyntheticPrompt(turn.user.text);
           const ending = turnEnding(turn, turnWorkers.get(turn.id)?.length ?? 0);
           const rejectedKey =

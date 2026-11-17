@@ -33,7 +33,9 @@ export function contextUsage(snapshot: ConsoleSessionSnapshot): { used?: number;
 }
 
 export function formatCost(costUsd: number | undefined): string | undefined {
-  return typeof costUsd === "number" && Number.isFinite(costUsd) ? `$${costUsd.toFixed(2)}` : undefined;
+  if (typeof costUsd !== "number" || !Number.isFinite(costUsd)) return undefined;
+  // Real spend below half a cent must not read as "$0.00".
+  return costUsd > 0 && costUsd < 0.005 ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
 export type ScopeSummary = { target?: string; inCount: number; outCount: number; enforcement: "enforced" | "not-enforced"; enforcementMessage?: string };

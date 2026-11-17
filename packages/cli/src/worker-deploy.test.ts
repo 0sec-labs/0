@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
+import { explainSshFailure, loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
 
 describe("worker deployment assets", () => {
   it("resolves both source and split bundle modules to their package root", () => {
@@ -21,6 +21,26 @@ describe("worker deployment assets", () => {
       writeFileSync(join(root, "0.js"), "");
       expect(resolveWorkerRepoRoot(pathToFileURL(join(root, "chunks/worker-deploy.js")).href)).toBe(root);
     } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it("explains a missing bundle and finds assets from the environment or the executable", () => {
+    const root = mkdtempSync(join(tmpdir(), "worker-assets-"));
+    try {
+      mkdirSync(join(root, "scripts")); writeFileSync(join(root, "scripts/bundle-cli.mjs"), "");
+      const module = pathToFileURL(join(root, "packages/cli/src/worker-deploy.ts")).href;
+      expect(() => resolveWorkerRepoRoot(module, {}, join(root, "nowhere/0"))).toThrow(/build:bundle/);
+      expect(() => resolveWorkerRepoRoot("file:///$bunfs/root/0", {}, "/nonexistent/bin/0")).toThrow(/does not include the files/);
+      const assets = join(root, "assets");
+      mkdirSync(join(assets, "dist"), { recursive: true }); mkdirSync(join(assets, "vendor"));
+      writeFileSync(join(assets, "dist/0.js"), ""); writeFileSync(join(assets, "vendor/tree-sitter-0.21.1-node24.tgz"), "");
+      expect(resolveWorkerRepoRoot("file:///$bunfs/root/0", { ZERO_WORKER_ASSETS: assets }, "/nonexistent/bin/0")).toBe(assets);
+      expect(resolveWorkerRepoRoot("file:///$bunfs/root/0", {}, join(assets, "bin/0"))).toBe(assets);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it("turns ssh failures into actionable sentences", () => {
+    expect(explainSshFailure("qa", "No ED25519 host key is known for x\nHost key verification failed.")).toContain("--trust-new-host");
+    expect(explainSshFailure("qa", "tester@qa: Permission denied (publickey).")).toContain("refused the sign-in");
+    expect(explainSshFailure("qa", "ssh: connect to host qa port 22: Connection refused")).toContain("not accepting connections");
+    expect(explainSshFailure("qa", "ssh: Could not resolve hostname qa: nodename nor servname provided")).toContain("Could not reach qa");
   });
   it("archives the source worker fixture without a research checkout and prefers bundled assets", () => {
     const root = mkdtempSync(join(tmpdir(), "worker-demo-"));

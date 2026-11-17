@@ -1257,6 +1257,7 @@ Guide: [Read the workflow](/findings/#verify-and-fix).
 | `--max-attempts <n>` | `3` | Maximum candidate patches; capped at 3 |
 | `--apply` | `false` | Apply only a patch that passed isolated source recheck and regression command |
 | `--output <path>` | — | Write the validated apply_patch DSL to this path |
+| `--cost-ceiling <usd>` | — | Stop asking the model for patches once the estimated cost reaches this many USD |
 
 ## Findings & evidence
 
@@ -3381,7 +3382,7 @@ to work there. `worker` still works as an older name.
 0 computers
 ```
 
-Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [hosts](#computers-hosts).
+Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [remove](#computers-remove) · [hosts](#computers-hosts).
 
 Aliases: `worker`.
 
@@ -3427,6 +3428,7 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the remote server clones into the engine folder instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
+| `--trust-new-host` | `false` | Trust and remember the computer's SSH host key if it is not known yet |
 | `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
@@ -3470,6 +3472,25 @@ redeployed later.
 | Argument | Required | Description |
 | --- | --- | --- |
 | `backend-id` | Yes |  |
+
+#### computers remove
+
+Remove a remote computer from this machine: closes the tunnel and forgets its
+saved connection. Files on the remote computer stay in place.
+
+```text
+0 computers remove [options] <backend-id>
+```
+
+Run `0 computers list` to see the IDs.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engines-config <path>` | — | Engine registry path |
 
 #### computers hosts
 
@@ -4195,17 +4216,19 @@ List, add, remove, export and import what 0 remembers across threads
 0 memory
 ```
 
-Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`.
+Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note you add here is saved at once. A note 0 wants to keep after reading web pages, files or tool output waits in the proposed inbox until you accept it. Secrets are never saved.
 
 ```bash
 0 memory list
 0 memory add "Run tests with pnpm test" --kind command
-0 memory export -o memory.json
+0 memory proposed list
+0 memory proposed accept m_1a2b3c4d
+0 memory export --to AGENTS.md
 ```
 
 Guide: Read the workflow.
 
-Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
+Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [proposed](#memory-proposed) · [export](#memory-export) · [import](#memory-import).
 
 #### memory list
 
@@ -4301,9 +4324,67 @@ Use notes in new threads again
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
 
+#### memory proposed
+
+Review notes 0 proposed after reading web pages, files or tool output (they are not used until accepted)
+
+```text
+0 memory proposed
+```
+
+Subcommands: [list](#memory-proposed-list) · [accept](#memory-proposed-accept) · [reject](#memory-proposed-reject).
+
+#### memory proposed list
+
+List proposed notes
+
+```text
+0 memory proposed list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory proposed accept
+
+Accept a proposed note so it is used in new threads. `--text` corrects the wording while accepting.
+
+```text
+0 memory proposed accept [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--text <text>` | — | Correct the wording while accepting |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
+#### memory proposed reject
+
+Discard a proposed note
+
+```text
+0 memory proposed reject [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Engine database to import older memories from |
+
 #### memory export
 
-Write notes to a file
+Write notes to a file: JSON for 0 by default, or with `--to` an AGENTS.md section for a person to review and commit. Only notes you wrote or accepted are exported. 0 never imports notes from a repository.
 
 ```text
 0 memory export [options]
@@ -4311,8 +4392,10 @@ Write notes to a file
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--folder <path>` | — | Only this folder |
-| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--folder <path>` | — | Only this folder (default for --to: this folder) |
+| `-o, --output <file>` | — | Write the JSON export to a file instead of stdout |
+| `--to <file>` | — | Add accepted notes to this markdown file (for example AGENTS.md) as a section you review and commit |
+| `--markdown` | — | Print the markdown section instead of JSON |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
 

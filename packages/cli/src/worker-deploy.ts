@@ -22,6 +22,10 @@ interface WorkerDeployOptions {
   /** OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config). */
   sshConfig?: string;
   enginesConfig?: string;
+  /** Trust and remember an SSH host key that is not known yet (first connection only). */
+  trustNewHost?: boolean;
+  /** Suppress progress lines on stderr (the web console calls this without a terminal). */
+  quiet?: boolean;
 }
 
 export interface WorkerDeployResult {
@@ -56,12 +60,45 @@ const LIMA_NAME_PATTERN = /^[\w.-]+$/;
 const TARGET_GIT_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s'"]+$/;
 const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
-export function resolveWorkerRepoRoot(moduleUrl = import.meta.url): string {
-  let directory = dirname(fileURLToPath(moduleUrl));
+const hasWorkerAssets = (directory: string) =>
+  (existsSync(join(directory, "dist/0.js")) || existsSync(join(directory, "0.js"))) && existsSync(join(directory, "vendor/tree-sitter-0.21.1-node24.tgz"));
+
+/** Walk up from `start` until a folder holding the engine bundle and vendor files is found. */
+function findWorkerAssets(start: string): string | undefined {
+  let directory = start;
   while (true) {
-    if ((existsSync(join(directory, "dist/0.js")) || existsSync(join(directory, "0.js"))) && existsSync(join(directory, "vendor/tree-sitter-0.21.1-node24.tgz"))) return directory;
+    if (hasWorkerAssets(directory)) return directory;
     const parent = dirname(directory);
-    if (parent === directory) throw new Error("Worker deployment requires the built CLI dist/ and vendor/ assets. Run pnpm build first.");
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
+/**
+ * Folder holding the engine bundle (`dist/0.js`) and `vendor/` that get copied to a remote computer.
+ * Looks from the running CLI's own files (source checkout, npm package, container image), then from
+ * `ZERO_WORKER_ASSETS`, then next to the executable (compiled binary installs).
+ */
+export function resolveWorkerRepoRoot(moduleUrl = import.meta.url, env: NodeJS.ProcessEnv = process.env, execPath = process.execPath): string {
+  let moduleDirectory: string | undefined;
+  try { moduleDirectory = dirname(fileURLToPath(moduleUrl)); } catch { /* compiled binaries use a virtual module path */ }
+  const fromModule = moduleDirectory ? findWorkerAssets(moduleDirectory) : undefined;
+  if (fromModule) return fromModule;
+  if (env.ZERO_WORKER_ASSETS && hasWorkerAssets(env.ZERO_WORKER_ASSETS)) return env.ZERO_WORKER_ASSETS;
+  const fromExecutable = findWorkerAssets(dirname(execPath));
+  if (fromExecutable) return fromExecutable;
+  // A source checkout that was compiled with `pnpm build` but never bundled has vendor/ but no dist/0.js.
+  const sourceRoot = moduleDirectory ? findSourceCheckout(moduleDirectory) : undefined;
+  if (sourceRoot) throw new Error("This source checkout has not been bundled yet, so there is nothing to copy to the remote computer. Run `pnpm run build:bundle` in the repository root, then try again.");
+  throw new Error("This installation of 0 does not include the files needed to set up a remote computer. Use a source checkout (`pnpm run build:bundle`), the 0security container image, or point ZERO_WORKER_ASSETS at a folder containing dist/0.js and vendor/.");
+}
+
+function findSourceCheckout(start: string): string | undefined {
+  let directory = start;
+  while (true) {
+    if (existsSync(join(directory, "scripts/bundle-cli.mjs"))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
     directory = parent;
   }
 }
@@ -91,16 +128,36 @@ export function assertSshClient(probe: (command: string) => { error?: Error & { 
   }
 }
 
-function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig">): WorkerRunner {
+/** Turn a failed ssh/scp run into a sentence a person can act on; the raw output stays after a dash. */
+export function explainSshFailure(host: string, output: string): string {
+  const detail = output.trim().split("\n").filter(line => line && !line.startsWith("Command failed")).slice(-3).join(" ");
+  if (/host key verification failed|no .* host key is known/i.test(output)) return `This computer (${host}) has not been trusted yet. Check its fingerprint with \`ssh ${host}\` once, or add it again with --trust-new-host to trust it on first connection.`;
+  if (/REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(output)) return `The identity of ${host} changed since it was last trusted. This can mean the computer was reinstalled or that someone is intercepting the connection. Remove the old entry with \`ssh-keygen -R ${host}\` only if you expected the change.`;
+  if (/permission denied/i.test(output)) return `${host} refused the sign-in. 0 uses your SSH keys without asking for a password: make sure the key is loaded (ssh-add) or set up in your SSH config, and that the user is allowed to sign in.`;
+  if (/connection refused/i.test(output)) return `${host} is not accepting connections. Check that the computer is on and that its SSH server is running on the port you expect.`;
+  if (/timed out|no route to host|could not resolve hostname|name or service not known|nodename nor servname/i.test(output)) return `Could not reach ${host}. Check the name or address, your network connection, and any VPN it needs. (${detail})`;
+  return `Could not run a command on ${host}. ${detail}`;
+}
+
+function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig" | "trustNewHost">): WorkerRunner {
   if (options.ssh) {
     assertSshClient();
     const host = options.ssh;
     const configArgs = options.sshConfig ? ["-F", options.sshConfig] : [];
+    const hostKeyMode = options.trustNewHost ? "accept-new" : "yes";
+    const explain = <T>(run: () => T): T => {
+      try { return run(); } catch (error) {
+        const e = error as { stderr?: Buffer | string; message?: string; killed?: boolean; signal?: string };
+        const output = e.stderr?.toString().trim() || e.message || "";
+        if (e.killed || e.signal === "SIGTERM") throw new Error(`The command on ${host} took too long and was stopped.`, { cause: error });
+        throw new Error(explainSshFailure(host, output), { cause: error });
+      }
+    };
     return {
       label: host,
-      shell: (command, timeout = 300_000) =>
-        execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout }),
-      copy: (local, remote) => execFileSync("scp", ["-q", "-o", "BatchMode=yes", ...configArgs, "--", local, `${host}:${remote}`], { stdio: "inherit", timeout: 600_000 }),
+      shell: (command, timeout = 300_000) => explain(() =>
+        execFileSync("ssh", ["-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] })),
+      copy: (local, remote) => explain(() => { execFileSync("scp", ["-q", "-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, ...configArgs, "--", local, `${host}:${remote}`], { stdio: ["ignore", "inherit", "pipe"], timeout: 600_000 }); }),
       tunnel: (port) => {
         const child = spawn("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ExitOnForwardFailure=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
         child.unref();
@@ -139,6 +196,8 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     const status = execFileSync("limactl", ["list", "--format", "{{.Status}}", runner.label], { encoding: "utf8" }).trim();
     if (status !== "Running") throw new Error(`VM ${runner.label} is ${status}; start it first`);
   }
+  const say = (message: string) => { if (!options.quiet) process.stderr.write(`${message}\n`); };
+  say(`Connecting to ${runner.label}...`);
   shell("uname -srm");
 
   const nodeVersion = shell("command -v node >/dev/null && node --version || echo none").trim();
@@ -146,6 +205,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     const arch = shell("uname -m").trim() === "aarch64" ? "arm64" : "x64";
     shell(`cd /tmp && curl -fsSL https://nodejs.org/dist/v24.14.0/node-v24.14.0-linux-${arch}.tar.xz -o node.tar.xz && sudo tar -xJf node.tar.xz -C /usr/local --strip-components=1 && node --version`, 600_000);
   }
+  say("Checking the tools 0 needs on the computer (this can take a few minutes the first time)...");
   const clangVersion = shell("command -v clang >/dev/null && clang --version | head -1 || echo none").trim();
   if (clangVersion === "none") {
     shell("sudo apt-get update -qq && sudo apt-get install -y -qq clang build-essential python3 >/dev/null && clang --version | head -1", 900_000);
@@ -171,6 +231,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     case "$command" in 'node dist/0.js web '*|'node /tmp/zero-engine/dist/0.js web '*|'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid" || true;; esac
   done`);
   shell(`rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}/vendor`);
+  say("Copying 0 to the computer...");
   runner.copy(join(staging, "bundle.tar.gz"), `${REMOTE_DIR}/bundle.tar.gz`);
   if (!options.targetGit) runner.copy(join(staging, "demo-target.tar.gz"), `${REMOTE_DIR}/demo-target.tar.gz`);
   runner.copy(join(repoRoot, "vendor/tree-sitter-0.21.1-node24.tgz"), `${REMOTE_DIR}/vendor/tree-sitter-0.21.1-node24.tgz`);
@@ -178,6 +239,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
 
   writeFileSync(join(staging, "package.json"), JSON.stringify({ name: "zero-engine-remote", private: true, dependencies: REMOTE_DEPS }, null, 2));
   runner.copy(join(staging, "package.json"), `${REMOTE_DIR}/package.json`);
+  say("Installing 0 on the computer...");
   shell(`cd ${REMOTE_DIR} && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund > install.log 2>&1 || { tail -20 install.log; exit 1; }`, 900_000);
   let targetPath: string;
   if (options.targetGit) {
@@ -193,9 +255,13 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     // The ssh shell is reaped on teardown; the setsid'd engine survives detached.
     shell(`cd ${REMOTE_DIR} || exit 1; ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js web --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo $! > ${REMOTE_DIR}/engine.pid; echo started`, 30_000);
   } catch { /* shell reaped; engine detached */ }
+  say("Starting 0 on the computer...");
   const ready = shell(`for i in $(seq 1 30); do grep -q ZERO_DASHBOARD_READY ${REMOTE_DIR}/engine.log 2>/dev/null && echo ready && break; sleep 1; done; tail -2 ${REMOTE_DIR}/engine.log`, 60_000);
   if (!ready.includes("ready")) throw new Error(`engine did not become ready: ${ready.trim()}`);
 
+  say("Opening a secure connection...");
+  // A redeploy must not leave the previous tunnel holding the port, or the new one cannot bind it.
+  try { stopManagedTunnel(loadManagedWorker(backendId)); } catch { /* first deployment: nothing to stop */ }
   const tunnelPid = runner.tunnel(port);
   const tunnelReady = Promise.withResolvers<void>();
   setTimeout(tunnelReady.resolve, 2000);

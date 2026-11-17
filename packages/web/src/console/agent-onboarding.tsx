@@ -19,12 +19,7 @@ MCP is optional: inspect 0 lab mcp-server --help and the client's actual configu
 
 Summarize readiness, any remaining sign-in or authorization, and the next command for my task.`;
 
-const AGENTS = [
-  { id: "claude", color: "text-[#D97757]" },
-  { id: "codex", color: "" },
-  { id: "cursor", color: "" },
-  { id: "opencode", color: "" },
-] as const;
+const AGENTS = ["claude", "codex", "cursor", "opencode"] as const;
 
 export function AgentOnboarding() {
   const [copied, setCopied] = useState(false);
@@ -49,10 +44,10 @@ export function AgentOnboarding() {
   return (
     <div className="inline-flex max-w-full flex-col items-center gap-2">
       <Button
-        variant="ghost"
+        variant="chip"
         size="sm"
         onClick={copyPrompt}
-        className="inline-flex h-8 max-w-full gap-2 rounded-md border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
+        className="max-w-full !px-2.5"
         aria-label={
           copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"
         }
@@ -62,11 +57,11 @@ export function AgentOnboarding() {
             className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`}
             aria-hidden={copied}
           >
-            <TerminalSquare aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
+            <TerminalSquare aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />
             <span>Set up your coding agent</span>
-            <span className="flex gap-1.5" aria-hidden="true">
-              {AGENTS.map((agent) => (
-                <ProviderIcon key={agent.id} providerId={agent.id} className={`size-3.5 ${agent.color}`} />
+            <span className="flex gap-1.5 text-icon-muted opacity-80" aria-hidden="true">
+              {AGENTS.map((id) => (
+                <ProviderIcon key={id} providerId={id} className="size-3.5" />
               ))}
             </span>
           </span>
@@ -74,7 +69,7 @@ export function AgentOnboarding() {
             className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
             aria-hidden={!copied}
           >
-            <Check aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
+            <Check aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />
             <span>Copied prompt · Paste into your agent</span>
           </span>
         </span>

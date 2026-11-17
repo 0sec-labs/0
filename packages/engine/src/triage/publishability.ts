@@ -440,14 +440,19 @@ export async function checkPublishability(
   const advisories: AdvisoryRef[] = [
     ...(inputs.knownAdvisoryRefs ?? []).map((a) => ({ source: "known" as const, ...a })),
   ];
+  // First advisory seen per id, kept in step with `advisories`, so merging a
+  // seam's refs is one lookup each instead of a rescan of the merged list.
+  const advisoryById = new Map<string, AdvisoryRef>();
+  for (const a of advisories) if (!advisoryById.has(a.id)) advisoryById.set(a.id, a);
   const mergeRefs = (refs: AdvisoryRef[]): void => {
     for (const a of refs) {
       // Same id from two sources: keep the first but upgrade its status to the
       // more decisive one (declined/withdrawn > patched) so a maintainer-decline
       // on our own report is never masked by a benign global entry.
-      const existing = advisories.find((e) => e.id === a.id);
+      const existing = advisoryById.get(a.id);
       if (!existing) {
         advisories.push(a);
+        advisoryById.set(a.id, a);
         continue;
       }
       if (

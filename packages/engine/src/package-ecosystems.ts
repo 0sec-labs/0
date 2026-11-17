@@ -301,11 +301,26 @@ function writeMinimalPackageJson(tempDir: string): void {
   });
 }
 
+/**
+ * One plain sentence for why a package could not be fetched. Accepts the raw tool output or the thrown error (whose
+ * `stderr` often holds the useful part); falls back to the last stderr line rather than the command line that failed.
+ */
+export function describePackageFetchFailure(registry: string, failure: unknown): string {
+  const stderr = String((failure as { stderr?: unknown } | null)?.stderr ?? "").trim();
+  const message = failure instanceof Error ? failure.message : String(failure);
+  const raw = `${message}\n${stderr}`;
+  if (/E404|404 Not Found|\bHTTP(?:\/\d(?:\.\d)?)? 404\b|error: 404|\b404\b|No matching distribution|could not be found/i.test(raw)) return `the package was not found on ${registry}. Check the name and spelling.`;
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|ECONNRESET|Could not resolve host|Connection refused|timed out|network/i.test(raw)) return `${registry} could not be reached. Check your network connection and try again.`;
+  const lines = (stderr || message).split("\n").map(line => line.trim()).filter(line => line && !/^Command failed/i.test(line));
+  return (stderr ? lines.at(-1) : lines[0])?.slice(0, 300) ?? "the download failed.";
+}
+
 function restoreNpmFixtureOrThrow(
   packageName: string,
   tempDir: string,
   msg: string,
   emit: ScanListener,
+  displayMessage: string = msg,
 ): InstalledPackage | never {
   if (shouldUseHistoricalPackageFallback(msg)) {
     const restored = restoreHistoricalPackageFixture(packageName, tempDir, emit);
@@ -318,7 +333,7 @@ function restoreNpmFixtureOrThrow(
     }
   }
   rmSync(tempDir, { recursive: true, force: true });
-  throw new Error(msg);
+  throw new Error(displayMessage);
 }
 
 function installNpmPackage(
@@ -387,7 +402,7 @@ function installNpmPackage(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return restoreNpmFixtureOrThrow(packageName, tempDir, `Failed to install ${spec}: ${msg}`, emit);
+    return restoreNpmFixtureOrThrow(packageName, tempDir, `Failed to install ${spec}: ${msg}`, emit, `Failed to install ${spec}: ${describePackageFetchFailure("npm", err)}`);
   }
 
   const pkgJsonPath = join(tempDir, "node_modules", packageName, "package.json");
@@ -577,7 +592,7 @@ function installPypiPackage(
   } catch (err) {
     rmSync(tempDir, { recursive: true, force: true });
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to download ${spec} from PyPI: ${msg}`);
+    throw new Error(`Failed to download ${spec} from PyPI: ${describePackageFetchFailure("PyPI", err)}`);
   }
 
   extractSingleArchive(archivePath, extractDir);
@@ -618,11 +633,16 @@ function installPypiPackage(
 function resolveCargoVersion(packageName: string, requestedVersion: string | undefined): string {
   if (requestedVersion) return requestedVersion;
 
-  const raw = execFileSync("curl", buildCratesIoCurlArgs(`https://crates.io/api/v1/crates/${packageName}`), {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: scanExecutionTimeout(60_000),
-  });
+  let raw: string;
+  try {
+    raw = execFileSync("curl", buildCratesIoCurlArgs(`https://crates.io/api/v1/crates/${packageName}`), {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: scanExecutionTimeout(60_000),
+    });
+  } catch (err) {
+    throw new Error(`Failed to look up ${packageName} on crates.io: ${describePackageFetchFailure("crates.io", err)}`);
+  }
   const parsed = JSON.parse(raw) as {
     crate?: { max_stable_version?: string; max_version?: string; newest_version?: string };
   };
@@ -665,7 +685,7 @@ function installCargoPackage(
   } catch (err) {
     rmSync(tempDir, { recursive: true, force: true });
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to download ${packageName}@${version} from crates.io: ${msg}`);
+    throw new Error(`Failed to download ${packageName}@${version} from crates.io: ${describePackageFetchFailure("crates.io", err)}`);
   }
 
   const archivePath = join(downloadDir, `${packageName}-${version}.crate`);

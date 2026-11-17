@@ -21,12 +21,12 @@ import {
 } from "@/ui/components/sidebar";
 import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
+import type { MemoryResponse } from "@/memory-model";
 import { SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS, canonicalWorkspacePath, isSidebarDestinationActive } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
-import { SidebarModeToggle } from "@/components/sidebar/sidebar-mode-toggle";
 import { useSidebarListMode } from "@/components/sidebar/use-sidebar-list";
 import { cn } from "@/lib/utils";
 
@@ -89,7 +89,7 @@ export function ConsoleNavigationRail({
   onHistorySlot?: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
 }) {
-  const { getDashboard, client } = useBackendApi();
+  const { getDashboard, client, webFetchJson } = useBackendApi();
   const location = useLocation();
   const route = backendRoute(location.pathname);
   const currentPath = canonicalWorkspacePath(location.pathname.slice(route.basename.length) || "/");
@@ -101,6 +101,9 @@ export function ConsoleNavigationRail({
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
+  // Notes 0 proposed and nobody has reviewed yet (the same query the Memory page uses, so one request serves both).
+  const memory = useQuery({ queryKey: queryKeys.consoleMemory(client.backendId), queryFn: ({ signal }) => webFetchJson<MemoryResponse>("/api/console/memory", { signal }), staleTime: 30_000, refetchOnWindowFocus: true });
+  const proposedCount = memory.data?.proposed?.length ?? 0;
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
   // Seven items, no overflow menu: New thread, Findings, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
   const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
@@ -162,6 +165,9 @@ export function ConsoleNavigationRail({
           <NavLink key={to} to={to} data-active={active(to) || undefined} className={sidebarItemClasses}>
             <Icon aria-hidden="true" />
             <SidebarLabel>{label}</SidebarLabel>
+            {label === "Memory" && proposedCount > 0 && (
+              <span role="img" aria-label={`${proposedCount} proposed note${proposedCount === 1 ? "" : "s"} to review`} className="ml-auto size-2 shrink-0 rounded-full bg-primary" />
+            )}
             {label === "Findings" && findingCount > 0 && (
               <span
                 aria-label={`${findingCount} to review`}
@@ -173,7 +179,6 @@ export function ConsoleNavigationRail({
           </NavLink>
         ))}
       </SidebarGroup>
-      {list.supported && <SidebarModeToggle mode={list.mode} onChange={list.setMode} />}
       {/* Both lists stay mounted: the Threads source keeps its queries and polling while Agents is shown. */}
       {list.mode === "agents" && <SentinelSidebarSection />}
       <div id="navigation-chat-history" className={cn("flex min-h-0 flex-1 flex-col", list.mode === "agents" && "hidden")}>

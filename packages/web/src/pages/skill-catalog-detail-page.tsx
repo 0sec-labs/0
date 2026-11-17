@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { Link, useParams } from "react-router-dom";
 import { CapyArrowUpRightIcon as ArrowUpRight, CapyCheckIcon as Check, CapyMoreIcon as More } from "@/ui/icons/capy";
 import { EmptyState, LoadingState } from "@/components/state-panel";
@@ -24,13 +25,14 @@ const size = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).
 export function SkillCatalogDetailPage() {
   const { id = "" } = useParams();
   const { inventory, install, remove, canWrite } = useSkillsCatalog();
+  const loading = usePendingGate(inventory.isPending);
   const skill = inventory.data?.skills.find(item => item.id === id);
   const publisher = skill ? inventory.data?.publishers[skill.publisher] : undefined;
   const preview = usePreview(skill ? { id: skill.id } : null);
   const [dialog, setDialog] = useState<"add" | "remove" | null>(null);
   useBreadcrumbLabel(skill?.title);
 
-  if (inventory.isPending) return <><LoadingState label="Loading skill…" variant="cards" /></>;
+  if (loading || inventory.isPending) return <><LoadingState label="Loading skill…" variant="cards" /></>;
   if (!skill || !inventory.data) return <><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/skills?tab=browse" />}>Back to skills</Button>} /></>;
 
   const data = preview.data;
@@ -84,7 +86,7 @@ export function SkillCatalogDetailPage() {
           <RailFact label="Licence">{skill.licence ?? "None declared"}{data?.licence.shareAlike && <span className="block text-muted-foreground-2">Share-alike: keep attribution</span>}</RailFact>
           <RailFact label="Pinned commit"><External href={githubCommitUrl(skill.repo, skill.commit)} mono>{skill.commit.slice(0, 12)}</External></RailFact>
           <RailFact label="Contents">{skill.files} {skill.files === 1 ? "file" : "files"}, {size(skill.bytes)}</RailFact>
-          <RailFact label="Permissions"><ul className="flex flex-col gap-2">{["Instructions the agent follows with your permissions", ...(skill.hasScripts ? ["Carries scripts. 0 stores them and never runs them"] : []), "Never updates by itself"].map(item => <li key={item} className="flex gap-2"><span aria-hidden="true" className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground-2" /><span>{item}</span></li>)}</ul></RailFact>
+          <RailFact label="Permissions"><ul className="flex flex-col gap-2">{["Instructions the agent follows with your permissions", ...(skill.hasScripts ? ["Carries scripts. 0security stores them and never runs them"] : []), "Never updates by itself"].map(item => <li key={item} className="flex gap-2"><span aria-hidden="true" className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground-2" /><span>{item}</span></li>)}</ul></RailFact>
         </dl>
       </aside>
     </div>

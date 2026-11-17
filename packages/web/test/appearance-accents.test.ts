@@ -20,9 +20,13 @@ function colorOf(value: string | undefined): Rgb {
   if (!rgb) throw new Error(`cannot parse ${value}`);
   return rgb;
 }
+/** Blue is the unattributed default, so its tokens are the :root (light) and .dark values; the other presets override them. */
+const select = (id: string, dark: boolean) => id === "blue"
+  ? { ...rootTokens, ...(dark ? declarations(".dark") : {}) }
+  : { ...declarations(`[data-accent="${id}"]`), ...(dark ? declarations(`.dark [data-accent="${id}"]`) : {}) };
 const modes = [
-  { name: "light", select: (id: string) => ({ ...declarations(`[data-accent="${id}"]`) }), surface: rootTokens["--card"] },
-  { name: "dark", select: (id: string) => ({ ...declarations(`[data-accent="${id}"]`), ...declarations(`.dark [data-accent="${id}"]`) }), surface: declarations(".dark")["--card"] },
+  { name: "light", select: (id: string) => select(id, false), surface: rootTokens["--card"] },
+  { name: "dark", select: (id: string) => select(id, true), surface: declarations(".dark")["--card"] },
 ] as const;
 
 describe("accent presets", () => {
@@ -42,11 +46,13 @@ describe("accent presets", () => {
       expect(contrastRatio(colorOf(foreground), colorOf(tokens["--primary"])), `${mode.name} ${accent.id}`).toBeGreaterThanOrEqual(4.5);
     }
   });
-  it("makes neutral the unattributed default: near-black fill in light, near-white in dark", () => {
-    expect(ACCENTS[0]!.id).toBe("neutral");
-    expect(rootTokens["--primary"]).toBe("#18181b");
-    expect(declarations(".dark")["--primary"]).toBe("#fafafa");
-    expect(declarations(".dark")["--primary-foreground"]).toBe("#18181b");
+  it("makes Capy blue the unattributed default in both themes; neutral stays an explicit preset", () => {
+    expect(ACCENTS[0]!.id).toBe("blue");
+    expect(rootTokens["--primary"]).toBe("oklch(58% .213 267.8)");
+    expect(declarations(".dark")["--primary"]).toBeUndefined();
+    expect(declarations(".dark")["--primary-ink"]).toBe("oklch(70% .15 267.8)");
+    expect(declarations('[data-accent="neutral"]')["--primary"]).toBe("#18181b");
+    expect(declarations('.dark [data-accent="neutral"]')["--primary"]).toBe("#fafafa");
   });
   it("keeps accent ink readable as text on the card surface (>= 4.5:1) for every accent", () => {
     for (const mode of modes) for (const accent of ACCENTS) {

@@ -1,4 +1,6 @@
-import { lazy, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { lazy, useEffect, useEffectEvent, useState, type ComponentType, type ReactNode } from "react";
+import { SKELETON_DELAY_MS } from "@/lib/pending-gate";
+import { createIntentPrefetcher, intentTarget, type IntentTarget } from "@/lib/intent-prefetch";
 import { LoadingState } from "@/components/state-panel";
 
 /** Route-level code splitting. Console (the landing page) stays eager in operations-app. */
@@ -78,8 +80,15 @@ export function routeForPath(pathname: string): RouteName | undefined {
 /** Chunks that carry dockview/markdown: fetched on navigation or hover only, never by idle warming. */
 const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "memory", "skills", "sentinels"]);
 
-/** Warm the other routes once the browser is idle, then on link hover/focus. */
-export function useRoutePrefetch() {
+/**
+ * Warm the other routes once the browser is idle, then on intent: a link or finding row held under the pointer
+ * (or focused) for 50 ms prefetches its chunk and, through `warmData`, its first query.
+ */
+export function useRoutePrefetch(warmData?: (target: IntentTarget) => void) {
+  const warm = useEffectEvent((target: IntentTarget) => {
+    if (target.kind === "path") { const name = routeForPath(target.pathname); if (name) prefetchRoute(name); }
+    warmData?.(target);
+  });
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
@@ -88,27 +97,27 @@ export function useRoutePrefetch() {
     const delay = window.setTimeout(() => { handle = idle(() => {
       (Object.keys(loaders) as RouteName[]).filter(name => !ON_DEMAND.has(name)).forEach((name, index) => window.setTimeout(() => prefetchRoute(name), index * 50));
     }, { timeout: 8000 } as IdleRequestOptions) as number; }, 3000);
-    const warm = (event: Event) => {
-      const anchor = (event.target as Element | null)?.closest?.("a[href]");
-      if (!anchor) return;
-      try {
-        const name = routeForPath(new URL((anchor as HTMLAnchorElement).href, window.location.href).pathname);
-        if (name) prefetchRoute(name);
-      } catch { /* ignore malformed hrefs */ }
-    };
-    document.addEventListener("pointerover", warm, { passive: true });
-    document.addEventListener("focusin", warm);
+    const intent = createIntentPrefetcher(target => warm(target));
+    const enter = (event: Event) => intent.enter(intentTarget(event.target as Element | null, window.location.href));
+    const leave = () => intent.cancel();
+    document.addEventListener("pointerover", enter, { passive: true });
+    document.addEventListener("pointerout", leave, { passive: true });
+    document.addEventListener("focusin", enter);
+    document.addEventListener("focusout", leave);
     return () => {
       window.clearTimeout(delay);
       if (handle !== undefined) (cancel as (id: number) => void)(handle);
-      document.removeEventListener("pointerover", warm);
-      document.removeEventListener("focusin", warm);
+      intent.cancel();
+      document.removeEventListener("pointerover", enter);
+      document.removeEventListener("pointerout", leave);
+      document.removeEventListener("focusin", enter);
+      document.removeEventListener("focusout", leave);
     };
   }, []);
 }
 
 /** Renders nothing for `delay` ms so fast chunk loads never flash a skeleton. */
-export function DelayedFallback({ delay = 150, children }: { delay?: number; children: ReactNode }) {
+export function DelayedFallback({ delay = SKELETON_DELAY_MS, children }: { delay?: number; children: ReactNode }) {
   const [show, setShow] = useState(false);
   useEffect(() => {
     const id = window.setTimeout(() => setShow(true), delay);

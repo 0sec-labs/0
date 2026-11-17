@@ -23,7 +23,9 @@ import { LocalProviderSessions, LocalProviderSessionError } from "../web/local-p
 import { handleRemoteProviderRelayRequest } from "../web/remote-provider-relay.js";
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
-import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
+import { retainedScanSnapshot } from "../web/report-artifacts.js";
+import { findingsServiceFor } from "../web/findings-service.js";
+import { retainedFindingsAcrossDatabases } from "../web/findings-export.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { FindingsAccessError, FindingsAccessTokenStore, handleFindingsAccessTokenRequest } from "../web/findings-access-tokens.js";
 import { FindingsReadApi, handleFindingsReadRequest } from "../web/findings-read-api.js";
@@ -496,6 +498,7 @@ export function registerDashboardCommand(program: Command): void {
                   lima: z.string().trim().min(1).max(128).optional(),
                   targetGit: z.string().trim().max(4096).optional(),
                   forwardProviderKey: z.boolean().optional(),
+                  trustNewHost: z.boolean().optional(),
                   enginePort: z.number().int().min(1).max(65535).optional(),
                 }).strict().parse(await readJson(req));
                 try { validateWorkerOptions(body); } catch (cause) {
@@ -503,12 +506,16 @@ export function registerDashboardCommand(program: Command): void {
                   throw new WebRequestError(message.startsWith("--ssh") ? "Enter a host name or user@host." : message.startsWith("--lima") ? "Enter a valid instance name." : message.startsWith("--target-git") ? "Enter a repository URL without spaces or quotes." : "Check the computer details and try again.", 400);
                 }
                 const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
-                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(body.trustNewHost ? ["--trust-new-host"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
                 const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
                   // foxguard: ignore[js/no-command-injection] all request values are strict-schema validated and passed as execFile argv without a shell.
                   execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
-                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the release binary or a repository build with dist/ and vendor/ assets. Install the release binary, or run pnpm build from the repository.", 422)); return; }
-                    if (error) { reject(new WebRequestError("Worker deployment failed. Check SSH access and the worker's installation requirements.", 502)); return; }
+                    if (error) {
+                      // The CLI explains what went wrong in its last stderr line; progress lines come before it.
+                      const reason = (stderr.trim().split("\n").at(-1)?.replace(/^error:\s*/, "").trim() ?? "").replace(/, or add it again with --trust-new-host to trust it on first connection\./, ", or tick “This is the first time I connect to it” under Another computer or options and try again.");
+                      const explained = reason.length > 0 && reason.length <= 600 && !/^\s*at /.test(reason);
+                      reject(new WebRequestError(explained ? reason : "Could not set up the computer. Check that you can sign in to it with SSH, then try again.", /source checkout has not been bundled|does not include the files/.test(reason) ? 422 : 502)); return;
+                    }
                     try { resolveDeploy(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker deployment returned an invalid result.", 502)); }
                   });
                 });
@@ -556,7 +563,9 @@ export function registerDashboardCommand(program: Command): void {
               }
               if (/^\/api\/findings\/[^/]+\/impact-assessment$/.test(requestUrl.pathname)) {
                 const input = req.method === "POST" || req.method === "DELETE" ? await readJson(req) : undefined;
-                const result = handleFindingImpactRequest(requestUrl.pathname, req.method ?? "GET", input, { dbPath: opts.dbPath });
+                const impactId = decodeURIComponent(requestUrl.pathname.split("/")[3] ?? "");
+                const owner = await findingsServiceFor(opts.dbPath).sourceOfFinding(impactId);
+                const result = handleFindingImpactRequest(requestUrl.pathname, req.method ?? "GET", input, { dbPath: owner?.id ?? opts.dbPath });
                 if (result) { json(res, result.status, result.data); return; }
               }
               const exportScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/export$/);
@@ -566,8 +575,8 @@ export function registerDashboardCommand(program: Command): void {
                 const format = requestedFormat === "md" ? "markdown" : requestedFormat;
                 if (!isReportExportFormat(format)) throw new WebRequestError("Unsupported report export format.", 400);
                 const report = exportScan
-                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
-                  : retainedFindingSnapshot((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
+                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? (await findingsServiceFor(opts.dbPath).sourceOfScan(decodeURIComponent(exportScan[1]!)))?.id ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
+                  : await retainedFindingsAcrossDatabases((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
                 const artifact = await exportReport(report, format, exportScan ? `0-scan-${decodeURIComponent(exportScan[1]!)}` : "0-findings");
                 res.writeHead(200, { "Content-Type": artifact.contentType, "Content-Disposition": `attachment; filename="${artifact.filename}"`, "Content-Length": artifact.body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
                 res.end(artifact.body);

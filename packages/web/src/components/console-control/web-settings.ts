@@ -16,7 +16,6 @@ export type SettingsCategory = typeof settingsCategories[number]["id"];
 type WebSetting = { category: SettingsCategory; label: string; description: string; toggle?: { on: string; off: string }; /** Shown as part of another setting's switch instead of its own row. */ into?: string };
 /** Idle-archive choices, in days; 0 is off. */
 /** Disclosure shown above the privacy switches: what is automatic, and how to stop it. */
-export const privacyDisclosure = "0security sends anonymous usage counts and crash reports by default (no targets, findings or code). IP addresses are discarded and the install ID is random. Turn either off below, or set ZERO_NO_TELEMETRY=1 to disable both.";
 export const archiveIdleChoices = [0, 7, 14, 30, 90].map(value => ({ value, label: value === 0 ? "Off" : `${value} days` }));
 const sharedSettings = {
   busyInputMode: { category: "input", label: "Messages while working", description: "Interrupt the response or queue your next message." },

@@ -4,6 +4,7 @@ import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/engine
 import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/engine/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 import {
+  FindingsService,
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
@@ -126,6 +127,14 @@ function resolveFindingByPrefix(rows: FindingRow[], id: string): FindingRow | un
   return matches[0];
 }
 
+/** Opens the database that holds this finding (scans keep one database per run); the shared one when none does. */
+async function openDatabaseHolding(id: string, selectedDbPath?: string): Promise<{ db: osecDB; dbPath: string | undefined }> {
+  if (selectedDbPath) return { db: new osecDB(selectedDbPath), dbPath: selectedDbPath };
+  if (listOsecRunDatabasePaths().length === 0) return { db: new osecDB(), dbPath: undefined };
+  const source = await new FindingsService({ sharedDbPath: resolveOsecDbPath(), listPaths: listOsecRunDatabasePaths }).sourceOfFinding(id, { prefix: true });
+  return { db: new osecDB(source?.id), dbPath: source?.id };
+}
+
 function triageColor(status?: string | null) {
   switch (status) {
     case "accepted":
@@ -188,36 +197,13 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
   const filters = { scanId: opts.scan, severity: opts.severity, category: opts.category, status: opts.status, triageStatus: opts.triage };
   const rows: FindingRow[] = [];
   const groups: Array<{ fingerprint: string; latest: FindingRow; count: number; scans: number }> = [];
-  if (!opts.all && dbPaths.length > 1) {
-    const databases: osecDB[] = [];
-    try {
-      for (const path of dbPaths) databases.push(new osecDB(path));
-      type Metadata = PriorityRow & Pick<FindingRow, "category" | "status" | "triageStatus"> & { familyKey: string };
-      const latestFamilies = new Map<string, { latest: Metadata; database: osecDB }>();
-      // Merge every lightweight latest-family record before filters or limits.
-      // A newer assessment in another DB must replace an old urgent occurrence.
-      for (const database of databases) {
-        for (const latest of database.iterateLatestFindingMetadata({ scanId: opts.scan })) {
-          const current = latestFamilies.get(latest.familyKey);
-          if (!current || latest.timestamp > current.latest.timestamp || (latest.timestamp === current.latest.timestamp && latest.id > current.latest.id)) latestFamilies.set(latest.familyKey, { latest: latest as Metadata, database });
-        }
-      }
-      const selected = [...latestFamilies.values()].filter(({ latest }) =>
-        (!opts.severity || latest.severity === opts.severity) && (!opts.category || latest.category === opts.category)
-        && (!opts.status || latest.status === opts.status) && (!opts.triage || latest.triageStatus === opts.triage))
-        .sort((a, b) => compareRows(a.latest, b.latest)).slice(0, limit);
-      for (const { latest, database } of selected) {
-        const finding = database.getFinding(latest.id) as FindingRow | undefined;
-        if (!finding) throw new Error(`Finding '${latest.id}' changed while its priority was being read.`);
-        let count = 0; const scanIds = new Set<string>();
-        for (const candidate of databases) {
-          const family = candidate.getFindingFamilyMetadata(latest.familyKey, { scanId: opts.scan });
-          count += family.count;
-          for (const scanId of family.scanIds) scanIds.add(scanId);
-        }
-        groups.push({ fingerprint: latest.familyKey, latest: finding, count, scans: scanIds.size });
-      }
-    } finally { for (const database of databases) database.close(); }
+  if (!opts.all && !opts.scan && !selectedDbPath && dbPaths.length > 1) {
+    // The same merged view the web Findings page uses: one family per fingerprint across every database.
+    const merged = await new FindingsService({ sharedDbPath: resolveOsecDbPath(), listPaths: listOsecRunDatabasePaths }).list();
+    const selected = merged.families.filter(({ latest }) =>
+      (!opts.severity || latest.severity === opts.severity) && (!opts.category || latest.category === opts.category)
+      && (!opts.status || latest.status === opts.status) && (!opts.triage || latest.triageStatus === opts.triage)).slice(0, limit);
+    for (const family of selected) groups.push({ fingerprint: family.key, latest: family.latest as FindingRow, count: family.count, scans: family.scanCount });
   } else {
     for (const dbPath of dbPaths) {
       const db = new osecDB(dbPath);
@@ -259,7 +245,7 @@ async function mutateTriage(
   triageNote: string | undefined,
   dbPath?: string,
 ): Promise<void> {
-  const db = new osecDB(dbPath);
+  const { db } = await openDatabaseHolding(id, dbPath);
   try {
     const rows = db.listFindings({ limit: 5000 }) as FindingRow[];
     const finding = resolveFindingByPrefix(rows, id);
@@ -310,8 +296,7 @@ export function registerFindingsCommand(program: Command): void {
     .argument("<id>", "Finding ID (full or prefix)")
     .option("--db-path <path>", "Path to SQLite database")
     .action(async (id: string, opts: { dbPath?: string }, command: Command) => {
-      const selectedDbPath = resolveDbPath(opts, command);
-      const db = new osecDB(selectedDbPath);
+      const { db, dbPath: selectedDbPath } = await openDatabaseHolding(id, resolveDbPath(opts, command));
 
       try {
         const all = db.listFindings({ limit: 5000 }) as FindingRow[];

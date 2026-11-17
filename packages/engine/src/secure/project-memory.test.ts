@@ -27,7 +27,7 @@ describe("secure repair notes", () => {
     recordRepairLearning(root, "r2", finding, repair("failed"));
     const notes = createFileNoteStore({ home }).list({ folder: root });
     expect(notes.map(note => note.kind).sort()).toEqual(["avoid", "fix-decision"]);
-    expect(notes.every(note => note.source === "0")).toBe(true);
+    expect(notes.every(note => note.source === "model")).toBe(true);
     const recalled = recallRepairLearnings(root);
     expect(recalled).toHaveLength(2);
     expect(recalled[0]).toContain("[prior note, untrusted]");

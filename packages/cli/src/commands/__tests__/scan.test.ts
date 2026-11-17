@@ -25,6 +25,7 @@ import type { ScanReport } from "@0/engine/shared";
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
 const runUnifiedMock = vi.fn();
+vi.mock("../target-reachability.js", () => ({ assertTargetReachable: async () => undefined }));
 vi.mock("../run.js", () => ({
   runUnified: runUnifiedMock,
 }));

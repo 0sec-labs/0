@@ -1,5 +1,5 @@
 // HTTP face of the one Memory for the web page: list, add, edit, delete, turn off, export, import.
-import { MemoryError, NOTE_KINDS, exportArchive, importArchive, isArchive, isKind, openMemory, type NoteStore } from "@0/engine";
+import { MemoryError, NOTE_KINDS, exportArchive, importArchive, isArchive, isKind, memoryOverview, openMemory, type NoteStore } from "@0/engine";
 
 type Reply = { status: number; data: unknown };
 const BASE = "/api/console/memory";
@@ -16,9 +16,14 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
   try {
     if (sub === "" && method === "GET") {
       const folder = query.get("folder") || undefined;
-      const all = store.list();
-      return { status: 200, data: { enabled: store.enabled(), kinds: NOTE_KINDS, folders: [...new Set(all.flatMap(note => note.folder ? [note.folder] : []))].sort(),
-        notes: store.list({ ...(folder ? { folder } : {}), ...(query.get("q") ? { query: query.get("q")! } : {}) }) } };
+      const all = store.list({ status: "all" });
+      const folders = [...new Set(all.flatMap(note => note.folder ? [note.folder] : []))].sort();
+      // What a thread in each folder (and one in no folder) would be shown; notes that do not fit are listed with the reason.
+      const overflow = [undefined, ...folders].flatMap(where => { const view = memoryOverview(store, where); return view.omitted.length ? [{ ...(where ? { folder: where } : {}), count: view.omitted.length, ids: view.omitted.map(note => note.id), reason: view.reason }] : []; });
+      return { status: 200, data: { enabled: store.enabled(), kinds: NOTE_KINDS, folders,
+        notes: store.list({ ...(folder ? { folder } : {}), ...(query.get("q") ? { query: query.get("q")! } : {}) }),
+        proposed: store.list({ status: "proposed", ...(folder ? { folder } : {}) }),
+        overflow } };
     }
     if (sub === "" && method === "POST") {
       const noteText = text(data["text"]);
@@ -26,7 +31,7 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
       const scope = data["scope"] === "folder" ? "folder" : "global";
       const folder = text(data["folder"], 4096);
       if (scope === "folder" && !folder) return { status: 400, data: { error: "Choose a folder for this note." } };
-      return { status: 200, data: { note: store.add({ text: noteText, scope, folder, kind: isKind(data["kind"]) ? data["kind"] : undefined, source: "you" }) } };
+      return { status: 200, data: { note: store.add({ text: noteText, scope, folder, kind: isKind(data["kind"]) ? data["kind"] : undefined, source: "user" }) } };
     }
     if (sub === "enabled" && method === "POST") { store.setEnabled(data["enabled"] !== false); return { status: 200, data: { enabled: store.enabled() } }; }
     if (sub === "clear" && method === "POST") return { status: 200, data: { removed: store.clear(text(data["folder"], 4096)) } };
@@ -35,6 +40,11 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
       const archive = data["archive"];
       if (!isArchive(archive)) return { status: 400, data: { error: "That file is not a 0 memory file." } };
       return { status: 200, data: importArchive(store, archive) };
+    }
+    const accept = /^(m_[a-z0-9]+)\/accept$/.exec(sub)?.[1];
+    if (accept && method === "POST") {
+      const note = store.accept(accept, text(data["text"]));
+      return note ? { status: 200, data: { note } } : { status: 404, data: { error: "That proposal is gone." } };
     }
     const id = /^(m_[a-z0-9]+)$/.exec(sub)?.[1];
     if (id && method === "PATCH") {

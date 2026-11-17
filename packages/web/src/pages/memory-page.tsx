@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyDatabaseIcon, CapyPlusIcon as Plus, CapySearchIcon as SearchIcon } from "@/ui/icons/capy";
 import { queryKeys } from "@/queries";
@@ -13,10 +14,11 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog, FormDialog } from "@/ui/components/confirm-dialog";
 import { Cell, Tile } from "@/components/skills/cells";
 import { MemoryMenu } from "@/components/memory-portability";
+import { MemoryProposed } from "@/components/memory-proposed";
 import { errorText } from "@/lib/api-error";
-import { NOTE_KIND_LABELS, filterNotes, folderLabel, noteDetail, type MemoryNote, type MemoryResponse, type NoteKind } from "@/memory-model";
+import { NOTE_KIND_LABELS, filterNotes, folderLabel, noteDetail, overflowNotice, type MemoryNote, type MemoryResponse, type NoteKind } from "@/memory-model";
 
-type Draft = { id?: string; text: string; scope: "global" | "folder"; folder: string; kind: NoteKind | "" };
+type Draft = { id?: string; proposal?: boolean; text: string; scope: "global" | "folder"; folder: string; kind: NoteKind | "" };
 const blank: Draft = { text: "", scope: "global", folder: "", kind: "" };
 
 export function MemoryPage() {
@@ -36,11 +38,14 @@ export function MemoryPage() {
     onSuccess: () => { setError(""); setDraft(null); setForgetting(null); return cache.invalidateQueries({ queryKey: key }); },
     onError: cause => setError(errorText(cause, "Couldn’t save this change.")),
   });
-  if (query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
+  const loading = usePendingGate(query.isPending);
+  if (loading || query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
   if (query.error) return <><PageHeader title="Memory" /><ErrorState error={query.error} /></>;
-  const { notes, folders, enabled } = query.data;
+  const { notes, folders, enabled, proposed = [], overflow = [] } = query.data;
+  const notice = overflowNotice(overflow, filter);
   const shown = filterNotes(notes, filter, search);
-  const save = () => { if (!draft) return; const body = JSON.stringify({ text: draft.text, scope: draft.scope, folder: draft.folder, kind: draft.kind || undefined });
+  const accept = (id: string, text?: string) => change.mutate(() => webFetchJson(`/api/console/memory/${encodeURIComponent(id)}/accept`, { method: "POST", body: JSON.stringify(text === undefined ? {} : { text }) }));
+  const save = () => { if (!draft) return; if (draft.proposal && draft.id) return accept(draft.id, draft.text); const body = JSON.stringify({ text: draft.text, scope: draft.scope, folder: draft.folder, kind: draft.kind || undefined });
     change.mutate(() => draft.id ? webFetchJson(`/api/console/memory/${encodeURIComponent(draft.id)}`, { method: "PATCH", body: JSON.stringify({ text: draft.text }) }) : webFetchJson("/api/console/memory", { method: "POST", body })); };
   const forget = () => { if (!forgetting) return; const target = forgetting; change.mutate(() => target === "all" ? webFetchJson("/api/console/memory/clear", { method: "POST", body: "{}" }) : webFetchJson(`/api/console/memory/${encodeURIComponent(target.id)}`, { method: "DELETE" })); };
   return <>
@@ -54,11 +59,14 @@ export function MemoryPage() {
       <select id="memory-folder" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={filter} onChange={event => setFilter(event.target.value)}>
         <option value="all">All notes</option><option value="global">Everywhere</option>{folders.map(folder => <option key={folder} value={folder}>{folderLabel(folder)}</option>)}</select></div>}
     {error && !draft && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
-    {shown.length === 0 ? <EmptyState title={notes.length ? "No notes match." : "Nothing remembered yet."} illustration={<CapyDatabaseIcon className="size-6 text-muted-foreground" />} />
+    <MemoryProposed notes={proposed} readOnly={readOnly} pending={change.isPending} onAccept={note => accept(note.id)}
+      onEdit={note => { setDraft({ id: note.id, proposal: true, text: note.text, scope: note.scope, folder: note.folder ?? "", kind: note.kind ?? "" }); setError(""); }} onReject={note => change.mutate(() => webFetchJson(`/api/console/memory/${encodeURIComponent(note.id)}`, { method: "DELETE" }))} />
+    {notice && <p role="status" className="mt-3 text-sm text-muted-foreground">{notice}</p>}
+    {shown.length === 0 && proposed.length > 0 ? null : shown.length === 0 ? <EmptyState title={notes.length ? "No notes match." : "Nothing remembered yet."} illustration={<CapyDatabaseIcon className="size-6 text-muted-foreground" />} />
       : <ul className="mt-4 divide-y-[0.5px] divide-[var(--card-hairline)]">{shown.map(note => <Cell key={note.id} to="#" tile={<Tile icon={<CapyDatabaseIcon className="size-4" />} />} name={note.text} description={noteDetail(note)} interactive={!readOnly}
         onOpen={readOnly ? undefined : () => { setDraft({ id: note.id, text: note.text, scope: note.scope, folder: note.folder ?? "", kind: note.kind ?? "" }); setError(""); }}
         trailing={readOnly ? undefined : <Button variant="ghost" size="sm" onClick={() => setForgetting(note)}>Forget</Button>} />)}</ul>}
-    <FormDialog open={draft !== null} onOpenChange={open => { if (!open) setDraft(null); }} title={draft?.id ? "Edit note" : "Add a note"} description="A short fact 0 should know in new threads." submitLabel={draft?.id ? "Save" : "Remember"}
+    <FormDialog open={draft !== null} onOpenChange={open => { if (!open) setDraft(null); }} title={draft?.proposal ? "Edit and accept" : draft?.id ? "Edit note" : "Add a note"} description="A short fact 0 should know in new threads." submitLabel={draft?.proposal ? "Accept" : draft?.id ? "Save" : "Remember"}
       submitDisabled={!draft?.text.trim() || (draft?.scope === "folder" && !draft.folder.trim())} pending={change.isPending} onSubmit={save} error={error ? <p role="alert" className="text-sm text-destructive">{error}</p> : undefined}>
       <Textarea aria-label="Note" rows={3} maxLength={500} autoFocus value={draft?.text ?? ""} onChange={event => setDraft(current => current && { ...current, text: event.target.value })} />
       {!draft?.id && <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -67,7 +75,7 @@ export function MemoryPage() {
         <select aria-label="Kind" className="h-8 rounded-md border border-input bg-background px-2" value={draft?.kind} onChange={event => setDraft(current => current && { ...current, kind: event.target.value as Draft["kind"] })}><option value="">No kind</option>{(Object.keys(NOTE_KIND_LABELS) as NoteKind[]).map(kind => <option key={kind} value={kind}>{NOTE_KIND_LABELS[kind]}</option>)}</select>
       </div>}
     </FormDialog>
-    <ConfirmDialog open={forgetting !== null} onOpenChange={open => { if (!open) setForgetting(null); }} title={forgetting === "all" ? "Forget every note?" : "Forget this note?"} description={forgetting === "all" ? "0 will no longer remember any of these." : "0 will no longer remember it."}
+    <ConfirmDialog open={forgetting !== null} onOpenChange={open => { if (!open) setForgetting(null); }} title={forgetting === "all" ? "Forget every note?" : "Forget this note?"} description={forgetting === "all" ? "0security will no longer remember any of these." : "0security will no longer remember it."}
       confirmLabel="Forget" destructive pending={change.isPending} onConfirm={forget} />
   </>;
 }

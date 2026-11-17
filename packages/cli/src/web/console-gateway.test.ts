@@ -105,6 +105,18 @@ describe("ConsoleGateway", () => {
     expect(messages).toHaveLength(4);
     await expect(instance.retry(chat.id, { text: "x", mode: "queue" })).rejects.toThrow("Retry runs immediately");
   });
+  it("saves the prompt when a turn starts, so a crash mid-turn still leaves the thread with its question", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-turn-start-save-")); homes.push(home);
+    let release!: () => void;
+    const hung = new Promise<void>(resolve => { release = resolve; });
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createSession: input => ({ ...engine(input), send: async () => { await hung; return outcome(); } }) }); gateways.push(instance);
+    const chat = instance.create({});
+    await instance.send(chat.id, "Map the attack surface.");
+    const saved = loadSession(chat.id, home);
+    expect(saved?.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Map the attack surface." }] }]);
+    expect(saved?.messageCount).toBe(1);
+    release(); await idle(instance, chat.id);
+  });
   it("flags a thread whose last turn ended without an answer, and clears it when the retry answers in place", async () => {
     const script: ConsoleTurnOutcome[] = [
       outcome(""),

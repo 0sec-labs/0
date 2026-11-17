@@ -116,7 +116,7 @@ describe("memory (local notes)", () => {
     const file = join(work, "old.json");
     writeFileSync(file, JSON.stringify({ format: "zero-memory", version: 1, knowledge: [{ id: "k1", projectId: "p1", summary: "Prefers pnpm", status: "current" }] }));
     await run("memory", "import", file, "--json"); expect(json().added).toBe(1);
-    await run("memory", "list", "--json"); expect(json().notes[0]).toMatchObject({ text: "Prefers pnpm", source: "0" });
+    await run("memory", "list", "--json"); expect(json().notes[0]).toMatchObject({ text: "Prefers pnpm", source: "import" });
   });
 });
 

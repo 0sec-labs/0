@@ -312,7 +312,7 @@ export function Conversation({
           }}
           aria-label="Conversation"
         >
-          <div className="mx-auto grid w-full max-w-[864px] grid-cols-[minmax(0,1fr)] gap-6">
+          <div className="mx-auto grid w-full max-w-[660px] grid-cols-[minmax(0,1fr)] gap-6">
             <div ref={content} className="min-w-0 space-y-10">
               {workspace.hasEarlierMessages && !worker && (
                 <div className="flex justify-center">
@@ -363,6 +363,11 @@ export function Conversation({
                 </div>
               )}
               <QueuedMessages inline workspace={rootWorkspace} snapshot={snapshot} />
+              {snapshot.pendingDecisions.length > 0 && (
+                <p data-slot="needs-you" role="status" className="text-xs font-medium text-primary-text">
+                  Needs you
+                </p>
+              )}
               {snapshot.pendingDecisions.map((decision) => (
                 <div key={decision.id}>
                   <ApprovalPanel
@@ -522,11 +527,12 @@ function ContextSuggestions({
           <Tooltip key={suggestion.label} content={suggestion.hint}>
             <Button
               type="button"
-              variant="ghost"
-              className="h-8 max-w-full gap-2 rounded-md border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
+              variant="chip"
+              size="sm"
+              className="max-w-full !px-2.5"
               onClick={() => onChoose(suggestion.prompt)}
             >
-              <Icon aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
+              <Icon aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />
               <span className="truncate">{suggestion.label}</span>
             </Button>
           </Tooltip>
@@ -736,7 +742,7 @@ export function Composer({
   const catalogLoaded = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
   const emptyThread = !worker && !snapshot.messages.length && !snapshot.session.messageCount && !snapshot.queuedMessages.length;
   // A bound model the catalog no longer lists. An empty thread re-resolves (healthy provider first); one with history keeps it and says so.
-  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread });
+  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread, discoveryFailed: new Set(modelDiagnostics.map((item) => item.providerId)) });
   const rebindStale = bindingStale && emptyThread;
   const shownRuntime = rebindStale
     ? startModel ? ({ providerId: startModel.providerId, model: startModel.model } as typeof snapshot.runtime) : undefined
@@ -911,7 +917,7 @@ export function Composer({
     );
   return (
     <div className={`shrink-0 bg-transparent ${worker || home ? "p-0" : "px-3 pb-[calc(0.25rem+env(safe-area-inset-bottom))] sm:px-6"}`}>
-      <div className={`mx-auto ${home ? "max-w-none" : "max-w-[896px]"}`}>
+      <div className={`mx-auto ${home ? "max-w-none" : "max-w-[712px]"}`}>
         {!worker &&
           feedback?.active &&
           ((feedback.waiting && !snapshot.pendingDecisions.length) ||

@@ -30,7 +30,7 @@ async function loadFinding(dbPath: string | undefined, findingId: string): Promi
 async function rememberFalsePositive(row: FindingRow, reason: string, opts: DbOption & { scope?: string; scopeValue?: string }) {
   const { openMemory } = await import("@0/engine");
   const where = opts.scope && opts.scope !== "global" && opts.scopeValue ? ` (${opts.scope} ${opts.scopeValue})` : "";
-  return openMemory(opts.dbPath ? { dbPath: opts.dbPath } : {}).add({ text: `Treat as a false positive${where}, ${row.category}: ${row.title}. Why: ${reason}`, scope: "global", kind: "avoid", source: "you" });
+  return openMemory(opts.dbPath ? { dbPath: opts.dbPath } : {}).add({ text: `Treat as a false positive${where}, ${row.category}: ${row.title}. Why: ${reason}`, scope: "global", kind: "avoid", source: "user" });
 }
 
 const fail = (err: unknown) => { console.error(chalk.red(err instanceof Error ? err.message : String(err))); process.exitCode = 1; };

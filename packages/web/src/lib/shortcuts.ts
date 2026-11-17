@@ -2,9 +2,9 @@
  * The single registry of keyboard shortcuts. The global key handlers match events against it and the Shortcuts
  * settings page and dialog render from it, so the documentation cannot drift from what the app handles.
  */
-export type ShortcutGroup = "Navigation" | "Threads" | "Panel" | "Editor";
+export type ShortcutGroup = "Navigation" | "Threads" | "Lists" | "Panel" | "Editor";
 /** `global` bindings must be unique across every scope; the others only within their own scope. */
-export type ShortcutScope = "global" | "mission" | "composer";
+export type ShortcutScope = "global" | "mission" | "composer" | "list";
 /** `mod` is Cmd on macOS and Ctrl elsewhere. Bindings without `mod` are plain keys. */
 export type Binding = { key: string; mod?: boolean; shift?: boolean; blockWhenTyping?: boolean };
 export type Shortcut = {
@@ -28,6 +28,9 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "sidebar.toggle", action: "Toggle sidebar", group: "Navigation", scope: "global", when: "Not editing formatted text", bindings: [mod("b", false, true), mod("s", true)], handler: "sidebar.toggle" },
   { id: "shortcuts.open", action: "Keyboard shortcuts", group: "Navigation", scope: "global", when: "Not typing in a field", bindings: [{ key: "?" }], handler: "shortcuts.open" },
   { id: "mission.new", action: "New thread", group: "Threads", scope: "global", when: "Always", bindings: [mod("o", true)], handler: "navigation.new-mission" },
+  { id: "list.next", action: "Next finding", group: "Lists", scope: "list", when: "On Findings, not typing in a field", bindings: [{ key: "j" }], handler: "list.native" },
+  { id: "list.previous", action: "Previous finding", group: "Lists", scope: "list", when: "On Findings, not typing in a field", bindings: [{ key: "k" }], handler: "list.native" },
+  { id: "list.select", action: "Select finding", group: "Lists", scope: "list", when: "On Findings, not typing in a field", bindings: [{ key: "x" }], handler: "list.native" },
   { id: "composer.focus", action: "Focus composer", group: "Editor", scope: "global", when: "Always", bindings: [mod("i")], handler: "composer.focus" },
   { id: "mission.stop", action: "Stop running thread", group: "Threads", scope: "global", when: "A thread is running", bindings: [mod(".")], handler: "mission.stop" },
   { id: "composer.upload", action: "Attach files", group: "Editor", scope: "global", when: "Composer visible, not typing in another field", bindings: [mod("/")], handler: "composer.upload" },
@@ -44,7 +47,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "composer.dismiss", action: "Dismiss suggestions", group: "Editor", scope: "composer", when: "Suggestions open", bindings: [{ key: "Escape" }], handler: "composer.native" },
 ];
 
-export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Navigation", "Threads", "Panel", "Editor"];
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Navigation", "Threads", "Lists", "Panel", "Editor"];
 
 export type KeyLike = { key: string; metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
 export type TargetLike = EventTarget | { tagName?: string; isContentEditable?: boolean; closest?(selector: string): unknown } | null | undefined;
@@ -83,7 +86,7 @@ export function bindingBlocked(binding: Binding, target: TargetLike): boolean {
 
 /** Find the registered shortcut an event triggers, honouring focus gating. `scopes` limits which scopes are live. */
 export function matchShortcut(event: KeyLike & { target?: TargetLike }, scopes: readonly ShortcutScope[] = ["global"], registry: readonly Shortcut[] = SHORTCUTS): Shortcut | undefined {
-  return registry.find(shortcut => scopes.includes(shortcut.scope) && shortcut.handler !== "composer.native"
+  return registry.find(shortcut => scopes.includes(shortcut.scope) && !shortcut.handler.endsWith(".native")
     && shortcut.bindings.some(binding => bindingMatches(binding, event) && !bindingBlocked(binding, event.target)));
 }
 

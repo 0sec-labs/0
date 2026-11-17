@@ -2,7 +2,8 @@ import { writeFileSync } from "node:fs";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { osecDB, resolveOsecRunStorage } from "@0/engine/storage";
-import { retainedFindingSnapshot, retainedScanSnapshot } from "../web/report-artifacts.js";
+import { findingDatabasePaths } from "../finding-focus.js";
+import { mergeFindingSnapshots, retainedFindingSnapshot, retainedScanSnapshot } from "../web/report-artifacts.js";
 import { finishWithError, UsageError } from "./output.js";
 
 export interface FindingsExportDeps {
@@ -29,23 +30,32 @@ export async function runFindingsExport(ids: string[], options: ExportOptions, d
     let report;
     if (options.scan) report = retainedScanSnapshot(options.scan, dbPath);
     else {
-      // Accept full IDs or unambiguous prefixes, like the other findings commands.
-      const db = new osecDB(dbPath);
-      let resolved: string[];
-      try {
-        const rows = db.listFindings({ limit: 5000, ...(options.severity ? { severity: options.severity } : {}), ...(options.category ? { category: options.category } : {}), ...(options.status ? { status: options.status } : {}), ...(options.triage ? { triageStatus: options.triage } : {}) }) as Array<{ id: string }>;
-        // No IDs: every finding in the database (`0 findings list --format sarif`).
-        if (!ids.length && rows.length === 0) throw new Error("No findings to export.");
-        resolved = !ids.length ? rows.map(row => row.id) : ids.map(id => {
-          const exact = rows.find(row => row.id === id);
-          if (exact) return exact.id;
-          const matches = rows.filter(row => row.id.startsWith(id));
-          if (matches.length > 1) throw new UsageError(`Finding prefix '${id}' is ambiguous.`);
-          if (!matches[0]) throw new Error(`Finding '${id}' not found.`);
-          return matches[0].id;
-        });
-      } finally { db.close(); }
-      report = retainedFindingSnapshot(resolved, dbPath);
+      // Accept full IDs or unambiguous prefixes, like the other findings commands. Scans keep one
+      // database per run, so look through all of them unless one was named.
+      const paths = dbPath ? [dbPath] : findingDatabasePaths();
+      const snapshots: Array<ReturnType<typeof retainedFindingSnapshot>> = [];
+      const unresolved = new Set(ids);
+      const filters = { limit: 5000, ...(options.severity ? { severity: options.severity } : {}), ...(options.category ? { category: options.category } : {}), ...(options.status ? { status: options.status } : {}), ...(options.triage ? { triageStatus: options.triage } : {}) };
+      for (const path of paths) {
+        const db = new osecDB(path);
+        let resolved: string[] = [];
+        try {
+          const rows = db.listFindings(ids.length ? { limit: 5000 } : filters);
+          if (!ids.length) resolved = rows.map(row => row.id);
+          else for (const id of ids) {
+            const matches = rows.filter(row => row.id === id || row.id.startsWith(id));
+            const exact = matches.find(row => row.id === id);
+            if (!exact && matches.length > 1) throw new UsageError(`Finding prefix '${id}' is ambiguous.`);
+            const hit = exact ?? matches[0];
+            if (hit) { resolved.push(hit.id); unresolved.delete(id); }
+          }
+        } catch (error) { if (error instanceof UsageError) throw error; /* An unreadable run database holds nothing to export. */ } finally { db.close(); }
+        if (resolved.length) snapshots.push(retainedFindingSnapshot(resolved, path));
+      }
+      if (unresolved.size) throw new Error(`Finding '${[...unresolved][0]}' not found.`);
+      // No IDs: every finding in the database (`0 findings list --format sarif`).
+      if (!snapshots.length) throw new Error("No findings to export.");
+      report = snapshots.length === 1 ? snapshots[0]! : mergeFindingSnapshots(snapshots);
     }
     const artifact = await exportReport(report, format, options.scan ? `0-scan-${options.scan}` : "0-findings");
     if (options.output) {

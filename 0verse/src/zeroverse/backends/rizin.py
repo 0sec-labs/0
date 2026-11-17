@@ -20,6 +20,7 @@ import json
 import re
 import shutil
 import time
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -692,6 +693,10 @@ def _driver_tier_edges(
                 t0, ptr = str(op.get("type", "")), op.get("ptr")
                 if t0 == "lea" and isinstance(ptr, int) and _in_ranges(ptr, code):
                     addr_taken.add(ptr)
+    # Ordered once: tier A below takes the lowest few candidates per call site, so
+    # each site can stop after ``_ADDR_TAKEN_PER_SITE`` hits instead of re-sorting
+    # the whole address-taken set.
+    addr_taken_sorted = sorted(addr_taken)
     for f in reach:
         ops = _func_ops(r2, f, cache)
         lea_ptr: dict[str, int] = {}
@@ -746,8 +751,11 @@ def _driver_tier_edges(
             # Tier A: capped address-taken speculation — ONLY for an unresolved site,
             # and only when the caller opted into speculative edges (see docstring).
             if speculative and t in _INDIRECT_CALL_TYPES and not resolved:
-                pool = sorted(a for a in addr_taken
-                              if a != f and a not in adj.get(f, ()))[:_ADDR_TAKEN_PER_SITE]
+                direct = adj.get(f, ())
+                pool = list(islice(
+                    (a for a in addr_taken_sorted if a != f and a not in direct),
+                    _ADDR_TAKEN_PER_SITE,
+                ))
                 for a in pool:
                     add(f, a, "addr-taken")
     return edges

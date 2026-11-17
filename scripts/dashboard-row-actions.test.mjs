@@ -22,7 +22,7 @@ test("thread row actions mount on hover and focus", async () => {
       export const CHAT_DRAG_MIME="application/x-chat";
       export const consoleSnapshotKey=(host,id)=>["console-snapshot",host,id];
       export const createChatOnExecutionHost=async()=>({id:"created"});
-      const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:"2026-10-25T10:00:00Z",createdAt:"2026-10-25T10:00:00Z"}));
+      const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:new Date().toISOString(),createdAt:new Date().toISOString()}));
       const api={client:{backendId:"local",dispose(){}},listConsoleSessions:()=>Promise.resolve(live),listSavedConsoleSessions:()=>Promise.resolve([]),getConsoleSnapshot:async id=>({session:live.find(s=>s.id===id)})};
       export const useBackendApi=()=>api;
       export const createBackendApi=()=>api;

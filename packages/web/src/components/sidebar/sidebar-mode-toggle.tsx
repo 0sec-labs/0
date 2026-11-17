@@ -1,13 +1,23 @@
-import { v } from "@/lib/vocabulary";
+import { List } from "lucide-react";
+import { CapyAgentIcon } from "@/ui/icons/capy";
 import type { SidebarListMode } from "@/lib/sidebar-rows";
-import { Tabs, TabsList, TabsTrigger } from "@/ui/components/tabs";
+import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { useSidebarListMode } from "./use-sidebar-list";
 
-/** Segmented [Agents | Threads] switch for the list area. */
-export function SidebarModeToggle({ mode, onChange }: { mode: SidebarListMode; onChange: (mode: SidebarListMode) => void }) {
-  return <Tabs value={mode} onValueChange={value => onChange(value as SidebarListMode)} className="shrink-0 gap-0 px-2 pt-2">
-    <TabsList aria-label="Sidebar list" className="h-7 w-full gap-0.5 rounded-md bg-secondary p-0.5">
-      <TabsTrigger value="agents" className="h-6 flex-1 rounded-sm px-2 text-xs data-[active]:bg-background data-[active]:text-foreground">{v("{Sentinels}")}</TabsTrigger>
-      <TabsTrigger value="threads" className="h-6 flex-1 rounded-sm px-2 text-xs data-[active]:bg-background data-[active]:text-foreground">{v("{Missions}")}</TabsTrigger>
-    </TabsList>
-  </Tabs>;
+const OPTIONS = [
+  { value: "agents", label: "Agents", Icon: CapyAgentIcon },
+  { value: "threads", label: "Threads", Icon: List },
+] as const;
+
+/** Agents | Threads as two header icon buttons, same size and weight as search, "+" and "...". Only the active one has a background; there is no outer box. Hidden when the server has no Agents. */
+export function SidebarModeToggle() {
+  const { mode, setMode, supported } = useSidebarListMode();
+  if (!supported) return null;
+  return <div role="group" aria-label="Sidebar list" className="flex shrink-0 items-center gap-1">
+    {OPTIONS.map(({ value, label, Icon }) => <Tooltip key={value} content={label} side="bottom">
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={label} aria-pressed={mode === value} onClick={() => setMode(value as SidebarListMode)}
+        className="text-muted-foreground-1 aria-pressed:bg-foreground/8 aria-pressed:text-foreground"><Icon /></Button>
+    </Tooltip>)}
+  </div>;
 }

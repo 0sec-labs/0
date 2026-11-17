@@ -35,6 +35,7 @@
 // separately.
 
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { trackExecutionResourceSpawn } from "./execution-resource-registry.js";
 
 // ── Result shapes ─────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ export type ScannerParsedResult =
 export type ScannerProcessOutcome =
   | { kind: "exit"; exitCode: number; combined: string; durationMs: number }
   | { kind: "timeout"; partial: string; durationMs: number }
-  | { kind: "error"; message: string; durationMs: number };
+  | { kind: "error"; message: string; durationMs: number; cancelled?: boolean };
 
 export interface ScannerRunOptions {
   /** Per-call requested timeout (ms). Clamped to `ceilingMs`. */
@@ -135,6 +136,16 @@ export interface ScannerRunOptions {
   /** Hard upper bound (ms) — even a longer requested timeout never exceeds it. */
   ceilingMs: number;
   env: Record<string, string>;
+  signal?: AbortSignal;
+}
+
+export const SCANNER_CANCELLED_BEFORE_DISPATCH_MESSAGE =
+  "scanner tool cancelled before dispatch";
+export const SCANNER_CANCELLED_BY_OPERATOR_MESSAGE =
+  "scanner tool cancelled by operator";
+
+export interface SuperviseChildOptions {
+  signal?: AbortSignal;
 }
 
 const SCANNER_GRACE_MS = 2_000;
@@ -188,13 +199,13 @@ function launchAllowlistedScanner(
   };
   switch (bin) {
     case "sqlmap":
-      return spawn("sqlmap", argv, spawnOpts);
+      return trackExecutionResourceSpawn(() => spawn("sqlmap", argv, spawnOpts), true);
     case "nmap":
-      return spawn("nmap", argv, spawnOpts);
+      return trackExecutionResourceSpawn(() => spawn("nmap", argv, spawnOpts), true);
     case "ffuf":
-      return spawn("ffuf", argv, spawnOpts);
+      return trackExecutionResourceSpawn(() => spawn("ffuf", argv, spawnOpts), true);
     case "nuclei":
-      return spawn("nuclei", argv, spawnOpts);
+      return trackExecutionResourceSpawn(() => spawn("nuclei", argv, spawnOpts), true);
     default:
       return null;
   }
@@ -215,14 +226,18 @@ export function superviseChild(
   child: ChildProcess,
   effectiveTimeoutMs: number,
   startedAt: number,
+  options?: SuperviseChildOptions,
 ): Promise<ScannerProcessOutcome> {
   return new Promise((resolvePromise) => {
+    const signal = options?.signal;
     let stdoutLen = 0;
     let stderrLen = 0;
     const stdoutChunks: string[] = [];
     const stderrChunks: string[] = [];
     let timedOut = false;
+    let cancelled = false;
     let settled = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
 
     child.stdout?.setEncoding("utf-8");
     child.stderr?.setEncoding("utf-8");
@@ -240,26 +255,39 @@ export function superviseChild(
     const collected = (): string =>
       (stdoutChunks.join("") + "\n" + stderrChunks.join("")).trim();
 
-    const killGroup = (signal: NodeJS.Signals) => {
+    const killGroup = (sig: NodeJS.Signals) => {
       const pid = child.pid;
       if (typeof pid !== "number") return;
       try {
-        process.kill(-pid, signal);
+        process.kill(-pid, sig);
       } catch {
         try {
-          process.kill(pid, signal);
+          process.kill(pid, sig);
         } catch {
           /* already dead */
         }
       }
     };
 
+    const terminate = () => {
+      killGroup("SIGTERM");
+      if (!killTimer) {
+        killTimer = setTimeout(() => {
+          if (!settled) killGroup("SIGKILL");
+        }, SCANNER_GRACE_MS);
+        killTimer.unref?.();
+      }
+    };
+
+    const onAbort = () => {
+      if (settled) return;
+      if (!timedOut) cancelled = true;
+      terminate();
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
-      killGroup("SIGTERM");
-      setTimeout(() => {
-        if (!settled) killGroup("SIGKILL");
-      }, SCANNER_GRACE_MS).unref?.();
+      terminate();
     }, effectiveTimeoutMs);
     timer.unref?.();
 
@@ -267,6 +295,8 @@ export function superviseChild(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      signal?.removeEventListener("abort", onAbort);
       resolvePromise(outcome);
     };
 
@@ -278,15 +308,27 @@ export function superviseChild(
       });
     });
 
-    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+    child.on("close", (code: number | null, sig: NodeJS.Signals | null) => {
       const durationMs = Date.now() - startedAt;
+      if (cancelled) {
+        settle({
+          kind: "error",
+          message: SCANNER_CANCELLED_BY_OPERATOR_MESSAGE,
+          durationMs,
+          cancelled: true,
+        });
+        return;
+      }
       if (timedOut) {
         settle({ kind: "timeout", partial: collected(), durationMs });
         return;
       }
-      const exitCode = typeof code === "number" ? code : signal ? 1 : 0;
+      const exitCode = typeof code === "number" ? code : sig ? 1 : 0;
       settle({ kind: "exit", exitCode, combined: collected(), durationMs });
     });
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
 }
 
@@ -304,6 +346,14 @@ export async function runScannerProcess(
   opts: ScannerRunOptions,
 ): Promise<ScannerProcessOutcome> {
   const startedAt = Date.now();
+  if (opts.signal?.aborted) {
+    return {
+      kind: "error",
+      message: SCANNER_CANCELLED_BEFORE_DISPATCH_MESSAGE,
+      durationMs: 0,
+      cancelled: true,
+    };
+  }
   const effectiveTimeout = Math.min(
     Math.max(1, opts.timeoutMs),
     Math.max(1, opts.ceilingMs),
@@ -335,7 +385,7 @@ export async function runScannerProcess(
       durationMs: Date.now() - startedAt,
     };
   }
-  return superviseChild(child, effectiveTimeout, startedAt);
+  return superviseChild(child, effectiveTimeout, startedAt, { signal: opts.signal });
 }
 
 // ── argv builders (pure; no shell concat) ───────────────────────────────────

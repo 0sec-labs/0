@@ -1,5 +1,4 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/geist-mono";
+@import "./fonts.css";
 @import "tailwindcss";
 @import "./ui/styles/motion.css";
 @import "./ui/styles/tokens.css";
@@ -13,8 +12,6 @@
 @property --sf-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @keyframes sf-top { from { --sf-top: 0px; } to { --sf-top: var(--sf-size, 24px); } }
 @keyframes sf-bottom { from { --sf-bottom: var(--sf-size, 24px); } to { --sf-bottom: 0px; } }
-/* Aurora backdrop: one slow drift shared by its blobs (ui/backdrops/aurora.tsx). */
-@keyframes backdrop-drift { from { transform: translate3d(-6%, -4%, 0) scale(1); } to { transform: translate3d(8%, 6%, 0) scale(1.16); } }
 @utility scroll-fade-y {
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sf-top), #000 calc(100% - var(--sf-bottom)), transparent 100%);
   @supports (animation-timeline: scroll()) {
@@ -44,12 +41,11 @@
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
 }
-/* Shared press feedback: 100ms colour transition plus a 3% dim while pressed. Set --press-brightness:1 to opt out. */
+/* Shared control feedback: 100ms colour-only transition; no press dim or scale (Capy). */
 @utility press {
-  transition-property: color, background-color, border-color, box-shadow, opacity, filter;
+  transition-property: color, background-color, border-color, box-shadow, opacity;
   transition-duration: 100ms;
   @media (prefers-reduced-motion: reduce) { transition: none; }
-  &:active:not(:disabled):not([aria-disabled="true"]) { filter: brightness(var(--press-brightness, .97)); }
 }
 /* Capy list/card/table rows: a 3.5% overlay over 100ms, colour only (no border, shadow or transform). */
 @utility ui-row-hover {
@@ -131,7 +127,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
-  --radius-sm: 4px;
+  --radius-sm: 3px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --font-heading: var(--font-sans);
@@ -159,21 +155,22 @@
   --popover: oklch(100% 0 0);
   --popover-foreground: var(--foreground);
   --brand-orange: #fd802e;
-  /* Neutral is the default accent: near-black filled actions (white in dark mode), focus ring, links and the enabled switch.
-     The brand orange stays for the logo and as the optional Orange accent preset. */
-  --primary: #18181b;
+  /* Blue (Capy's oklch(.58 .213 267.8)) is the default accent: filled actions, send, selection, focus ring and the enabled switch.
+     --primary-ink is the same hue as text (links, "needs you"); --primary-soft is its wash. Neutral and the other presets stay
+     selectable. The brand orange stays for the logo and as the Orange preset. */
+  --primary: oklch(58% .213 267.8);
   --switch-on: var(--primary);
   --primary-foreground: #ffffff;
-  --primary-hover: color-mix(in oklch, var(--primary) 82%, white);
+  --primary-hover: color-mix(in oklch, var(--primary) 90%, black);
   --dither-ink: #52525b;
-  --primary-ink: #27272a;
+  --primary-ink: oklch(49% .2 267.8);
   --primary-text: var(--primary-ink);
   --secondary: oklch(0% 0 0 / .05);
   --secondary-foreground: var(--foreground);
   --muted: oklch(93.2% .0028 290);
   --muted-foreground: color-mix(in oklch, var(--foreground) 62%, var(--background));
   --muted-foreground-1: var(--muted-foreground);
-  --muted-foreground-2: color-mix(in oklch, var(--foreground) 58%, var(--background));
+  --muted-foreground-2: color-mix(in oklch, var(--foreground) 63%, var(--background));
   --muted-foreground-3: color-mix(in oklch, var(--foreground) 36%, var(--background));
   --accent: oklch(0% 0 0 / .05);
   /* Light panels draw their edge with the 0.5px --sh-card ring, so the hairline stays clear. */
@@ -191,7 +188,7 @@
   --border-3: oklch(0% 0 0 / .15);
   --border: var(--border-1);
   --input: var(--card);
-  --ring: color-mix(in oklch, var(--primary) 55%, transparent);
+  --ring: var(--primary);
   --destructive: oklch(0.577 0.245 27.325);
   /* Filled actions keep a strong red; dark-mode error text uses a lighter red. */
   --destructive-background: oklch(0.577 0.245 27.325);
@@ -205,8 +202,8 @@
   --section: oklch(0% 0 0 / .04);
   --popover-hover: oklch(0% 0 0 / .04);
   --row-hover: oklch(0% 0 0 / .03);
-  --primary-soft: color-mix(in srgb, var(--primary) 8%, transparent);
-  --primary-soft-hover: color-mix(in srgb, var(--primary) 12%, transparent);
+  --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
+  --primary-soft-hover: color-mix(in srgb, var(--primary) 16%, transparent);
   --text-link: var(--primary-ink);
   --inverse: var(--foreground);
   --inverse-text: var(--background);
@@ -290,8 +287,10 @@
     word-break: break-word;
   }
 
+  /* Capy selection: the accent at 20% behind accent-ink text. */
   ::selection {
-    background: color-mix(in oklab, var(--ring) 28%, transparent);
+    background: color-mix(in oklab, var(--primary) 20%, transparent);
+    color: var(--primary-ink);
   }
 
   /* Capy-thin scrollbars: a quiet thumb on a clear track; `no-scrollbar` and scroll-owning widgets override. */
@@ -336,11 +335,9 @@
   --card: oklch(21.82% .0019 286.2);
   --card-hover: oklch(23.97% .0019 286.3);
   --popover: oklch(25.24% .0019 286.3);
-  --primary: #fafafa;
-  --primary-foreground: #18181b;
-  --primary-hover: color-mix(in oklch, var(--primary) 86%, black);
+  --primary-hover: color-mix(in oklch, var(--primary) 88%, white);
   --dither-ink: #d4d4d8;
-  --primary-ink: #e4e4e7;
+  --primary-ink: oklch(70% .15 267.8);
   --secondary: oklch(100% 0 0 / .08);
   --muted: oklch(32.93% .0017 286.3);
   --muted-foreground: color-mix(in oklch, var(--foreground) 68%, var(--background));
@@ -358,7 +355,7 @@
   --border-1: oklch(100% 0 0 / .08);
   --border-2: oklch(100% 0 0 / .12);
   --border-3: oklch(100% 0 0 / .16);
-  --ring: color-mix(in oklch, var(--primary) 70%, transparent);
+  --ring: var(--primary);
 }
 
 /* Appearance: font size scale (Default is 1, so existing layouts are untouched). */
@@ -374,12 +371,6 @@ html[data-font-size="large"] { --ui-font-scale: 1.14; }
   --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 88%, black);
   --primary-ink: oklch(56% .17 48); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
   --ring: color-mix(in oklch, var(--brand-orange) 70%, transparent); --dither-ink: var(--brand-orange);
-}
-[data-accent="blue"] {
-  --primary-foreground: #ffffff;
-  --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 88%, black);
-  --primary-ink: #1d4ed8; --primary-text: #1d4ed8; --text-link: #1d4ed8;
-  --ring: color-mix(in oklch, #2563eb 70%, transparent); --dither-ink: #2563eb;
 }
 [data-accent="green"] {
   --primary-foreground: #ffffff;
@@ -409,11 +400,6 @@ html[data-font-size="large"] { --ui-font-scale: 1.14; }
   --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 90%, white);
   --primary-ink: oklch(76% .15 55); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
   --ring: var(--brand-orange); --dither-ink: var(--brand-orange);
-}
-.dark [data-accent="blue"], .dark[data-accent="blue"] {
-  --primary-foreground: #ffffff;
-  --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 90%, white);
-  --primary-ink: #60a5fa; --primary-text: #60a5fa; --text-link: #60a5fa; --ring: #60a5fa; --dither-ink: #60a5fa;
 }
 .dark [data-accent="green"], .dark[data-accent="green"] {
   --primary-foreground: #ffffff;

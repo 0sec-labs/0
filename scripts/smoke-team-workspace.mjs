@@ -27,6 +27,9 @@ let child; let origin; let token; let teamPaths; let createdWorkspaceId;
 const streams = [];
 let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
+// The server restarts on the same port mid-run; a pooled keep-alive socket to the old process would fail with "fetch failed".
+// Every request therefore opts out of connection reuse.
+const nonReusable = { Connection: "close" };
 const wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms));
 async function start(port = "0") {
   child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--engines-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
@@ -43,7 +46,7 @@ async function start(port = "0") {
     await wait(50);
   }
   if (!origin) throw new Error("Disposable server did not become ready.");
-  const html = await (await fetch(origin)).text();
+  const html = await (await fetch(origin, { headers: nonReusable })).text();
   token = /<meta name="0-control-token" content="([^"]+)"/.exec(html)?.[1];
   if (!token) throw new Error("Disposable server bootstrap did not supply a control token.");
 }
@@ -58,7 +61,7 @@ function jar() {
   let cookie = "";
   return {
     async request(path, method = "GET", input, expected = 200) {
-      const response = await fetch(`${origin}${path}`, { method, headers: { Origin: origin, "X-0-Control-Token": token, "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) }, ...(input === undefined ? {} : { body: JSON.stringify(input) }), signal: AbortSignal.timeout(10000) });
+      const response = await fetch(`${origin}${path}`, { method, headers: { ...nonReusable, Origin: origin, "X-0-Control-Token": token, "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) }, ...(input === undefined ? {} : { body: JSON.stringify(input) }), signal: AbortSignal.timeout(10000) });
       const setCookie = response.headers.getSetCookie?.()[0] ?? response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";")[0];
       const data = await response.json().catch(() => null);
@@ -67,7 +70,7 @@ function jar() {
     },
     async stream() {
       const controller = new AbortController();
-      const response = await fetch(`${origin}/api/team/events`, { headers: { Origin: origin, "X-0-Control-Token": token, Cookie: cookie, Accept: "text/event-stream" }, signal: controller.signal });
+      const response = await fetch(`${origin}/api/team/events`, { headers: { ...nonReusable, Origin: origin, "X-0-Control-Token": token, Cookie: cookie, Accept: "text/event-stream" }, signal: controller.signal });
       check(response.ok && response.body && response.headers.get("content-type")?.includes("text/event-stream"), "Authenticated presence stream opened.");
       const reader = response.body.getReader();
       const feed = { events: [], close() { controller.abort(); void reader.cancel().catch(() => {}); } };
@@ -158,7 +161,7 @@ try {
   await editor.request("/api/findings-access", "POST", { name: "Forbidden" }, 403);
   await viewer.request("/api/findings-access", "GET", undefined, 403);
   const readKey = async (path, expected, method = "GET") => {
-    const response = await fetch(`${origin}${path}`, { method, headers: { Authorization: `Bearer ${apiCredential.token}` }, signal: AbortSignal.timeout(10000) });
+    const response = await fetch(`${origin}${path}`, { method, headers: { ...nonReusable, Authorization: `Bearer ${apiCredential.token}` }, signal: AbortSignal.timeout(10000) });
     check(response.status === expected, `${method} ${path}: scoped API expected ${expected}, received ${response.status}.`);
     return response.json();
   };
@@ -186,7 +189,7 @@ try {
   await readKey("/api/v1/findings", 401);
   console.log(`Team workspace API smoke: ${checks} checks passed; 3 independent account sessions; concurrent chats, SSE, skill CAS and restart verified; 0 LLM turns.`);
 } catch (cause) {
-  console.error(`Team workspace API smoke failed: ${cause instanceof Error ? cause.message : "unknown failure"}`);
+  console.error(`Team workspace API smoke failed: ${cause instanceof Error ? cause.message : "unknown failure"}${cause instanceof Error && cause.cause ? ` (${cause.cause.code ?? cause.cause.message ?? cause.cause})` : ""}`);
   process.exitCode = 1;
 } finally {
   for (const stream of streams) stream.close();

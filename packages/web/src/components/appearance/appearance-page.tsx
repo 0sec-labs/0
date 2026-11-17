@@ -4,7 +4,6 @@ import { MOTION_OPTIONS, modesForTheme } from "@/lib/appearance-settings";
 import { Switch } from "@/ui/components/switch";
 import { cn } from "@/ui/lib/utils";
 import { AccentSwatches } from "./accent-swatches";
-import { AppearancePreview } from "./appearance-preview";
 import { BackdropTiles } from "./backdrop-tiles";
 import { Segmented } from "./choice-group";
 import { ModeTiles } from "./mode-tiles";
@@ -31,7 +30,7 @@ function DensityHint({ compact }: { compact: boolean }) {
 }
 
 /**
- * The one place to change how the console looks: a live preview, then Mode, Theme, Accent, Background, Text and layout, Motion.
+ * The one place to change how the console looks: Mode, Theme, Accent, Background, Text and layout, Motion.
  * Compact transcript follows the account (an engine setting), so the parent passes it in; `undefined` hides the switch.
  */
 export function AppearancePage({ compact, onCompact }: { compact?: boolean; onCompact?: (next: boolean) => void }) {
@@ -39,7 +38,6 @@ export function AppearancePage({ compact, onCompact }: { compact?: boolean; onCo
   const resolved = useResolvedMode();
   const motionLine = "Slows or stops the background and other movement.";
   return <div className="flex flex-col gap-4" data-slot="appearance-page">
-    <div className="sticky top-0 z-10 -mx-1 bg-background px-1 pt-1 pb-3"><AppearancePreview background={settings.background} /></div>
     <Section id="setting-web-theme" title="Mode" description="Follow your system, or always use light or dark.">
       <ModeTiles value={settings.mode} themeId={settings.theme} modes={modesForTheme(settings.theme)} onChange={set.mode} />
     </Section>

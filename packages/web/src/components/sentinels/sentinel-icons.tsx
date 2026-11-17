@@ -1,5 +1,5 @@
 import { Crosshair, FlaskConical, LifeBuoy, Package, Radar, Rocket, Wrench } from "lucide-react";
-import { CapyApiKeyIcon, CapyCloudIcon, CapyShieldIcon, CapySparkleIcon, type IconComponent } from "@/ui/icons/capy";
+import { CapyAgentIcon, CapyApiKeyIcon, CapyCloudIcon, CapyShieldIcon, CapySparkleIcon, type IconComponent } from "@/ui/icons/capy";
 
 /**
  * Icon ids a Sentinel avatar can carry (engine `avatar.icon`). Capy glyphs where Capy has one; lucide
@@ -7,5 +7,5 @@ import { CapyApiKeyIcon, CapyCloudIcon, CapyShieldIcon, CapySparkleIcon, type Ic
  */
 export const SENTINEL_ICONS: Readonly<Record<string, IconComponent>> = {
   target: Crosshair, shield: CapyShieldIcon, package: Package, wrench: Wrench, key: CapyApiKeyIcon, radar: Radar,
-  cloud: CapyCloudIcon, lifebuoy: LifeBuoy, flask: FlaskConical, rocket: Rocket, sparkle: CapySparkleIcon,
+  cloud: CapyCloudIcon, lifebuoy: LifeBuoy, flask: FlaskConical, rocket: Rocket, sparkle: CapySparkleIcon, agent: CapyAgentIcon,
 };

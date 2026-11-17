@@ -21,9 +21,9 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
       export const CHAT_DRAG_MIME="application/x-chat";
       export const consoleSnapshotKey=(host,id)=>["console-snapshot",host,id];
       export const createChatOnExecutionHost=async()=>({id:"created"});
-      const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:"2026-10-25T10:00:00Z",createdAt:"2026-10-25T10:00:00Z"}));
+      const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:new Date().toISOString(),createdAt:new Date().toISOString()}));
       live.push({...live[0],id:"review-one",title:"Same review",messageCount:843},{...live[0],id:"review-two",title:"Same review",messageCount:262});
-      const saved=[{id:"saved",summary:"Saved chat",messageCount:2,savedAt:1},{id:"saved-second",summary:"Second saved chat",messageCount:2,savedAt:2},{id:"saved-cancel",summary:"Cancelled opening",messageCount:2,savedAt:3}];
+      const saved=[{id:"saved",summary:"Saved chat",messageCount:2,savedAt:Date.now()-1000},{id:"saved-second",summary:"Second saved chat",messageCount:2,savedAt:Date.now()-2000},{id:"saved-cancel",summary:"Cancelled opening",messageCount:2,savedAt:Date.now()-3000}];
       const api={client:{backendId:"local",dispose(){}},listConsoleSessions:()=>window.blockHistory?new Promise(()=>{}):Promise.resolve(live),listSavedConsoleSessions:()=>Promise.resolve(saved),getConsoleSnapshot:async id=>({session:live.find(s=>s.id===id)}),resumeConsoleSession:(id)=>new Promise(resolve=>{window.resolveResume=()=>{window.blockHistory=true;resolve({...live[0],id:"resumed-"+id,title:"Resumed "+id,savedId:id});};})};
       export const useBackendApi=()=>{if(new Error().stack.includes('HostChatSource'))window.hostGroupRenders=(window.hostGroupRenders??0)+1;return api;};
       export const createBackendApi=()=>api;

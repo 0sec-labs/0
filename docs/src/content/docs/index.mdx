@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: "0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks."
+description: "0security is software infrastructure to deploy sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere."
 template: doc
 prev: false
 head:
@@ -9,7 +9,7 @@ head:
   - tag: meta
     attrs:
       name: description
-      content: "0security is sovereign infrastructure to build and deploy security agents that find, prove and fix security risks. It is open source and runs on your own infrastructure, with the LLMs you choose."
+      content: "0security is software infrastructure to deploy sovereign, persistent AI security agents that find and fix security risks across any tech stack, work with any model, and run anywhere."
 ---
 
 import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/components";
@@ -154,7 +154,7 @@ jobs:
           persist-credentials: false
       - uses: 0sec-labs/0security@main # Pin a reviewed full commit SHA.
         with:
-          version: v0.37.0 # Pin the CLI release you reviewed.
+          version: v0.38.0 # Pin the CLI release you reviewed.
           path: .
           runtime: api
           cost-ceiling: '5'

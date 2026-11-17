@@ -75,7 +75,7 @@ export function skillWarnings(text: string, hasScripts: boolean): string[] {
   if (/[​-‏⁠⁦-⁩‪-‮﻿]/.test(text)) warnings.push("Contains invisible Unicode characters.");
   if (/<!--/.test(text)) warnings.push("Contains HTML comments that are hidden when rendered.");
   if (/[A-Za-z0-9+/]{200,}={0,2}/.test(text)) warnings.push("Contains a long encoded block.");
-  if (hasScripts) warnings.push("Bundles scripts. 0 stores them but never runs them.");
+  if (hasScripts) warnings.push("Bundles scripts. 0security stores them but never runs them.");
   return warnings;
 }
 

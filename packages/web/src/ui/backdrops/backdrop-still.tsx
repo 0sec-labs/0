@@ -3,17 +3,14 @@
 import * as React from "react"
 
 import { cn } from "../lib/utils.js"
-import { readSafeAlpha } from "./contrast.js"
+import { readSafeAlpha, resolveRgb } from "./contrast.js"
 import { cappedDpr } from "./engine.js"
 import { PEAK_ALPHA, tileOpacity, type BackdropKind } from "./kinds.js"
 import { renderStill } from "./still.js"
 
-/** Same mask the live backdrop wears on the new-thread screen: glow from the top and corners, clear behind the composer. */
-const SCREEN_MASK = "[mask-image:radial-gradient(ellipse_150%_135%_at_50%_110%,rgb(0_0_0/0)_0%,rgb(0_0_0/0)_48%,rgb(0_0_0/.4)_70%,rgb(0_0_0/.9)_94%)]"
-
 /**
  * One frozen frame of a backdrop, drawn at its own size by `renderStill` (no animation loop, no timers).
- * `tile` is boosted so the look reads in a thumbnail; `screen` uses the opacity the live screen uses (the contrast cap) and its mask.
+ * `tile` is boosted so the look reads in a thumbnail; `screen` uses the opacity the live screen uses (the contrast cap).
  * It repaints when the box or the theme, accent or mode changes.
  */
 function BackdropStill({ kind, variant, className }: { kind: BackdropKind; variant: "tile" | "screen"; className?: string }) {
@@ -29,7 +26,8 @@ function BackdropStill({ kind, variant, className }: { kind: BackdropKind; varia
       el.width = Math.round(width * dpr); el.height = Math.round(height * dpr)
       c.setTransform(dpr, 0, 0, dpr, 0, 0)
       host.style.opacity = String(variant === "tile" ? tileOpacity(kind) : readSafeAlpha(host, PEAK_ALPHA[kind]))
-      renderStill(c, kind, width, height, { ink: getComputedStyle(host).color })
+      const ink = getComputedStyle(host).color, rgb = resolveRgb(ink)
+      renderStill(c, kind, width, height, { ink, rgb: rgb ? [rgb.r * 255, rgb.g * 255, rgb.b * 255] : undefined, dpr })
     }
     paint()
     const sized = new ResizeObserver(paint)
@@ -39,7 +37,7 @@ function BackdropStill({ kind, variant, className }: { kind: BackdropKind; varia
     return () => { sized.disconnect(); themed.disconnect() }
   }, [kind, variant])
   if (kind === "none") return null
-  return <div ref={box} aria-hidden="true" data-slot="backdrop-still" data-kind={kind} className={cn("pointer-events-none absolute inset-0 overflow-hidden text-[var(--dither-ink)]", variant === "screen" && SCREEN_MASK, className)}>
+  return <div ref={box} aria-hidden="true" data-slot="backdrop-still" data-kind={kind} className={cn("pointer-events-none absolute inset-0 overflow-hidden text-[var(--dither-ink)]", className)}>
     <canvas ref={canvas} className="absolute inset-0 size-full" />
   </div>
 }

@@ -764,7 +764,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       if (!opts.suppressOutput) {
         console.error(
           chalk.yellow(
-            `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
+            `Scan stopped at the cost ceiling${opts.costCeilingUsd === undefined ? "" : ` of $${opts.costCeilingUsd}`}${estimatedCostUsd === undefined ? "" : ` (about $${estimatedCostUsd.toFixed(estimatedCostUsd < 0.01 ? 4 : 2)} spent)`}. ${canonicalReport.summary.totalFindings} finding(s) so far were kept. Raise --cost-ceiling to let it finish.`,
           ),
         );
       }

@@ -76,7 +76,7 @@ export function registerIdentityCommand(program: Command): void {
           chalk.red(
             `Missing ${TOKEN_ENV}. Export a Microsoft Graph access token with directory read scopes, e.g.\n` +
               `  export ${TOKEN_ENV}="$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)"\n` +
-              `The token is read from the environment only — 0 never accepts it as a command-line argument.`,
+              `The token is read from the environment only — 0security never accepts it as a command-line argument.`,
           ),
         );
         process.exitCode = 2;
