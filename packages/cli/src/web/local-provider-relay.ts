@@ -15,7 +15,10 @@ export async function createLocalRelayProvider(selection: ConsoleRuntimeSelectio
   ]);
   signal?.throwIfAborted();
   if (selection.providerId && selection.providerId !== "chatgpt-codex") throw new Error("Local model relay currently supports ChatGPT Codex only. Choose the local ChatGPT connection.");
-  const { runtime, info } = await createWebConsoleRuntime({ ...selection, providerId: "chatgpt-codex" });
+  const { runtime, info } = await createWebConsoleRuntime({ ...selection, providerId: "chatgpt-codex" }).catch((error: unknown) => {
+    if (error instanceof Error && /no configured credentials/.test(error.message)) throw new Error("Threads on another computer use the ChatGPT sign-in on this computer, and this computer is not signed in to ChatGPT yet. Connect ChatGPT in Settings, then start the thread again.", { cause: error });
+    throw error;
+  });
   signal?.throwIfAborted();
   const provider = runtime.resolvedProvider();
   const model = runtime.resolvedModel();

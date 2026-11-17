@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- `0 computers remove <id>` takes a remote computer out of the list from the terminal, as the Computers page already could. Files on the computer stay.
+
 ### Changed
 
 - Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
@@ -21,6 +25,8 @@ on the GitHub Release tag.
 - The Agents | Threads switch is a small icon toggle on the list header, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
 - Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
 - The original Dither background is back and is the default again: dots only in the top part of the screen, fading out downward, drawn on a small canvas that covers just that band and runs at 6 frames per second, pausing when the tab is hidden or off screen. The full-screen scene is now Dither flow in the Background list. A saved Dither choice shows the original Dither; pick Dither flow to keep the full-screen one.
+- The Computers page add flow drops the words Deploy, SSH host and target repository, says what the first add takes, shows a Reconnect button on a disconnected computer, and names the computer in its Stop menu item.
+
 
 ### Removed
 
@@ -32,6 +38,9 @@ on the GitHub Release tag.
 - The web Findings page now lists every finding: results of `0 scan` runs (one database per run) appear next to findings from threads and Agents, de-duplicated by fingerprint. Moving a finding on the board, accepting or dismissing it, notes, impact assessments and exports are saved in the database that holds it, and a finding's detail says where it came from (a scan and its date, an Agent, a thread). `0 findings` uses the same merged view. Older runs beyond 300 databases or 2 GB are skipped, newest kept.
 - Model calls now recover after a broken connection for real. The earlier fix never took effect on Node 24 and later, or in the compiled binary, so after a TLS `bad_record_mac` every call failed until you restarted the console. Each recovery now uses a new connection pool with no TLS session reuse, and `/healthz` shows the last failure code and whether a session was reused.
 - The thread list now says "Can’t reach this computer" instead of "No threads yet" while the engine is unreachable, so a restart no longer looks like lost threads.
+- `0 computers add` now says what to do when the repository has not been bundled yet (`pnpm run build:bundle`), and finds the files to copy from `ZERO_WORKER_ASSETS` or next to the program when it runs as an installed binary. Before, it stopped with an unexplained "run pnpm build".
+- Adding a computer now explains the common SSH problems in plain words: an unknown computer identity (with `--trust-new-host` and a matching checkbox on the Computers page to trust it the first time), a refused sign-in, a refused connection and an unreachable name. The Computers page shows that message instead of "Worker deployment failed", and `0 computers add` prints what it is doing while it works.
+- A thread started on another computer without a ChatGPT sign-in on this one, or on a computer without a model key, now says what is missing instead of `RuntimeConfig.provider=... has no configured credentials`.
 - Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
 - `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
 - When the computer behind the console stops answering without closing the connection, the page now shows Reconnecting after about a minute and recovers when it answers again. Before, it looked frozen with no notice.

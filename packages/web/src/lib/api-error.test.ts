@@ -82,4 +82,8 @@ describe("missing thread text", () => {
     expect(isMissingMissionText("Console thread was not found.")).toBe(true);
     expect(isMissingMissionText("Reconnecting…")).toBe(false);
   });
+  it("explains a provider with no credentials instead of showing the runtime setting", () => {
+    expect(mapErrorText("RuntimeConfig.provider=openai has no configured credentials")).toBe("This computer has no sign-in or API key for openai. Open Connections to connect a model, then try again.");
+    expect(mapErrorText("RuntimeConfig.provider=chatgpt-codex has no configured credentials")).toContain("for ChatGPT.");
+  });
 });

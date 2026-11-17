@@ -613,6 +613,8 @@ Options:
                            ssh.config)
   --engine-port <port>     Engine port on the remote server (default: stable port derived from
                            host)
+  --trust-new-host         Trust and remember the computer's SSH host key if it is not known yet
+                           (default: false)
   --forward-provider-key   Forward this computer's OPENAI_API_KEY to the remote engine (user-owned
                            hosts only) (default: false)
   --engines-config <path>  Engine registry path
@@ -633,6 +635,16 @@ List registered remote computers
 
 Options:
   --json                   Print JSON
+  --engines-config <path>  Engine registry path
+  -h, --help               display help for command
+
+### 0 computers remove (hidden)
+Usage: 0 computers remove [options] <backend-id>
+
+Remove a remote computer from this machine: closes the tunnel and forgets its saved connection
+(files on the remote computer stay)
+
+Options:
   --engines-config <path>  Engine registry path
   -h, --help               display help for command
 

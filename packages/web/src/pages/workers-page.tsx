@@ -45,6 +45,7 @@ export function WorkersPage() {
   const [ssh, setSsh] = useState("");
   const [targetGit, setTargetGit] = useState("");
   const [forwardKey, setForwardKey] = useState(false);
+  const [trustHost, setTrustHost] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -60,7 +61,7 @@ export function WorkersPage() {
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
       await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
     } catch (cause) {
-      setError(errorText(cause, "Deploy failed."));
+      setError(errorText(cause, "Couldn’t add this computer. Check that you can sign in to it with SSH, then try again."));
     } finally {
       setBusy(null);
     }
@@ -120,7 +121,7 @@ export function WorkersPage() {
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
       await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
       if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/computers"));
-    } catch (cause) { setError(errorText(cause, "Couldn’t remove this connection.")); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t remove this computer.")); }
     finally { setBusy(null); }
   };
 
@@ -134,7 +135,7 @@ export function WorkersPage() {
 
       <section aria-label="Computers" className="space-y-3">
         {loadingBackends && <LoadingState label="Loading computers…" rows={2} />}
-        {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
+        {backends.error && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-destructive"><p>Couldn’t load your computers. {backends.error.message}</p><Button size="sm" variant="outline" onClick={() => void backends.refetch()}>Try again</Button></div>}
         {availableHosts.length > 0 && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">
           {availableHosts.map(backend => {
             const connected = backend.status === "connected";
@@ -142,22 +143,23 @@ export function WorkersPage() {
             const remote = backend.id !== "local";
             return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? `Remote computer · ${statusLabel(backend)}` : statusLabel(backend)}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? `Remote computer · ${statusLabel(backend)}` : `${statusLabel(backend)} · runs threads here`}</p></div>
               {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
+              {remote && !connected && backend.status !== "connecting" && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void (isManaged ? reconnectHost(backend) : checkConnection(backend.id))}>{busy === `reconnect:${backend.id}` || busy === `check:${backend.id}` ? "Reconnecting…" : "Reconnect"}</Button>}
               {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-ring-inset"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   {isManaged ? <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void reconnectHost(backend)}>{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</DropdownMenu.Item> : <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</DropdownMenu.Item>}
-                  {connected && isManaged && <DropdownMenu.Item disabled={busy !== null} icon={<Square className="size-4" />} onClick={() => { setError(""); setStopCandidate(backend); }}>Stop 0 on this computer</DropdownMenu.Item>}
+                  {connected && isManaged && <DropdownMenu.Item disabled={busy !== null} icon={<Square className="size-4" />} onClick={() => { setError(""); setStopCandidate(backend); }}>{`Stop 0 on ${backend.name}`}</DropdownMenu.Item>}
                   <DropdownMenu.Item variant="danger" disabled={busy !== null} icon={<Trash2 className="size-4" />} onClick={() => { setError(""); setRemoveCandidate(backend); }}>Remove</DropdownMenu.Item>
                 </DropdownMenu.Content></DropdownMenu>}
             </li>;
           })}
         </ul>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote computers yet.</p>}
+        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">Threads run on this computer. Add another computer you can reach with SSH to run threads there too.</p>}
         {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {result && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4 py-3 text-sm">
-            <div className="min-w-0"><p className="font-medium">Computer ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
+            <div className="min-w-0"><p className="font-medium">Computer added</p><p className="truncate text-xs text-muted-foreground">Ready to run threads.</p></div>
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
           </div>
         )}
@@ -166,23 +168,25 @@ export function WorkersPage() {
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
         <DialogContent><DialogHeader><DialogTitle>Add computer</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">0 signs in with your SSH keys and installs itself on a Linux computer. The first time can take a few minutes.</p>
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
             {(hosts.data?.hosts ?? []).length > 0 ? <>
-              <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search SSH hosts" className="pl-8" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search hosts from ~/.ssh/config" /></div>
+              <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search saved computers" className="pl-8" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search computers saved in your SSH settings" /></div>
               <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border">
                 {discovered.map(host => <li key={host.alias} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{host.alias}</p><p className="truncate text-xs text-muted-foreground">{[host.user, host.hostname].filter(Boolean).join("@")}</p></div>
-                  <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey }, host.alias)}><Play aria-hidden="true" />{busy === host.alias ? "Deploying…" : "Deploy"}</Button>
+                  <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey, ...(trustHost ? { trustNewHost: true } : {}) }, host.alias)}><Play aria-hidden="true" />{busy === host.alias ? "Adding…" : "Add"}</Button>
                 </li>)}
                 {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching computers.</li>}
               </ul>
-            </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No SSH computers found in ~/.ssh/config. Enter one below.</p>}
-            <Disclosure summary={<>Other server or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
-              <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
-                <label className="block space-y-1 text-xs text-muted-foreground"><span>SSH address (user@host or config alias)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
-                <label className="block space-y-1 text-xs text-muted-foreground"><span>Target repository (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
-                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this computer's OpenAI key to the remote computer (user-owned hosts only)</span></label>
-                <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Deploying…" : "Deploy to computer"}</Button>
+            </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No saved computers found in your SSH settings. Enter one below.</p>}
+            <Disclosure summary={<>Another computer or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
+              <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey, ...(trustHost ? { trustNewHost: true } : {}) }, "manual"); }}>
+                <label className="block space-y-1 text-xs text-muted-foreground"><span>Address (user@host, or a name from your SSH settings)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
+                <label className="block space-y-1 text-xs text-muted-foreground"><span>Code to work on (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Let that computer use my OpenAI key (only for computers you own)</span></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={trustHost} onChange={event => setTrustHost(event.target.checked)} disabled={busy !== null} /><span>This is the first time I connect to it: trust it and remember its identity</span></label>
+                <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Adding… this can take a few minutes" : "Add computer"}</Button>
               </form>
             </Disclosure>
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -191,14 +195,14 @@ export function WorkersPage() {
       </Dialog>
       <ConfirmDialog open={stopCandidate !== null} onOpenChange={open => { if (!open) setStopCandidate(null); }} pending={busy !== null} destructive
         title={`Stop ${stopCandidate?.name}?`}
-        description="Active work on that computer will be interrupted."
+        description="Threads running on that computer stop. You can reconnect it later."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        confirmLabel={busy === "stop" ? "Stopping…" : "Stop 0 on this computer"} onConfirm={() => void stopEngine()} />
+        confirmLabel={busy === "stop" ? "Stopping…" : "Stop 0"} onConfirm={() => void stopEngine()} />
       <ConfirmDialog open={removeCandidate !== null} onOpenChange={open => { if (!open) setRemoveCandidate(null); }} pending={busy !== null} destructive
         title={`Remove ${removeCandidate?.name}?`}
-        description="Removes the saved connection and its local credential."
+        description="Takes it out of this list. 0 stays installed on that computer."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        confirmLabel={busy === "remove" ? "Removing…" : "Remove connection"} onConfirm={() => void removeBackend()} />
+        confirmLabel={busy === "remove" ? "Removing…" : "Remove computer"} onConfirm={() => void removeBackend()} />
     </>
   );
 }

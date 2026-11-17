@@ -23,6 +23,7 @@ A computer owns threads, automation runs, workspace paths and execution. Choosin
 | `--lima <name>` | Lima instance. Default `zero-worker`. |
 | `--target-git <url>` | Repository the worker clones into its workspace. |
 | `--engine-port <port>` | Computer port on the worker. Default is stable per host. |
+| `--trust-new-host` | Trust and remember the computer's SSH host key the first time you connect. Without it, an unknown computer is refused and the message tells you to check it with `ssh <host>`. |
 | `--forward-provider-key` | Forward this machine's `OPENAI_API_KEY` to the worker. Use only on hosts you own. |
 | `--engines-config <path>` | Registry file to update. |
 
@@ -31,7 +32,10 @@ Manage a deployed worker by its computer ID:
 ```bash
 0 computers repair <id>   # reconnect the tunnel and restart the engine if needed
 0 computers stop <id>     # stop the engine and tunnel; keeps remote files and registration
+0 computers remove <id>   # forget the computer on this machine; remote files stay
 ```
+
+0 copies its own bundle to the computer, so it must be able to find `dist/0.js` and `vendor/`. In a source checkout run `pnpm run build:bundle` once. An installed binary has no such files: set `ZERO_WORKER_ASSETS` to a folder that has them, or use the container image. The target must be Linux with `sudo` (to install Node 24 and a C compiler the first time).
 
 The browser app also deploys workers from its computer selector.
 
@@ -99,6 +103,8 @@ Threads, runs, workspaces and approvals belong to the computer you chose. `/srv/
 ### Local Codex model for a remote thread
 
 A browser thread can run its tools on a remote computer while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that thread. Provider tokens stay on your machine. Prompts, tool results and responses pass through a thread-scoped relay, and they can contain remote workspace data.
+
+If this machine is not signed in to ChatGPT, creating the thread fails with a message that says so. A computer added with `--forward-provider-key` can run threads on its own `OPENAI_API_KEY` through the commands in [Continue the same work](#continue-the-same-work).
 
 Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP automations still use the server's own provider.
 

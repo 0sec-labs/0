@@ -62,6 +62,8 @@ export function mapErrorText(message: string): string {
   if (isModelDisabledText(message)) return API_ERROR_MESSAGES.model_disabled!;
   for (const code of ["browser_only", "owner_required", "approval_required"]) if (new RegExp(`\\b${code}\\b`).test(message)) return API_ERROR_MESSAGES[code]!;
   if (/already processing a turn|wait for the current turn/i.test(message)) return "This thread is busy with another turn. Try again when it finishes.";
+  const noCredentials = /(?:RuntimeConfig\.provider|ZERO_SELECTED_PROVIDER|ZERO_FORCE_PROVIDER)=([\w-]+) has no configured credentials/.exec(message);
+  if (noCredentials) return `This computer has no sign-in or API key for ${noCredentials[1] === "chatgpt-codex" ? "ChatGPT" : noCredentials[1]}. Open Connections to connect a model, then try again.`;
   return message;
 }
 

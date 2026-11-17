@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { enginesConfigOption } from "./shared-options.js";
 import { deployWorker, repairWorker, stopWorker, validateWorkerOptions } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
-import { loadBackendConnectionConfig } from "../web/backend-connections.js";
+import { BackendConnectionRegistry, loadBackendConnectionConfig } from "../web/backend-connections.js";
 import { loadManagedWorker } from "../worker-deploy.js";
 import { printJson, renderTable, sinks, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
@@ -49,8 +49,9 @@ export function registerWorkerCommand(program: Command): void {
     .option("--target-git <url>", "Repository the remote server clones into the engine folder instead of the bundled demo target")
     .option("--ssh-config <path>", "OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config)")
     .option("--engine-port <port>", "Engine port on the remote server (default: stable port derived from host)")
+    .option("--trust-new-host", "Trust and remember the computer's SSH host key if it is not known yet", false)
     .option("--forward-provider-key", "Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only)", false)
-    .action(async (opts: { ssh?: string; lima: string; targetGit?: string; enginePort?: string; forwardProviderKey: boolean; sshConfig?: string; enginesConfig?: string }) => {
+    .action(async (opts: { ssh?: string; lima: string; targetGit?: string; enginePort?: string; forwardProviderKey: boolean; trustNewHost: boolean; sshConfig?: string; enginesConfig?: string }) => {
       const port = opts.enginePort === undefined ? undefined : Number.parseInt(opts.enginePort, 10);
       if (port !== undefined && (!Number.isSafeInteger(port) || port < 1 || port > 65535)) throw new Error("--engine-port must be 1-65535");
       validateWorkerOptions({ ...(opts.ssh ? { ssh: opts.ssh, ...(opts.sshConfig ? { sshConfig: opts.sshConfig } : {}) } : { lima: opts.lima }), ...(opts.targetGit ? { targetGit: opts.targetGit } : {}) });
@@ -60,6 +61,7 @@ export function registerWorkerCommand(program: Command): void {
         ...(opts.targetGit ? { targetGit: opts.targetGit } : {}),
         ...(opts.enginesConfig ? { enginesConfig: opts.enginesConfig } : {}),
         ...(port === undefined ? {} : { enginePort: port }),
+        ...(opts.trustNewHost ? { trustNewHost: true } : {}),
         forwardProviderKey: opts.forwardProviderKey,
       });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -80,6 +82,19 @@ export function registerWorkerCommand(program: Command): void {
     .action(async (backendId: string) => {
       process.stdout.write(JSON.stringify(await stopWorker(backendId)) + "\n");
     });
+
+  const remove = worker
+    .command("remove <backend-id>")
+    .description("Remove a remote computer from this machine: closes the tunnel and forgets its saved connection (files on the remote computer stay)")
+    .action((backendId: string, opts: { enginesConfig?: string }) => {
+      try {
+        new BackendConnectionRegistry(opts.enginesConfig ? { configPath: opts.enginesConfig } : {}).remove(backendId);
+      } catch (error) {
+        throw new Error(error instanceof Error && /not registered/.test(error.message) ? `No computer with ID ${backendId}. Run \`0 computers list\` to see the IDs.` : error instanceof Error ? error.message : "Could not remove the computer.");
+      }
+      process.stdout.write(JSON.stringify({ removed: true, backendId, remoteFilesRemoved: false }) + "\n");
+    });
+  enginesConfigOption(remove, "Engine registry path");
 
   worker
     .command("hosts")

@@ -498,6 +498,7 @@ export function registerDashboardCommand(program: Command): void {
                   lima: z.string().trim().min(1).max(128).optional(),
                   targetGit: z.string().trim().max(4096).optional(),
                   forwardProviderKey: z.boolean().optional(),
+                  trustNewHost: z.boolean().optional(),
                   enginePort: z.number().int().min(1).max(65535).optional(),
                 }).strict().parse(await readJson(req));
                 try { validateWorkerOptions(body); } catch (cause) {
@@ -505,12 +506,16 @@ export function registerDashboardCommand(program: Command): void {
                   throw new WebRequestError(message.startsWith("--ssh") ? "Enter a host name or user@host." : message.startsWith("--lima") ? "Enter a valid instance name." : message.startsWith("--target-git") ? "Enter a repository URL without spaces or quotes." : "Check the computer details and try again.", 400);
                 }
                 const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
-                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(body.trustNewHost ? ["--trust-new-host"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
                 const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
                   // foxguard: ignore[js/no-command-injection] all request values are strict-schema validated and passed as execFile argv without a shell.
                   execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
-                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the release binary or a repository build with dist/ and vendor/ assets. Install the release binary, or run pnpm build from the repository.", 422)); return; }
-                    if (error) { reject(new WebRequestError("Worker deployment failed. Check SSH access and the worker's installation requirements.", 502)); return; }
+                    if (error) {
+                      // The CLI explains what went wrong in its last stderr line; progress lines come before it.
+                      const reason = (stderr.trim().split("\n").at(-1)?.replace(/^error:\s*/, "").trim() ?? "").replace(/, or add it again with --trust-new-host to trust it on first connection\./, ", or tick “This is the first time I connect to it” under Another computer or options and try again.");
+                      const explained = reason.length > 0 && reason.length <= 600 && !/^\s*at /.test(reason);
+                      reject(new WebRequestError(explained ? reason : "Could not set up the computer. Check that you can sign in to it with SSH, then try again.", /source checkout has not been bundled|does not include the files/.test(reason) ? 422 : 502)); return;
+                    }
                     try { resolveDeploy(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker deployment returned an invalid result.", 502)); }
                   });
                 });
