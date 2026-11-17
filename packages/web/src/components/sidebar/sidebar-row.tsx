@@ -5,7 +5,7 @@ import { SidebarLabel } from "@/ui/components/sidebar";
 
 /** Shared row chrome: 52px (32px compact), 8px padding, 6px radius, white-alpha hover and the active token. */
 export const sidebarRowClasses = (density: SidebarDensity) => cn(
-  "group/row relative flex w-full min-w-0 shrink-0 items-center gap-2.5 rounded-md px-2 text-left outline-none select-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset data-[active]:bg-secondary aria-[current=page]:bg-secondary",
+  "group/row relative flex w-full min-w-0 shrink-0 items-center gap-2.5 rounded-md px-2 text-left outline-none select-none transition-colors duration-100 hover:bg-foreground/5 focus-visible:outline-ring-inset data-[active]:bg-foreground/7 aria-[current=page]:bg-foreground/7",
   density === "compact" ? "h-8" : "h-13",
 );
 

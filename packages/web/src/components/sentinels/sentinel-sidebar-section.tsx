@@ -39,7 +39,7 @@ export function SentinelSidebarSection() {
         const active = location.pathname.endsWith(`/agents/${encodeURIComponent(row.id)}`);
         return <NavLink key={row.id} to={row.href} data-sidebar-row data-active={active || undefined} aria-label={`${row.name}, ${row.badgeLabel}`} className={sidebarRowClasses(density)}>
           <SentinelAvatar sentinel={agent} badge={row.badge} size={compact ? "xs" : "md"} />
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <RowTitleLine title={row.name} trailing={<RowAge>{row.age}</RowAge>} />
             {!compact && <RowSubline className={row.subtitle.tone === "accent" ? "text-primary-ink" : undefined}>{row.subtitle.text}</RowSubline>}
           </span>

@@ -20,10 +20,10 @@ export function SidebarListHeader<Sort extends string>({ title, newLabel, onNew,
   onSearch: (trigger: HTMLElement) => void;
   searchActive?: boolean;
 }) {
-  return <div className="flex h-8 shrink-0 items-center gap-0.5 px-2">
-    <h2 className="min-w-0 flex-1 truncate px-2 text-[13px] leading-4 font-medium text-foreground">{title}</h2>
+  return <div className="mt-4 mb-2 flex h-8 shrink-0 items-center gap-1 px-2">
+    <h2 className="min-w-0 flex-1 truncate pl-2 text-[13px] leading-4 font-medium text-foreground">{title}</h2>
     <SidebarModeToggle />
-    <Tooltip content={searchLabel} side="bottom"><Button type="button" variant="ghost" size="icon-sm" aria-label={searchLabel} aria-pressed={searchActive} className="text-muted-foreground-1 aria-pressed:bg-secondary aria-pressed:text-foreground" onClick={event => onSearch(event.currentTarget)}><Search /></Button></Tooltip>
+    <Tooltip content={searchLabel} side="bottom"><Button type="button" variant="ghost" size="icon-sm" aria-label={searchLabel} aria-pressed={searchActive} className="text-muted-foreground-1 aria-pressed:bg-foreground/8 aria-pressed:text-foreground" onClick={event => onSearch(event.currentTarget)}><Search /></Button></Tooltip>
     <Tooltip content={newLabel} side="bottom"><Button type="button" variant="ghost" size="icon-sm" aria-label={newLabel} className="text-muted-foreground-1" onClick={onNew}><Plus /></Button></Tooltip>
     <DropdownMenu>
       <Tooltip content={`${title} options`} side="bottom">

@@ -126,6 +126,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const attention = live ? ATTENTION[live] ?? ((row.session as { lastTurnIncomplete?: boolean }).lastTurnIncomplete ? "Needs attention" : (row.session as { lastTurnFailed?: boolean }).lastTurnFailed ? "Last turn failed" : undefined) : undefined;
   const working = live === "working" || live === "cancelling";
   const count = (row.session as { messageCount?: number }).messageCount;
+  const empty = (count ?? 0) === 0 && !selected;
   // Second line: the waiting/failed text in the accent colour, else the folder and the computer. Running work shows its spinner instead.
   const waiting = working ? undefined : attention;
   const hostLabel = `${host.name}${slice.offline ? " · offline" : ""}`;
@@ -137,8 +138,8 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
       onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }}
       onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); slice.actions.click(row, title); } }}
       data-sidebar-row title={title}
-      className="-mx-2 flex h-full min-w-0 flex-1 flex-col justify-center gap-1 rounded-md px-2 outline-none select-none focus-visible:outline-ring-inset">
-      <RowTitleLine className={sidebarChatTitlePending(row) ? "ui-text-shimmer" : undefined} title={title} trailing={<span className="flex min-w-6 shrink-0 items-center justify-end">
+      className="-mx-2 flex h-full min-w-0 flex-1 flex-col justify-center gap-[3px] rounded-md px-2 outline-none select-none focus-visible:outline-ring-inset">
+      <RowTitleLine className={sidebarChatTitlePending(row) ? "ui-text-shimmer" : empty ? "text-foreground/50" : undefined} title={title} trailing={<span className="flex min-w-6 shrink-0 items-center justify-end">
         {working
           ? <span role="status" aria-label={live === "cancelling" ? "Stopping" : "Working"} className={cn("flex size-4 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>
           : <RowAge className={cn(!readOnly && "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:opacity-0")}>{age}</RowAge>}
@@ -148,12 +149,12 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           {subline.kind === "needs-you"
             ? <SidebarLabel className="text-primary-ink">{subline.text}</SidebarLabel>
             : <>
-              <SidebarLabel data-slot="thread-folder" className="flex-1">{subline.folder}</SidebarLabel>
-              <span data-slot="thread-computer" className="ml-auto flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap">{host.id === "local" ? <LaptopIcon aria-hidden="true" className="size-3.5 shrink-0" /> : <ServerIcon aria-hidden="true" className="size-3.5 shrink-0" />}{subline.computer}</span>
+              {subline.folder && <SidebarLabel data-slot="thread-folder" className="flex-1">{subline.folder}</SidebarLabel>}
+              <span data-slot="thread-computer" className={cn(subline.folder && "ml-auto", "flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap")}>{host.id === "local" ? <LaptopIcon aria-hidden="true" className="size-3.5 shrink-0" /> : <ServerIcon aria-hidden="true" className="size-3.5 shrink-0" />}{subline.computer}</span>
             </>}
         </span>}
     </a>
-    {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute inset-y-0 right-0 flex items-center rounded-r-md bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
+    {!readOnly && (actionsFor === id || touchOnly) && <div data-slot="sidebar-thread-actions" className="absolute top-1.5 right-0 flex h-6 items-center rounded-r-md bg-chrome bg-[image:linear-gradient(var(--secondary),var(--secondary))] pr-1 pl-9 [mask-image:linear-gradient(to_left,#000_calc(100%-32px),transparent)]">
       <Button variant="ghost" size="icon-xs" disabled={slice.busy || slice.unavailable} tooltip={`Delete ${VOCAB.mission.singular}`} className="size-5.5 p-1 text-muted-foreground hover:bg-transparent hover:text-destructive" aria-label={`Delete ${title}`} onClick={() => slice.actions.requestDelete(session.id, title, isSaved)}><Trash2 className="size-(--icon-sm)" /></Button>
     </div>}
   </div>;
