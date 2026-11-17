@@ -117,6 +117,7 @@ describe("embedded (no running engine)", () => {
     expect((await run("agents", "archive", prefix, ...db)).code).toBe(0);
     expect(JSON.parse((await run("agents", "list", "--status", "archived", ...db)).out)).toHaveLength(1);
     expect((await run("agents", "delete", prefix, "--yes", ...db)).code).toBe(0);
+    expect((await run("agents", "delete", viaAutonomy.id.slice(0, 8), "--yes", ...db)).code).toBe(0);
     expect(JSON.parse((await run("agents", "list", ...db)).out)).toEqual([]);
   });
 

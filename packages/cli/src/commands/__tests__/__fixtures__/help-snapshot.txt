@@ -595,8 +595,8 @@ Commands:
   list [options]        List registered remote computers
   add|deploy [options]  Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH
                         host) and register it
-  stop <backend-id>     Stop a managed remote computer and its owned tunnel; retain remote files
-                        and registration
+  stop <backend-id>     Stop a managed remote computer and its owned tunnel; retain remote files and
+                        registration
   help [command]        display help for command
 
 ### 0 computers add
@@ -607,12 +607,11 @@ Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH host) an
 Options:
   --ssh <user@host>        SSH target host (BatchMode; key auth from ssh config/agent)
   --lima <name>            Lima instance name (default: "zero-worker")
-  --target-git <url>       Repository the remote server clones into the engine folder instead of
-                           the bundled demo target
+  --target-git <url>       Repository the remote server clones into the engine folder instead of the
+                           bundled demo target
   --ssh-config <path>      OpenSSH config file for the SSH target (e.g. a Lima instance's
                            ssh.config)
-  --engine-port <port>     Engine port on the remote server (default: stable port derived from
-                           host)
+  --engine-port <port>     Engine port on the remote server (default: stable port derived from host)
   --trust-new-host         Trust and remember the computer's SSH host key if it is not known yet
                            (default: false)
   --forward-provider-key   Forward this computer's OPENAI_API_KEY to the remote engine (user-owned
@@ -1019,8 +1018,8 @@ Options:
   -h, --help           display help for command
 
 Commands:
-  setup [options]      Verify/provision the signed native runtime, approve a local image, and
-                       select SmolVM execution
+  setup [options]      Verify/provision the signed native runtime, approve a local image, and select
+                       SmolVM execution
   status [options]     Inspect configuration, provisioned runtime, image approval and retained
                        admission; never downloads
   providers            List explicit provider grant IDs; credentials are never displayed
@@ -1115,8 +1114,8 @@ Options:
   --scan <scanId>        Filter by scan ID
   --severity <severity>  Filter by severity: critical, high, medium, low, info
   --category <category>  Filter by attack category
-  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported,
-                         fixed, false-positive
+  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported, fixed,
+                         false-positive
   --triage <triage>      Filter by triage: new, accepted, suppressed
   --limit <n>            Max findings/groups to show (default: "50")
   --all                  Show raw finding rows instead of grouped fingerprints (default: false)
@@ -1211,8 +1210,8 @@ Options:
   --scan <scanId>        Filter by scan ID
   --severity <severity>  Filter by severity: critical, high, medium, low, info
   --category <category>  Filter by attack category
-  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported,
-                         fixed, false-positive
+  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported, fixed,
+                         false-positive
   --triage <triage>      Filter by triage: new, accepted, suppressed
   --limit <n>            Max findings/groups to show
   -h, --help             display help for command
@@ -1408,19 +1407,19 @@ Options:
   --db-path <path>           Persistent findings database (defaults to ZERO_DB_PATH or the local
                              store)
   -m, --model <id>           Override the LLM model id (else provider default)
-  --role <role>              Tool set to expose: audit|review|discovery|attack|verify (default
-                             audit = every tool)
+  --role <role>              Tool set to expose: audit|review|discovery|attack|verify (default audit
+                             = every tool)
   --approvals <ask|auto>     Ask before running commands, or run them automatically (default auto).
                              Credential, private-network and sandbox protections apply either way.
   --max-tool-calls <n>       Optional tool-call round limit per message (unlimited by default)
   --allow-scanners           Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off
-  --resume [id]              With a headless prompt, reopen a saved chat by id or unique prefix;
-                             use browser history for a picker.
+  --resume [id]              With a headless prompt, reopen a saved chat by id or unique prefix; use
+                             browser history for a picker.
   --continue                 With a headless prompt, continue the most recent saved console chat.
   -p, --print [prompt]       Non-interactive: run ONE prompt through the engine, print the result,
                              and exit. Reads the prompt from the argument or piped stdin. Combine
-                             with --continue/--resume to query a saved session. Also reachable as
-                             `0 -p <prompt>`.
+                             with --continue/--resume to query a saved session. Also reachable as `0
+                             -p <prompt>`.
   --engine <id>              Use a registered remote engine
   --engines-config <path>    Operator engine connection registry JSON file
   --chat <id>                Send to an existing live engine chat
@@ -1550,8 +1549,8 @@ Options:
   --cybergym-subset <path>       Pre-registered CyberGym task-id file
   --cybergym-difficulty <level>  CyberGym task difficulty (default: "level1")
   --cybergym-best-of-n <n>       CyberGym trajectory count; default strict pass@1 (default: "1")
-  --cybergym-max-submits <n>     Official CyberGym submits per task; default strict pass@1
-                                 (default: "1")
+  --cybergym-max-submits <n>     Official CyberGym submits per task; default strict pass@1 (default:
+                                 "1")
   --case-id <id>                 exact case id in a pre-registered manifest slice (repeatable)
                                  (default: [])
   --manifest-id <id>             sealed slice id (required with --case-id)
@@ -1825,8 +1824,8 @@ Options:
   --rate-limit <spec>          Per-host request rate-limit spec. Defaults to 5 rps when unset. An
                                active --engagement-profile caps this: the effective rate is the
                                minimum of the two, so the profile can only lower it.
-  --allow-scanners             Disable generic-scanner suppression for scoped engagements.
-                               (default: false)
+  --allow-scanners             Disable generic-scanner suppression for scoped engagements. (default:
+                               false)
   --engagement-profile <name>  Engagement hardening posture for authorized enterprise work.
                                'standard' (default) is the existing behaviour. 'conservative'
                                applies the quiet posture to this MCP chat: no adaptive WAF-evasion
@@ -1867,13 +1866,12 @@ Commands:
                                               hypotheses and only scoped adapters may hand off
                                               targets
   linux-matrix [options]                      Import externally executed vulnerable-vs-patched boot
-                                              logs; 0 validates and hashes them but does not
-                                              execute boots
+                                              logs; 0 validates and hashes them but does not execute
+                                              boots
   linux [options]                             Run a supplied Linux kernel reproducer through the
                                               shared N-boot evidence gate
   hunt [options]                              Hunt a bug class across a source tree, seeded by a
-                                              proven fix. Emits leads to verify, not confirmed
-                                              bugs.
+                                              proven fix. Emits leads to verify, not confirmed bugs.
   recency-hunt [options]                      Hunt recent kernel commits (linux-next) for security
                                               regressions. Emits leads to verify, not confirmed
                                               bugs.
@@ -1888,15 +1886,15 @@ Commands:
                                               commands
   protocol-check [options]                    Check an HTTP implementation against a spec excerpt
                                               for MUST-level violations.
-  npm-discovery                               Dynamic bug discovery for npm packages; confirmed
-                                              only on observed runtime impact.
+  npm-discovery                               Dynamic bug discovery for npm packages; confirmed only
+                                              on observed runtime impact.
   js-recon [options] <url>                    Mine live JavaScript for endpoints, API bases, and
                                               redacted secrets
   xnu-fuzz                                    IOKit user-client fuzzer for macOS kernel (xnu)
                                               security research.
   kernel                                      Kernel security scans
-  cve                                         CVE workflows: artifact lookup (`find`) and
-                                              autonomous PoC adaptation (`adapt`).
+  cve                                         CVE workflows: artifact lookup (`find`) and autonomous
+                                              PoC adaptation (`adapt`).
   intel                                       Live vulnerability intelligence lookup helpers
   recon [options] <domain>                    Map a domain's attack surface: subdomains, endpoints,
                                               API docs, and MCP servers.
@@ -1912,8 +1910,7 @@ Commands:
                                               argument.
   adgraph [options]                           Offline Active Directory attack-path analysis over
                                               BloodHound/SharpHound JSON on disk. Reads files only:
-                                              never collects, authenticates, or touches the
-                                              network.
+                                              never collects, authenticates, or touches the network.
   entragraph [options]                        Offline Microsoft Entra ID attack-path analysis over
                                               an AzureHound export on disk. Reads files only: never
                                               collects, authenticates, or touches the network.
@@ -1947,8 +1944,7 @@ Arguments:
                               checkout)
 
 Options:
-  --files <a.c,b.c>           Comma-separated subsystem source files, repo-relative to
-                              <source-root>
+  --files <a.c,b.c>           Comma-separated subsystem source files, repo-relative to <source-root>
   --subsystem <label>         Subsystem label for the stored model (e.g. net/unix)
   --model-path <path>         Where the durable assumption model JSON lives (default under
                               <source-root>/.0)
@@ -1961,8 +1957,8 @@ Options:
                               direct-token scan — FP ablation)
   --no-finder-targeting       Feed the finder the whole subsystem file instead of focused
                               per-function excerpts
-  --no-dual-view              Disable the v2 dual-api/cross-phase enumerator (caller-scan only —
-                              the v1 behavior)
+  --no-dual-view              Disable the v2 dual-api/cross-phase enumerator (caller-scan only — the
+                              v1 behavior)
   --dynamic-witness           v3: route dual-view candidates to the KASAN synthesize→boot→witness
                               oracle (bypasses the static skeptic). Needs a KASAN VM env
                               (ZERO_KERNEL_QEMU_*).
@@ -2113,8 +2109,8 @@ Options:
 ### 0 lab research entragraph
 Usage: 0 lab research entragraph [options]
 
-Offline Microsoft Entra ID attack-path analysis over an AzureHound export on disk. Reads files
-only: never collects, authenticates, or touches the network.
+Offline Microsoft Entra ID attack-path analysis over an AzureHound export on disk. Reads files only:
+never collects, authenticates, or touches the network.
 
 Options:
   --input <path>   A single AzureHound JSON file, or a directory of AzureHound JSON files
@@ -2139,16 +2135,15 @@ Options:
   --max-strategies <N>    Cap the number of applicable strategies attempted (bounds VM boots).
   --output <path>         Write the weaponization result JSON to this path instead of stdout.
   --climb                 Engine-driven root-climb mode: drive the REAL verify→weaponization chain
-                          runner (real QEMU runner + real oracle, no overrides), looping boots
-                          until the oracle credits root. Requires staged kernel-VM artifacts.
-  --loop-boots <N>        [--climb] Max genuine QEMU boots to loop (root race is ~1/6-8). Default
-                          8.
+                          runner (real QEMU runner + real oracle, no overrides), looping boots until
+                          the oracle credits root. Requires staged kernel-VM artifacts.
+  --loop-boots <N>        [--climb] Max genuine QEMU boots to loop (root race is ~1/6-8). Default 8.
   --vmlinux <path>        [--climb] Resolved vmlinux for the root-tail planner's symbol resolution.
   --kernel-config <path>  [--climb] Kernel .config text for exploit-config introspection.
   --freed-struct <name>   [--climb] Freed object's C struct name (e.g. snd_rawmidi_runtime).
   --proof-out <path>      [--climb] Where to write the read-only root proof (default: temp dir).
-  --autoclimb             Autonomous LLM-composed weaponization climb: the engine's OWN codegen
-                          loop composes each C body from the technique library + bug trigger + last
+  --autoclimb             Autonomous LLM-composed weaponization climb: the engine's OWN codegen loop
+                          composes each C body from the technique library + bug trigger + last
                           verdict.
   --bug-spec <path>       [--autoclimb] JSON AutonomousClimbBug (trigger C, config-off, slab,
                           ceiling).
@@ -2168,9 +2163,9 @@ Options:
                           is REQUIRED (no local execution).
   --flag-path <path>      [--agent] Where the captured flag must land in the target (default
                           /tmp/flag).
-  --flag-pattern <ere>    [--agent] ERE the flag content must match. Without it a capture rests on
-                          a non-empty flag file only, which a status line the agent echoes there
-                          will FALSE-PASS.
+  --flag-pattern <ere>    [--agent] ERE the flag content must match. Without it a capture rests on a
+                          non-empty flag file only, which a status line the agent echoes there will
+                          FALSE-PASS.
   --max-steps <N>         [--agent] Agent step budget (default 90).
   --runtime <mode>        [--agent] Engine runtime (default api).
   -h, --help              display help for command
@@ -2289,17 +2284,16 @@ Options:
                                  set (default 1)
   --novelty-sync                 Clone/fetch lore mirrors before running the novelty gate
   --novelty-model <model>        Optional model override for the lore duplicate judge
-  --novelty-required             Legacy alias; --novelty already aborts when evidence is
-                                 unavailable
-  --methodology                  Use the kernel-LPE methodology preset: lifecycle/provenance
-                                 lenses, best-of-4, top-2 skeptic gate, reachable-first
+  --novelty-required             Legacy alias; --novelty already aborts when evidence is unavailable
+  --methodology                  Use the kernel-LPE methodology preset: lifecycle/provenance lenses,
+                                 best-of-4, top-2 skeptic gate, reachable-first
   --invariant                    Engine A: build (or load) the seed-touched subsystem's stored
                                  invariant model and inject its rules + deterministic violation
                                  hypotheses into every finder prompt
-  --graph-slice                  Load the seed-touched subsystem's pre-exported Joern CPG and
-                                 inject a compact interprocedural reachability slice around the fix
-                                 site into every finder prompt (needs scripts/provision-cpg.sh;
-                                 fail-open to flat-text)
+  --graph-slice                  Load the seed-touched subsystem's pre-exported Joern CPG and inject
+                                 a compact interprocedural reachability slice around the fix site
+                                 into every finder prompt (needs scripts/provision-cpg.sh; fail-open
+                                 to flat-text)
   --cpg <path>                   Explicit CPG graphson JSON path for --graph-slice (default:
                                  <source>/.0/cpg/<subsystem>.json)
   --ops-harvest <paths>          [--graph-slice] Comma-separated repo-relative C files to harvest
@@ -2313,9 +2307,9 @@ Options:
                                  requires staged kernel-VM artifacts and is ignored under
                                  --no-verify. Never rejects a finding; it stamps a proven verdict
                                  and gates the weaponize budget.
-  --prove-min-ceiling <ceiling>  [--exploitability] Minimum assessed impact ceiling worth a VM
-                                 slot: dos-only|info-leak|oob-write|uaf-control (default info-leak
-                                 — filters out dos-only before QEMU is touched)
+  --prove-min-ceiling <ceiling>  [--exploitability] Minimum assessed impact ceiling worth a VM slot:
+                                 dos-only|info-leak|oob-write|uaf-control (default info-leak —
+                                 filters out dos-only before QEMU is touched)
   --output <path>                Write the hunt result JSON to this path instead of stdout
   --runtime <mode>               Engine runtime (default api)
   --timeout <ms>                 Accepted cloud agent timeout budget in milliseconds (default:
@@ -2597,8 +2591,8 @@ Options:
 ### 0 lab research linux-matrix
 Usage: 0 lab research linux-matrix [options]
 
-Import externally executed vulnerable-vs-patched boot logs; 0 validates and hashes them but does
-not execute boots
+Import externally executed vulnerable-vs-patched boot logs; 0 validates and hashes them but does not
+execute boots
 
 Options:
   --matrix <path>         Versioned external boot-matrix manifest JSON
@@ -2620,8 +2614,7 @@ Options:
   --build-system <sys>          Force the build system: cargo | cmake | autotools | meson | make
                                 (else auto-detected)
   --artifact-dir <path>         Persist bounded crash evidence outside the source tree
-  --artifact-max-bytes <bytes>  Aggregate byte ceiling for retained crash evidence (default
-                                4194304)
+  --artifact-max-bytes <bytes>  Aggregate byte ceiling for retained crash evidence (default 4194304)
   --harness <name>              libFuzzer / cargo-fuzz harness target name
   --fuzz-dir <path>             Non-standard cargo-fuzz directory (relative to source root)
   --miri                        Additionally run `cargo +nightly miri` for UB detection (Rust)
@@ -2677,8 +2670,8 @@ Options:
   --detectors <ids>              Restrict to these detector ids (comma-separated). Default: all.
   --downloads-floor <n>          Skip packages below this weekly-download floor (needs registry
                                  metadata).
-  --max-age-days <n>             Skip packages whose last publish is older than this (needs
-                                 registry metadata).
+  --max-age-days <n>             Skip packages whose last publish is older than this (needs registry
+                                 metadata).
   --i-understand-untrusted-exec  Acknowledge that `run` executes untrusted package code in-process
                                  on this host.
   --offline-dedup                Skip the live OSV advisory lookup (air-gapped/hermetic runs).
@@ -2709,14 +2702,14 @@ Check an HTTP implementation against a spec excerpt for MUST-level violations.
 
 Options:
   --spec <file>             Path to the authoritative specification excerpt (RFC/ABNF prose, text).
-  --impl <file>             Path to the implementation source excerpt the divergence is
-                            hypothesized in.
+  --impl <file>             Path to the implementation source excerpt the divergence is hypothesized
+                            in.
   --target <url>            Base URL of the live target to exercise (e.g. http://127.0.0.1:8080).
   --json                    Emit the full result (findings + attempts) as JSON on stdout.
   --max-exercises <N>       Cap how many ranked hypotheses to exercise against the target (default
                             8).
-  --runtime <runtime>       LLM runtime: auto/api (codex login or API key), claude, codex.
-                            (default: "auto")
+  --runtime <runtime>       LLM runtime: auto/api (codex login or API key), claude, codex. (default:
+                            "auto")
   --protocol <name>         Protocol name for the report/finding (default HTTP/1.1).
   --spec-version <version>  Spec edition for the report (default RFC 9110).
   --spec-ref <ref>          Auditable spec citation (e.g. 'RFC 9110 §9.3.6').
@@ -2749,16 +2742,15 @@ Options:
                                      boots are expensive — bounded by the budget below.
   --witness-candidates <N>           Dynamic-witness RUN budget: total dual-view candidates booted
                                      through the KASAN oracle per run (default 10)
-  --witness-candidates-per-file <N>  Per-file cap on witnessed candidates, clamped to the run
-                                     budget (default 6)
+  --witness-candidates-per-file <N>  Per-file cap on witnessed candidates, clamped to the run budget
+                                     (default 6)
   --witness-rounds <N>               Bounded PoC-repair rounds per candidate — each is one VM boot
                                      (default 2)
-  --witness-mode <mode>              PoC shape for the oracle: single (sequential), race
-                                     (concurrent multi-thread), auto (race for race-shaped seams;
-                                     default)
+  --witness-mode <mode>              PoC shape for the oracle: single (sequential), race (concurrent
+                                     multi-thread), auto (race for race-shaped seams; default)
   --witness-race-threads <N>         Race-mode worker threads driving entryA vs entryB (default 4)
-  --witness-race-iters <N>           Race-mode per-thread hammer iterations to widen the race
-                                     window (default 200000)
+  --witness-race-iters <N>           Race-mode per-thread hammer iterations to widen the race window
+                                     (default 200000)
   --remine-assumptions               Force a fresh assumption mine for dual-view each run (default:
                                      reuse a stored per-file model if present)
   --output <path>                    Write the report JSON here instead of stdout
@@ -2795,8 +2787,8 @@ Options:
 Commands:
   extract [options]  Extract cited protocol invariants from an arbitrary spec text file
   scan [options]     Extract spec invariants and map them to candidate implementation code
-  plan [options]     Extract invariants, map implementation candidates, and emit drift hypotheses
-                     to verify
+  plan [options]     Extract invariants, map implementation candidates, and emit drift hypotheses to
+                     verify
   help [command]     display help for command
 
 ### 0 lab research specdrift extract
@@ -2822,8 +2814,7 @@ Options:
   --spec-name <name>                  Display name stored in citations
   --max-invariants <N>                Maximum invariant candidates to extract (default: "40")
   --max-files <N>                     Maximum source files to inspect (default: "400")
-  --max-candidates-per-invariant <N>  Maximum implementation candidates per invariant (default:
-                                      "5")
+  --max-candidates-per-invariant <N>  Maximum implementation candidates per invariant (default: "5")
   --max-hypotheses <N>                Maximum drift hypotheses to emit (default: "20")
   --timeout <ms>                      Source preparation timeout (default: "600000")
   --output <path>                     Write JSON result to a file instead of stdout
@@ -2840,8 +2831,7 @@ Options:
   --spec-name <name>                  Display name stored in citations
   --max-invariants <N>                Maximum invariant candidates to extract (default: "40")
   --max-files <N>                     Maximum source files to inspect (default: "400")
-  --max-candidates-per-invariant <N>  Maximum implementation candidates per invariant (default:
-                                      "5")
+  --max-candidates-per-invariant <N>  Maximum implementation candidates per invariant (default: "5")
   --timeout <ms>                      Source preparation timeout (default: "600000")
   --output <path>                     Write JSON result to a file instead of stdout
   -h, --help                          display help for command
@@ -3126,8 +3116,8 @@ Write notes to a file: JSON for 0 (default), or with --to a reviewable AGENTS.md
 Options:
   --folder <path>      Only this folder (default for --to: this folder)
   -o, --output <file>  Write the JSON export to a file instead of stdout
-  --to <file>          Add accepted notes to this markdown file (for example AGENTS.md) as a
-                       section you review and commit
+  --to <file>          Add accepted notes to this markdown file (for example AGENTS.md) as a section
+                       you review and commit
   --markdown           Print the markdown section instead of JSON
   --json               Print machine-readable JSON
   --db-path <path>     Engine database to import older memories from
@@ -3690,8 +3680,8 @@ Options:
   --ref <tag>                  Git ref (tag/sha/branch) to check out before verifying — defaults to
                                the repo's current HEAD
   --drop-fixed                 Move findings whose status is 'fixed' or 'file-removed' into
-                               _dropped/ with a reason file instead of drafting an advisory for
-                               them (default: false)
+                               _dropped/ with a reason file instead of drafting an advisory for them
+                               (default: false)
   --reverify                   Behaviourally re-verify each finding's PoC step graph against a live
                                target. Requires --target-url. (default: false)
   --target-url <url>           Base URL the behavioural re-verify runtime dispatches http actions
@@ -3700,8 +3690,8 @@ Options:
                                behavioural re-verify
   --target-timeout-ms <ms>     Per-step timeout for behavioural re-verify, in milliseconds (default
                                30000)
-  --keep-unrun                 Route `could_not_run` behavioural verdicts to needs-review instead
-                               of dropping them. Default-off because unverified PoCs should never
+  --keep-unrun                 Route `could_not_run` behavioural verdicts to needs-review instead of
+                               dropping them. Default-off because unverified PoCs should never
                                auto-file. (default: false)
   --reverify-rps <n>           Per-host requests-per-second cap for behavioural reverify (default
                                2). Honours 429 Retry-After.
@@ -3801,8 +3791,8 @@ Options:
   --test-command <command>      Explicit regression command to run in the isolated candidate
                                 worktree
   --verify-image <image>        Run --test-command in this digest-pinned container image with the
-                                network off; without it the command runs on this machine and the
-                                fix is never labelled Verified
+                                network off; without it the command runs on this machine and the fix
+                                is never labelled Verified
   --runtime <runtime>           Fix runtime: auto or api (default: "auto")
   -m, --model <model>           Model identifier for the selected runtime
   --api-key <key>               API key for the selected runtime
@@ -3839,11 +3829,11 @@ Options:
   --static-only                Run only the static layer and skip AI analysis on purpose (exit 0).
                                Without it, a scan that cannot reach a model exits 3. (default:
                                false)
-  --cost-ceiling <usd>         Hard per-audit USD cost ceiling. Aborts cleanly with partial
-                               findings if exceeded.
+  --cost-ceiling <usd>         Hard per-audit USD cost ceiling. Aborts cleanly with partial findings
+                               if exceeded.
   --resume <run-id>            Resume a previous run from its journal on disk (0#374)
-  --branch-from <entry-index>  Branch the journal at the given entry index before resuming
-                               (requires --resume).
+  --branch-from <entry-index>  Branch the journal at the given entry index before resuming (requires
+                               --resume).
   --verbose                    Show detailed output (default: false)
   --timeout <ms>               AI agent timeout in milliseconds (default: "600000")
   -h, --help                   display help for command
@@ -3858,8 +3848,7 @@ Arguments:
                              worker, not a newly provisioned sandbox
 
 Options:
-  --test-command <command>   Operator-approved regression command; must pass before and after
-                             repair
+  --test-command <command>   Operator-approved regression command; must pass before and after repair
   --source-path <path>       Repository-relative folder to investigate and repair; setup and tests
                              run at the repository root
   --setup-command <command>  Operator-approved setup/build command run in each disposable checkout
@@ -3914,21 +3903,21 @@ Options:
   --profile <profile>               Review profile: default (web/JS/TS/Python), c-library (C/C++
                                     memory safety, tier-1/2/3 harness), linux-kernel (kernel-aware
                                     static review), cardano-onchain (Aiken/Plutus validator logic),
-                                    solana-onchain (Anchor/native Rust account-model
-                                    authorization), evm-onchain (Solidity/Foundry/Hardhat
-                                    DeFi/bridge — reentrancy, oracle manipulation, cross-chain
-                                    replay), cairo-onchain (Cairo/Starknet DeFi — caller-auth gaps,
-                                    share-rounding, L1↔L2 messages), move-onchain (Sui/Aptos Move —
-                                    object/capability binding, shared-math overflow, reward-index
-                                    accounting), cardano-haskell (first-party Cardano Haskell node
-                                    stack — ledger/plutus/ouroboros/cardano-base), xnu-kernel
-                                    (Apple XNU macOS/iOS source review), or xnu-re (decompiled
-                                    Apple kext pseudo-C) (default: "default")
+                                    solana-onchain (Anchor/native Rust account-model authorization),
+                                    evm-onchain (Solidity/Foundry/Hardhat DeFi/bridge — reentrancy,
+                                    oracle manipulation, cross-chain replay), cairo-onchain
+                                    (Cairo/Starknet DeFi — caller-auth gaps, share-rounding, L1↔L2
+                                    messages), move-onchain (Sui/Aptos Move — object/capability
+                                    binding, shared-math overflow, reward-index accounting),
+                                    cardano-haskell (first-party Cardano Haskell node stack —
+                                    ledger/plutus/ouroboros/cardano-base), xnu-kernel (Apple XNU
+                                    macOS/iOS source review), or xnu-re (decompiled Apple kext
+                                    pseudo-C) (default: "default")
   --target <target>                 Review target alias: app/default, c-library, or linux-kernel
-  --ecosystem <ecosystem>           Review the SOURCE of a published package instead of a repo:
-                                    npm, pypi, cargo, or oci. When set, <repo> is the package NAME
-                                    — 0 installs it and reviews its extracted source. Omit for a
-                                    local path or git URL.
+  --ecosystem <ecosystem>           Review the SOURCE of a published package instead of a repo: npm,
+                                    pypi, cargo, or oci. When set, <repo> is the package NAME — 0
+                                    installs it and reviews its extracted source. Omit for a local
+                                    path or git URL.
   --package-version <version>       Pin the package version to review (only with --ecosystem).
                                     Defaults to latest.
   --seed-findings <path>            Path to ND-JSON leads from an external producer. "-" reads
@@ -3949,8 +3938,8 @@ Options:
                                     sanitizer validation). (default: "1")
   --harness-function <name>         Tier-2 only: name of the suspect function the harness should
                                     drive. Defaults to a heuristic placeholder.
-  --harness-header <path>           Tier-2 only: header to #include in the emitted harness.
-                                    Defaults to the function name with a .h suffix.
+  --harness-header <path>           Tier-2 only: header to #include in the emitted harness. Defaults
+                                    to the function name with a .h suffix.
   --harness-build-system <system>   Tier-2 only: build system to grep-parse for object subset
                                     (autotools, cmake, meson, auto). (default: "auto")
   --harness-sanitizers <list>       Tier-2 only: comma-separated sanitizers to enable (asan, ubsan,
@@ -3961,11 +3950,10 @@ Options:
                                     ZERO_KERNEL_QEMU_KERNEL.
   --harness-qemu-disk <path>        Tier-3 only: pre-built rootfs image. Defaults to
                                     ZERO_KERNEL_QEMU_DISK.
-  --harness-wall-clock-ms <ms>      Tier-3 only: wall-clock budget in milliseconds for the full
-                                    QEMU validation. Default 300000 (5m).
+  --harness-wall-clock-ms <ms>      Tier-3 only: wall-clock budget in milliseconds for the full QEMU
+                                    validation. Default 300000 (5m).
   --subsystem <path>                Restrict the review to a specific subsystem directory (e.g.
-                                    crypto/, net/tcp/). Only meaningful with --profile
-                                    linux-kernel.
+                                    crypto/, net/tcp/). Only meaningful with --profile linux-kernel.
   --hypothesis <text>               Operator hypothesis to seed the agent with a specific research
                                     direction. Modeled after Xint Code's operator prompt.
   --conversation <text>             PR/MR discussion thread to review against (untrusted). The
@@ -3976,8 +3964,8 @@ Options:
   --fix-commit <sha>                Analyze a security-fix commit and hunt for structurally similar
                                     unpatched code paths (variant hunting). Requires a local git
                                     repo. Resolves the commit to its full SHA and first-parent
-                                    preimage. When used alone, feeds candidates as SeedFindings
-                                    into the review pipeline. Combine with --variants-only to emit
+                                    preimage. When used alone, feeds candidates as SeedFindings into
+                                    the review pipeline. Combine with --variants-only to emit
                                     candidates as JSON without model/network calls.
   --variants-only                   Emit full variant-hunt result as JSON (candidates, language
                                     coverage, errors) and exit. Requires --fix-commit. No model,
@@ -4004,8 +3992,8 @@ Arguments:
                                to --finding when --runner is supplied.
 
 Options:
-  --runner <kind>              Deterministic replay runner: local|smolvm|docker|qemu (default
-                               smolvm in an admitted workbench, local outside).
+  --runner <kind>              Deterministic replay runner: local|smolvm|docker|qemu (default smolvm
+                               in an admitted workbench, local outside).
   --docker-network <name>      Docker network for --runner docker. Defaults to none; bridge/custom
                                networks require --scope and only permit HTTP steps.
   --scope <path>               Engagement scope JSON required for HTTP replay; SmolVM also refuses
@@ -4072,47 +4060,44 @@ Options:
                                      recommendations only
   --routing-model <model>            Approve a model candidate for the reviewed routing plan
                                      (repeatable)
-  --routing-review-ref <ref>         Review reference confirming provider/workflow authorization
-                                     and model evidence limitations
+  --routing-review-ref <ref>         Review reference confirming provider/workflow authorization and
+                                     model evidence limitations
   --goal <goal>                      Noninteractive routing goal: known-vulnerabilities,
                                      unknown-vulnerabilities, misconfigurations
   --plan-time-cap <ms>               Overall wall-clock cap required for a noninteractive routing
                                      plan
   --single-model                     Use the selected model for every task, ignoring task
                                      assignments
-  --no-guided                        Skip interactive scan planning and use explicit command
-                                     options
+  --no-guided                        Skip interactive scan planning and use explicit command options
   --repo <path>                      Source code path for white-box scanning
-  --access-control-fixtures <file>   JSON file of known private resource ownership fixtures for
-                                     IDOR verification
+  --access-control-fixtures <file>   JSON file of known private resource ownership fixtures for IDOR
+                                     verification
   --identities <file>                Restricted JSON file with named test identities for
                                      access-control replay
   --auth <json>                      Auth credentials: JSON string or path (bearer, cookie, basic,
                                      header)
-  --scope <path>                     Path to a JSON scope policy (defining a scope turns
-                                     enforcement on)
+  --scope <path>                     Path to a JSON scope policy (defining a scope turns enforcement
+                                     on)
   --allow-scanners                   Expose generic scanner tools in scope-enforced scans (default:
                                      false)
   --require-scope                    Refuse unscoped scans while the scope extension is enabled
                                      (default: false)
   --attribution-header <name=value>  Header to attach to in-scope requests (repeatable); never sent
                                      out-of-scope
-  --attribution-ua <token>           Engagement token to embed in the User-Agent on in-scope
-                                     traffic
+  --attribution-ua <token>           Engagement token to embed in the User-Agent on in-scope traffic
   --api-spec <path>                  Path to an OpenAPI/Swagger spec for endpoint knowledge
   --export <target>                  Export findings to issue tracker (e.g. github:owner/repo)
   --cost-ceiling <usd>               Estimated USD stopping threshold; in-flight usage may
                                      overshoot, partial findings retained
-  --rate-limit <spec>                Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default
-                                     5)
+  --rate-limit <spec>                Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5)
   --engagement-profile <name>        Engagement posture: standard (default) or conservative
                                      (quieter)
   --no-waf-evasion                   Disable adaptive WAF-evasion retries
   --features <list>                  Comma-separated feature flags to enable, e.g. 'fp-moat'
   --emit <target>                    Emit mode: 'pr' opens a GitHub PR per reproduced finding
   --base <branch>                    Base branch for `--emit pr` (default: main)
-  --dry-run                          With `--emit pr`: print git/gh commands instead of running
-                                     them (default: false)
+  --dry-run                          With `--emit pr`: print git/gh commands instead of running them
+                                     (default: false)
   --emit-out-dir <path>              Directory for `--emit pr` rollup files (default: system temp)
   --resume <run-id>                  Resume a previous run from its on-disk journal
   --verbose                          Show detailed output (default: false)
@@ -4218,8 +4203,8 @@ Commands:
 ### 0 skills extensions add (hidden)
 Usage: 0 skills extensions add [options] <source>
 
-Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as
-`0 skills add`
+Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<full sha>; same as `0
+skills add`
 
 Options:
   --preview         Only show the install prompt
@@ -4750,8 +4735,8 @@ Options:
                                 calls
   --engine-time-cap <ms>        Server workflow deadline ceiling (default 600000 ms)
   --engine-cost-cap <usd>       Server workflow estimated cost ceiling (default $5)
-  --server-mode                 Serve the console to a network behind a TLS proxy: requires
-                                sign-in, an allowed-host list and a single node (off by default)
+  --server-mode                 Serve the console to a network behind a TLS proxy: requires sign-in,
+                                an allowed-host list and a single node (off by default)
   --allowed-host <host...>      Server mode: accepted Host header names (default: only the bind
                                 host); also ZERO_ALLOWED_HOSTS
   --trusted-proxy <cidr...>     Server mode: proxy addresses or CIDRs whose X-Forwarded-* headers

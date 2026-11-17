@@ -20,7 +20,7 @@
     "@0/engine": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "chalk": "^6.0.1",
-    "commander": "^12.1.0",
+    "commander": "^15.1.0",
     "jose": "^6.2.17",
     "zod": "^4.6.7"
   },
