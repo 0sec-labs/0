@@ -77,6 +77,10 @@ export interface LaunchOptions {
   context?: { label: string; text: string };
   /** Post (or edit in place) one summary comment on this pull request when the run completes. */
   comment?: { repo: string; pr: number; headSha: string; fork: boolean };
+  /** How the trigger arrived (`schedule`, `poll`, `check`, `webhook`); recorded on the turn ledger. */
+  via?: string;
+  /** Unique per Agent in the turn ledger (the cause: trigger and occurrence, or trigger, pull request and head commit). */
+  idempotencyKey?: string;
 }
 interface Watch { activationId: string; stop(reason: string): Promise<void>; dispose(): void }
 
@@ -133,12 +137,12 @@ export class SentinelRunner {
   }
 
   /** "Check now": makes one enabled trigger due and polls it immediately. Returns false when it is off or already busy. */
-  async checkNow(triggerId: string): Promise<boolean> {
+  async checkNow(triggerId: string, via: "check" | "webhook" = "check"): Promise<boolean> {
     if (this.#closed) return false;
     const nowMs = this.#now();
     const due = this.#store.requestCheck(triggerId, nowMs);
     if (!due) return false;
-    await this.#fire(due, nowMs);
+    await this.#fire(due, nowMs, via);
     return true;
   }
 
@@ -158,7 +162,7 @@ export class SentinelRunner {
     }
   }
 
-  async #fire(due: SentinelTrigger, nowMs: number): Promise<void> {
+  async #fire(due: SentinelTrigger, nowMs: number, via: "poll" | "check" | "webhook" = "poll"): Promise<void> {
     const sentinel = this.#store.get(due.sentinelId);
     if (!sentinel) { this.#store.deleteTrigger(due.id); return; }
     const nextFireAt = due.kind === "schedule" && due.schedule ? isoAt(nextSentinelFire(due.schedule, nowMs))
@@ -172,8 +176,8 @@ export class SentinelRunner {
       if (!automation || automation.ownerSentinelId !== due.sentinelId) { release({ enabled: false, lastStatus: "blocked", lastError: "The automation no longer exists or is not owned by this Agent." }); return; }
       if (sentinel.status !== "active") { release({ lastStatus: sentinel.pauseReason ? "paused_budget" : "paused" }); return; }
       if (sentinelNeedsReview(sentinel)) { release({ lastStatus: "needs_review", lastError: "Scope, model, tools or skills changed. Review and acknowledge the Agent before it runs on its own." }); return; }
-      if (due.kind === "github-pr") { await this.#pollPullRequests(claimed, sentinel, automation, release); return; }
-      const result = await this.#launchSafely(sentinel.id, { trigger: { kind: "schedule", automationId: automation.id, triggerId: due.id }, automation, autonomous: true });
+      if (due.kind === "github-pr") { await this.#pollPullRequests(claimed, sentinel, automation, release, via); return; }
+      const result = await this.#launchSafely(sentinel.id, { trigger: { kind: "schedule", automationId: automation.id, triggerId: due.id }, automation, autonomous: true, via: "schedule", idempotencyKey: `schedule:${due.id}:${due.nextFireAt ?? nowMs}` });
       release(result.ok ? { lastStatus: "running", lastActivationId: result.activation.id, lastError: undefined } : { lastStatus: result.kind, lastError: result.reason });
     } catch (error) {
       release({ lastStatus: "error", lastError: message(error) });
@@ -185,7 +189,7 @@ export class SentinelRunner {
     catch (error) { return { ok: false, kind: error instanceof SentinelRunError ? error.kind : "error", reason: message(error) }; }
   }
 
-  async #pollPullRequests(trigger: SentinelTrigger, sentinel: Sentinel, automation: SecurityWorkflow, release: (update: { lastStatus?: string; lastError?: string; lastActivationId?: string; cursor?: Record<string, string> }) => unknown): Promise<void> {
+  async #pollPullRequests(trigger: SentinelTrigger, sentinel: Sentinel, automation: SecurityWorkflow, release: (update: { lastStatus?: string; lastError?: string; lastActivationId?: string; cursor?: Record<string, string> }) => unknown, via: string): Promise<void> {
     const github = trigger.github!;
     let prs: Array<{ number: number; headRefOid: string; title: string; url: string; baseRefName: string; headRefName: string; isCrossRepository: boolean; isDraft?: boolean; state?: string }>;
     try {
@@ -222,7 +226,7 @@ export class SentinelRunner {
           sentinelId: sentinel.id, sentinelVersion: sentinel.version, status: "skipped", skills: [...sentinel.skills], automationId: automation.id,
           trigger: { kind: "github-pr", automationId: automation.id, triggerId: trigger.id, event: { ...event, skipped: skip.reason } },
           error: `Skipped: ${skip.reason}.`, finishedAt: isoAt(this.#now()),
-        });
+        }, { via, idempotencyKey: `github:${trigger.id}:${pr.number}:${pr.headRefOid}:${skip.tag}` });
         seen[key] = marker;
         continue;
       }
@@ -230,7 +234,7 @@ export class SentinelRunner {
       const diff = await this.#diff(github.repo, pr.number);
       const result = await this.#launchSafely(sentinel.id, {
         trigger: { kind: "github-pr", automationId: automation.id, triggerId: trigger.id, event },
-        automation, autonomous: true, ...(fork ? { untrusted: true } : {}),
+        automation, autonomous: true, via, idempotencyKey: `github:${trigger.id}:${pr.number}:${pr.headRefOid}`, ...(fork ? { untrusted: true } : {}),
         ...(diff ? { context: { label: "pull-request-diff", text: diff } } : {}),
         ...(github.commentOnPr === true ? { comment: { repo: github.repo, pr: pr.number, headSha: pr.headRefOid, fork } } : {}),
       });
@@ -292,11 +296,11 @@ export class SentinelRunner {
     const reserved = this.#store.reserveActivation({
       sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "running",
       ...(options.automation ? { automationId: options.automation.id } : {}), skills: [...sentinel.skills], ownerPid: process.pid,
-    }, { sinceIso: isoAt(nowMs - DAY_MS), maxRuns: budget.maxRunsPerDay, dailyUsd: budget.dailyUsd });
+    }, { sinceIso: isoAt(nowMs - DAY_MS), maxRuns: budget.maxRunsPerDay, dailyUsd: budget.dailyUsd }, { ...(options.via ? { via: options.via } : {}), ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}) });
     if ("breach" in reserved) {
       const breach = reserved.breach === "runs" ? `Daily run limit (${budget.maxRunsPerDay}) reached.` : `Daily budget ($${budget.dailyUsd}) used.`;
       if (options.autonomous) {
-        this.#store.createActivation({ sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "skipped", skills: [...sentinel.skills], error: breach, finishedAt: isoAt(nowMs) });
+        this.#store.createActivation({ sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "skipped", skills: [...sentinel.skills], error: breach, finishedAt: isoAt(nowMs) }, options.via ? { via: options.via } : {});
         this.#pauseForBudget(sentinel, breach, nowMs);
       }
       throw new SentinelRunError(breach, 429, "budget");

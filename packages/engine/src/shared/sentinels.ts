@@ -205,6 +205,36 @@ export interface SentinelActivation {
   finishedAt?: string;
 }
 
+/** What started a turn in an Agent's thread. A manual "Run now" is `user`; `legacy` marks an activation projected from before the turn ledger existed. */
+export const AGENT_TURN_ORIGINS = ["schedule", "github", "user", "promote", "legacy"] as const;
+export type AgentTurnOrigin = (typeof AGENT_TURN_ORIGINS)[number];
+/** Provenance detail of a turn. `via` says how it arrived (for example `poll` or `webhook` for GitHub, or the old trigger kind for a legacy row). */
+export interface AgentTurnOriginDetail { via?: string; triggerId?: string; automationId?: string; userId?: string; event?: Record<string, string | number> }
+export interface AgentTurn {
+  id: string;
+  agentId: string;
+  /** The thread the turn ran in; for a legacy row the child thread the activation started. */
+  sessionId?: string;
+  /** Monotonic per Agent; absent on a projected legacy row. */
+  seq?: number;
+  origin: AgentTurnOrigin;
+  detail: AgentTurnOriginDetail;
+  triggerId?: string;
+  status: SentinelActivationStatus;
+  /** Unique per Agent: a replayed delivery or a second engine tick is a no-op. */
+  idempotencyKey?: string;
+  costUsd?: number;
+  error?: string;
+  note?: string;
+  /** Why a turn was skipped (for example "Waiting on you"); shown instead of an error. */
+  skippedReason?: string;
+  ownerPid?: number;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  legacyActivationId?: string;
+}
+
 export type SentinelFileAuthorKind = "human" | "agent";
 export interface SentinelFile { sentinelId: string; path: string; revision: number; content: string; authorKind: SentinelFileAuthorKind; author: string; updatedAt: string }
 export interface SentinelFileRevision { sentinelId: string; path: string; revision: number; content: string; digest: string; authorKind: SentinelFileAuthorKind; author: string; createdAt: string }

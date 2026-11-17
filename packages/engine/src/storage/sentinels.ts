@@ -5,7 +5,7 @@ import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 import {
   SENTINEL_FILE_DEFAULTS, SENTINEL_MAX_FILES, SENTINEL_MAX_FILE_BYTES, SENTINEL_MAX_SENTINELS, SentinelFilePathSchema,
   applySentinelPatch, dropAccessFields, normalizeSentinelBudget, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
-  type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
+  type AgentTurn, type AgentTurnOrigin, type AgentTurnOriginDetail, type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
 } from "../shared/sentinels.js";
 import {
   SentinelTriggerCreateSchema, isSentinelTriggerKind, nextSentinelFire,
@@ -21,12 +21,38 @@ const MAX_TRIGGERS_PER_SENTINEL = 50;
 const MAX_CURSOR_ENTRIES = 200;
 /** A trigger claim only covers the launch itself; an older one belongs to a crashed engine. */
 export const SENTINEL_CLAIM_STALE_MS = 600_000;
+const MAX_TURNS_LIST = 200;
 const parseRow = <T>(value: unknown, key: string): T => JSON.parse(String((value as Record<string, unknown>)[key])) as T;
 /** Files from removed features: stored rows stay untouched but are not listed. */
 const HIDDEN_FILES = new Set(["CREW.md"]);
 /** Stored Sentinels from before the budget trim carry per-run and time caps, and older ones a removed settings block (dropped here); reduce them on read. Rows are never rewritten here. */
 const parseSentinelRow = (value: unknown): Sentinel => { const { crew: _removed, ...sentinel } = parseRow<Sentinel & { crew?: unknown }>(value, "sentinel_json"); return { ...dropAccessFields(sentinel) as unknown as Sentinel, budget: normalizeSentinelBudget(sentinel.budget) }; };
 const invalid = (error: unknown): never => { throw new SentinelStoreError(error instanceof Error ? error.message : "Invalid Agent.", 400); };
+
+const turnOriginOf = (kind: SentinelActivation["trigger"]["kind"]): Exclude<AgentTurnOrigin, "legacy" | "promote"> => kind === "github-pr" ? "github" : kind === "manual" ? "user" : "schedule";
+function turnFromRow(value: unknown): AgentTurn {
+  const r = value as Record<string, unknown>;
+  const text = (key: string) => r[key] === null || r[key] === undefined ? undefined : String(r[key]);
+  const number = (key: string) => r[key] === null || r[key] === undefined ? undefined : Number(r[key]);
+  const pick = <K extends keyof AgentTurn>(key: K, v: AgentTurn[K] | undefined) => v === undefined ? {} : { [key]: v };
+  return {
+    id: String(r.id), agentId: String(r.agent_id), origin: String(r.origin) as AgentTurnOrigin, detail: JSON.parse(String(r.origin_json)) as AgentTurnOriginDetail, status: String(r.status) as AgentTurn["status"],
+    ...pick("sessionId", text("session_id")), ...pick("seq", number("seq")), ...pick("triggerId", text("trigger_id")), ...pick("idempotencyKey", text("idempotency_key")), ...pick("costUsd", number("cost_usd")),
+    ...pick("error", text("error")), ...pick("note", text("note")), ...pick("skippedReason", text("skipped_reason")), ...pick("ownerPid", number("owner_pid")), ...pick("queuedAt", text("queued_at")),
+    ...pick("startedAt", text("started_at")), ...pick("finishedAt", text("finished_at")), ...pick("legacyActivationId", text("legacy_activation_id")),
+  };
+}
+/** An activation from before the ledger (or one the ledger never saw) read as a turn. The row itself is never rewritten. */
+function projectActivation(a: SentinelActivation): AgentTurn {
+  const automationId = a.automationId ?? a.trigger.automationId;
+  return {
+    id: `legacy:${a.id}`, agentId: a.sentinelId, origin: "legacy",
+    detail: { via: a.trigger.kind, ...(a.trigger.triggerId ? { triggerId: a.trigger.triggerId } : {}), ...(automationId ? { automationId } : {}), ...(a.trigger.event ? { event: a.trigger.event } : {}) },
+    status: a.status, startedAt: a.startedAt, queuedAt: a.startedAt, legacyActivationId: a.id,
+    ...(a.missionId ? { sessionId: a.missionId } : {}), ...(a.trigger.triggerId ? { triggerId: a.trigger.triggerId } : {}), ...(a.costUsd !== undefined ? { costUsd: a.costUsd } : {}),
+    ...(a.error ? { error: a.error } : {}), ...(a.status === "skipped" && a.error ? { skippedReason: a.error } : {}), ...(a.note ? { note: a.note } : {}), ...(a.ownerPid !== undefined ? { ownerPid: a.ownerPid } : {}), ...(a.finishedAt ? { finishedAt: a.finishedAt } : {}),
+  };
+}
 
 /** Seed files for a new Sentinel. AGENTS.md is the charter (role, hard limits, scope); NOTES.md is memory. */
 export function defaultSentinelFiles(sentinel: Pick<Sentinel, "name" | "mission" | "scope">, instructions?: string): Record<(typeof SENTINEL_FILE_DEFAULTS)[number], string> {
@@ -54,6 +80,11 @@ export class SentinelStore {
       CREATE TABLE IF NOT EXISTS sentinel_triggers (id TEXT PRIMARY KEY, sentinel_id TEXT NOT NULL, automation_id TEXT NOT NULL, kind TEXT NOT NULL, enabled INTEGER NOT NULL, next_fire_at TEXT, active_claim TEXT, trigger_json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS sentinel_triggers_due ON sentinel_triggers(enabled, next_fire_at);
       CREATE INDEX IF NOT EXISTS sentinel_triggers_sentinel ON sentinel_triggers(sentinel_id);
+      CREATE TABLE IF NOT EXISTS agent_turns (id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, session_id TEXT, seq INTEGER, origin TEXT NOT NULL, origin_json TEXT NOT NULL, trigger_id TEXT, status TEXT NOT NULL, idempotency_key TEXT, cost_usd REAL, error TEXT, note TEXT, skipped_reason TEXT, owner_pid INTEGER, queued_at TEXT, started_at TEXT, finished_at TEXT, legacy_activation_id TEXT);
+      CREATE INDEX IF NOT EXISTS agent_turns_agent ON agent_turns(agent_id, started_at);
+      CREATE INDEX IF NOT EXISTS agent_turns_session ON agent_turns(session_id);
+      CREATE INDEX IF NOT EXISTS agent_turns_legacy ON agent_turns(legacy_activation_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS agent_turns_key ON agent_turns(agent_id, idempotency_key);
       CREATE TABLE IF NOT EXISTS sentinel_file_revisions (sentinel_id TEXT NOT NULL, path TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, author_kind TEXT NOT NULL, author TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (sentinel_id, path, revision));`);
     // Trigger kinds that were removed (push, webhook, finding events) stay in the table but can never fire.
     this.#db.exec("UPDATE sentinel_triggers SET enabled = 0 WHERE enabled = 1 AND kind NOT IN ('schedule', 'manual', 'github-pr')");
@@ -148,29 +179,66 @@ export class SentinelStore {
       this.#db.prepare("DELETE FROM sentinel_file_revisions WHERE sentinel_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinel_triggers WHERE sentinel_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinel_activations WHERE sentinel_id = ?").run(id);
+      this.#db.prepare("DELETE FROM agent_turns WHERE agent_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinels WHERE id = ?").run(id);
       return true;
     })();
   }
 
   // Activations
-  createActivation(input: Omit<SentinelActivation, "id" | "startedAt"> & { startedAt?: string }): SentinelActivation {
+  /** Every activation is also written as a turn (`agent_turns`, linked by `legacy_activation_id`); `meta` carries what only the caller knows. */
+  createActivation(input: Omit<SentinelActivation, "id" | "startedAt"> & { startedAt?: string }, meta: { idempotencyKey?: string; via?: string } = {}): SentinelActivation {
     this.#require(input.sentinelId);
     const activation: SentinelActivation = { ...input, id: randomUUID(), startedAt: input.startedAt ?? new Date().toISOString() };
     this.#db.prepare("INSERT INTO sentinel_activations (id, sentinel_id, status, mission_id, automation_id, activation_json, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .run(activation.id, activation.sentinelId, activation.status, activation.missionId ?? null, activation.automationId ?? null, JSON.stringify(activation), activation.startedAt, activation.finishedAt ?? null);
+    const projected = projectActivation(activation);
+    const via = meta.via ?? projected.detail.via;
+    this.#insertTurn({ ...projected, id: randomUUID(), origin: turnOriginOf(activation.trigger.kind), detail: { ...projected.detail, ...(via ? { via } : {}) }, ...(meta.idempotencyKey ? { idempotencyKey: meta.idempotencyKey } : {}) }, true);
     return activation;
+  }
+  /** Inserts a turn with the next per-Agent sequence number. A taken idempotency key returns null; `degrade` stores the row without the key instead (the activation path must never fail on a replayed cause). */
+  #insertTurn(turn: AgentTurn, degrade = false): AgentTurn | null {
+    const seq = Number((this.#db.prepare("SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM agent_turns WHERE agent_id = ?").all(turn.agentId)[0] as { n: number }).n);
+    const row = { ...turn, seq };
+    const insert = (value: AgentTurn) => this.#db.prepare("INSERT INTO agent_turns (id, agent_id, session_id, seq, origin, origin_json, trigger_id, status, idempotency_key, cost_usd, error, note, skipped_reason, owner_pid, queued_at, started_at, finished_at, legacy_activation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(value.id, value.agentId, value.sessionId ?? null, value.seq ?? null, value.origin, JSON.stringify(value.detail), value.triggerId ?? null, value.status, value.idempotencyKey ?? null, value.costUsd ?? null, value.error ?? null, value.note ?? null, value.skippedReason ?? null, value.ownerPid ?? null, value.queuedAt ?? null, value.startedAt ?? null, value.finishedAt ?? null, value.legacyActivationId ?? null);
+    if (row.idempotencyKey && this.getTurnByKey(row.agentId, row.idempotencyKey)) {
+      if (!degrade) return null;
+      const { idempotencyKey: _taken, ...keyless } = row;
+      insert(keyless);
+      return keyless;
+    }
+    insert(row);
+    return row;
+  }
+  getTurnByKey(agentId: string, idempotencyKey: string): AgentTurn | null {
+    const found = this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? AND idempotency_key = ?").all(agentId, idempotencyKey)[0];
+    return found ? turnFromRow(found) : null;
+  }
+  getTurn(id: string): AgentTurn | null {
+    const found = this.#db.prepare("SELECT * FROM agent_turns WHERE id = ?").all(id)[0];
+    return found ? turnFromRow(found) : null;
+  }
+  /** An Agent's turns, newest first: ledger rows plus activations the ledger never saw (projected as origin `legacy`). Nothing is counted twice. */
+  listTurns(agentId: string, limit = 50): AgentTurn[] {
+    const bounded = Math.max(1, Math.min(Math.trunc(limit) || 50, MAX_TURNS_LIST));
+    const rows = this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? ORDER BY COALESCE(started_at, queued_at) DESC, seq DESC LIMIT ?").all(agentId, bounded).map(turnFromRow);
+    const legacy = this.#db.prepare("SELECT activation_json FROM sentinel_activations a WHERE a.sentinel_id = ? AND NOT EXISTS (SELECT 1 FROM agent_turns t WHERE t.legacy_activation_id = a.id) ORDER BY a.started_at DESC, a.id LIMIT ?")
+      .all(agentId, bounded).map(value => projectActivation(parseRow<SentinelActivation>(value, "activation_json")));
+    const when = (turn: AgentTurn) => turn.startedAt ?? turn.queuedAt ?? "";
+    return [...rows, ...legacy].sort((a, b) => when(b).localeCompare(when(a))).slice(0, bounded);
   }
   /**
    * Checks the rolling-window caps and records the activation in one transaction. Two launches that both see one slot left
    * cannot both take it: the second sees the first one's row and gets the breach instead.
    */
-  reserveActivation(input: Omit<SentinelActivation, "id" | "startedAt">, caps: { sinceIso: string; maxRuns: number; dailyUsd: number }): { activation: SentinelActivation; ledger: { runs: number; costUsd: number } } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } {
+  reserveActivation(input: Omit<SentinelActivation, "id" | "startedAt">, caps: { sinceIso: string; maxRuns: number; dailyUsd: number }, meta: { idempotencyKey?: string; via?: string } = {}): { activation: SentinelActivation; ledger: { runs: number; costUsd: number } } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } {
     return this.#db.transaction(() => {
       const ledger = this.ledger(input.sentinelId, caps.sinceIso);
       if (ledger.runs >= caps.maxRuns) return { breach: "runs" as const, ledger };
       if (ledger.costUsd >= caps.dailyUsd) return { breach: "budget" as const, ledger };
-      return { activation: this.createActivation(input), ledger };
+      return { activation: this.createActivation(input, meta), ledger };
     })();
   }
   getActivation(id: string): SentinelActivation | null {
@@ -183,6 +251,8 @@ export class SentinelStore {
       if (!current) throw new SentinelStoreError("Activation not found.", 404);
       const next: SentinelActivation = { ...current, ...update };
       this.#db.prepare("UPDATE sentinel_activations SET status = ?, mission_id = ?, activation_json = ?, finished_at = ? WHERE id = ?").run(next.status, next.missionId ?? null, JSON.stringify(next), next.finishedAt ?? null, id);
+      this.#db.prepare("UPDATE agent_turns SET status = ?, session_id = ?, cost_usd = ?, error = ?, note = ?, finished_at = ? WHERE legacy_activation_id = ?")
+        .run(next.status, next.missionId ?? null, next.costUsd ?? null, next.error ?? null, next.note ?? null, next.finishedAt ?? null, id);
       return next;
     })();
   }
@@ -193,14 +263,18 @@ export class SentinelStore {
   listRunningActivations(): SentinelActivation[] {
     return this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE status = 'running' ORDER BY started_at LIMIT 500").all().map(value => parseRow<SentinelActivation>(value, "activation_json"));
   }
-  /** Rolling-window ledger derived from activations (skipped ones excluded): runs started and USD spent since `sinceIso`. */
+  /**
+   * Rolling-window ledger (skipped ones excluded): turns started and USD spent since `sinceIso`. Reads activations plus
+   * ledger turns that have no activation behind them, so a dual-written row is never counted twice.
+   */
   ledger(sentinelId: string, sinceIso: string): { runs: number; costUsd: number } {
     let runs = 0; let costUsd = 0;
     for (const value of this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)) {
       const activation = parseRow<SentinelActivation>(value, "activation_json");
       runs += 1; costUsd += activation.costUsd ?? 0;
     }
-    return { runs, costUsd };
+    const own = this.#db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS cost FROM agent_turns WHERE agent_id = ? AND legacy_activation_id IS NULL AND COALESCE(started_at, queued_at) >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number; cost: number };
+    return { runs: runs + Number(own.n), costUsd: costUsd + Number(own.cost) };
   }
   countActivationsSince(sentinelId: string, sinceIso: string): number {
     return Number((this.#db.prepare("SELECT COUNT(*) AS n FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number }).n);

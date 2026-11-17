@@ -83,6 +83,18 @@ describe("Agent scheduler", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(2);
   });
 
+  it("writes a turn alongside each activation, keyed by the trigger occurrence", async () => {
+    const f = fixture();
+    const { id, triggerId } = await f.armed();
+    vi.setSystemTime(T0 + 5 * MIN + 1_000);
+    await f.service.tick();
+    f.emit("mission-2", { type: "turn-complete", stopReason: "end_turn" });
+    const [activation] = await f.activations(id);
+    const turns = ((await f.call("GET", `${P}/${id}/turns`)).data as { turns: Array<Record<string, any>> }).turns;
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({ origin: "schedule", triggerId, status: "completed", sessionId: "mission-2", legacyActivationId: activation!.id, detail: { via: "schedule" }, idempotencyKey: `schedule:${triggerId}:2026-03-02T10:05:00.000Z` });
+  });
+
   it("updates the activation's status and cost when its thread finishes", async () => {
     const f = fixture();
     const { id } = await f.armed();

@@ -107,6 +107,18 @@ describe("agent API", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(3);
   });
 
+  it("lists an Agent's turns with the activation behind each manual run", async () => {
+    const f = fixture();
+    const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
+    expect((await f.call("GET", `${P}/nope/turns`)).status).toBe(404);
+    expect((await f.call("GET", `${P}/${sentinel.id}/turns?limit=0`)).status).toBe(400);
+    await f.call("POST", `${P}/${sentinel.id}/run`, { approval: "launch-authorized-run", version: 1 });
+    const turns = ((await f.call("GET", `${P}/${sentinel.id}/turns`)).data as { turns: Array<{ origin: string; status: string; sessionId: string; legacyActivationId: string }> }).turns;
+    const activations = ((await f.call("GET", `${P}/${sentinel.id}/activations`)).data as { activations: Array<{ id: string }> }).activations;
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({ origin: "user", status: "running", sessionId: "mission-2", legacyActivationId: activations[0]!.id });
+  });
+
   it("marks the activation failed when the thread cannot start, enforces the daily cap and refuses archived Agents", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
