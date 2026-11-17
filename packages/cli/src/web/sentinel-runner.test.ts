@@ -12,7 +12,7 @@ const MIN = 60_000;
 const dirs: string[] = [];
 const P = "/api/console/sentinels";
 
-function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: string }> }; profile?: "local" | "smolvm"; checkouts?: Record<string, string> } = {}) {
+function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: string }> }; profile?: "local" | "smolvm"; checkouts?: Record<string, string>; persistent?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "zero-sentinel-run-"));
   dirs.push(dir);
   const dbPath = join(dir, "control.db");
@@ -23,15 +23,17 @@ function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: st
   const emit = (id: string, event: SentinelSessionEvent) => { for (const listener of [...(listeners.get(id) ?? [])]) listener(event); };
   const missions = {
     create: vi.fn((_input: Record<string, unknown>) => { const id = `mission-${++counter}`; live.add(id); return { id }; }),
-    send: vi.fn(async (id: string, text: string, _author?: { userId: string; displayName: string }, _mode?: "queue") => { emit(id, { type: "user", text }); return {}; }),
+    send: vi.fn(async (id: string, text: string, _author?: { userId: string; displayName: string }, _mode?: "queue", _automated?: boolean) => { emit(id, { type: "user", text }); return {}; }),
     pendingDecisions: vi.fn((_id: string) => 0),
     subscribe: vi.fn((id: string, listener: (event: SentinelSessionEvent) => void) => { const set = listeners.get(id) ?? new Set(); set.add(listener); listeners.set(id, set); return () => set.delete(listener); }),
     cancel: vi.fn(async (_id: string) => ({})),
     usage: vi.fn((id: string) => ({ costUsd: costs.get(id) ?? 0 })),
     exists: vi.fn((id: string) => live.has(id)),
     reopen: undefined as undefined | ((id: string) => Promise<{ id: string }>),
+    removeQueued: vi.fn((_id: string, _messageId: string) => ({})),
+    resumeQueue: vi.fn((_id: string, _messageId: string) => ({})),
   };
-  const service = new WebSentinelService({ dbPath, missions, executionProfile: () => options.profile ?? "local", checkout: async repo => options.checkouts?.[repo], ...(options.gh ? { gh: options.gh } : {}) });
+  const service = new WebSentinelService({ dbPath, missions, executionProfile: () => options.profile ?? "local", checkout: async repo => options.checkouts?.[repo], ...(options.persistent ? { persistentThread: () => true } : {}), ...(options.gh ? { gh: options.gh } : {}) });
   const workflows = new SecurityWorkflowStore(dbPath);
   const store = new SentinelStore(dbPath);
   const call = async (method: string, path: string, body?: unknown, actor?: SentinelActor) => {
@@ -384,6 +386,63 @@ describe("GitHub pull request polling", () => {
     expect((await f.activations(id)).filter(activation => activation.trigger.event.pr === 1)).toHaveLength(1);
   });
 
+  it("persistent thread: queues one review turn per head commit, supersedes a queued older commit of the same pull request, and records the webhook path", async () => {
+    let listing = [pr(1, "aaa")];
+    const run = vi.fn(async (args: string[]) => ({ stdout: args.includes("diff") ? "diff --git a b" : JSON.stringify(listing) }));
+    const { f, id, triggerId } = await armedPr({ run }, {}, { persistent: true });
+    await f.service.tick();
+    listing = [pr(1, "bbb")];
+    f.missions.send.mockImplementation(async () => ({ queuedMessageId: `q-${f.missions.send.mock.calls.length}` }));
+    vi.setSystemTime(T0 + 2 * MIN);
+    await f.service.tick();
+    listing = [pr(1, "ccc")];
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    const turns = f.store.listTurns(id).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+    expect(turns.map(turn => [turn.detail.event?.["headSha"], turn.status, turn.detail.via])).toEqual([["bbb", "skipped", "poll"], ["ccc", "queued", "webhook"]]);
+    expect(turns[0]!.skippedReason).toBe("Superseded by a newer commit");
+    expect(f.missions.removeQueued).toHaveBeenCalledWith("mission-1", "q-1");
+    expect(f.missions.create).toHaveBeenCalledTimes(1);
+    expect(f.missions.send.mock.calls[1]![1]).toContain("[Turn from GitHub pull request o/r#1");
+    expect(f.missions.send.mock.calls[1]![1]).toContain("<pull-request-diff>");
+    // The same head commit is not delivered twice.
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    expect(f.missions.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("persistent thread: a pause that lands while the pull request diff is being fetched stops the turn", async () => {
+    let listing = [pr(1, "aaa")];
+    let pause: (() => Promise<unknown>) | undefined;
+    const run = vi.fn(async (args: string[]) => { if (args.includes("diff")) await pause?.(); return { stdout: args.includes("diff") ? "diff" : JSON.stringify(listing) }; });
+    const { f, id, triggerId } = await armedPr({ run }, {}, { persistent: true });
+    await f.service.tick();
+    listing = [pr(1, "bbb")];
+    pause = () => f.call("POST", `${P}/${id}/pause`, {});
+    vi.setSystemTime(T0 + 2 * MIN);
+    await f.service.tick();
+    expect(f.missions.send).not.toHaveBeenCalled();
+    expect(f.store.listTurns(id)).toEqual([]);
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "paused", lastError: "Agent is paused." });
+  });
+
+  it("persistent thread: a pull request that arrives while the thread waits on a person is offered again later, not lost", async () => {
+    let listing = [pr(1, "aaa")];
+    const run = vi.fn(async (args: string[]) => ({ stdout: args.includes("diff") ? "" : JSON.stringify(listing) }));
+    const { f, id } = await armedPr({ run }, {}, { persistent: true });
+    await f.service.tick();
+    listing = [pr(1, "bbb")];
+    f.missions.pendingDecisions.mockReturnValue(1);
+    vi.setSystemTime(T0 + 2 * MIN);
+    await f.service.tick();
+    vi.setSystemTime(T0 + 4 * MIN);
+    await f.service.tick();
+    expect(f.missions.send).not.toHaveBeenCalled();
+    expect(f.store.listTurns(id).filter(turn => turn.skippedReason === "Waiting on you")).toHaveLength(1);
+    f.missions.pendingDecisions.mockReturnValue(0);
+    vi.setSystemTime(T0 + 6 * MIN);
+    await f.service.tick();
+    expect(f.missions.send).toHaveBeenCalledTimes(1);
+  });
+
   it("surfaces a blocked trigger when gh cannot read the repository, and retries", async () => {
     const run = vi.fn(async (_args: string[]): Promise<{ stdout: string }> => { throw new Error("gh: not logged in"); });
     const { f, triggerId } = await armedPr({ run });
@@ -551,5 +610,187 @@ describe("GitHub pull request polling", () => {
     expect(f.service.webhookTargets("o/r", "main")).toHaveLength(1);
     await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: false });
     expect(f.service.webhookTargets("o/r", "main")).toEqual([]);
+  });
+});
+
+describe("persistent thread delivery (flag on)", () => {
+  const turnsOf = (f: ReturnType<typeof fixture>, id: string) => f.store.listTurns(id).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+  const fire = async (f: ReturnType<typeof fixture>, minutes: number) => { vi.setSystemTime(T0 + minutes * MIN + 1_000); await f.service.tick(); };
+
+  it("delivers a scheduled turn into the one standing thread with a queue-mode send, a charter envelope and its own cost", async () => {
+    const f = fixture({ persistent: true });
+    const { id, triggerId } = await f.armed();
+    await fire(f, 5);
+    expect(f.missions.create).toHaveBeenCalledTimes(1); // the home thread; no child thread
+    const [missionId, text, , mode, automated] = f.missions.send.mock.calls[0]!;
+    expect([missionId, mode, automated]).toEqual(["mission-1", "queue", true]);
+    expect(text).toMatch(/^\[Turn from schedule "[^"]+" at 2026-03-02 10:05 UTC · turn [0-9a-f]{8}\]/);
+    expect(text).toContain("Watch deps.");
+    expect(text).toContain("Hard limits");
+    expect(text).toContain("Skills allow-list: pr-diff-review");
+    expect(text).toContain("Your saved notes");
+    expect(turnsOf(f, id)[0]).toMatchObject({ origin: "schedule", triggerId, status: "running", sessionId: "mission-1", idempotencyKey: `schedule:${triggerId}:2026-03-02T10:05:00.000Z` });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "queued" });
+    f.costs.set("mission-1", 0.25);
+    f.emit("mission-1", { type: "usage" });
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "completed", costUsd: 0.25 });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "completed", consecutiveFailures: 0 });
+    // The next turn starts from the thread's cost at its own start, and carries the envelope again (but not unchanged notes).
+    await fire(f, 10);
+    const second = f.missions.send.mock.calls[1]![1];
+    expect(second).toContain("Hard limits");
+    expect(second).toContain("Watch deps.");
+    expect(second).not.toContain("Your saved notes");
+    f.costs.set("mission-1", 0.35);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(turnsOf(f, id)[1]).toMatchObject({ status: "completed", costUsd: expect.closeTo(0.1, 5) });
+    expect(f.missions.create).toHaveBeenCalledTimes(1);
+    expect((await f.activations(id))).toHaveLength(0);
+  });
+
+  it("never reuses a thread configured with an older scope, model or skills: the gateway pins those at creation, so a changed Agent gets a fresh thread", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 10); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(f.missions.create).toHaveBeenCalledTimes(1);
+    expect(f.store.get(id)!.homeFingerprint).toBeTruthy();
+    let minute = 10;
+    for (const change of [{ scope: { targets: ["https://narrower.example.com"] } }, { skills: [] }]) {
+      const before = f.missions.create.mock.calls.length;
+      const { version } = await f.view(id);
+      expect((await f.call("PATCH", `${P}/${id}`, { version, ...change })).status).toBe(200);
+      expect((await f.call("POST", `${P}/${id}/acknowledge`, {})).status).toBe(200);
+      minute += 5;
+      await fire(f, minute);
+      expect(f.missions.create).toHaveBeenCalledTimes(before + 1);
+      const [missionId, text] = f.missions.send.mock.calls.at(-1)!;
+      expect(missionId).toBe(`mission-${before + 1}`);
+      expect(text).toContain("fresh thread configured with the current ones");
+      expect(text).toContain("Your saved notes");
+      expect(f.missions.create.mock.calls.at(-1)![0]).toMatchObject(change.skills ? { skillAllowList: [] } : { scope: { in_scope: ["https://narrower.example.com"] } });
+      f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
+    }
+  });
+
+  it("replaces a standing thread from before the configuration was recorded, once", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.create({}); // mission-1 stands in for an old-path home thread
+    f.store.setHomeMission(id, "mission-1");
+    expect(f.store.get(id)!.homeFingerprint).toBeUndefined();
+    await fire(f, 5);
+    expect(f.missions.send.mock.calls[0]![0]).toBe("mission-2");
+    f.emit("mission-2", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 10);
+    expect(f.missions.send.mock.calls[1]![0]).toBe("mission-2");
+  });
+
+  it("records 'Waiting on you' instead of queueing behind an unanswered decision", async () => {
+    const f = fixture({ persistent: true });
+    const { id, triggerId } = await f.armed();
+    f.missions.pendingDecisions.mockReturnValue(1);
+    await fire(f, 5);
+    expect(f.missions.send).not.toHaveBeenCalled();
+    expect(turnsOf(f, id)).toHaveLength(1);
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "skipped", skippedReason: "Waiting on you" });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "waiting" });
+  });
+
+  it("coalesces a second occurrence while the first is still queued", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.send.mockImplementation(async () => ({ queuedMessageId: "q1" }));
+    await fire(f, 5);
+    await fire(f, 10);
+    expect(f.missions.send).toHaveBeenCalledTimes(1);
+    expect(turnsOf(f, id).map(turn => [turn.status, turn.skippedReason])).toEqual([["queued", undefined], ["skipped", "Still working on the previous one"]]);
+  });
+
+  it("records a full gateway queue as skipped, never dropped silently", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.send.mockRejectedValueOnce(Object.assign(new Error("The message queue is full."), { statusCode: 409 }));
+    await fire(f, 5);
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "skipped", skippedReason: "The queue is full" });
+  });
+
+  it("a failed turn does not stall the next one; three failures in a row turn the trigger off and mark the Agent as needing you", async () => {
+    const f = fixture({ persistent: true });
+    const { id, triggerId } = await f.armed();
+    for (const minute of [5, 10, 15]) {
+      await fire(f, minute);
+      f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "model exploded" });
+    }
+    expect(turnsOf(f, id).map(turn => turn.status)).toEqual(["failed", "failed", "failed"]);
+    expect(turnsOf(f, id)[0]!.error).toContain("model exploded");
+    expect(f.missions.send).toHaveBeenCalledTimes(3);
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
+    await fire(f, 20);
+    expect(f.missions.send).toHaveBeenCalledTimes(3);
+    // A person turning it back on starts the count again; a success clears it.
+    await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: true, approval: "enable-reviewed-trigger" });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: true, consecutiveFailures: 0 });
+  });
+
+  it("a success resets the failure count", async () => {
+    const f = fixture({ persistent: true });
+    const { triggerId } = await f.armed();
+    await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "x" });
+    await fire(f, 10); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 15); f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "x" });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: true, consecutiveFailures: 1 });
+  });
+
+  it("a message that cannot start is dropped by the gateway: its turn fails and the next occurrence is delivered", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.send.mockImplementationOnce(async () => ({ queuedMessageId: "q1" }));
+    await fire(f, 5);
+    f.emit("mission-1", { type: "queued", messages: [] });
+    f.emit("mission-1", { type: "error", message: "No model configured." });
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "failed", error: "No model configured." });
+    await fire(f, 10);
+    expect(f.missions.send).toHaveBeenCalledTimes(2);
+    expect(turnsOf(f, id)[1]!.status).toBe("running");
+  });
+
+  it("enforces the daily budget mid-turn: pauses the Agent, cancels the turn and records the turns behind it", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed({ budget: { dailyUsd: 1, maxRunsPerDay: 20 } });
+    await fire(f, 5);
+    f.missions.send.mockImplementationOnce(async () => ({ queuedMessageId: "q2" }));
+    await fire(f, 10);
+    f.costs.set("mission-1", 1.5);
+    f.emit("mission-1", { type: "usage" });
+    await vi.waitFor(() => expect(f.missions.cancel).toHaveBeenCalled());
+    await vi.waitFor(() => expect(turnsOf(f, id)[0]!.status).toBe("cancelled"));
+    expect(turnsOf(f, id)[1]).toMatchObject({ status: "skipped" });
+    expect((await f.view(id)).status).toBe("paused");
+    expect(f.missions.removeQueued).toHaveBeenCalledWith("mission-1", "q2");
+  });
+
+  it("refuses at the daily turn limit with a skipped record and pauses the Agent", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed({ budget: { dailyUsd: 10, maxRunsPerDay: 1 } });
+    await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 10);
+    expect(f.missions.send).toHaveBeenCalledTimes(1);
+    expect(turnsOf(f, id)[1]).toMatchObject({ status: "skipped", skippedReason: expect.stringMatching(/Daily turn limit/) });
+    expect((await f.view(id)).status).toBe("paused");
+  });
+
+  it("closes turns a stopped engine left open as interrupted, and tells the Agent on its next turn", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    // A turn row left by an engine process that no longer exists.
+    const reserved = f.store.reserveTurn({ agentId: id, origin: "schedule", detail: { via: "schedule" }, sessionId: "mission-0", ownerPid: 2_147_483_000, nowIso: new Date(T0).toISOString() }, { sinceIso: new Date(T0 - 86_400_000).toISOString(), maxRuns: 10, dailyUsd: 10 });
+    if (!("turn" in reserved)) throw new Error("not reserved");
+    await f.service.tick(T0 + MIN);
+    expect(f.store.getTurn(reserved.turn.id)).toMatchObject({ status: "failed", error: "The engine stopped before this finished.", note: "interrupted" });
+    await fire(f, 5);
+    expect(f.missions.send.mock.calls[0]![1]).toContain("previous turn was interrupted");
   });
 });

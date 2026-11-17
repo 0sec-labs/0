@@ -3,10 +3,11 @@ import { promisify } from "node:util";
 import { SentinelStore, type SecurityWorkflowStore } from "@0/engine/storage";
 import { audit } from "./audit.js";
 import {
-  nextSentinelFire, sentinelNeedsReview,
+  nextSentinelFire, sentinelNeedsReview, sentinelReviewFingerprint,
   type ShareSafeReport, type Sentinel, type SentinelActivation, type SentinelTrigger, type SecurityWorkflow,
 } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
+import { AgentTurnDelivery, type TurnResult } from "./agent-turns.js";
 
 const DAY_MS = 86_400_000;
 const MAX_SEED_FILE_CHARS = 16_000;
@@ -49,7 +50,13 @@ export interface SentinelMissionRuntime {
   reopen?(id: string): Promise<{ id: string }>;
   /** Findings the mission saved, as share-safe fields only. Used for the optional pull request comment. */
   findings?(id: string): ShareSafeReport["findings"];
+  /** Takes one queued message off the thread's queue (a newer pull request commit supersedes it). */
+  removeQueued?(id: string, messageId: string): unknown;
+  /** Starts a queued message now and un-pauses the queue; used after a person cancels a turn so trigger turns behind it still run. */
+  resumeQueue?(id: string, messageId: string): unknown;
 }
+/** `ZERO_AGENTS_PERSISTENT_THREAD=1` delivers trigger turns into each Agent's one standing thread instead of starting a child thread per firing. Off by default. */
+export const agentsPersistentThreadFromEnv = (): boolean => /^(1|true|on|yes)$/i.test(process.env.ZERO_AGENTS_PERSISTENT_THREAD ?? "");
 /** Minimal `gh` seam (same shape as the engine's GhClient). Credentials stay in gh's own store. */
 export interface SentinelGhClient { run(args: string[]): Promise<{ stdout: string }> }
 const defaultSentinelGh = (): SentinelGhClient => ({ run: args => execute("gh", args, { timeout: 30_000, maxBuffer: 4_000_000 }).then(({ stdout }) => ({ stdout })) });
@@ -100,12 +107,16 @@ export class SentinelRunner {
 
   readonly #executionProfile: () => "local" | "smolvm";
   readonly #checkout: (repo: string) => Promise<string | undefined>;
+  readonly #persistent: () => boolean;
+  readonly #turns: AgentTurnDelivery;
 
-  constructor(options: { store: SentinelStore; workflows: SecurityWorkflowStore; missions: SentinelMissionRuntime; gh?: SentinelGhClient; now?: () => number; executionProfile?: () => "local" | "smolvm"; checkout?: (repo: string) => Promise<string | undefined> }) {
+  constructor(options: { store: SentinelStore; workflows: SecurityWorkflowStore; missions: SentinelMissionRuntime; gh?: SentinelGhClient; now?: () => number; executionProfile?: () => "local" | "smolvm"; checkout?: (repo: string) => Promise<string | undefined>; persistentThread?: () => boolean }) {
     this.#store = options.store; this.#workflows = options.workflows; this.#missions = options.missions;
     this.#executionProfile = options.executionProfile ?? (() => { try { return consoleExecutionProfile(); } catch { return "local"; } });
     this.#checkout = options.checkout ?? findCheckout;
     this.#gh = options.gh ?? defaultSentinelGh(); this.#now = options.now ?? Date.now;
+    this.#persistent = options.persistentThread ?? agentsPersistentThreadFromEnv;
+    this.#turns = new AgentTurnDelivery({ store: this.#store, missions: this.#missions, now: this.#now, ensureHome: sentinel => this.#homeMissionInfo(sentinel, undefined, sentinelReviewFingerprint(sentinel)), pauseForBudget: (sentinel, reason, nowMs) => this.#pauseForBudget(sentinel, reason, nowMs) });
   }
 
   /** Starts the unref'd poll loop (default 15 s). Without it the runner only reacts to manual launches and explicit tick() calls. */
@@ -120,6 +131,7 @@ export class SentinelRunner {
     await this.#pending;
     for (const watch of this.#watches.values()) watch.dispose();
     this.#watches.clear();
+    this.#turns.dispose();
   }
 
   // ---------- scheduler ----------
@@ -154,6 +166,7 @@ export class SentinelRunner {
 
   /** Runs left "running" by a stopped engine can never finish; close them out so budgets and attention stay truthful. */
   #reconcile(nowMs: number): void {
+    this.#turns.reconcile(isProcessAlive);
     for (const activation of this.#store.listRunningActivations()) {
       if (this.#watches.has(activation.id)) continue;
       const pid = activation.ownerPid;
@@ -177,11 +190,27 @@ export class SentinelRunner {
       if (sentinel.status !== "active") { release({ lastStatus: sentinel.pauseReason ? "paused_budget" : "paused" }); return; }
       if (sentinelNeedsReview(sentinel)) { release({ lastStatus: "needs_review", lastError: "Scope, model, tools or skills changed. Review and acknowledge the Agent before it runs on its own." }); return; }
       if (due.kind === "github-pr") { await this.#pollPullRequests(claimed, sentinel, automation, release, via); return; }
+      if (this.#persistent()) {
+        const outcome = await this.#deliverSafely({ sentinel, origin: "schedule", via: "schedule", trigger: { id: due.id, kind: "schedule" }, automation, idempotencyKey: `schedule:${due.id}:${due.nextFireAt ?? nowMs}`, ...(due.nextFireAt ? { scheduledFor: due.nextFireAt } : {}) });
+        release(this.#turnRelease(outcome, due.id));
+        return;
+      }
       const result = await this.#launchSafely(sentinel.id, { trigger: { kind: "schedule", automationId: automation.id, triggerId: due.id }, automation, autonomous: true, via: "schedule", idempotencyKey: `schedule:${due.id}:${due.nextFireAt ?? nowMs}` });
       release(result.ok ? { lastStatus: "running", lastActivationId: result.activation.id, lastError: undefined } : { lastStatus: result.kind, lastError: result.reason });
     } catch (error) {
       release({ lastStatus: "error", lastError: message(error) });
     }
+  }
+
+  async #deliverSafely(request: Parameters<AgentTurnDelivery["deliver"]>[0]): Promise<TurnResult> {
+    try { return await this.#turns.deliver(request); } catch (error) { return { status: "refused", kind: "failed", reason: message(error) }; }
+  }
+  /** What the trigger shows once its turn is queued or refused. The turn's own outcome is written at completion (never overwritten here once it has finished). */
+  #turnRelease(outcome: TurnResult, triggerId: string): { lastStatus?: string; lastError?: string } {
+    if (outcome.status === "refused") return { lastStatus: outcome.kind === "budget" ? "budget" : outcome.kind === "inactive" ? "paused" : outcome.kind === "review" ? "needs_review" : "error", lastError: outcome.reason };
+    if (outcome.status === "skipped") return { lastStatus: outcome.reason === "Waiting on you" ? "waiting" : "skipped", lastError: outcome.reason };
+    const current = this.#store.getTrigger(triggerId);
+    return outcome.status === "queued" && (!current || current.lastStatus === "starting") ? { lastStatus: "queued", lastError: undefined } : {};
   }
 
   async #launchSafely(sentinelId: string, options: LaunchOptions): Promise<{ ok: true; activation: SentinelActivation } | { ok: false; kind: string; reason: string }> {
@@ -232,6 +261,18 @@ export class SentinelRunner {
       }
       if (launched >= MAX_PR_LAUNCHES_PER_POLL) break;
       const diff = await this.#diff(github.repo, pr.number);
+      if (this.#persistent()) {
+        const outcome = await this.#deliverSafely({
+          sentinel, origin: "github", via, trigger: { id: trigger.id, kind: "github-pr" }, automation, event, idempotencyKey: `github:${trigger.id}:${pr.number}:${pr.headRefOid}`,
+          ...(fork ? { untrusted: true } : {}), ...(diff ? { context: { label: "pull-request-diff", text: diff } } : {}),
+        });
+        const update = this.#turnRelease(outcome, trigger.id);
+        if (outcome.status === "refused") { lastStatus = update.lastStatus ?? "error"; lastError = update.lastError; break; }
+        if (outcome.status === "skipped" && !outcome.consumed) { lastStatus = update.lastStatus ?? "waiting"; lastError = update.lastError; break; }
+        seen[key] = pr.headRefOid;
+        if (outcome.status === "queued") { launched += 1; lastStatus = "queued"; }
+        continue;
+      }
       const result = await this.#launchSafely(sentinel.id, {
         trigger: { kind: "github-pr", automationId: automation.id, triggerId: trigger.id, event },
         automation, autonomous: true, via, idempotencyKey: `github:${trigger.id}:${pr.number}:${pr.headRefOid}`, ...(fork ? { untrusted: true } : {}),
@@ -366,15 +407,23 @@ export class SentinelRunner {
   }
 
   /** The standing mission: created on first use, restored after an engine restart, recreated only if it cannot be restored. */
-  async #homeMission(sentinel: Sentinel, actor?: SentinelActor): Promise<string> {
+  async #homeMission(sentinel: Sentinel, actor?: SentinelActor): Promise<string> { return (await this.#homeMissionInfo(sentinel, actor)).id; }
+  /**
+   * `replaced: "lost"` when the Agent had a standing thread that could not be restored and a fresh one took its place.
+   * With `fingerprint` (the persistent-thread path) the thread must have been configured with the Agent's current scope,
+   * model and skills: the gateway cannot change those on a live thread, so an older thread is replaced (`"changed"`) and
+   * is never used for unattended work. Threads from before the fingerprint was recorded count as changed once.
+   */
+  async #homeMissionInfo(sentinel: Sentinel, actor?: SentinelActor, fingerprint?: string): Promise<{ id: string; replaced: false | "lost" | "changed" }> {
     const existing = sentinel.homeMissionId;
-    if (existing && (this.#missions.exists?.(existing) ?? true)) return existing;
-    if (existing && this.#missions.reopen) {
-      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true); return reopened.id; } catch { /* Fall through to a fresh standing mission. */ }
+    const stale = fingerprint !== undefined && Boolean(existing) && sentinel.homeFingerprint !== fingerprint;
+    if (existing && !stale && (this.#missions.exists?.(existing) ?? true)) return { id: existing, replaced: false };
+    if (existing && !stale && this.#missions.reopen) {
+      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true, fingerprint); return { id: reopened.id, replaced: false }; } catch { /* Fall through to a fresh standing mission. */ }
     }
     const home = this.#missions.create(this.#missionConfig(sentinel, `Agent: ${sentinel.name}`));
     actor?.onMissionCreated?.(home.id);
-    return this.#store.setHomeMission(sentinel.id, home.id, Boolean(existing)).homeMissionId ?? home.id;
+    return { id: this.#store.setHomeMission(sentinel.id, home.id, Boolean(existing), fingerprint).homeMissionId ?? home.id, replaced: existing ? (stale ? "changed" : "lost") : false };
   }
 
   #pauseForBudget(sentinel: Sentinel, reason: string, nowMs: number): void {

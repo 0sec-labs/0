@@ -102,4 +102,95 @@ describe("agent turn ledger", () => {
     store.close();
     expect(() => new SentinelStore(path).close()).not.toThrow();
   });
+
+  describe("trigger turn reservation", () => {
+    const caps = { sinceIso: "2000-01-01T00:00:00.000Z", maxRuns: 2, dailyUsd: 10 };
+    const input = (agentId: string, extra: Record<string, unknown> = {}) => ({ agentId, origin: "schedule" as const, detail: { via: "schedule" }, triggerId: "t1", sessionId: "home", ownerPid: 1, nowIso: new Date().toISOString(), ...extra });
+
+    it("a replayed cause is a no-op, but a failed delivery of it may be retried", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const first = store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps);
+      if (!("turn" in first)) throw new Error("expected a turn");
+      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps)).toMatchObject({ duplicate: { id: first.turn.id } });
+      store.updateTurn(first.turn.id, { status: "failed" });
+      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps)).toHaveProperty("turn");
+      store.close();
+    });
+
+    it("takes the caps and the insert in one transaction: the last slot goes to one of two reservations", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const results = [1, 2, 3].map(n => store.reserveTurn(input(agent.id, { triggerId: `t${n}` }), { ...caps, maxRuns: 2 }));
+      expect(results.filter(result => "turn" in result)).toHaveLength(2);
+      expect(results[2]).toMatchObject({ breach: "runs" });
+      store.close();
+    });
+
+    it("breaches on spend and counts turn cost in the ledger", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const first = store.reserveTurn(input(agent.id), caps);
+      if (!("turn" in first)) throw new Error("expected a turn");
+      store.updateTurn(first.turn.id, { status: "completed", costUsd: 10 });
+      expect(store.reserveTurn(input(agent.id, { triggerId: "t2" }), caps)).toMatchObject({ breach: "budget" });
+      store.close();
+    });
+
+    it("skips a trigger's second queued occurrence; a running one does not block", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const first = store.reserveTurn(input(agent.id), caps);
+      if (!("turn" in first)) throw new Error("expected a turn");
+      expect(store.reserveTurn(input(agent.id), caps)).toMatchObject({ skipped: { status: "skipped", skippedReason: "Still working on the previous one" } });
+      store.updateTurn(first.turn.id, { status: "running" });
+      expect(store.reserveTurn(input(agent.id), { ...caps, maxRuns: 10 })).toHaveProperty("turn");
+      store.close();
+    });
+
+    it("supersedes a queued older commit of the same pull request only", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const pr = (n: number, sha: string) => input(agent.id, { origin: "github", detail: { via: "poll", event: { pr: n, headSha: sha } }, coalesce: { pr: n }, idempotencyKey: `g:${n}:${sha}` });
+      const one = store.reserveTurn(pr(1, "a"), { ...caps, maxRuns: 10 });
+      const two = store.reserveTurn(pr(2, "a"), { ...caps, maxRuns: 10 });
+      const newer = store.reserveTurn(pr(1, "b"), { ...caps, maxRuns: 10 });
+      if (!("turn" in one) || !("turn" in two) || !("turn" in newer)) throw new Error("expected turns");
+      expect(newer.superseded.map(turn => turn.id)).toEqual([one.turn.id]);
+      expect(store.getTurn(one.turn.id)).toMatchObject({ status: "skipped", skippedReason: "Superseded by a newer commit" });
+      expect(store.getTurn(two.turn.id)!.status).toBe("queued");
+      store.close();
+    });
+
+    it("records a skipped cause once", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const skip = { agentId: agent.id, origin: "github" as const, detail: {}, reason: "Waiting on you", idempotencyKey: "k:waiting", nowIso: new Date().toISOString() };
+      const a = store.recordSkippedTurn(skip);
+      expect(store.recordSkippedTurn(skip).id).toBe(a.id);
+      expect(store.listTurns(agent.id)).toHaveLength(1);
+      store.close();
+    });
+
+    it("opens the circuit after three failures in a row, and a success or a person resets the count", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const automation = { automationId: "a1", kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: true };
+      const trigger = store.createTrigger(agent.id, automation);
+      expect(store.noteTurnResult(trigger.id, { status: "failed", error: "x" })).toMatchObject({ disabled: false });
+      expect(store.noteTurnResult(trigger.id, { status: "completed" })!.trigger.consecutiveFailures).toBe(0);
+      store.noteTurnResult(trigger.id, { status: "failed" }); store.noteTurnResult(trigger.id, { status: "failed" });
+      expect(store.noteTurnResult(trigger.id, { status: "failed", error: "boom" })).toMatchObject({ disabled: true, trigger: { enabled: false, lastStatus: "failing", consecutiveFailures: 3 } });
+      expect(store.getTrigger(trigger.id)!.lastError).toContain("boom");
+      expect(store.listDueTriggers(Date.now() + 10 * 86_400_000)).toEqual([]);
+      // Turns that were interrupted by an engine stop are not the trigger's fault.
+      const other = store.createTrigger(agent.id, automation);
+      for (let i = 0; i < 5; i++) store.noteTurnResult(other.id, { status: "failed", countsAsFailure: false });
+      expect(store.getTrigger(other.id)).toMatchObject({ enabled: true, consecutiveFailures: 0 });
+      store.updateTrigger(trigger.id, { enabled: true });
+      expect(store.getTrigger(trigger.id)).toMatchObject({ enabled: true, consecutiveFailures: 0 });
+      store.close();
+    });
+  });
 });
+

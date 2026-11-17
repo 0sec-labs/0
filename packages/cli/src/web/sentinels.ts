@@ -32,12 +32,12 @@ export class WebSentinelService {
    * `scheduler` starts the background tick (schedules, GitHub PR polling, run tracking). Off by default so tests and
    * tools that only need the HTTP surface do not run autonomous work; the dashboard turns it on.
    */
-  constructor(options: { dbPath?: string; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient; executionProfile?: () => "local" | "smolvm"; checkout?: (repo: string) => Promise<string | undefined> }) {
+  constructor(options: { dbPath?: string; missions: SentinelMissionRuntime; now?: () => number; scheduler?: boolean | { pollIntervalMs?: number }; gh?: SentinelGhClient; executionProfile?: () => "local" | "smolvm"; checkout?: (repo: string) => Promise<string | undefined>; persistentThread?: () => boolean }) {
     this.#store = new SentinelStore(options.dbPath);
     this.#workflows = new SecurityWorkflowStore(options.dbPath);
     this.#missions = options.missions;
     this.#now = options.now ?? Date.now;
-    this.#runner = new SentinelRunner({ store: this.#store, workflows: this.#workflows, missions: options.missions, now: this.#now, ...(options.gh ? { gh: options.gh } : {}), ...(options.executionProfile ? { executionProfile: options.executionProfile } : {}), ...(options.checkout ? { checkout: options.checkout } : {}) });
+    this.#runner = new SentinelRunner({ store: this.#store, workflows: this.#workflows, missions: options.missions, now: this.#now, ...(options.gh ? { gh: options.gh } : {}), ...(options.executionProfile ? { executionProfile: options.executionProfile } : {}), ...(options.checkout ? { checkout: options.checkout } : {}), ...(options.persistentThread ? { persistentThread: options.persistentThread } : {}) });
     if (options.scheduler) this.#noteAccessUpgrade();
     if (options.scheduler) this.#runner.start(typeof options.scheduler === "object" ? options.scheduler.pollIntervalMs : undefined);
   }
@@ -89,8 +89,9 @@ export class WebSentinelService {
     let pending = 0;
     for (const id of missions) { try { pending += this.#missions.pendingDecisions(id); } catch { /* A closed mission has nothing pending. */ } }
     const needsReview = sentinelNeedsReview(sentinel);
-    const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : undefined);
-    return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
+    const failing = this.#store.listTriggers(sentinel.id).some(trigger => trigger.lastStatus === "failing");
+    const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
+    return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview || failing, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
   #view(sentinel: Sentinel) { return { ...sentinel, attention: this.#attention(sentinel) }; }
   #automations(id: string) { return this.#workflows.list().filter(workflow => workflow.ownerSentinelId === id); }
