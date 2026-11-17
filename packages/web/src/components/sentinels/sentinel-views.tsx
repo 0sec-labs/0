@@ -12,9 +12,10 @@ import { formatRelativeAge } from "@/lib/relative-time";
 import { toast } from "@/ui/components/toast";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { displayTime } from "@/components/workflow-triggers";
-import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
-import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
+import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
+import { NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { addedSuggestions, sentinelHref, suggestedSchedule, type SentinelPresetAutomation } from "@/sentinels/model";
+import { SentinelFiles } from "./sentinel-files";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
 import { AddTriggerDialog } from "./add-trigger-dialog";
@@ -33,7 +34,6 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; readOnly: boolean }) {
   const { setPaused, acknowledge } = useSentinelMutations();
   const activations = useSentinelActivations(sentinel.id);
-  const files = useSentinelFiles(sentinel.id);
   const navigate = useNavigate();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -80,19 +80,9 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
         {[["Runs", String(week.length)], ["Failed", String(week.filter(item => item.status === "failed").length)], ["Cost", `$${cost.toFixed(2)}`], ["Last run", activations.data?.[0] ? ago(activations.data[0].startedAt) || "now" : "Never"]].map(([label, value]) => <div key={label} className="rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3"><dt className="text-xs text-muted-foreground-1">{label}</dt><dd className="mt-1 text-lg font-medium tabular-nums">{value}</dd></div>)}
       </dl>
     </Section>
-    <Section title={`Files${files.data ? ` (${files.data.files.length})` : ""}`} action={<Button size="xs" variant="ghost" render={<Link to="?view=files" />}>Open files</Button>}>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {DEFAULT_FILES.map(path => {
-          const file = files.data?.files.find(item => item.path === path);
-          return <Link key={path} to="?view=files" className="flex h-36 flex-col gap-2 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3 outline-none ui-row-hover focus-visible:outline-ring-inset">
-            <span className="text-sm font-medium">{path}</span>
-            <span className="flex-1 text-xs text-muted-foreground-1">{file ? `${file.bytes.toLocaleString()} bytes, revision ${file.revision}, edited ${ago(file.updatedAt) || "now"} by ${file.authorKind === "agent" ? v("the {sentinel}") : "you"}` : "Empty"}</span>
-          </Link>;
-        })}
-      </div>
-    </Section>
-    {!home && !archived && <p className="text-sm text-muted-foreground-1">Its standing chat appears after the first run.</p>}
-    {home && <Button variant="secondary" size="sm" className="self-start" render={<Link to={home} />}>Open standing chat</Button>}
+    <Section title="Threads"><SentinelActivations sentinel={sentinel} /></Section>
+    <Section title="Files"><SentinelFiles sentinelId={sentinel.id} readOnly={readOnly || archived} /></Section>
+    <Button variant="secondary" size="sm" className="self-start" render={<Link to={sentinelHref(sentinel.id)} />}>Open thread</Button>
     <RunSentinelDialog sentinel={sentinel} open={running} onOpenChange={setRunning} onStarted={missionId => { const href = chatHref(missionId); if (href) navigate(href); }} />
   </div>;
 }
@@ -211,7 +201,7 @@ export function SentinelActivations({ sentinel }: { sentinel: Sentinel }) {
   const query = useSentinelActivations(sentinel.id);
   if (query.isLoading) return <LoadingState label="Loading activations" />;
   if (query.error) return <p role="alert" className="text-sm text-destructive">{errorText(query.error, "Unable to load activations.")}</p>;
-  if (!query.data?.length) return <EmptyState title="No activations yet" body="Waiting for its first trigger. Run it now to see how it works." />;
+  if (!query.data?.length) return <EmptyState title="No threads yet" body="Tell it what to do in its thread." />;
   return <ul className="divide-y-[0.5px] divide-border-1 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
     {query.data.map(item => {
       const href = chatHref(item.missionId);

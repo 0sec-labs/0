@@ -342,9 +342,11 @@ export class SentinelRunner {
 
   #missionConfig(sentinel: Sentinel, title: string, checkout?: string): Record<string, unknown> {
     const inScope = [...sentinel.scope.targets, ...sentinel.scope.domains];
+    // A pull request run works in its checkout; otherwise the folder the owner chose for this agent (an absolute path in its repositories).
+    const folder = checkout ?? sentinel.scope.repos.find(repo => repo.startsWith("/"));
     return {
       title, target: sentinel.scope.targets[0] ?? sentinel.scope.domains[0] ?? "",
-      ...(checkout ? { workspacePath: checkout } : {}),
+      ...(folder ? { workspacePath: folder } : {}),
       // The model is pinned from the Sentinel record on every run, scheduled or manual.
       ...(inScope.length || sentinel.scope.outOfScope.length ? { scope: { ...(inScope.length ? { in_scope: inScope } : {}), ...(sentinel.scope.outOfScope.length ? { out_of_scope: sentinel.scope.outOfScope } : {}) } } : {}),
       ...(sentinel.model ? { runtime: { providerId: sentinel.model.providerId, model: sentinel.model.model, ...(sentinel.model.reasoning ? { reasoningEffort: sentinel.model.reasoning } : {}) } } : {}),

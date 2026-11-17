@@ -47,6 +47,8 @@ import { BackendConnectionPicker } from "@/components/backend-connection-picker"
 import { FilePathPicker } from "./file-path-picker";
 import { QueuedMessages } from "./queued-messages";
 import { AgentOnboarding } from "./agent-onboarding";
+import { openNewAgent } from "@/lib/new-agent";
+import { CapyAgentIcon } from "@/ui/icons/capy";
 import { ConnectModelStep } from "./connect-model-step";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -538,6 +540,10 @@ function ContextSuggestions({
           </Tooltip>
         );
       })}
+      <Button type="button" variant="chip" size="sm" className="max-w-full !px-2.5" onClick={openNewAgent}>
+        <CapyAgentIcon aria-hidden="true" className="shrink-0 text-icon-muted" />
+        <span className="truncate">{v("Create {a sentinel}")}</span>
+      </Button>
     </div>
   );
 }

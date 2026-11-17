@@ -105,18 +105,18 @@
   },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "node-sqlite3-wasm": "^0.8.55",
-    "pdfkit": "^0.15.2",
-    "playwright": "1.60.0",
+    "drizzle-orm": "^0.45.4",
+    "node-sqlite3-wasm": "^0.8.61",
+    "pdfkit": "^0.20.2",
+    "playwright": "1.65.1",
     "tree-sitter": "file:vendor/tree-sitter-0.21.1-node24.tgz",
     "tree-sitter-c": "0.21.4"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "@types/pdfkit": "^0.13.9",
+    "@types/pdfkit": "^0.17.7",
     "esbuild": "^0.28.1",
-    "react": "^19.2.4"
+    "react": "^19.3.1"
   },
   "pnpm": {
     "overrides": {
@@ -149,7 +149,7 @@
       "postcss-selector-parser@^7.0.0": "^7.1.6",
       "zod": "4.6.6",
       "vitest": "5.1.0",
-      "astro": "7.4.7",
+      "astro": "7.4.12",
       "vite": "^8.2.4",
       "@astrojs/markdown-remark": "^7.3.0",
       "@hono/node-server@>=1.0.0 <2.1.6": "2.1.6"
