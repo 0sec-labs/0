@@ -271,6 +271,28 @@ describe("budget enforcement", () => {
     expect((await f.view(created.sentinel.id)).status).toBe("paused");
     expect((await f.view(created.sentinel.id)).pauseReason).toBeUndefined();
   });
+
+  it("lets only one of two simultaneous launches take the last slot of the daily run limit", async () => {
+    const f = fixture();
+    const created = (await f.call("POST", P, { name: "M", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
+    const run = () => f.call("POST", `${P}/${created.sentinel.id}/run`, { approval: "launch-authorized-run", version: 1 });
+    const results = await Promise.all([run(), run()]);
+    expect(results.map(result => result.status).sort()).toEqual([202, 429]);
+    expect(await f.activations(created.sentinel.id)).toHaveLength(1);
+  });
+
+  it("charges a queued turn only for its own cost, not for the turn that ran before it", async () => {
+    const f = fixture();
+    const { id } = await f.armed({}, "sentinel-home");
+    // The earlier turn on the shared thread finishes (adding $5) after this one was queued and before it starts.
+    f.missions.send.mockImplementationOnce(async (mission: string, text: string) => { f.costs.set(mission, 5); f.emit(mission, { type: "user", text }); return {}; });
+    vi.setSystemTime(T0 + 5 * MIN + 1_000);
+    await f.service.tick();
+    f.costs.set("mission-1", 5.25);
+    f.emit("mission-1", { type: "usage" });
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect((await f.activations(id))[0]).toMatchObject({ status: "completed", costUsd: 0.25 });
+  });
 });
 
 describe("triggers API, ownership and deletion", () => {

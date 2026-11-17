@@ -138,7 +138,7 @@ export class SentinelStore {
       return sentinel;
     })();
   }
-  /** Removes the Sentinel and its files. Activations are retained as history; automations and findings are untouched. */
+  /** Removes the Sentinel, its files, triggers and activation history. Automations, findings and the threads it started are untouched. */
   delete(id: string, version?: number): boolean {
     return this.#db.transaction(() => {
       const current = this.get(id);
@@ -147,6 +147,7 @@ export class SentinelStore {
       this.#db.prepare("DELETE FROM sentinel_files WHERE sentinel_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinel_file_revisions WHERE sentinel_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinel_triggers WHERE sentinel_id = ?").run(id);
+      this.#db.prepare("DELETE FROM sentinel_activations WHERE sentinel_id = ?").run(id);
       this.#db.prepare("DELETE FROM sentinels WHERE id = ?").run(id);
       return true;
     })();
@@ -160,11 +161,23 @@ export class SentinelStore {
       .run(activation.id, activation.sentinelId, activation.status, activation.missionId ?? null, activation.automationId ?? null, JSON.stringify(activation), activation.startedAt, activation.finishedAt ?? null);
     return activation;
   }
+  /**
+   * Checks the rolling-window caps and records the activation in one transaction. Two launches that both see one slot left
+   * cannot both take it: the second sees the first one's row and gets the breach instead.
+   */
+  reserveActivation(input: Omit<SentinelActivation, "id" | "startedAt">, caps: { sinceIso: string; maxRuns: number; dailyUsd: number }): { activation: SentinelActivation; ledger: { runs: number; costUsd: number } } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } {
+    return this.#db.transaction(() => {
+      const ledger = this.ledger(input.sentinelId, caps.sinceIso);
+      if (ledger.runs >= caps.maxRuns) return { breach: "runs" as const, ledger };
+      if (ledger.costUsd >= caps.dailyUsd) return { breach: "budget" as const, ledger };
+      return { activation: this.createActivation(input), ledger };
+    })();
+  }
   getActivation(id: string): SentinelActivation | null {
     const found = this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE id = ?").all(id)[0];
     return found ? parseRow<SentinelActivation>(found, "activation_json") : null;
   }
-  updateActivation(id: string, update: Partial<Pick<SentinelActivation, "status" | "missionId" | "executionId" | "costUsd" | "error" | "finishedAt">>): SentinelActivation {
+  updateActivation(id: string, update: Partial<Pick<SentinelActivation, "status" | "missionId" | "parentMissionId" | "note" | "executionId" | "costUsd" | "error" | "finishedAt">>): SentinelActivation {
     return this.#db.transaction(() => {
       const current = this.getActivation(id);
       if (!current) throw new SentinelStoreError("Activation not found.", 404);

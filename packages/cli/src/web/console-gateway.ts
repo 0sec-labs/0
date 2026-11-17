@@ -150,7 +150,7 @@ type ManagedSession = {
   forceStopOperation?: Promise<DesktopConsoleSession>;
   initialMessages: NativeMessage[]; savedId?: string; workers: Map<string, ConsoleWorker>; ownedIds: Set<string>;
   userAttributions: ConsoleUserAttribution[];
-  busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
+  busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; automatedQueued?: Set<string>; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
   pendingConfiguration?: ConsoleSessionConfiguration; configuration: Promise<void> | null;
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   costCeilingUsd?: number; costCeilingExceeded?: boolean;
@@ -587,7 +587,8 @@ export class ConsoleGateway {
   subscribe(id: string, listener: (event: DesktopConsoleEvent) => void): () => void {
     const managed = this.#require(id); managed.listeners.add(listener); return () => managed.listeners.delete(listener);
   }
-  async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
+  /** `options.automated` marks a message sent by a schedule or trigger: if it cannot start when its turn comes, it is dropped so the messages behind it still run. */
+  async send(id: string, value: unknown, author?: ConsoleMessageAuthor, options?: { automated?: boolean }): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
     const managed = this.#requireOpen(id);
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued automation launch and decisions to finish.", 409);
@@ -610,6 +611,7 @@ export class ConsoleGateway {
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
       const queuedMessageId = this.#createId();
       managed.queued.push({ id: queuedMessageId, text: input.text, ...(input.attachments ? { attachments: input.attachments } : {}), createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
+      if (options?.automated) (managed.automatedQueued ??= new Set()).add(queuedMessageId);
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
       if (input.mode === "steer" && managed.abort) this.#cancelTurn(managed);
       return { ...this.#summary(managed), queuedMessageId };
@@ -1737,8 +1739,17 @@ export class ConsoleGateway {
       if (managed.pauseQueue || managed.pendingConfiguration || !managed.queued.length) return;
       const next = managed.queued.shift()!;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
+      const automated = managed.automatedQueued?.delete(next.id) === true;
       try { await this.#startTurn(managed, next.text, next.author, next.attachments); }
       catch (error) {
+        if (automated) {
+          // Scheduled work is not retried and must not hold up the next one.
+          this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
+          this.#emit(managed, { type: "error", message: errorMessage(error) });
+          if (!managed.turn && (managed.status as DesktopConsoleSessionStatus) === "working") managed.status = "failed";
+          await this.#processIdleWork(managed);
+          return;
+        }
         managed.queued.unshift(next); managed.pauseQueue = true;
         this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
         this.#emit(managed, { type: "error", message: errorMessage(error) });

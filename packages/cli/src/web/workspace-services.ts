@@ -1,4 +1,4 @@
-import { osecDB } from "@0/engine/storage";
+import { osecDB, SentinelStore } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
 import { isApiRuntime } from "@0/engine";
 import { homeStateDir, toShareSafeFindings } from "@0/engine/shared";
@@ -18,6 +18,20 @@ import type { UpdateManager } from "./update-manager.js";
 import { getSettings } from "../state/settings-store.js";
 import { archiveIdleSessions } from "../state/session-store.js";
 
+/** The Agent runner's send: keeps the `queue` mode so a trigger firing into a busy standing thread waits its turn instead of failing with 409. */
+export function sendToMission(gateway: Pick<ConsoleGateway, "send">, id: string, text: string, author?: { userId: string; displayName: string }, mode?: "queue", automated?: boolean) {
+  return gateway.send(id, { text, ...(mode ? { mode } : {}) }, author, automated ? { automated: true } : undefined);
+}
+
+/** Opt-in idle archive that never touches an Agent's standing thread. */
+export function archiveIdleExceptAgentThreads(days: number, dbPath: string | undefined, stateDir: string | undefined): number {
+  const store = new SentinelStore(dbPath);
+  try {
+    const protectedIds = new Set(store.list().flatMap(agent => agent.status !== "archived" && agent.homeMissionId ? [agent.homeMissionId] : []));
+    return archiveIdleSessions(days, stateDir, { protectedIds });
+  } finally { store.close(); }
+}
+
 type Options = { updates?: UpdateManager; relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
 export async function createWorkspaceServices(options: Options) {
   const skills = new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir: options.stateDir ?? homeStateDir(), team: options.auth.enabled });
@@ -28,7 +42,7 @@ export async function createWorkspaceServices(options: Options) {
     ...(options.stateDir ? { homeDir: options.stateDir } : {}),
   });
   // Opt-in sweep (archiveIdleDays; 0 = off). Deferred so it never delays startup; failures are ignored.
-  setTimeout(() => { try { archiveIdleSessions(getSettings().archiveIdleDays, options.stateDir); } catch { /* best effort */ } }, 0).unref();
+  setTimeout(() => { try { archiveIdleExceptAgentThreads(getSettings().archiveIdleDays, options.dbPath, options.stateDir); } catch { /* best effort */ } }, 0).unref();
   const engagements = new EngagementStore({ workspace: options.workspace ?? process.cwd(), dbPath: options.dbPath, ...(options.stateDir ? { stateDir: options.stateDir } : {}) });
   const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, updates: options.updates });
   let workflows: WebWorkflowService | undefined;
@@ -65,7 +79,7 @@ export async function createWorkspaceServices(options: Options) {
     github = new GitHubPublicationAuth();
     sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: {
       create: input => gateway.create(input),
-      send: (id, text, author) => gateway.send(id, { text }, author),
+      send: (id, text, author, mode, automated) => sendToMission(gateway, id, text, author, mode, automated),
       pendingDecisions: id => gateway.get(id).pendingDecisions.length,
       subscribe: (id, listener) => gateway.subscribe(id, event => listener(event as unknown as { type: string })),
       cancel: id => gateway.cancel(id),
