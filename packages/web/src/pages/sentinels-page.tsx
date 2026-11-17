@@ -90,7 +90,7 @@ export function SentinelPage() {
   return <>
     <AgentConversation key={sentinel.id} sentinel={sentinel} readOnly={readOnly} onViewAgent={() => setView("overview")} />
     <Dialog open={view !== null} onOpenChange={open => { if (!open) setView(null); }}>
-      <DialogContent className="flex max-h-[88dvh] flex-col gap-5 overflow-y-auto sm:max-w-[672px]" data-testid="agent-profile">
+      <DialogContent className="max-h-[88dvh] grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto sm:max-w-[672px]" data-testid="agent-profile">
         <DialogTitle className="sr-only">{sentinel.name}</DialogTitle>
         <header className="flex items-center gap-4">
           <SentinelAvatar sentinel={sentinel} size="lg" />

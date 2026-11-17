@@ -222,6 +222,8 @@ export function AgentActivity({ sentinel }: { sentinel: Sentinel }) {
         {item.startedAt && item.finishedAt && <span className="w-12 text-right text-xs tabular-nums text-muted-foreground-1">{workedFor(Date.parse(item.finishedAt) - Date.parse(item.startedAt))}</span>}
         {item.costUsd !== undefined && <span className="w-12 text-right text-xs tabular-nums text-muted-foreground-1">${item.costUsd.toFixed(2)}</span>}
         <span className="w-8 text-right text-xs tabular-nums text-muted-foreground-2">{when ? ago(when) || "now" : ""}</span>
+        {/* Work from before the standing thread (or with it turned off) ran in its own thread: keep it reachable. */}
+        {item.sessionId && item.sessionId !== sentinel.homeMissionId && <Button size="xs" variant="ghost" render={<Link to={chatHref(item.sessionId)!} />}>Open</Button>}
       </li>;
     })}
   </ul>;

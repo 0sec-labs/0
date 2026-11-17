@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Monitor, Pause, Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { errorText } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
@@ -62,7 +62,7 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
   const stop = () => { if (missionId) void workspace.perform(() => api.controlConsoleSession(missionId, "cancel")); };
   const toggle = () => void setPaused.mutateAsync({ id: sentinel.id, paused: !paused, version: sentinel.version }).catch(() => undefined);
 
-  return <div className="flex min-h-0 flex-1 flex-col" data-testid="agent-thread" data-agent-status={sentinel.status}>
+  return <div className="flex h-full min-h-0 flex-1 flex-col" data-testid="agent-thread" data-agent-status={sentinel.status}>
     <header className="flex h-11 shrink-0 items-center gap-2.5 border-b-[0.5px] border-border-1 px-4">
       <SentinelAvatar sentinel={sentinel} size="xs" />
       <h1 className="min-w-0 truncate font-sans text-sm font-medium tracking-[-0.01em]">{sentinel.name}</h1>
@@ -82,13 +82,14 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
       : !missionId ? (readOnly ? <p className="p-6 text-sm text-muted-foreground">It has no thread yet.</p> : <ConversationSkeleton />)
       : !snapshot ? (workspace.error ? <div role="alert" className="p-6 text-sm text-destructive">{workspace.error}</div> : <ConversationSkeleton />)
       : <AgentTurnsContext value={byNonce}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
         <Conversation workspace={workspace} worker={undefined} sendBehavior="queue" composerPlaceholder={agentComposerPlaceholder(sentinel.name)}
           emptyState={<div className="max-w-xs space-y-2 text-center"><SentinelAvatar sentinel={sentinel} size="lg" className="mx-auto" /><h2 className="text-lg font-medium tracking-tight">{sentinel.name}</h2><p className="text-sm leading-6 text-muted-foreground">{sentinel.mission || "Tell it what to watch and what to do."}</p></div>}
           onSubmitRoot={send} onSubmit={send} onStopRoot={stop} onStop={stop}
           onResolve={(id, response) => void workspace.perform(() => api.resolveConsoleDecision(snapshot.session.id, id, response))}
           resumeCap={() => void workspace.send({ text: "Continue from where you stopped.", mode: "send" })}
           onSelectWorker={setWorkerId} />
-        <p className="mx-auto flex w-full max-w-[712px] shrink-0 items-center gap-1.5 px-4 pb-2 text-xs text-muted-foreground-2"><Monitor aria-hidden="true" className="size-3" />This computer<span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500" /><span className="sr-only">awake</span></p>
+        </div>
       </AgentTurnsContext>}
   </div>;
 }

@@ -28,3 +28,15 @@ describe("wake-up lines", () => {
     expect(workedFor(3_725_000)).toBe("1h 2m");
   });
 });
+
+describe("editing a schedule in place", () => {
+  test("a stored schedule becomes the draft the fields edit, and round-trips through the request", async () => {
+    const { draftFromSchedule, triggerRequestFromDraft } = await import("../src/sentinels/model");
+    const schedule = { frequency: "weekly" as const, weekday: 3, time: "07:30", timezone: "Europe/Zurich" };
+    const draft = draftFromSchedule(schedule, "auto-1");
+    expect(draft).toMatchObject({ kind: "schedule", frequency: "weekly", weekday: "3", time: "07:30", timezone: "Europe/Zurich", automationId: "auto-1" });
+    expect(triggerRequestFromDraft(draft)).toEqual({ ok: true, request: { automationId: "auto-1", kind: "schedule", schedule } });
+    const every = draftFromSchedule({ frequency: "minutes", every: 30, timezone: "UTC" }, "a");
+    expect(triggerRequestFromDraft({ ...every, every: "3" })).toMatchObject({ ok: false });
+  });
+});

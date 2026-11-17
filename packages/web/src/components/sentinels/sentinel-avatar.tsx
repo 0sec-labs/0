@@ -30,7 +30,7 @@ function StatusText({ label, tone }: { label: string; tone: "success" | "warning
 const BADGE_CLASSES: Record<AgentBadge, string> = {
   running: "bg-primary animate-pulse",
   "needs-you": "bg-amber-500",
-  failed: "bg-destructive",
+  failed: "bg-red-500",
   paused: "bg-muted-foreground-3",
   idle: "bg-emerald-500",
 };
