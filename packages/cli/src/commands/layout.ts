@@ -50,11 +50,7 @@ export function configureGroupedHelp(program: Command): void {
   program.configureHelp({
     formatHelp(cmd: Command, helper: Help): string {
       const width = helper.padWidth(cmd, helper);
-      const columns = helper.helpWidth ?? 80;
-      const item = (term: string, description: string): string => {
-        const fullText = `${term.padEnd(width)}  ${description}`;
-        return "  " + (description ? helper.wrap(fullText, columns - 2, width + 4) : term);
-      };
+      const item = (term: string, description: string): string => helper.formatItem(term, width, description, helper);
       const out = [`Usage: ${helper.commandUsage(cmd)}`, "", helper.commandDescription(cmd), ""];
       out.push("Options:", ...helper.visibleOptions(cmd).map((option) => item(helper.optionTerm(option), helper.optionDescription(option))), "");
       const visible = new Map(helper.visibleCommands(cmd).map((command) => [command.name(), command]));
