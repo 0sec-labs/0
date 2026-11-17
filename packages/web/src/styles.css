@@ -155,15 +155,14 @@
   --popover: oklch(100% 0 0);
   --popover-foreground: var(--foreground);
   --brand-orange: #fd802e;
-  /* Blue (Capy's oklch(.58 .213 267.8)) is the default accent: filled actions, send, selection, focus ring and the enabled switch.
-     --primary-ink is the same hue as text (links, "needs you"); --primary-soft is its wash. Neutral and the other presets stay
-     selectable. The brand orange stays for the logo and as the Orange preset. */
-  --primary: oklch(58% .213 267.8);
+  /* Neutral is the default accent: near-black filled actions (white in dark mode), focus ring, links and the enabled switch.
+     Blue (Capy's oklch(.58 .213 267.8)) and the other presets are selectable. The brand orange stays for the logo and as the Orange preset. */
+  --primary: #18181b;
   --switch-on: var(--primary);
   --primary-foreground: #ffffff;
-  --primary-hover: color-mix(in oklch, var(--primary) 90%, black);
+  --primary-hover: color-mix(in oklch, var(--primary) 82%, white);
   --dither-ink: #52525b;
-  --primary-ink: oklch(49% .2 267.8);
+  --primary-ink: #27272a;
   --primary-text: var(--primary-ink);
   --secondary: oklch(0% 0 0 / .05);
   --secondary-foreground: var(--foreground);
@@ -188,7 +187,7 @@
   --border-3: oklch(0% 0 0 / .15);
   --border: var(--border-1);
   --input: var(--card);
-  --ring: var(--primary);
+  --ring: color-mix(in oklch, var(--primary) 55%, transparent);
   --destructive: oklch(0.577 0.245 27.325);
   /* Filled actions keep a strong red; dark-mode error text uses a lighter red. */
   --destructive-background: oklch(0.577 0.245 27.325);
@@ -202,8 +201,8 @@
   --section: oklch(0% 0 0 / .04);
   --popover-hover: oklch(0% 0 0 / .04);
   --row-hover: oklch(0% 0 0 / .03);
-  --primary-soft: color-mix(in srgb, var(--primary) 12%, transparent);
-  --primary-soft-hover: color-mix(in srgb, var(--primary) 16%, transparent);
+  --primary-soft: color-mix(in srgb, var(--primary) 8%, transparent);
+  --primary-soft-hover: color-mix(in srgb, var(--primary) 12%, transparent);
   --text-link: var(--primary-ink);
   --inverse: var(--foreground);
   --inverse-text: var(--background);
@@ -287,10 +286,8 @@
     word-break: break-word;
   }
 
-  /* Capy selection: the accent at 20% behind accent-ink text. */
   ::selection {
-    background: color-mix(in oklab, var(--primary) 20%, transparent);
-    color: var(--primary-ink);
+    background: color-mix(in oklab, var(--ring) 28%, transparent);
   }
 
   /* Capy-thin scrollbars: a quiet thumb on a clear track; `no-scrollbar` and scroll-owning widgets override. */
@@ -335,9 +332,11 @@
   --card: oklch(21.82% .0019 286.2);
   --card-hover: oklch(23.97% .0019 286.3);
   --popover: oklch(25.24% .0019 286.3);
-  --primary-hover: color-mix(in oklch, var(--primary) 88%, white);
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --primary-hover: color-mix(in oklch, var(--primary) 86%, black);
   --dither-ink: #d4d4d8;
-  --primary-ink: oklch(70% .15 267.8);
+  --primary-ink: #e4e4e7;
   --secondary: oklch(100% 0 0 / .08);
   --muted: oklch(32.93% .0017 286.3);
   --muted-foreground: color-mix(in oklch, var(--foreground) 68%, var(--background));
@@ -355,7 +354,7 @@
   --border-1: oklch(100% 0 0 / .08);
   --border-2: oklch(100% 0 0 / .12);
   --border-3: oklch(100% 0 0 / .16);
-  --ring: var(--primary);
+  --ring: color-mix(in oklch, var(--primary) 70%, transparent);
 }
 
 /* Appearance: font size scale (Default is 1, so existing layouts are untouched). */
@@ -366,6 +365,13 @@ html[data-font-size="large"] { --ui-font-scale: 1.14; }
    default and never sets the attribute. Filled actions use white text (>= 4.5:1, enforced in
    test/appearance-accents.test.ts); orange takes black text; neutral flips to black text in
    dark mode. Ink is the text/link colour. */
+[data-accent="blue"] {
+  --primary-foreground: #ffffff;
+  --primary: oklch(58% .213 267.8); --switch-on: oklch(58% .213 267.8); --primary-hover: color-mix(in oklch, oklch(58% .213 267.8) 90%, black);
+  --primary-ink: oklch(49% .2 267.8); --primary-text: oklch(49% .2 267.8); --text-link: oklch(49% .2 267.8);
+  --primary-soft: color-mix(in srgb, oklch(58% .213 267.8) 12%, transparent); --primary-soft-hover: color-mix(in srgb, oklch(58% .213 267.8) 16%, transparent);
+  --ring: oklch(58% .213 267.8); --dither-ink: oklch(58% .213 267.8);
+}
 [data-accent="orange"] {
   --primary-foreground: #18181b;
   --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 88%, black);
@@ -394,6 +400,13 @@ html[data-font-size="large"] { --ui-font-scale: 1.14; }
   --primary: #18181b; --primary-foreground: #ffffff; --switch-on: #18181b; --primary-hover: color-mix(in oklch, #18181b 82%, white);
   --primary-ink: #27272a; --primary-text: #27272a; --text-link: #27272a;
   --ring: color-mix(in oklch, #18181b 55%, transparent); --dither-ink: #52525b;
+}
+.dark [data-accent="blue"], .dark[data-accent="blue"] {
+  --primary-foreground: #ffffff;
+  --primary: oklch(58% .213 267.8); --switch-on: oklch(58% .213 267.8); --primary-hover: color-mix(in oklch, oklch(58% .213 267.8) 88%, white);
+  --primary-ink: oklch(70% .15 267.8); --primary-text: oklch(70% .15 267.8); --text-link: oklch(70% .15 267.8);
+  --primary-soft: color-mix(in srgb, oklch(58% .213 267.8) 20%, transparent); --primary-soft-hover: color-mix(in srgb, oklch(58% .213 267.8) 24%, transparent);
+  --ring: oklch(58% .213 267.8); --dither-ink: oklch(58% .213 267.8);
 }
 .dark [data-accent="orange"], .dark[data-accent="orange"] {
   --primary-foreground: #18181b;

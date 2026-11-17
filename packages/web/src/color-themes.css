@@ -4,7 +4,7 @@
   --t-bg: oklch(96.2% .0025 290);
   --t-fg: oklch(23.5% .0038 290);
   --t-text: oklch(23.5% .0038 290);
-  --t-primary: oklch(58% .213 267.8);
+  --t-primary: #18181b;
   --t-primary-text: #ffffff;
   --t-shader-ink: #52525b;
   --t-chrome: initial;
@@ -19,15 +19,15 @@
   --t-muted-foreground-3: initial;
   --t-icon-muted: initial;
   --t-text-link: initial;
-  --t-ink: oklch(49% .2 267.8);
+  --t-ink: #27272a;
 }
 
 [data-color-theme="zero"].dark {
   --t-bg: oklch(14.03% .0022 286.1);
   --t-fg: oklch(94.04% .0013 286.4);
   --t-text: oklch(94.04% .0013 286.4);
-  --t-primary: oklch(58% .213 267.8);
-  --t-primary-text: #ffffff;
+  --t-primary: #fafafa;
+  --t-primary-text: #18181b;
   --t-shader-ink: #d4d4d8;
   --t-chrome: initial;
   --t-panel: oklch(18.26% .002 286.2);
@@ -41,7 +41,7 @@
   --t-muted-foreground-3: initial;
   --t-icon-muted: initial;
   --t-text-link: initial;
-  --t-ink: oklch(70% .15 267.8);
+  --t-ink: #e4e4e7;
 }
 
 [data-color-theme="dracula"]:not(.dark) {

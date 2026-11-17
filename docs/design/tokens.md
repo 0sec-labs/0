@@ -18,16 +18,16 @@ One place defines them: `packages/web/src/styles.css` (`:root` is light, `.dark`
 | `--secondary-hover` | white 11% | black 8% | secondary-hover .11 |
 | `--popover-hover` | white 6.5% | black 4% | popover-hover .065 |
 | `--section` | white 3.5% | black 4% | section .035 |
-| `--primary` | oklch(58% .213 267.8) | same | primary #456af6 |
-| `--primary-foreground` | #ffffff | #ffffff | text on a filled primary |
-| `--primary-ink` (links, "needs you") | oklch(70% .15 267.8) | oklch(49% .2 267.8) | primary-ink .70 .15 (light darkened to read on white) |
-| `--primary-soft` / `-hover` | primary 20% / 24% | primary 12% / 16% | primary-soft 20% |
-| `--ring` | `--primary` | `--primary` | focus ring = primary |
-| selection | primary 20% bg, primary-ink text | same | selection |
+| `--primary` (default Neutral) | #fafafa | #18181b | neutral default; Blue accent is Capy primary #456af6 |
+| `--primary-foreground` | #18181b | #ffffff | text on a filled primary |
+| `--primary-ink` (links, "needs you") | #e4e4e7 | #27272a | neutral ink; Blue accent: oklch(70% .15 267.8) dark, oklch(49% .2 267.8) light |
+| `--primary-soft` / `-hover` | primary 8% / 12% | primary 8% / 12% | Blue accent: 20% / 24% dark, 12% / 16% light |
+| `--ring` | primary 70% | primary 55% | Blue accent: `--primary` |
+| selection | ring 28% | ring 28% | Blue accent follows its ring |
 | `--success`, `--warning`, `--destructive` | oklch(61.7% .208 142.85), oklch(85% .155 96), oklch(55% .185 27) | light-tuned | semantic |
 | `--diff-add` / `--diff-del` | oklch(68% .14 142.85) / oklch(66% .14 25), 10% wash | 56% / 55%, 6% wash | diff add/del |
 
-The accent is a preset: Blue is the default (no `data-accent`), Neutral, Orange, Green, Violet and Rose override the primary tokens in `styles.css`. Other colour themes (Dracula, Nord, ...) bring their own primary through `--t-primary`.
+The accent is a preset: Neutral is the default (no `data-accent`); Blue (Capy's primary), Orange, Green, Violet and Rose override the primary tokens in `styles.css`. Other colour themes (Dracula, Nord, ...) bring their own primary through `--t-primary`.
 
 ## Type, radius, controls
 
