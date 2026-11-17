@@ -195,8 +195,12 @@ export class LinuxKernelResearchAdapter
   ): Promise<ResearchStageResult<ResearchFinding>> {
     const items: ResearchFinding[] = [];
     const evidence: ResearchEvidence[] = [];
+    // First candidate per id, so each execution resolves in O(1) rather than
+    // rescanning the candidate list.
+    const candidateById = new Map<string, LinuxKernelCandidate>();
+    for (const item of input.candidates) if (!candidateById.has(item.id)) candidateById.set(item.id, item);
     for (const execution of input.executions ?? []) {
-      const candidate = input.candidates.find((item) => item.id === execution.candidateId);
+      const candidate = candidateById.get(execution.candidateId);
       const stable = execution.result.status === "reproduced" && execution.result.nbootStable;
       evidence.push({
         stage: "verify",

@@ -873,6 +873,16 @@ function siteFromFinding(finding: Finding, fallback: SurvivorSite): SurvivorSite
   return ann?.startLine ? { ...fallback, line: ann.startLine } : fallback;
 }
 
+/**
+ * First hunt record per finding id. Built once per hunt so resolving each
+ * confirmed finding's skeptic reason is an O(1) lookup, not a rescan of `records`.
+ */
+function recordByFindingId<R extends { finding: { id: string } }>(records: readonly R[]): Map<string, R> {
+  const byId = new Map<string, R>();
+  for (const record of records) if (!byId.has(record.finding.id)) byId.set(record.finding.id, record);
+  return byId;
+}
+
 /** The `dataflow` detector's survivors — anchored at the deterministic violation site. */
 function survivorsFromHunt(rec: RecencyFileRecord, result: SubsystemInvariantHuntResult): RecencySurvivor[] {
   const confirmed = result.hunt?.confirmed ?? [];
@@ -884,8 +894,9 @@ function survivorsFromHunt(rec: RecencyFileRecord, result: SubsystemInvariantHun
     line: viol?.line ?? 0,
     bugClass: viol?.kind ?? "invariant-violation",
   };
+  const recordById = recordByFindingId(records);
   return confirmed.map((f: Finding) => {
-    const match = records.find((r) => r.finding.id === f.id);
+    const match = recordById.get(f.id);
     return shapeSurvivor("dataflow", rec, f, siteFromFinding(f, fallback), match?.skepticReason ?? "confirmed by skeptic gate");
   });
 }
@@ -993,8 +1004,9 @@ function survivorsFromExtraHunt(
   hunt: HuntScanResult,
   fallback: SurvivorSite,
 ): RecencySurvivor[] {
+  const recordById = recordByFindingId(hunt.records);
   return hunt.confirmed.map((f) => {
-    const match = hunt.records.find((r) => r.finding.id === f.id);
+    const match = recordById.get(f.id);
     return shapeSurvivor(detector, rec, f, siteFromFinding(f, fallback), match?.skepticReason ?? "confirmed by skeptic gate");
   });
 }

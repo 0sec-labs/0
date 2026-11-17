@@ -244,7 +244,12 @@ const PLUS_FILE_RE = /^\+\+\+ b\/(\S+)/;
  */
 function parseUnifiedDiff(diff: string): TouchedFile[] {
   const files: TouchedFile[] = [];
+  // Path -> file and per-file function-name sets, so re-finding a file header
+  // or de-duplicating a function is O(1) instead of a scan of the arrays built so far.
+  const fileByPath = new Map<string, TouchedFile>();
+  const functionsSeen = new Map<TouchedFile, Set<string>>();
   let current: TouchedFile | undefined;
+  let currentFunctions = new Set<string>();
   let postLine = 0; // running post-image line cursor within a hunk
 
   for (const raw of diff.split("\n")) {
@@ -252,11 +257,14 @@ function parseUnifiedDiff(diff: string): TouchedFile[] {
     if (fileMatch) {
       const path = fileMatch[1]!;
       if (path === "/dev/null") continue;
-      current = files.find((f) => f.path === path);
+      current = fileByPath.get(path);
       if (!current) {
         current = { path, functions: [], changedLines: [] };
         files.push(current);
+        fileByPath.set(path, current);
+        functionsSeen.set(current, new Set());
       }
+      currentFunctions = functionsSeen.get(current)!;
       continue;
     }
 
@@ -264,7 +272,10 @@ function parseUnifiedDiff(diff: string): TouchedFile[] {
     if (hunk && current) {
       postLine = Number(hunk[1]);
       const fn = functionFromHunkContext(hunk[2] ?? "");
-      if (fn && !current.functions.includes(fn)) current.functions.push(fn);
+      if (fn && !currentFunctions.has(fn)) {
+        currentFunctions.add(fn);
+        current.functions.push(fn);
+      }
       continue;
     }
 
@@ -276,9 +287,10 @@ function parseUnifiedDiff(diff: string): TouchedFile[] {
       // An added line that defines/opens a function reveals a sink function the
       // hunk-header context may have missed (e.g. a whole new guard helper).
       const def = raw.slice(1).match(/^[A-Za-z_][\w\s*]*?\b([A-Za-z_]\w*)\s*\(/);
-      if (def && !current.functions.includes(def[1]!)) {
+      if (def && !currentFunctions.has(def[1]!)) {
         const name = def[1]!;
         if (!["if", "for", "while", "switch", "sizeof", "return"].includes(name)) {
+          currentFunctions.add(name);
           current.functions.push(name);
         }
       }

@@ -553,13 +553,15 @@ def delta_files(detail: TaskDetail, diff_text: str | None = None) -> list[str]:
     if detail.type != TaskType.DELTA or not diff_text:
         return []
     files: list[str] = []
+    seen: set[str] = set()  # O(1) membership; ``files`` keeps first-seen order
     for line in diff_text.splitlines():
         if not line.startswith("+++ "):
             continue
         path = line[4:].strip()
         if path.startswith(("a/", "b/")):
             path = path[2:]
-        if path and path != "/dev/null" and path not in files:
+        if path and path != "/dev/null" and path not in seen:
+            seen.add(path)
             files.append(path)
     return files
 def frames_from_run(run_result: RunResult) -> list[Frame]:

@@ -17,9 +17,11 @@ import json
 import struct
 
 from zeroverse.backends.rizin import (
+    _ADDR_TAKEN_PER_SITE,
     _augmented_driver_adjacency,
     _call_adjacency,
     _driver_dispatch_handlers,
+    _driver_tier_edges,
     _reachable,
     _windows_driver_priority,
 )
@@ -191,3 +193,30 @@ def test_driver_priority_carries_indirect_reachables() -> None:
     assert prio.get(MJ14) == 2
     assert prio.get(LEAF) == 2
     assert 0x1900 not in prio  # the constructor is not dispatch-reachable
+
+
+def test_speculative_tier_takes_the_lowest_address_taken_targets_per_site() -> None:
+    """Tier A (opt-in) pairs an unresolved indirect call with the lowest
+    ``_ADDR_TAKEN_PER_SITE`` address-taken functions, skipping the caller itself
+    and anything it already calls directly."""
+    # Arrange
+    caller, direct_callee = 0x1000, 0x1010
+    taken = [0x1000 + 0x10 * step for step in range(14)]  # includes caller + direct callee
+    ops = [
+        {"disasm": f"lea rax, [fcn.{ptr:08x}]", "type": "lea", "ptr": ptr}
+        for ptr in reversed(taken)  # discovery order must not matter
+    ]
+    ops.append({"disasm": "call rax", "type": "ucall"})
+    cache = {caller: ops}
+    stats: dict[str, int] = {}
+
+    # Act
+    edges = _driver_tier_edges(
+        None, {caller: {direct_callee}}, {caller}, [], {}, set(), [_TEXT], cache,
+        {caller}, stats, speculative=True,
+    )
+
+    # Assert
+    expected = [a for a in taken if a not in (caller, direct_callee)][:_ADDR_TAKEN_PER_SITE]
+    assert edges == {caller: set(expected)}
+    assert stats == {"addr-taken": _ADDR_TAKEN_PER_SITE}
