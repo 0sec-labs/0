@@ -161,11 +161,12 @@ export class SentinelStore {
     })();
   }
   /** Binds the standing mission once; overwrites only when `replace` (the old one was lost with an engine restart). Does not bump the version (not an operator edit). */
-  setHomeMission(id: string, missionId: string, replace = false): Sentinel {
+  setHomeMission(id: string, missionId: string, replace = false, fingerprint?: string): Sentinel {
     return this.#db.transaction(() => {
       const current = this.#require(id);
       if (current.homeMissionId && !replace) return current;
-      const sentinel: Sentinel = { ...current, homeMissionId: missionId, updatedAt: new Date().toISOString() };
+      const { homeFingerprint: _old, ...rest } = current;
+      const sentinel: Sentinel = { ...rest, homeMissionId: missionId, ...(fingerprint ? { homeFingerprint: fingerprint } : {}), updatedAt: new Date().toISOString() };
       this.#write(sentinel, false);
       return sentinel;
     })();

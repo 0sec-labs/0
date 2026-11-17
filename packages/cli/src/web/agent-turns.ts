@@ -42,8 +42,12 @@ export interface TurnContext {
   store: SentinelStore;
   missions: SentinelMissionRuntime;
   now: () => number;
-  /** The Agent's standing thread: reused, restored after a restart, or created. `replaced` is true when an older one was lost. */
-  ensureHome(sentinel: Sentinel): Promise<{ id: string; replaced: boolean }>;
+  /**
+   * The Agent's standing thread: reused, restored after a restart, or created. The gateway pins scope, model and the skills
+   * allow-list when a thread is created, so a thread made under an older scope is never reused: `changed` means a fresh
+   * thread was created with the current ones, `lost` that the old one could not be restored.
+   */
+  ensureHome(sentinel: Sentinel): Promise<{ id: string; replaced: false | "lost" | "changed" }>;
   pauseForBudget(sentinel: Sentinel, reason: string, nowMs: number): void;
 }
 
@@ -78,9 +82,11 @@ export class AgentTurnDelivery {
       ...(request.event ? { event: request.event } : {}),
     };
     const base = { agentId: sentinel.id, origin: request.origin, detail, triggerId: request.trigger.id, nowIso } as const;
-    let home: { id: string; replaced: boolean };
+    let home: Awaited<ReturnType<TurnContext["ensureHome"]>>;
     try { home = await ctx.ensureHome(sentinel); }
     catch (error) { return { status: "refused", kind: "failed", reason: message(error) }; }
+    // A fresh thread has seen nothing: send the notes again.
+    if (home.replaced) this.#seen.delete(sentinel.id);
     // A thread that is waiting on a person would hold trigger turns behind it forever: record them as skipped instead.
     let pending = 0;
     try { pending = ctx.missions.pendingDecisions(home.id); } catch { /* A thread that cannot be read has nothing pending. */ }
@@ -104,7 +110,7 @@ export class AgentTurnDelivery {
     }
     for (const old of reserved.superseded) this.#withdraw(old.id);
     const turn = reserved.turn;
-    const text = this.#compose(request, turn, { remainingUsd: budget.dailyUsd - reserved.ledger.costUsd, notices: [...(home.replaced ? ["Your earlier conversation could not be restored, so this is a fresh thread. Your notes below are the record of earlier work."] : []), ...(interrupted ? ["Your previous turn was interrupted when the engine stopped; check what it left half done before you continue."] : [])] });
+    const text = this.#compose(request, turn, { remainingUsd: budget.dailyUsd - reserved.ledger.costUsd, notices: [...(home.replaced === "lost" ? ["Your earlier conversation could not be restored, so this is a fresh thread. Your notes below are the record of earlier work."] : home.replaced === "changed" ? ["Your scope, model or skills changed, so you are on a fresh thread configured with the current ones. Your notes below are the record of earlier work."] : []), ...(interrupted ? ["Your previous turn was interrupted when the engine stopped; check what it left half done before you continue."] : [])] });
     const watch = this.#watch(home.id);
     const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0 };
     watch.queued.push(tracked);

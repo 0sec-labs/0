@@ -128,6 +128,8 @@ export interface Sentinel extends SentinelInput {
   id: string;
   /** Standing mission (chat/session) created on first run or at creation; activations are child missions. */
   homeMissionId: string | null;
+  /** Review fingerprint (scope, model, skills, folder) the standing thread was configured with. The gateway pins those at creation, so a changed fingerprint means a fresh thread. Absent on threads made before it was recorded. */
+  homeFingerprint?: string;
   /** Fingerprint of the authority-bearing fields (scope, model, skills) the operator last acknowledged. */
   reviewedFingerprint?: string;
   /** Why the runner paused this Sentinel (budget breach); cleared by resume. Surfaces as "needs you". */
@@ -173,7 +175,7 @@ export function parseSentinelCreate(value: unknown): SentinelCreateInput {
 /** Patches replace whole top-level fields (nested objects included); fields not named stay as they are. */
 export function applySentinelPatch(current: Sentinel, patch: Record<string, unknown>): SentinelInput {
   const { version: _version, ...rawFields } = patch;
-  const { id: _id, homeMissionId: _home, reviewedFingerprint: _fp, pauseReason: _pause, owner: _owner, version: _v, createdAt: _c, updatedAt: _u, ...editable } = current;
+  const { id: _id, homeMissionId: _home, homeFingerprint: _homeFp, reviewedFingerprint: _fp, pauseReason: _pause, owner: _owner, version: _v, createdAt: _c, updatedAt: _u, ...editable } = current;
   return SentinelInputSchema.parse({ ...editable, ...dropAccessFields(rawFields) });
 }
 export function parseSentinelPatch(value: unknown): Record<string, unknown> & { version: number } {

@@ -17,7 +17,7 @@ Set `ZERO_AGENTS_PERSISTENT_THREAD=1` in the environment of the engine (any of `
 
 With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web/agent-turns.ts`):
 
-- The Agent's home thread is ensured first (reused, restored after a restart, or created). No child thread is created. If the old thread cannot be restored the next turn says so.
+- The Agent's home thread is ensured first (reused, restored after a restart, or created). No child thread is created. If the old thread cannot be restored, or was configured with an older scope, model or skills, a fresh one is created and the next turn says so.
 - The turn is reserved in one store transaction (`reserveTurn`): replayed cause (idempotency key), second queued occurrence of the same schedule (`skipped`: "Still working on the previous one"), a newer commit of a pull request that is still queued (the older one becomes `skipped`: "Superseded by a newer commit" and leaves the gateway queue), and the daily turn and spend caps.
 - A thread that has a pending decision records the turn as `skipped` ("Waiting on you") and does not queue it. A pull request is not marked as handled in that case, so it is offered again at the next poll.
 - The send is queue mode and automated, so a message that cannot start is dropped by the gateway and the next one runs. A full gateway queue is recorded as `skipped` ("The queue is full").
@@ -28,7 +28,7 @@ With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web
 
 ### Known gaps in Phase 2 (all must be closed or accepted before Phase 3)
 
-1. The gateway pins scope, model and the skills allow-list when the thread is created, and cannot change the skills allow-list afterwards. The envelope always states the current scope and skills, but the thread's enforced allow-list can be older than the Agent's after an edit. A gateway `instructions` channel and a way to reconfigure the skill allow-list are needed.
+1. The gateway pins scope, model and the skills allow-list when a thread is created and cannot change them afterwards. The runner therefore records the configuration the standing thread was created with (`homeFingerprint` on the Agent record) and never uses a thread whose configuration differs from the Agent's current scope, model or skills: it creates a fresh thread, tells the Agent so, and sends its notes again. The old thread stays as an ordinary thread. A standing thread from before the fingerprint existed is replaced once. This loses conversation continuity on every scope, model or skills edit until the gateway can reconfigure a live thread; a gateway `instructions` channel and a reconfigurable allow-list would remove the replacement.
 2. Pull request comments are not posted from the standing thread: findings are read per thread, so a comment would list every earlier review. The comment option is ignored while the flag is on.
 3. `messages[0]` of a thread survives compaction verbatim, so the first turn's envelope stays in context forever and can disagree with the current charter. The per-turn envelope says it overrides earlier messages; the system-prompt channel is the real fix.
 4. A person's message typed in the Agent's thread is not recorded as a turn (Phase 3).

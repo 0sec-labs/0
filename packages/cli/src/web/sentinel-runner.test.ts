@@ -634,6 +634,44 @@ describe("persistent thread delivery (flag on)", () => {
     expect((await f.activations(id))).toHaveLength(0);
   });
 
+  it("never reuses a thread configured with an older scope, model or skills: the gateway pins those at creation, so a changed Agent gets a fresh thread", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 10); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(f.missions.create).toHaveBeenCalledTimes(1);
+    expect(f.store.get(id)!.homeFingerprint).toBeTruthy();
+    let minute = 10;
+    for (const change of [{ scope: { targets: ["https://narrower.example.com"] } }, { skills: [] }]) {
+      const before = f.missions.create.mock.calls.length;
+      const { version } = await f.view(id);
+      expect((await f.call("PATCH", `${P}/${id}`, { version, ...change })).status).toBe(200);
+      expect((await f.call("POST", `${P}/${id}/acknowledge`, {})).status).toBe(200);
+      minute += 5;
+      await fire(f, minute);
+      expect(f.missions.create).toHaveBeenCalledTimes(before + 1);
+      const [missionId, text] = f.missions.send.mock.calls.at(-1)!;
+      expect(missionId).toBe(`mission-${before + 1}`);
+      expect(text).toContain("fresh thread configured with the current ones");
+      expect(text).toContain("Your saved notes");
+      expect(f.missions.create.mock.calls.at(-1)![0]).toMatchObject(change.skills ? { skillAllowList: [] } : { scope: { in_scope: ["https://narrower.example.com"] } });
+      f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
+    }
+  });
+
+  it("replaces a standing thread from before the configuration was recorded, once", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.create({}); // mission-1 stands in for an old-path home thread
+    f.store.setHomeMission(id, "mission-1");
+    expect(f.store.get(id)!.homeFingerprint).toBeUndefined();
+    await fire(f, 5);
+    expect(f.missions.send.mock.calls[0]![0]).toBe("mission-2");
+    f.emit("mission-2", { type: "turn-complete", stopReason: "end_turn" });
+    await fire(f, 10);
+    expect(f.missions.send.mock.calls[1]![0]).toBe("mission-2");
+  });
+
   it("records 'Waiting on you' instead of queueing behind an unanswered decision", async () => {
     const f = fixture({ persistent: true });
     const { id, triggerId } = await f.armed();

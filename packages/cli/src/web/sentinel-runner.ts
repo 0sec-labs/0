@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { SentinelStore, type SecurityWorkflowStore } from "@0/engine/storage";
 import { audit } from "./audit.js";
 import {
-  nextSentinelFire, sentinelNeedsReview,
+  nextSentinelFire, sentinelNeedsReview, sentinelReviewFingerprint,
   type ShareSafeReport, type Sentinel, type SentinelActivation, type SentinelTrigger, type SecurityWorkflow,
 } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
@@ -116,7 +116,7 @@ export class SentinelRunner {
     this.#checkout = options.checkout ?? findCheckout;
     this.#gh = options.gh ?? defaultSentinelGh(); this.#now = options.now ?? Date.now;
     this.#persistent = options.persistentThread ?? agentsPersistentThreadFromEnv;
-    this.#turns = new AgentTurnDelivery({ store: this.#store, missions: this.#missions, now: this.#now, ensureHome: sentinel => this.#homeMissionInfo(sentinel), pauseForBudget: (sentinel, reason, nowMs) => this.#pauseForBudget(sentinel, reason, nowMs) });
+    this.#turns = new AgentTurnDelivery({ store: this.#store, missions: this.#missions, now: this.#now, ensureHome: sentinel => this.#homeMissionInfo(sentinel, undefined, sentinelReviewFingerprint(sentinel)), pauseForBudget: (sentinel, reason, nowMs) => this.#pauseForBudget(sentinel, reason, nowMs) });
   }
 
   /** Starts the unref'd poll loop (default 15 s). Without it the runner only reacts to manual launches and explicit tick() calls. */
@@ -408,16 +408,22 @@ export class SentinelRunner {
 
   /** The standing mission: created on first use, restored after an engine restart, recreated only if it cannot be restored. */
   async #homeMission(sentinel: Sentinel, actor?: SentinelActor): Promise<string> { return (await this.#homeMissionInfo(sentinel, actor)).id; }
-  /** `replaced` is true when the Agent had a standing thread that could not be restored and a fresh one took its place. */
-  async #homeMissionInfo(sentinel: Sentinel, actor?: SentinelActor): Promise<{ id: string; replaced: boolean }> {
+  /**
+   * `replaced: "lost"` when the Agent had a standing thread that could not be restored and a fresh one took its place.
+   * With `fingerprint` (the persistent-thread path) the thread must have been configured with the Agent's current scope,
+   * model and skills: the gateway cannot change those on a live thread, so an older thread is replaced (`"changed"`) and
+   * is never used for unattended work. Threads from before the fingerprint was recorded count as changed once.
+   */
+  async #homeMissionInfo(sentinel: Sentinel, actor?: SentinelActor, fingerprint?: string): Promise<{ id: string; replaced: false | "lost" | "changed" }> {
     const existing = sentinel.homeMissionId;
-    if (existing && (this.#missions.exists?.(existing) ?? true)) return { id: existing, replaced: false };
-    if (existing && this.#missions.reopen) {
-      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true); return { id: reopened.id, replaced: false }; } catch { /* Fall through to a fresh standing mission. */ }
+    const stale = fingerprint !== undefined && Boolean(existing) && sentinel.homeFingerprint !== fingerprint;
+    if (existing && !stale && (this.#missions.exists?.(existing) ?? true)) return { id: existing, replaced: false };
+    if (existing && !stale && this.#missions.reopen) {
+      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true, fingerprint); return { id: reopened.id, replaced: false }; } catch { /* Fall through to a fresh standing mission. */ }
     }
     const home = this.#missions.create(this.#missionConfig(sentinel, `Agent: ${sentinel.name}`));
     actor?.onMissionCreated?.(home.id);
-    return { id: this.#store.setHomeMission(sentinel.id, home.id, Boolean(existing)).homeMissionId ?? home.id, replaced: Boolean(existing) };
+    return { id: this.#store.setHomeMission(sentinel.id, home.id, Boolean(existing), fingerprint).homeMissionId ?? home.id, replaced: existing ? (stale ? "changed" : "lost") : false };
   }
 
   #pauseForBudget(sentinel: Sentinel, reason: string, nowMs: number): void {
