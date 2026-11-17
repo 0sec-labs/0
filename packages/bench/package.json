@@ -103,14 +103,14 @@
   },
   "dependencies": {
     "@0/engine": "workspace:*",
-    "express": "^4.22.1"
+    "express": "^5.3.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.25",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.1.0"
   },
   "description": "Benchmark runners, fixtures and intentionally vulnerable/safe test targets for 0 (never shipped)"
 }

@@ -16,7 +16,7 @@ describe("preference parsing", () => {
     expect(parseThemePreference(null)).toBe("system");
     expect(parseThemePreference("sepia")).toBe("system");
     expect(parseAccent("blue")).toBe("blue");
-    expect(parseAccent("pink")).toBe("blue");
+    expect(parseAccent("pink")).toBe("neutral");
     expect(parseFontSize("large")).toBe("large");
     expect(parseFontSize("huge")).toBe("default");
     expect(parseMotionPreference("reduce")).toBe("reduce");

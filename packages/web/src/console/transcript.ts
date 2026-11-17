@@ -489,6 +489,14 @@ function mergeToolAndTextSegments(turn: ReducedTurn, entry: ReducedTurn, matched
       const saved = segments[match];
       if (saved.type === "assistant" || saved.type === "reasoning") saved.text = appendStreamedText(saved.text, segment.text);
       cursor = match + 1;
+    } else if (segment.type === "reasoning" && !incoming.slice(index + 1).some(item => item.type === "tools")) {
+      // Thinking that no tool follows came before the closing answer. Dropping it after that answer would
+      // push the answer into the collapsed work log, so it goes ahead of the committed trailing reply.
+      let trailing = segments.length;
+      while (trailing > 0 && segments[trailing - 1].type === "assistant") trailing--;
+      const at = Math.min(cursor, trailing);
+      segments.splice(at, 0, segment);
+      cursor = at + 1;
     } else {
       segments.splice(cursor++, 0, segment);
     }

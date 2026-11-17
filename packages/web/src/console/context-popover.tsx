@@ -22,7 +22,8 @@ export function contextUsage(snapshot: ContextSnapshot) {
 export function ContextPopover({ snapshot }: { snapshot: ContextSnapshot }) {
   const { showContextMeter } = useDisplaySettings();
   const { used, windowTokens, percent } = contextUsage(snapshot);
-  if (!showContextMeter) return null;
+  // Nothing measured yet: an empty ring is indistinguishable from a stuck spinner, so show nothing.
+  if (!showContextMeter || (used === undefined && percent === undefined)) return null;
   const label = percent === undefined ? "Context usage" : `Context usage: ${percent}% used`;
   const width = percent === undefined ? 0 : Math.max(0, Math.min(100, percent));
   return (
@@ -34,12 +35,17 @@ export function ContextPopover({ snapshot }: { snapshot: ContextSnapshot }) {
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="size-7 shrink-0 text-muted-foreground-1 hover:text-foreground"
+              className="h-7 min-w-7 shrink-0 px-1.5 text-muted-foreground-1 hover:text-foreground"
               aria-label="Context usage"
             />
           }
         >
-          <ContextRing percent={percent} />
+          {percent === undefined && used !== undefined ? (
+            // Without a known window an empty ring reads as a stuck spinner; show the count instead.
+            <span className="text-xs tabular-nums">{formatTokens(used)}</span>
+          ) : (
+            <ContextRing percent={percent} />
+          )}
         </Popover.Trigger>
       </Tooltip>
       <Popover.Content side="top" align="end" className="w-[330px] max-w-[calc(100vw-16px)] gap-3 p-3">

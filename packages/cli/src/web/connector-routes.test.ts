@@ -39,8 +39,8 @@ describe("connector routes", () => {
     const list = (await handleConnectorRequest(svc, hosted, "extensions/connectors", "GET", undefined))!.data as { connectors: Array<{ enabled: boolean; status: ConnectorStatus }> };
     expect(list.connectors[0]).toMatchObject({ enabled: false, status: { state: "unavailable" } });
   });
-  it("ignores other routes; mutations are privileged and audited without the token", () => {
-    expect(handleConnectorRequest(setup(), {}, "extensions", "GET", undefined)).resolves.toBeNull();
+  it("ignores other routes; mutations are privileged and audited without the token", async () => {
+    await expect(handleConnectorRequest(setup(), {}, "extensions", "GET", undefined)).resolves.toBeNull();
     expect(isPrivilegedOperatorRoute("/api/console/extensions/connectors/github/connect", "POST")).toBe(true);
     expect(isPrivilegedOperatorRoute("/api/console/extensions/connectors", "GET")).toBe(false);
     const audit = describeConsoleAudit("extensions/connectors/github/connect", "POST", { token: "secret-value" });

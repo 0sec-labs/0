@@ -81,8 +81,8 @@ export const COLOR_THEMES: readonly ThemePalette[] = [
     id: "zero", name: "Zero", author: "0 Labs", license: "Proprietary", sourceUrl: "https://0.security",
     description: "The default look. Accent presets apply here.",
     // Mirrors the :root and .dark tokens in styles.css so the gallery can preview it. The live app uses styles.css directly.
-    light: tokens("oklch(96.2% .0025 290)", "oklch(23.5% .0038 290)", "oklch(58% .213 267.8)", { primaryText: "#ffffff", primaryInk: "oklch(49% .2 267.8)", shaderInk: "#52525b", panel: "oklch(98.5% .0015 290)", card: "oklch(100% 0 0)", cardHover: "oklch(97.8% .0015 290)", popover: "oklch(100% 0 0)", muted: "oklch(93.2% .0028 290)" }),
-    dark: tokens("oklch(14.03% .0022 286.1)", "oklch(94.04% .0013 286.4)", "oklch(58% .213 267.8)", { primaryText: "#ffffff", primaryInk: "oklch(70% .15 267.8)", shaderInk: "#d4d4d8", panel: "oklch(18.26% .002 286.2)", card: "oklch(21.82% .0019 286.2)", cardHover: "oklch(23.97% .0019 286.3)", popover: "oklch(25.24% .0019 286.3)", muted: "oklch(32.93% .0017 286.3)" }),
+    light: tokens("oklch(96.2% .0025 290)", "oklch(23.5% .0038 290)", "#18181b", { primaryText: "#ffffff", primaryInk: "#27272a", shaderInk: "#52525b", panel: "oklch(98.5% .0015 290)", card: "oklch(100% 0 0)", cardHover: "oklch(97.8% .0015 290)", popover: "oklch(100% 0 0)", muted: "oklch(93.2% .0028 290)" }),
+    dark: tokens("oklch(14.03% .0022 286.1)", "oklch(94.04% .0013 286.4)", "#fafafa", { primaryText: "#18181b", primaryInk: "#e4e4e7", shaderInk: "#d4d4d8", panel: "oklch(18.26% .002 286.2)", card: "oklch(21.82% .0019 286.2)", cardHover: "oklch(23.97% .0019 286.3)", popover: "oklch(25.24% .0019 286.3)", muted: "oklch(32.93% .0017 286.3)" }),
   },
   { id: "dracula", name: "Dracula", author: "Dracula Theme", license: MIT, sourceUrl: "https://github.com/dracula/dracula-theme",
     description: "Dracula with the Alucard light variant.",

@@ -48,17 +48,18 @@ function TurnWork({ turn, subagents, shimmer, children }: { turn: ReducedTurn; s
           aria-expanded={open}
           aria-controls={`${id}-work`}
           onClick={() => setManual(!open)}
-          className="inline-flex min-h-7 w-fit max-w-[80%] items-center gap-1 rounded-[var(--radius-inner,4px)] text-xs font-normal text-muted-foreground-2 transition-colors hover:text-muted-foreground-1 focus-visible:outline-ring-inset"
+          className="relative inline-flex min-h-7 w-fit max-w-[80%] items-center rounded-[var(--radius-inner,4px)] text-xs font-normal text-muted-foreground-2 transition-colors hover:text-muted-foreground-1 focus-visible:outline-ring-inset"
         >
           <span className="truncate">
             <ShimmerText active={shimmer}>{label.split(",")[0]}</ShimmerText>
             {label.includes(",") ? label.slice(label.indexOf(",")) : ""}
           </span>
-          {turn.isWorking && !turn.retry && time && <span className="tabular-nums">{time}</span>}
+          {turn.isWorking && !turn.retry && time && <span className="ml-1 tabular-nums">{time}</span>}
           {failedCallCount(turn.toolCalls) > 0 && <X aria-hidden="true" data-turn-work-failed className="size-3 flex-none text-destructive" />}
+          {/* Out of flow so the label, not label plus arrow, is what centres between the hairlines (and under the day stamp). */}
           <ChevronRight
             aria-hidden="true"
-            className="size-3 flex-none -rotate-90 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-0 group-data-[open]/work-head:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute top-1/2 left-full ml-1 size-3 flex-none -translate-y-1/2 -rotate-90 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-0 group-data-[open]/work-head:opacity-100 [@media(hover:none)]:opacity-100"
           />
         </button>
         <span aria-hidden="true" className={cn(hairline, "origin-left")} />
