@@ -20,7 +20,7 @@ describe("agent review and budget", () => {
     expect(meters.find(meter => meter.key === "usd")).toMatchObject({ used: "$2.50", limit: "$10", percent: 25 });
     expect(meters.find(meter => meter.key === "runs")?.percent).toBe(25);
     expect(meters.map(meter => meter.key)).toEqual(["usd", "runs"]);
-    expect(dailyCaps(DEFAULT_BUDGET)).toBe("$10 and 20 runs a day");
+    expect(dailyCaps(DEFAULT_BUDGET)).toBe("$10 and 20 automatic turns a day");
     expect(budgetMeters({ budget: DEFAULT_BUDGET, usage: { runs: 99, costUsd: 99 } })[0]!.percent).toBe(100);
   });
   it("describes triggers", () => {

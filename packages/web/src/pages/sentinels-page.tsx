@@ -4,7 +4,7 @@ import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CapyAgentIcon } from "@/ui/icons/capy";
 import { v } from "@/lib/vocabulary";
-import { PageHeader } from "@/components/page-shell";
+import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
@@ -12,7 +12,8 @@ import { NotFound } from "@/ui/components/not-found";
 import { useTeamAccess } from "@/components/team-access";
 import { openNewAgent } from "@/lib/new-agent";
 import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sentinel-avatar";
-import { AgentThread } from "@/components/sentinels/agent-thread";
+import { AgentConversation } from "@/components/sentinels/agent-conversation";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SentinelAutomations, SentinelOverview, SentinelSettings } from "@/components/sentinels/sentinel-views";
 import { GitHubWebhookControl } from "@/components/console-control/github-webhook-control";
 import { AutomationEditor } from "@/components/automations/automation-editor";
@@ -69,7 +70,10 @@ export function SentinelsPage() {
   </>;
 }
 
-/** One agent. By default its own thread; `?view=` opens the detail page: Overview (status, budget, threads, files), Automations, Settings. */
+/**
+ * One agent: its own thread, the real conversation, full width. "View agent" opens the Profile dialog (`?view=`) on one of
+ * three tabs: Overview (status, budget, notes and files), Automations (its triggers and schedules) and Settings.
+ */
 export function SentinelPage() {
   const { sentinelId = "" } = useParams();
   const [search, setSearch] = useSearchParams();
@@ -77,27 +81,35 @@ export function SentinelPage() {
   const readOnly = team.enabled && team.user?.role === "viewer";
   const query = useSentinel(sentinelId);
   useBreadcrumbLabel(query.data?.name);
+  usePageVariant("full");
   const view = parseView(search.get("view"));
+  const setView = (next: SentinelView | null) => setSearch(previous => { const params = new URLSearchParams(previous); if (next) params.set("view", next); else { params.delete("view"); params.delete("workflow"); } return params; }, { replace: next !== null });
   if (query.isLoading) return <><LoadingState label="Loading" variant="detail" /></>;
   if (query.error || !query.data) return <>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</>;
   const sentinel = query.data;
-  if (view === null) return <AgentThread sentinel={sentinel} readOnly={readOnly} />;
   return <>
-    <header className="flex items-center gap-4">
-      <SentinelAvatar sentinel={sentinel} size="lg" />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 truncate font-sans text-[22px]/7 font-medium tracking-[-0.02em]">{sentinel.name}</h1><SentinelStatusBadge sentinel={sentinel} /></div>
-        <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No job set yet."}</p>
-      </div>
-      <Button variant="secondary" size="sm" render={<Link to={sentinelHref(sentinel.id)} />}>Thread</Button>
-    </header>
-    <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); params.set("view", String(next)); return params; }, { replace: true })}>
-      <TabsList variant="line" aria-label="Agent views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
-    </Tabs></div>
-    <div role="region" aria-label={VIEW_LABELS[view]}>
-      {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}
-      {view === "automations" && <SentinelAutomations sentinel={sentinel} readOnly={readOnly} />}
-      {view === "settings" && <SentinelSettings key={sentinel.id} sentinel={sentinel} readOnly={readOnly} />}
-    </div>
+    <AgentConversation key={sentinel.id} sentinel={sentinel} readOnly={readOnly} onViewAgent={() => setView("overview")} />
+    <Dialog open={view !== null} onOpenChange={open => { if (!open) setView(null); }}>
+      <DialogContent className="max-h-[88dvh] grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto sm:max-w-[672px]" data-testid="agent-profile">
+        <DialogTitle className="sr-only">{sentinel.name}</DialogTitle>
+        <header className="flex items-center gap-4">
+          <SentinelAvatar sentinel={sentinel} size="lg" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2"><h2 className="min-w-0 truncate font-sans text-[22px]/7 font-medium tracking-[-0.02em]">{sentinel.name}</h2><SentinelStatusBadge sentinel={sentinel} /></div>
+            <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No job set yet."}</p>
+          </div>
+        </header>
+        {view && <>
+          <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setView(next as SentinelView)}>
+            <TabsList variant="line" aria-label="Agent views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
+          </Tabs></div>
+          <div role="region" aria-label={VIEW_LABELS[view]}>
+            {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}
+            {view === "automations" && <SentinelAutomations sentinel={sentinel} readOnly={readOnly} />}
+            {view === "settings" && <SentinelSettings key={sentinel.id} sentinel={sentinel} readOnly={readOnly} onClose={() => setView(null)} />}
+          </div>
+        </>}
+      </DialogContent>
+    </Dialog>
   </>;
 }

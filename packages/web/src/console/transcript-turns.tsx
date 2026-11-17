@@ -17,6 +17,8 @@ import { WorkerTree, isCancellation } from "./worker-tree";
 import { RefreshCw, RotateCcw } from "lucide-react";
 import { isRetryableError, messageLink } from "./transcript-actions";
 import { Disclosure } from "@/components/ui/disclosure";
+import { AgentWakeLine } from "@/components/sentinels/agent-wake-line";
+import { parseWakeHeader } from "@/sentinels/wake";
 import { SYNTHETIC_PROMPT_LABELS, classifySyntheticPrompt } from "./synthetic-prompt";
 import { turnLimitNotice } from "./run-feedback";
 import type { ReducedTurn } from "./transcript";
@@ -106,6 +108,8 @@ export const TranscriptTurns = memo(function TranscriptTurns({
         turns.map((turn, turnIndex) => {
           const stamp = needsStamp(turns[turnIndex - 1]?.startedAt, turn.startedAt);
           const synthetic = turn.user.attachments?.length ? undefined : classifySyntheticPrompt(turn.user.text);
+          const wake = turn.user.attachments?.length ? null : parseWakeHeader(turn.user.text);
+          const quiet = Boolean(synthetic || wake);
           const ending = turnEnding(turn, turnWorkers.get(turn.id)?.length ?? 0);
           const rejectedKey =
             Boolean(turn.error) &&
@@ -138,7 +142,8 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                   </div>
                 </Disclosure>
               )}
-              {!synthetic && (turn.user.text || turn.user.attachments?.length) && (
+              {wake && <AgentWakeLine header={wake} text={turn.user.text} />}
+              {!quiet && (turn.user.text || turn.user.attachments?.length) && (
                 <div data-slot="user-message" className="flex min-w-0 flex-col items-end">
                   <div className="group/rail relative flex min-w-0 max-w-[77%] flex-col items-end pt-7">
                     <MessageToolbar
@@ -216,7 +221,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                     !active &&
                     canWrite &&
                     !turn.isWorking &&
-                    !synthetic &&
+                    !quiet &&
                     (turn.user.text || turn.user.attachments?.length) && (
                       <Button
                         type="button"
@@ -242,7 +247,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                     turnIndex === turns.length - 1 &&
                     !active &&
                     canWrite &&
-                    !synthetic &&
+                    !quiet &&
                     Boolean(turn.user.text || turn.user.attachments?.length)
                   }
                   busy={workspace.busy}
@@ -264,7 +269,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       <ProviderRejectedNotice
                         snapshot={snapshot}
                         message={{ text: turn.user.text, attachments: turn.user.attachments }}
-                        canSwitch={turnIndex === turns.length - 1 && !active && canWrite && !turn.isWorking && !synthetic && Boolean(turn.user.text || turn.user.attachments?.length)}
+                        canSwitch={turnIndex === turns.length - 1 && !active && canWrite && !turn.isWorking && !quiet && Boolean(turn.user.text || turn.user.attachments?.length)}
                         onRetry={onRetry}
                       />
                     ) : (
@@ -287,7 +292,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       !active &&
                       canWrite &&
                       !turn.isWorking &&
-                      !synthetic &&
+                      !quiet &&
                       ((isRetryableError(turn.error) && classifyRunError(turn.error).retryable) || recoveredProviderError(turn.error, workspace.connectionRecovery)) &&
                       (turn.user.text || turn.user.attachments?.length) && (
                         <Button

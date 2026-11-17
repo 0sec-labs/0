@@ -243,17 +243,18 @@ try {
   await settle(async () => (await triggerOf(withComments)).lastStatus !== 'blocked', 'recovery after gh works again');
   lap('ghFailure');
 
-  // 7. The Agent page shows the activations and thread links.
+  // 7. The Agent page's Overview lists the turns and links to the threads they ran in.
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const problems = [];
   page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));
-  await page.goto(new URL(`/agents/${withComments.id}?view=activations`, origin).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL(`/agents/${withComments.id}?view=overview`, origin).href, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   await page.getByText('Pull request #4', { exact: false }).first().waitFor({ timeout: 15000 });
   const text = await page.locator('body').innerText();
-  assert.match(text, /Pull request #5 skipped/);
-  assert.match(text, /Pull request #6 skipped/);
+  assert.match(text, /Pull request #5/);
+  assert.match(text, /Pull request #6/);
+  assert.match(text, /skipped/i);
   assert.match(text, /fork pull request/);
   assert.match(text, /draft pull request/);
   const threadLinks = await page.locator('a[href^="/chats/"]').count();

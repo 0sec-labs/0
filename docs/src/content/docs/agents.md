@@ -3,20 +3,32 @@ title: Agents
 description: Standing jobs with a scope, a daily budget and a review gate, plus the saved automations they run and the GitHub pull request trigger.
 ---
 
-An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It then runs threads for you on a schedule, when a GitHub pull request is opened or updated, or when you start it by hand. An **automation** is a workflow template plus a trigger: a saved list of steps that runs against a target and keeps its results. An Agent owns automations.
+An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a workflow template plus a trigger: a saved list of steps that runs against a target and keeps its results. An Agent owns automations.
 
 ## Create one
 
 1. Run `0` and click **+** next to **Agents** in the sidebar. The Agents page, the command palette and the **Create an agent** chip on the home screen open the same dialog.
 2. Optionally pick a **Start from** preset. It fills the name, avatar and instructions; **Blank** is the default. Click the avatar to change its glyph or colour.
 3. Type a name, then check the **Folder** it works on, the **Computer** it runs on and its **Model** (the current default unless you pick one).
-4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, budget, last 7 days, threads, files), Automations and Settings.
+4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, budget, last 7 days, notes and files, activity), Automations and Settings.
 
 Creating an agent never turns a schedule on. A preset only suggests automations; none exists until you add it on the Automations tab, and a schedule starts only after you review and turn it on. Production targets stay off.
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
 Each Agent has a scope, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+
+## One thread that never ends
+
+The Agent's page is its real conversation, the same transcript and composer every thread has. Everything it does happens there:
+
+- **Your messages.** Type in the composer and the message goes into the thread. If the Agent is in the middle of a turn, yours waits its turn rather than stopping it. Each message is recorded as one of the Agent's turns and counts toward its spend, but never toward its turn limit.
+- **Wake-ups.** When a schedule or a pull request trigger fires, the work arrives in the same thread as a quiet centered line, such as *Schedule · Woke on schedule, worked for 54s*. Click it to see what arrived and how it ended. A red x marks a turn that failed. The chip names the cause: Schedule, GitHub or You.
+- **Pause and Resume.** Pause turns the triggers off. The thread still answers you, even when the day's budget is used; the page shows a one-time notice that your messages still count toward spend.
+- **Needs you.** The sidebar row shows the Agent's last message and a glyph only when it is working, waiting on you or failed. A row that needs you says so in place of its age.
+- **Older threads.** Work from before this change, or with `ZERO_AGENTS_PERSISTENT_THREAD=0` set, ran in a thread of its own. Those stay as ordinary threads and are listed under Activity in Overview with an **Open** link.
+
+Every wake-up message carries the Agent's charter, scope, skills and remaining budget again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
 
 ## Presets
 
@@ -44,7 +56,7 @@ There is one mode: an Agent has shell access, like a thread. There is no access 
 
 ## Budget
 
-Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Agent and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**. Older per-run cost and time caps load normally and are ignored.
+Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 automatic turns per day by default. Both are editable. The turn limit counts wake-ups only; your own messages are never refused. At the cap the Agent stops the running wake-up, pauses its triggers and marks itself as needing you; your messages still go through. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**. Older per-run cost and time caps load normally and are ignored.
 
 ## Triggers
 
@@ -72,7 +84,7 @@ The trigger must exist and be on for that repository and base branch; deliveries
 
 #### What a pull request run does
 
-A new commit on an open pull request starts one thread, recorded as an activation on the Agent with a link to the thread. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. 0 does not check out or execute the pull request branch itself; the run works in the repository's local checked-out folder.
+A new commit on an open pull request wakes the Agent in its thread with one turn, recorded in its activity. If an older commit of the same pull request is still waiting, the newer one replaces it. Pull request reviews run one at a time, in the order they arrive. Closed and merged pull requests are ignored. The run gets the pull request's diff, fetched through `gh pr diff`, as untrusted data. 0 does not check out or execute the pull request branch itself; the run works in the repository's local checked-out folder.
 
 By default a run **posts nothing to GitHub**. Results are in the Agent's activity and thread only. Two options on the trigger change that, and both are off by default:
 
@@ -100,12 +112,12 @@ The Agent's `gh` account needs permission to comment when `--comment` is on. A f
 
 ## Review gate
 
-Scheduled and polled runs are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, access level, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
+Scheduled and polled turns are autonomous, so the Agent must be **active and reviewed**. The review covers a fingerprint of its scope, model, access level, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous turn. Your own messages are never blocked.
 
 
 ## From the CLI
 
-Everything on the Agents page works from `0 agents`. Commands attach to a running engine; without one, reads and edits work against the control database directly. Running an Agent starts a thread, so `run` needs the engine. Pass `--json` for machine output.
+Everything on the Agents page works from `0 agents`. Commands attach to a running engine; without one, reads and edits work against the control database directly. `agents run` sends a message into the Agent's thread, so it needs the engine. Pass `--json` for machine output.
 
 ```bash
 0 agents list --presets

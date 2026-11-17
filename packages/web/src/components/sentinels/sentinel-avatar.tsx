@@ -30,10 +30,13 @@ function StatusText({ label, tone }: { label: string; tone: "success" | "warning
 const BADGE_CLASSES: Record<AgentBadge, string> = {
   running: "bg-primary animate-pulse",
   "needs-you": "bg-amber-500",
+  failed: "bg-red-500",
   paused: "bg-muted-foreground-3",
   idle: "bg-emerald-500",
 };
 /** Small status marker overlapping the avatar's bottom-right corner. */
 export function AvatarBadge({ badge }: { badge: AgentBadge }) {
+  // Idle and paused agents draw no glyph: only working, waiting and failed are worth a mark.
+  if (badge === "idle" || badge === "paused") return null;
   return <span aria-hidden="true" data-badge={badge} className={cn("absolute -right-1 -bottom-1 size-2.5 rounded-full ring-2 ring-chrome", BADGE_CLASSES[badge])} />;
 }

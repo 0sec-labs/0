@@ -9,7 +9,7 @@ Status: approved direction. Phases 0 to 3 are shipped. Phases 4 to 6 below are t
 | 0 | Shipped (#400). |
 | 1 | Shipped (#402). `agent_turns` is written alongside every activation; `GET /sentinels/:id/turns` returns turns with older activations projected as origin `legacy`. The daily ledger reads the union and counts each row once. Behaviour is unchanged. |
 | 2 | Shipped (#403) behind a flag. |
-| 3 | Backend: the flag is on by default and a person's message in an Agent's thread is recorded as a turn (see "Phase 3 backend" below). Web: see "Phase 3 web" below. |
+| 3 | Shipped. Backend (#404): the flag is on by default and a person's message is a turn ("Phase 3 backend"). Web: the Agent page is the real conversation ("Phase 3 web"). Open gaps are listed at the end of "Phase 3 web". |
 | 4 to 6 | Not started. |
 
 ### Phase 3 backend
@@ -35,6 +35,17 @@ With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web
 - Cost is the thread's cost at the end of the turn minus its cost at the start of that turn. Mid-turn enforcement on usage events stays: reaching the daily cap cancels the turn, pauses the Agent and records the turns waiting behind it.
 - A turn that fails does not stall the queue. After three failed turns in a row the trigger turns itself off (`lastStatus: failing`) and the Agent shows "needs you". A person turning the trigger back on resets the count. Turns closed because the engine stopped do not count as failures, and the next turn is told that the previous one was interrupted.
 - When a person cancels a turn, the gateway pauses its queue; trigger turns waiting behind it are started again.
+
+### Phase 3 web
+
+- The Agent page (`/agents/:id`) renders the live conversation component for the Agent's thread, full width, with a slim header (avatar, name, cost, Pause or Resume, View agent). The composer is the ordinary one: model, folder and Computer chips and the context ring. Sending goes into the thread, queued behind a running turn, and nothing navigates away. `AgentTurnsContext` hands the turn ledger to the transcript.
+- A trigger turn is recognised by its header and drawn as a centered 12px line with a cause chip (Schedule, GitHub), "Woke on schedule, worked for 54s", a red x when it failed, and an expandable log (what arrived, how it ended, cost). The same message in an ordinary thread view keeps the line without the ledger details. A person's own message is a normal bubble; its "You" chip appears in Overview's Activity list.
+- The sidebar row follows the Capy row: 32px avatar tinted by the Agent colour, name and age, the last message, a glyph only for working, waiting or failed, and "needs you" in place of the age. Paused shows "Paused. Triggers are off." in place of the last message.
+- View agent opens the Profile dialog on three tabs. Overview: status, budget (spend and automatic turns), last 7 days, notes and files, and Activity (the turns; the Threads list is gone). Automations: the owned automations and the triggers, each with an Edit button that shows the real schedule fields (frequency, time, day, timezone, cron). Settings: fields, memory, Archive and Delete. `?view=` links still work and open the dialog.
+- Pause and Resume are in the header and in Overview. Over budget, the page shows a one-time notice per day and the message still goes through.
+- The Run dialog is removed (the composer is the way to give an Agent work).
+
+Remaining gaps after Phase 3 (all planned for later phases): triggers still need an owned automation and show "Runs in" (Phase 4); no "Promote to agent" (Phase 5); the chevron for threads an Agent started, the hover card and the centered avatar header at the top of the transcript are not built; a trigger cannot be fired by hand except a pull request "Check now"; the stored names and CLI wording still say run (Phase 6); the per-turn gateway cost ceiling (above) and compaction with a Memory flush are not done; the Agent page is one of the shell pages that now gets a bounded height from `SharedWorkspaceLayout`.
 
 ### Known gaps in Phase 2 (status after Phase 3)
 
