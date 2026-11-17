@@ -588,6 +588,27 @@ describe("GitHub pull request polling", () => {
     const edit = calls.find(args => args[0] === "api" && args[1] === "--method")!;
     expect(edit).toEqual(expect.arrayContaining(["PATCH", "repos/o/r/issues/comments/777"]));
   });
+  it("persistent thread: the pull request comment lists only the findings this turn added to the shared thread", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    const old = { id: "old", templateId: "t", title: "Earlier finding", severity: "low", category: "x", status: "open", location: { path: "a.ts", startLine: 1 } };
+    const fresh = { id: "new", templateId: "t", title: "Fresh finding", severity: "high", category: "x", status: "open", location: { path: "b.ts", startLine: 2 } };
+    const github = gh(() => listing, calls, args => (args[0] === "api" && args[1] === "--paginate" ? "" : args[0] === "pr" && args[1] === "comment" ? "" : undefined));
+    const { f, id } = await armedPr(github, { commentOnPr: true }, { persistent: true });
+    const findings = vi.fn(() => [old]);
+    (f.missions as unknown as { findings: unknown }).findings = findings;
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    expect(f.store.listTurns(id)[0]).toMatchObject({ origin: "github", status: "running" });
+    findings.mockImplementation(() => [old, fresh]);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    const post = calls.find(args => args[0] === "pr" && args[1] === "comment")!;
+    const body = post[post.indexOf("--body") + 1]!;
+    expect(body).toContain("`b.ts:2`");
+    expect(body).not.toContain("a.ts");
+  });
   it("webhook checks use the poller's routine: targets match repo and base only, one head SHA launches once across webhook and poll, drafts and forks keep their rules", async () => {
     let listing = [pr(1, "aaa")];
     const { f, id, triggerId } = await armedPr(gh(() => listing));

@@ -104,7 +104,7 @@ const modelBase = `http://127.0.0.1:${model.address().port}/v1`;
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !SCRUB.test(key)));
 Object.assign(env, {
-  HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, ZERO_0VERSE_MCP: '0', ZERO_PR_COMMENT_MIN_GAP_MS: '0', ZERO_NO_TELEMETRY: '1', NO_COLOR: '1',
+  HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, ZERO_0VERSE_MCP: '0', ZERO_PR_COMMENT_MIN_GAP_MS: '0', ZERO_NO_TELEMETRY: '1', ZERO_AGENTS_PERSISTENT_THREAD: '0', NO_COLOR: '1',
   ZERO_SKIP_UPDATE_CHECK: '1', ZERO_E2E_ENGINE_TOKEN: engineToken, ZERO_NO_DEPRECATION_WARNINGS: '1',
 });
 

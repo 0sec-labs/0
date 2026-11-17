@@ -121,7 +121,7 @@ export class SentinelRunner {
     this.#checkout = options.checkout ?? findCheckout;
     this.#gh = options.gh ?? defaultSentinelGh(); this.#now = options.now ?? Date.now;
     this.#persistent = options.persistentThread ?? agentsPersistentThreadFromEnv;
-    this.#turns = new AgentTurnDelivery({ store: this.#store, missions: this.#missions, now: this.#now, ensureHome: sentinel => this.#homeMissionInfo(sentinel, undefined, sentinelReviewFingerprint(sentinel)), pauseForBudget: (sentinel, reason, nowMs) => this.#pauseForBudget(sentinel, reason, nowMs) });
+    this.#turns = new AgentTurnDelivery({ store: this.#store, missions: this.#missions, now: this.#now, ensureHome: sentinel => this.#homeMissionInfo(sentinel, undefined, sentinelReviewFingerprint(sentinel)), postSummary: (sentinel, comment, missionId, turnId, exclude) => this.#postSummary(sentinel, comment, missionId, turnId, exclude, true), pauseForBudget: (sentinel, reason, nowMs) => this.#pauseForBudget(sentinel, reason, nowMs) });
   }
 
   /** Starts the unref'd poll loop (default 15 s). Without it the runner only reacts to manual launches and explicit tick() calls. */
@@ -326,6 +326,7 @@ export class SentinelRunner {
         const outcome = await this.#deliverSafely({
           sentinel, origin: "github", via, trigger: { id: trigger.id, kind: "github-pr" }, automation, event, idempotencyKey: `github:${trigger.id}:${pr.number}:${pr.headRefOid}`,
           ...(fork ? { untrusted: true } : {}), ...(diff ? { context: { label: "pull-request-diff", text: diff } } : {}),
+          ...(github.commentOnPr === true ? { comment: { repo: github.repo, pr: pr.number, headSha: pr.headRefOid, fork } } : {}),
         });
         const update = this.#turnRelease(outcome, trigger.id);
         if (outcome.status === "refused") { lastStatus = update.lastStatus ?? "error"; lastError = update.lastError; break; }
@@ -353,7 +354,7 @@ export class SentinelRunner {
   }
 
   /** One summary comment per pull request and Agent, found by a hidden marker and edited in place on later pushes. */
-  async #postSummary(sentinel: Sentinel, comment: NonNullable<LaunchOptions["comment"]>, missionId: string, activationId: string): Promise<void> {
+  async #postSummary(sentinel: Sentinel, comment: NonNullable<LaunchOptions["comment"]>, missionId: string, recordId: string, exclude?: ReadonlySet<string>, isTurn = false): Promise<void> {
     const subject = `${comment.repo}#${comment.pr}`;
     const nowMs = this.#now();
     while (this.#commentLog.length && nowMs - this.#commentLog[0]! > 3_600_000) this.#commentLog.shift();
@@ -364,7 +365,7 @@ export class SentinelRunner {
     this.#commentLog.push(nowMs); this.#commentLast.set(gapKey, nowMs);
     if (this.#commentLast.size > 500) this.#commentLast.delete(this.#commentLast.keys().next().value!);
     const marker = prCommentMarker(sentinel.id);
-    const body = renderPrComment(sentinel.name, marker, comment, this.#missions.findings?.(missionId) ?? []);
+    const body = renderPrComment(sentinel.name, marker, comment, (this.#missions.findings?.(missionId) ?? []).filter(finding => !exclude || !finding.id || !exclude.has(finding.id)));
     try {
       const listed = (await this.#gh.run(["api", "--paginate", `repos/${comment.repo}/issues/${comment.pr}/comments`, "--jq", `.[] | select(.body | contains("${marker}")) | .id`])).stdout;
       const existing = listed.split(/\s+/).find(value => /^\d+$/.test(value));
@@ -374,7 +375,8 @@ export class SentinelRunner {
       audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.comment", subject, detail: { sentinelId: sentinel.id, mode: edited ? "edited" : "created" } });
     } catch (error) {
       audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.comment", subject, outcome: "denied", detail: { sentinelId: sentinel.id, reason: message(error).slice(0, 200) } });
-      try { this.#store.updateActivation(activationId, { error: `The pull request comment could not be posted: ${message(error)}`.slice(0, 500) }); } catch { /* deleted */ }
+      const failure = `The pull request comment could not be posted: ${message(error)}`.slice(0, 500);
+      try { if (isTurn) this.#store.updateTurn(recordId, { note: failure }); else this.#store.updateActivation(recordId, { error: failure }); } catch { /* deleted */ }
     }
   }
 

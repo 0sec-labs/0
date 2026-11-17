@@ -28,6 +28,8 @@ export interface TurnRequest {
   untrusted?: boolean;
   /** Extra untrusted context fenced into the message (for example the pull request diff). */
   context?: { label: string; text: string };
+  /** Post (or edit in place) one summary comment on this pull request when the turn completes. Only findings the thread gained during this turn are listed. */
+  comment?: { repo: string; pr: number; headSha: string; fork: boolean };
 }
 export type TurnResult =
   | { status: "queued"; turn: AgentTurn }
@@ -49,9 +51,11 @@ export interface TurnContext {
    */
   ensureHome(sentinel: Sentinel): Promise<{ id: string; replaced: false | "lost" | "changed" }>;
   pauseForBudget(sentinel: Sentinel, reason: string, nowMs: number): void;
+  /** Posts the pull request summary for a completed turn. `exclude` is the finding ids the thread already had when the turn started. */
+  postSummary?(sentinel: Sentinel, comment: NonNullable<TurnRequest["comment"]>, missionId: string, turnId: string, exclude: ReadonlySet<string>): Promise<void>;
 }
 
-interface Tracked { turnId: string; sentinel: Sentinel; text: string; triggerId?: string; messageId?: string; base: number; /** A person's message: never capped. */ person?: boolean }
+interface Tracked { turnId: string; sentinel: Sentinel; text: string; triggerId?: string; messageId?: string; base: number; /** A person's message: never capped. */ person?: boolean; comment?: TurnRequest["comment"]; baseline?: ReadonlySet<string> }
 /** `home` threads are watched for as long as the engine lives, so a person's messages in them are recorded as turns. */
 interface ThreadWatch { missionId: string; agentId?: string; home?: boolean; unsubscribe?: () => void; queued: Tracked[]; running?: Tracked; inQueue?: Set<string> }
 /** Messages the engine sends on its own (not typed by the person) must not be recorded as the person's turns. */
@@ -144,7 +148,7 @@ export class AgentTurnDelivery {
     const turn = reserved.turn;
     const text = this.#compose(request, turn, { remainingUsd: budget.dailyUsd - reserved.ledger.costUsd, notices: [...(home.replaced === "lost" ? ["Your earlier conversation could not be restored, so this is a fresh thread. Your notes below are the record of earlier work."] : home.replaced === "changed" ? ["Your scope, model or skills changed, so you are on a fresh thread configured with the current ones. Your notes below are the record of earlier work."] : []), ...(interrupted ? ["Your previous turn was interrupted when the engine stopped; check what it left half done before you continue."] : [])] });
     const watch = this.#watch(home.id);
-    const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0 };
+    const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0, ...(request.comment ? { comment: request.comment } : {}) };
     watch.queued.push(tracked);
     try {
       const sent = await ctx.missions.send(home.id, text, undefined, "queue", true);
@@ -238,6 +242,7 @@ export class AgentTurnDelivery {
         if (!next) { this.#beginPersonTurn(watch, event); return; }
         watch.queued = watch.queued.filter(item => item !== next);
         next.base = this.#ctx.missions.usage?.(watch.missionId)?.costUsd ?? next.base;
+        if (next.comment) { try { next.baseline = new Set((this.#ctx.missions.findings?.(watch.missionId) ?? []).flatMap(finding => finding.id ? [finding.id] : [])); } catch { next.baseline = new Set(); } }
         watch.running = next;
         try { this.#ctx.store.updateTurn(next.turnId, { status: "running", startedAt: isoAt(this.#ctx.now()), sessionId: watch.missionId }); } catch { /* The Agent was deleted. */ }
       } else if (event.type === "error") {
@@ -296,6 +301,7 @@ export class AgentTurnDelivery {
     watch.running = undefined;
     const cost = this.#costOf(watch, turn);
     this.#end(turn.turnId, turn.triggerId, status, error, { costUsd: cost });
+    if (status === "completed" && turn.comment && this.#ctx.postSummary) void this.#ctx.postSummary(turn.sentinel, turn.comment, watch.missionId, turn.turnId, turn.baseline ?? new Set()).catch(() => { /* Reported on the turn by the poster. */ });
     // A cancelled turn pauses the gateway queue; trigger turns behind it must still run.
     const next = watch.queued.find(item => item.messageId);
     if (status === "cancelled" && next?.messageId && this.#ctx.missions.resumeQueue) {

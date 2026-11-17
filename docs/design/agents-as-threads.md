@@ -23,7 +23,7 @@ Status: approved direction. Phases 0 to 3 are shipped. Phases 4 to 6 below are t
 - The Agent view carries `thread: { status, updatedAt, lastMessage }` for the sidebar row.
 - A trigger turn that could not start is matched to its row by its queued message id. A turn that was never queued is never blamed for an error.
 
-The flag applies to schedule and GitHub pull request triggers. A person opening or messaging the thread keeps whatever thread exists, even if it was made under an older scope or model; the next trigger turn replaces it (see gap 1) and says so.
+The flag applies to schedule and GitHub pull request triggers, including the pull request comment option. A person opening or messaging the thread keeps whatever thread exists, even if it was made under an older scope or model; the next trigger turn replaces it (see gap 1) and says so.
 
 With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web/agent-turns.ts`):
 
@@ -39,7 +39,7 @@ With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web
 ### Known gaps in Phase 2 (status after Phase 3)
 
 1. The gateway pins scope, model and the skills allow-list when a thread is created and cannot change them afterwards. The runner therefore records the configuration the standing thread was created with (`homeFingerprint` on the Agent record) and never uses a thread whose configuration differs from the Agent's current scope, model or skills: it creates a fresh thread, tells the Agent so, and sends its notes again. The old thread stays as an ordinary thread. A standing thread from before the fingerprint existed is replaced once. This loses conversation continuity on every scope, model or skills edit until the gateway can reconfigure a live thread; a gateway `instructions` channel and a reconfigurable allow-list would remove the replacement.
-2. Pull request comments are not posted from the standing thread: findings are read per thread, so a comment would list every earlier review. The comment option is ignored while the flag is on.
+2. Closed in Phase 3: the pull request comment works from the standing thread. The engine notes which findings the thread already had when the turn started and lists only the ones the turn added, so a comment never repeats earlier reviews.
 3. `messages[0]` of a thread survives compaction verbatim, so the first turn's envelope stays in context forever and can disagree with the current charter. The per-turn envelope says it overrides earlier messages; the system-prompt channel is the real fix.
 4. Closed in Phase 3: a person's message is recorded as a turn.
 5. Accepted, still open: the per-turn gateway cost ceiling is not set. The gateway's `costCeilingUsd` can only be given when a thread is created and is cumulative for the thread's life, so it cannot bound one turn of a thread that never ends. Only the subscriber enforces the daily cap, and a trigger turn is cancelled when a usage event shows the cap is reached. A gateway call that sets the ceiling per turn would close it.
