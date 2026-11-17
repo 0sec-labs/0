@@ -3418,14 +3418,14 @@ export class ToolExecutor {
 
   private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
 
-  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[]): ReturnType<AuditWorkerTree["acquire"]> {
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[], trackPublication = false): ReturnType<AuditWorkerTree["acquire"]> {
     const restricted = readOnly || this.isReadOnlyWorker();
     const keys = guardedKeys ?? this.checkoutKeys();
     const effectiveTools = this.subagentTools(undefined, restricted).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
     const writeCapable = !restricted && effectiveTools.some(tool => !isCheckoutReadOnlyTool(tool.name));
     return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
       workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
-      publication: true,
+      ...(trackPublication ? { publication: true } : {}),
     });
   }
 
@@ -4395,7 +4395,7 @@ export class ToolExecutor {
     const maxTurns = this.admittedSubagentMaxTurns((args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40));
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
+    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools, true);
     try {
     // queued — before any async setup
     this.emitWorkerLifecycle({ ...base, status: "queued" as const });
@@ -4502,7 +4502,7 @@ export class ToolExecutor {
     try {
       const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools, true);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
