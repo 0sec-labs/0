@@ -66,9 +66,14 @@ function mountTool(
   caseId: string,
   persistedWrites: Map<string, { path: string; content: string }>,
 ) {
-  app.post(`/adversarial/${caseId}/:phase(write|replay)/mcp`, (req, res) => {
-    const method = req.body?.method;
+  app.post(`/adversarial/${caseId}/:phase/mcp`, (req, res, next) => {
+    // Express 5 (path-to-regexp 8) no longer accepts inline regex in params.
     const phase = String(req.params.phase ?? "write");
+    if (phase !== "write" && phase !== "replay") {
+      next();
+      return;
+    }
+    const method = req.body?.method;
 
     if (method === "tools/list") {
       if (phase === "write") {
