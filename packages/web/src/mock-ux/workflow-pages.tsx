@@ -67,7 +67,7 @@ export function WorkflowDetailPage() {
           <DropdownMenu.Content align="start">{SKILLS.filter(skill => !skills.includes(skill)).map(skill => <DropdownMenu.Item key={skill} onClick={() => setSkills(list => [...list, skill])}>{skill}</DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu>
       </div>
     </Section>
-    <Section title="Triggers" description="An automation is a trigger. Add as many as you like, or none to run it only by hand."
+    <Section title="Triggers" description="Add as many as you like, or none to run it only by hand."
       actions={<DropdownMenu><DropdownMenu.Trigger render={<Button variant="secondary" size="sm" />}><CapyPlusIcon aria-hidden="true" />Add trigger</DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">{(Object.keys(KIND_LABEL) as MockTrigger["kind"][]).map(kind => { const Icon = KIND_ICON[kind]; return <DropdownMenu.Item key={kind} icon={<Icon aria-hidden="true" />} onClick={() => addTrigger(kind)}>{KIND_LABEL[kind]}</DropdownMenu.Item>; })}</DropdownMenu.Content></DropdownMenu>}>
       <ul className={cn(cardClasses, "divide-y-[0.5px] divide-border-2")} data-testid="triggers">
