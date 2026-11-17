@@ -47,6 +47,7 @@ import { SAVED_POLL_MS, sessionsRefetchInterval } from "./session-polling";
 import { SAVED_OPEN_WINDOW, savedTranscriptSnapshot } from "./saved-snapshot";
 import { rememberSessionAlias } from "./session-recovery";
 import { resumeSavedOnce } from "@/lib/lazy-resume";
+import { createOptimisticSend, settledSends, withOptimisticSends, type OptimisticSend } from "./optimistic-send";
 import { sessionsWithTitle, snapshotWithTitle } from "@/lib/optimistic-title";
 export { applyEvents, findingSignal, pollDelay, shouldResyncSnapshot, snapshotActive } from "./workspace-events";
 
@@ -210,19 +211,16 @@ export function useConsoleWorkspace(
     () => (rawSnapshot?.toolsOmitted && toolsQuery.data ? { ...rawSnapshot, tools: toolsQuery.data } : rawSnapshot),
     [rawSnapshot, toolsQuery.data],
   );
-  // The first message of a send is shown at once; it is dropped as soon as the server's own copy arrives or the send fails.
-  const [optimistic, setOptimistic] = useState<{ sessionId: string; text: string; baseline: number } | null>(null);
-  const shownSnapshot = useMemo(() => {
-    if (!snapshot || !optimistic || optimistic.sessionId !== snapshot.session.id) return snapshot;
-    if (snapshot.messages.length > optimistic.baseline || ["working", "waiting", "cancelling"].includes(snapshot.session.status)) return snapshot;
-    return {
-      ...snapshot,
-      messages: [...snapshot.messages, { role: "user" as const, content: [{ type: "text" as const, text: optimistic.text }] }],
-      session: { ...snapshot.session, status: "working" as const },
-    };
-  }, [snapshot, optimistic]);
+  // A sent message is shown at once and stays put; it is dropped when the server's own copy arrives or the send fails.
+  const [optimistic, setOptimistic] = useState<OptimisticSend[]>([]);
+  const shownSnapshot = useMemo(
+    () => (snapshot && sessionId && optimistic.length ? withOptimisticSends(snapshot, sessionId, optimistic) : snapshot),
+    [snapshot, sessionId, optimistic],
+  );
   useEffect(() => {
-    if (optimistic && snapshot && optimistic.sessionId === snapshot.session.id && snapshot.messages.length > optimistic.baseline) setOptimistic(null);
+    if (!snapshot || !optimistic.length) return;
+    const done = settledSends(snapshot, optimistic);
+    if (done.length) setOptimistic((items) => items.filter((item) => !done.includes(item)));
   }, [snapshot, optimistic]);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const loadEarlierMessages = async () => {
@@ -583,9 +581,11 @@ export function useConsoleWorkspace(
         .filter((item) => input.attachments?.some((value) => value.kind === item.kind && value.value === item.value))
         .map((item) => item.id),
     );
-    const plain = !savedId && !input.workerId && input.mode !== "queue" && input.mode !== "steer" && !input.attachments?.length && input.text.trim();
-    if (plain && snapshot && !snapshot.messages.length) {
-      setOptimistic({ sessionId, text: input.text, baseline: snapshot.messages.length });
+    const mine = !input.workerId && input.mode !== "steer" && (input.text.trim() || input.attachments?.length) && shownSnapshot
+      ? createOptimisticSend(shownSnapshot, sessionId, input)
+      : undefined;
+    if (mine) {
+      setOptimistic((items) => [...items, mine]);
       setDrafts((previous) => (previous[submittedKey] === submittedDraft ? { ...previous, [submittedKey]: "" } : previous));
     }
     // A blank mission created before the model list loaded has no runtime yet: bind the model Home showed, so the mission runs on it.
@@ -596,11 +596,16 @@ export function useConsoleWorkspace(
     };
     const result = await perform(savedId ? resumeAndSend(input, options?.retry) : deliver, sessionId, "Couldn't send. Your message is still in the composer. Try again.");
     if (!result) {
-      setOptimistic(null);
-      if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));
+      if (mine) setOptimistic((items) => items.filter((item) => item !== mine));
+      if (mine) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));
       return false;
     }
     const queuedMessageId = (result as { queuedMessageId?: string }).queuedMessageId;
+    if (mine) {
+      // The host may have queued a plain send behind a turn another tab started; show it as queued. Never keep a bubble the server will not echo.
+      if (queuedMessageId && !mine.queued) setOptimistic((items) => items.map((item) => (item === mine ? { ...item, queued: true } : item)));
+      window.setTimeout(() => setOptimistic((items) => items.filter((item) => item.id !== mine.id)), 15000);
+    }
     if (!input.workerId && input.mode === "queue" && queuedMessageId)
       setQueuedShortcut({ sessionId, id: queuedMessageId });
     setDrafts((previous) =>
