@@ -110,7 +110,7 @@
     "pdfkit": "^0.20.2",
     "playwright": "1.65.1",
     "tree-sitter": "file:vendor/tree-sitter-0.21.1-node24.tgz",
-    "tree-sitter-c": "0.24.1"
+    "tree-sitter-c": "0.21.4"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

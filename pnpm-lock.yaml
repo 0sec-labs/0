@@ -59,8 +59,8 @@ importers:
         specifier: file:vendor/tree-sitter-0.21.1-node24.tgz
         version: file:vendor/tree-sitter-0.21.1-node24.tgz
       tree-sitter-c:
-        specifier: 0.24.1
-        version: 0.24.1(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz)
+        specifier: 0.21.4
+        version: 0.21.4(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz)
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -182,8 +182,8 @@ importers:
         specifier: file:../../vendor/tree-sitter-0.21.1-node24.tgz
         version: file:vendor/tree-sitter-0.21.1-node24.tgz
       tree-sitter-c:
-        specifier: 0.24.1
-        version: 0.24.1(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz)
+        specifier: 0.21.4
+        version: 0.21.4(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz)
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -4547,13 +4547,14 @@ packages:
     resolution: {integrity: sha512-FTxc8u8Kl2tz0Lat1u8ksvcy8bwHRyEMawwTWybo51JqaC6O7SvfuhAKg+Ld6VqyIe2QRJBzY9HA7y2WyFRT2w==}
     engines: {node: '>=16'}
 
-  tree-sitter-c@0.24.1:
-    resolution: {integrity: sha512-lkYwWN3SRecpvaeqmFKkuPNR3ZbtnvHU+4XAEEkJdrp3JfSp2pBrhXOtvfsENUneye76g889Y0ddF2DM0gEDpA==}
-    version: 0.24.1
+  tree-sitter-c@0.21.4:
+    resolution: {integrity: sha512-IahxFIhXiY15SUlrt2upBiKSBGdOaE1fjKLK1Ik5zxqGHf6T1rvr3IJrovbsE5sXhypx7Hnmf50gshsppaIihA==}
+    version: 0.21.4
     peerDependencies:
-      tree-sitter: ^0.22.4
+      tree-sitter: ^0.21.0
+      tree_sitter: '*'
     peerDependenciesMeta:
-      tree-sitter:
+      tree_sitter:
         optional: true
 
   tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz:
@@ -9986,11 +9987,10 @@ snapshots:
       tldts: 7.5.4
     optional: true
 
-  tree-sitter-c@0.24.1(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz):
+  tree-sitter-c@0.21.4(tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz):
     dependencies:
       node-addon-api: 8.9.0
       node-gyp-build: 4.8.4
-    optionalDependencies:
       tree-sitter: file:vendor/tree-sitter-0.21.1-node24.tgz
 
   tree-sitter@file:vendor/tree-sitter-0.21.1-node24.tgz:

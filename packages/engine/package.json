@@ -74,7 +74,7 @@
     "node-sqlite3-wasm": "^0.8.61",
     "pdfkit": "^0.20.2",
     "tree-sitter": "file:../../vendor/tree-sitter-0.21.1-node24.tgz",
-    "tree-sitter-c": "0.24.1",
+    "tree-sitter-c": "0.21.4",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
