@@ -109,18 +109,29 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
       if (scope === "folder" && !input.folder) throw new MemoryError("A folder note needs a folder.");
       const folder = scope === "folder" ? folderIdentity(input.folder!) : undefined;
       if (input.kind !== undefined && !isKind(input.kind)) throw new MemoryError("Unknown note kind.");
-      const id = noteId(text, scope, folder);
+      const currentEntries = entries();
+      const existing = currentEntries.find(entry =>
+        entry.note.scope === scope &&
+        entry.note.folder === folder &&
+        entry.note.text.toLowerCase() === text.toLowerCase()
+      );
       const status = input.status ?? "live";
-      const note: Note = { id, text, scope, source: input.source ?? "user", status, created: input.created ?? now(),
-        ...(folder ? { folder } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.thread ? { thread: input.thread } : {}),
-        ...(input.tainted ? { tainted: true } : {}), ...(input.reviewed ? { reviewed: true } : {}) };
-      const existing = find(id);
       if (existing) {
         if (existing.note.status !== "proposed" || status !== "live") return existing.note;
         const promoted: Note = { ...existing.note, status: "live", reviewed: true };
-        rewriteOf(existing, notes => notes.map(entry => entry.id === id ? promoted : entry));
+        rewriteOf(existing, notes => notes.map(entry => entry.id === existing.note.id ? promoted : entry));
         return promoted;
       }
+      const occupied = new Set(currentEntries.map(entry => entry.note.id));
+      let id = noteId(text, scope, folder);
+      let salt = 1;
+      while (occupied.has(id)) {
+        id = noteId(text, scope, folder, salt);
+        salt++;
+      }
+      const note: Note = { id, text, scope, source: input.source ?? "user", status, created: input.created ?? now(),
+        ...(folder ? { folder } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.thread ? { thread: input.thread } : {}),
+        ...(input.tainted ? { tainted: true } : {}), ...(input.reviewed ? { reviewed: true } : {}) };
       const file = scope === "global" ? globalFile : folderFileFor(folder!);
       writeNotes(file, [...readFile(file, scope, folder), note], folder);
       return note;

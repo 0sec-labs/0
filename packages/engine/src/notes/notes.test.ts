@@ -72,3 +72,186 @@ describe("file store", () => {
     expect(existsSync(join(repo, ".0", "memory", "MEMORY.md"))).toBe(true);
   });
 });
+
+describe("content deduplication and stable id allocation", () => {
+  it("1. normal edit preserves the original ID", () => {
+    const store = createFileNoteStore({ home });
+    const note = store.add({ text: "Alpha" });
+    const originalId = note.id;
+    const edited = store.edit(originalId, "Alpha Edited");
+    expect(edited?.id).toBe(originalId);
+    expect(edited?.text).toBe("Alpha Edited");
+    expect(store.list().find(n => n.id === originalId)?.text).toBe("Alpha Edited");
+  });
+
+  it("2. adding identical existing content deduplicates", () => {
+    const store = createFileNoteStore({ home });
+    const first = store.add({ text: "Duplicate Content" });
+    const second = store.add({ text: "duplicate content" });
+    expect(second.id).toBe(first.id);
+    expect(store.list().filter(n => n.text.toLowerCase() === "duplicate content")).toHaveLength(1);
+  });
+
+  it("3. editing Alpha to Beta and adding Beta does not create a duplicate", () => {
+    const store = createFileNoteStore({ home });
+    const a = store.add({ text: "Alpha" });
+    store.edit(a.id, "Beta");
+    const b = store.add({ text: "Beta" });
+    expect(b.id).toBe(a.id);
+    expect(store.list().filter(n => n.text.toLowerCase() === "beta")).toHaveLength(1);
+  });
+
+  it("4. editing Alpha to Beta and adding Alpha creates a separate note with a different unused ID", () => {
+    const store = createFileNoteStore({ home });
+    const a = store.add({ text: "Alpha" });
+    store.edit(a.id, "Beta");
+    const c = store.add({ text: "Alpha" });
+    expect(c.id).not.toBe(a.id);
+    expect(c.text).toBe("Alpha");
+    expect(store.list().find(n => n.id === a.id)?.text).toBe("Beta");
+    expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
+  });
+
+  it("5. both Alpha and Beta remain independently retrievable", () => {
+    const store = createFileNoteStore({ home });
+    const a = store.add({ text: "Alpha" });
+    store.edit(a.id, "Beta");
+    const c = store.add({ text: "Alpha" });
+
+    expect(store.list().find(n => n.id === a.id)?.text).toBe("Beta");
+    expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
+
+    expect(store.remove(a.id)).toBe(true);
+    expect(store.list().find(n => n.id === a.id)).toBeUndefined();
+    expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
+  });
+
+  it("6. repeated edits do not break subsequent deduplication", () => {
+    const store = createFileNoteStore({ home });
+    const note = store.add({ text: "Alpha" });
+    const originalId = note.id;
+
+    store.edit(originalId, "Beta");
+    store.edit(originalId, "Gamma");
+
+    // Adding Gamma dedupes to the existing note
+    const reGamma = store.add({ text: "Gamma" });
+    expect(reGamma.id).toBe(originalId);
+
+    // Adding Beta allocates a distinct unused ID
+    const reBeta = store.add({ text: "Beta" });
+    expect(reBeta.id).not.toBe(originalId);
+
+    // Adding Alpha allocates another distinct unused ID
+    const reAlpha = store.add({ text: "Alpha" });
+    expect(reAlpha.id).not.toBe(originalId);
+    expect(reAlpha.id).not.toBe(reBeta.id);
+
+    const ids = new Set(store.list().map(n => n.id));
+    expect(ids.size).toBe(3);
+  });
+
+  it("7. accept(id, correctedText) does not introduce the same defect", () => {
+    const store = createFileNoteStore({ home });
+    const proposed = store.add({ text: "Draft Fact", status: "proposed", source: "model" });
+    const originalId = proposed.id;
+
+    const accepted = store.accept(originalId, "Final Fact");
+    expect(accepted?.id).toBe(originalId);
+    expect(accepted?.text).toBe("Final Fact");
+
+    // Adding "Final Fact" dedupes to the accepted note
+    const addedFinal = store.add({ text: "Final Fact" });
+    expect(addedFinal.id).toBe(originalId);
+    expect(store.list().filter(n => n.text === "Final Fact")).toHaveLength(1);
+
+    // Adding "Draft Fact" creates a distinct note with an unused ID
+    const addedDraft = store.add({ text: "Draft Fact" });
+    expect(addedDraft.id).not.toBe(originalId);
+    expect(store.list().find(n => n.id === addedDraft.id)?.text).toBe("Draft Fact");
+  });
+
+  it("8. same text in different scopes remains independent", () => {
+    const store = createFileNoteStore({ home });
+    const globalNote = store.add({ text: "Shared Convention", scope: "global" });
+    const folderNote = store.add({ text: "Shared Convention", scope: "folder", folder: "/work/repo" });
+
+    expect(globalNote.id).not.toBe(folderNote.id);
+    expect(globalNote.scope).toBe("global");
+    expect(folderNote.scope).toBe("folder");
+
+    const allNotes = store.list({ status: "all" });
+    expect(allNotes.filter(n => n.text === "Shared Convention")).toHaveLength(2);
+  });
+
+  it("9. same text in different folders remains independent", () => {
+    const store = createFileNoteStore({ home });
+    const folder1 = store.add({ text: "Test command", scope: "folder", folder: "/work/app-a" });
+    const folder2 = store.add({ text: "Test command", scope: "folder", folder: "/work/app-b" });
+
+    expect(folder1.id).not.toBe(folder2.id);
+    expect(folder1.folder).not.toBe(folder2.folder);
+
+    expect(store.list({ folder: "/work/app-a" })).toHaveLength(1);
+    expect(store.list({ folder: "/work/app-b" })).toHaveLength(1);
+  });
+
+  it("10. proposed-to-live promotion behavior remains correct", () => {
+    const store = createFileNoteStore({ home });
+    const proposed = store.add({ text: "Heuristic rule", status: "proposed", source: "model" });
+    expect(proposed.status).toBe("proposed");
+    expect(store.list()).toHaveLength(0); // live only by default
+
+    // User adds the same rule -> promoted to live & reviewed
+    const live = store.add({ text: "Heuristic rule", status: "live", source: "user" });
+    expect(live.id).toBe(proposed.id);
+    expect(live.status).toBe("live");
+    expect(live.reviewed).toBe(true);
+    expect(store.list()).toHaveLength(1);
+
+    // Also test promotion of a proposed note whose text was edited
+    const p2 = store.add({ text: "Initial text", status: "proposed", source: "model" });
+    store.edit(p2.id, "Edited text");
+    const live2 = store.add({ text: "Edited text", status: "live", source: "user" });
+    expect(live2.id).toBe(p2.id);
+    expect(live2.status).toBe("live");
+    expect(live2.reviewed).toBe(true);
+  });
+
+  it("11. edited notes and collision-resolved IDs survive store reload", () => {
+    let store = createFileNoteStore({ home });
+    const a = store.add({ text: "Alpha" });
+    store.edit(a.id, "Beta");
+    const c = store.add({ text: "Alpha" });
+
+    // Reload store from disk
+    store = createFileNoteStore({ home });
+    const reloadedA = store.list().find(n => n.id === a.id);
+    const reloadedC = store.list().find(n => n.id === c.id);
+
+    expect(reloadedA?.text).toBe("Beta");
+    expect(reloadedC?.text).toBe("Alpha");
+    expect(reloadedA?.id).toBe(a.id);
+    expect(reloadedC?.id).toBe(c.id);
+  });
+
+  it("12. delete and recreate behavior remains correct", () => {
+    const store = createFileNoteStore({ home });
+    const a = store.add({ text: "Alpha" });
+    const aId = a.id;
+    store.edit(aId, "Beta");
+    const c = store.add({ text: "Alpha" });
+    const cId = c.id;
+
+    // Delete the edited note (Beta)
+    expect(store.remove(aId)).toBe(true);
+    expect(store.list().find(n => n.id === aId)).toBeUndefined();
+    expect(store.list().find(n => n.id === cId)?.text).toBe("Alpha");
+
+    // Now re-add Beta -> should be assigned an ID cleanly without collision
+    const newBeta = store.add({ text: "Beta" });
+    expect(newBeta.text).toBe("Beta");
+    expect(store.list().find(n => n.id === newBeta.id)?.text).toBe("Beta");
+    expect(store.list().find(n => n.id === cId)?.text).toBe("Alpha");
+  });
+});

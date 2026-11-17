@@ -45,8 +45,10 @@ export function isKind(value: unknown): value is NoteKind {
 }
 
 /** Stable id for a note, derived from scope and text so hand-written lines get the same id every read. */
-export function noteId(text: string, scope: NoteScope, folder?: string): string {
-  return `m_${createHash("sha256").update(`${scope}\0${folder ?? ""}\0${text.toLowerCase()}`).digest("hex").slice(0, 8)}`;
+export function noteId(text: string, scope: NoteScope, folder?: string, salt?: number | string): string {
+  const base = `${scope}\0${folder ?? ""}\0${text.toLowerCase()}`;
+  const payload = salt !== undefined ? `${base}\0${salt}` : base;
+  return `m_${createHash("sha256").update(payload).digest("hex").slice(0, 8)}`;
 }
 
 export function folderKey(identity: string): string {
