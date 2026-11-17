@@ -3418,13 +3418,14 @@ export class ToolExecutor {
 
   private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
 
-  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[]): ReturnType<AuditWorkerTree["acquire"]> {
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[], trackPublication = false): ReturnType<AuditWorkerTree["acquire"]> {
     const restricted = readOnly || this.isReadOnlyWorker();
     const keys = guardedKeys ?? this.checkoutKeys();
     const effectiveTools = this.subagentTools(undefined, restricted).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
     const writeCapable = !restricted && effectiveTools.some(tool => !isCheckoutReadOnlyTool(tool.name));
     return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
       workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
+      ...(trackPublication ? { publication: true } : {}),
     });
   }
 
@@ -4394,16 +4395,22 @@ export class ToolExecutor {
     const maxTurns = this.admittedSubagentMaxTurns((args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40));
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
+    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools, true);
     try {
     // queued — before any async setup
     this.emitWorkerLifecycle({ ...base, status: "queued" as const });
 
     const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace, allowedTools, this.admittedSubagentHttpMethods(parsed.args.allowedHttpMethods));
     // Preserve accepted findings even if a later model request failed.
-    this.mergeSubagentFindings(outcome.findings ?? []);
-    if (!outcome.ok) {
-      return { success: false, output: null, error: outcome.error };
+    const isCancelled = this._workerTree.isPublicationCancelled(outcome.agent_id);
+    if (!isCancelled) {
+      this.mergeSubagentFindings(outcome.findings ?? []);
+      this._workerTree.settlePublication(outcome.agent_id, true);
+    } else {
+      this._workerTree.settlePublication(outcome.agent_id, false);
+    }
+    if (!outcome.ok || isCancelled) {
+      return { success: false, output: null, error: !outcome.ok ? outcome.error : "Worker stopped by operator" };
     }
 
 
@@ -4418,6 +4425,7 @@ export class ToolExecutor {
       },
     };
     } finally {
+      this._workerTree.settlePublication(base.agent_id, false);
       lease.release();
     }
   }
@@ -4490,10 +4498,11 @@ export class ToolExecutor {
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
+    const publicationGate = this._workerTree.registerPublicationGate(this.ctx.scanId);
     try {
       const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools, true);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -4544,20 +4553,26 @@ export class ToolExecutor {
     const rawOutcomes = await mapWithConcurrency(
       specs,
       concurrency,
-      async (spec) =>
-        this.runOneSubagent(
-          spec.task,
-          spec.maxTurns,
-          spec.base,
-          deps,
-          messagingById.get(spec.base.agent_id),
-          spec.selection,
-          spec.lease,
-          batchContext,
-          spec.expectedWorkspace,
-          spec.allowedTools,
-          spec.allowedHttpMethods,
-        ),
+      async (spec) => {
+        try {
+          return await this.runOneSubagent(
+            spec.task,
+            spec.maxTurns,
+            spec.base,
+            deps,
+            messagingById.get(spec.base.agent_id),
+            spec.selection,
+            spec.lease,
+            batchContext,
+            spec.expectedWorkspace,
+            spec.allowedTools,
+            spec.allowedHttpMethods,
+          );
+        } finally {
+          spec.lease?.release();
+          spec.lease = undefined;
+        }
+      },
       callerSignal,
     );
 
@@ -4576,6 +4591,7 @@ export class ToolExecutor {
         });
         spec.lease?.release();
         spec.lease = undefined;
+        this._workerTree.settlePublication(spec.base.agent_id, false);
         outcomes[i] = {
           ok: false,
           agent_id: spec.base.agent_id,
@@ -4589,7 +4605,27 @@ export class ToolExecutor {
     // Keep admission leases until publication ends: a resolved stop must not
     // be followed by a late merge from an already completed concurrency wave.
     const perChild = outcomes.map((outcome, index) => {
+      const spec = specs[index];
+      const isCancelled = this._workerTree.isPublicationCancelled(outcome.agent_id);
+      if (isCancelled) {
+        if (outcome.ok) {
+          this.emitWorkerLifecycle({
+            ...spec.base,
+            status: "stopped" as const,
+            summary: "Stopped by operator",
+            durationMs: 0,
+          });
+        }
+        this._workerTree.settlePublication(outcome.agent_id, false);
+        return {
+          index,
+          agent_id: outcome.agent_id,
+          ok: false as const,
+          error: !outcome.ok ? outcome.error : "Worker stopped by operator",
+        };
+      }
       this.mergeSubagentFindings(outcome.findings ?? []);
+      this._workerTree.settlePublication(outcome.agent_id, true);
       if (outcome.ok) {
         return {
           index,
@@ -4635,7 +4671,12 @@ export class ToolExecutor {
       meta,
     };
     } finally {
-      for (const spec of specs) spec.lease?.release();
+      publicationGate();
+      for (const spec of specs) {
+        this._workerTree.settlePublication(spec.base.agent_id, false);
+        spec.lease?.release();
+        spec.lease = undefined;
+      }
     }
   }
 
