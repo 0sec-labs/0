@@ -80,9 +80,18 @@ export class HuntResearchAdapter
   ): Promise<ResearchStageResult<ResearchFinding>> {
     const result = await this.result(target, ctx);
     const preNovel = [...result.confirmed, ...result.duplicates.map((entry) => entry.finding)];
+    // First candidate per finding object and per finding id, built once, so each
+    // finding resolves in O(1): identity match first, then id — the order the
+    // two find() passes used.
+    const candidateByFinding = new Map<HuntRecordCandidate["payload"]["finding"], HuntRecordCandidate>();
+    const candidateByFindingId = new Map<string, HuntRecordCandidate>();
+    for (const item of input.candidates) {
+      const candidateFinding = item.payload.finding;
+      if (!candidateByFinding.has(candidateFinding)) candidateByFinding.set(candidateFinding, item);
+      if (!candidateByFindingId.has(candidateFinding.id)) candidateByFindingId.set(candidateFinding.id, item);
+    }
     const items = preNovel.map((finding) => {
-      const candidate = input.candidates.find((item) => item.payload.finding === finding)
-        ?? input.candidates.find((item) => item.payload.finding.id === finding.id);
+      const candidate = candidateByFinding.get(finding) ?? candidateByFindingId.get(finding.id);
       return {
         finding,
         candidateId: candidate?.id ?? `unknown:${finding.id}`,
