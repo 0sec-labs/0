@@ -917,6 +917,42 @@ describe("ConsoleGateway", () => {
     expect(instance.worker(chat.id, child).status).toBe("completed");
   });
 
+  it("drops a scheduled message that cannot start so the next one still runs, and keeps a person's message queued", async () => {
+    for (const automated of [true, false]) {
+      let finish!: () => void; let failNext = false;
+      const delivered: string[] = [];
+      const instance = gateway(input => {
+        const session = engine(input);
+        const approvalsNow = session.approvals;
+        Object.defineProperty(session, "approvals", { get() {
+          if (failNext) { failNext = false; throw new Error("Temporary startup failure"); }
+          return approvalsNow;
+        } });
+        session.send = async text => {
+          delivered.push(text);
+          if (text === "first") await new Promise<void>(resolve => { finish = resolve; });
+          return outcome();
+        };
+        return session;
+      });
+      const chat = instance.create();
+      await instance.send(chat.id, "first");
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      await instance.send(chat.id, { text: "scheduled A", mode: "queue" }, undefined, { automated });
+      await instance.send(chat.id, { text: "scheduled B", mode: "queue" }, undefined, { automated });
+      failNext = true; finish();
+      if (automated) {
+        await vi.waitFor(() => expect(delivered).toEqual(["first", "scheduled B"]));
+        await idle(instance, chat.id);
+        expect(instance.get(chat.id).queuedMessages).toEqual([]);
+      } else {
+        await vi.waitFor(() => expect(instance.get(chat.id).events.some(event => event.type === "error")).toBe(true));
+        expect(delivered).toEqual(["first"]);
+        expect(instance.get(chat.id).queuedMessages.map(message => message.text)).toEqual(["scheduled A", "scheduled B"]);
+      }
+    }
+  });
+
   it("retains unread notifications after failed automatic startup without looping", async () => {
     let failSummary = false;
     const delivered: string[] = [];

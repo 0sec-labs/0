@@ -40,6 +40,12 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- An agent's schedule that fires while its own thread is busy now waits its turn instead of failing with "already processing a turn", and a scheduled message that cannot start no longer holds up the ones behind it.
+- Deleting an agent now also removes its activity history, as the delete dialog says.
+- An agent's own thread is no longer hidden by the automatic archive of idle threads.
+- A scheduled turn that waited behind another is charged only for its own cost, so the daily budget no longer counts the earlier turn twice.
+- Two agent starts at the same moment can no longer both take the last slot of the daily limit.
+
 - A thread's first reply no longer disappears behind the collapsed "Worked" divider when the model thought before answering and the history was reopened. The day stamp and the "Worked" label now line up, and the context meter shows a token count instead of an empty ring that looked like a stuck spinner when the model's context size is unknown.
 
 - `0 scan` now says what is wrong with a target instead of "unknown command" or a clean result: a folder that does not exist (`No such folder`), an unsupported package source such as `pip:` (with the `pypi:` form to use), an unknown kind of target, a web address that refuses the connection or cannot be found (no scan is started), and a package that is not on npm, PyPI or crates.io.

@@ -98,16 +98,19 @@ describe("SentinelStore", () => {
     expect(store.getFile(sentinel.id, "reports/2026-01-01.md")).toBeNull();
     store.close();
   });
-  it("deleting a Sentinel removes files but keeps activations and automations", () => {
+  it("deleting a Sentinel removes its files and activation history, and keeps automations and other Agents' history", () => {
     const { path } = open();
     const store = new SentinelStore(path);
     const workflows = new SecurityWorkflowStore(path);
     const sentinel = store.create({ name: "A" });
     const workflow = workflows.save({ ...createSecurityWorkflowTemplate("repository-review", { target: "." }), ownerSentinelId: sentinel.id, runIn: "sentinel-home" });
+    const other = store.create({ name: "B" });
     store.createActivation({ sentinelId: sentinel.id, sentinelVersion: 1, trigger: { kind: "manual" }, status: "completed", skills: [] });
+    store.createActivation({ sentinelId: other.id, sentinelVersion: 1, trigger: { kind: "manual" }, status: "completed", skills: [] });
     store.delete(sentinel.id);
     expect(store.listFiles.bind(store, sentinel.id)).toThrow(/not found/);
-    expect(store.listActivations(sentinel.id)).toHaveLength(1);
+    expect(store.listActivations(sentinel.id)).toHaveLength(0);
+    expect(store.listActivations(other.id)).toHaveLength(1);
     expect(workflows.get(workflow.id)?.ownerSentinelId).toBe(sentinel.id);
     store.close();
   });

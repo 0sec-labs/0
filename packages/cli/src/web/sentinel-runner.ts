@@ -36,7 +36,7 @@ export interface SentinelMissionRuntime {
   /** Same path chats use: ConsoleGateway.create(input). Accepts `skillAllowList` and `parentSessionId`. */
   create(input: Record<string, unknown>): { id: string };
   /** Same path chats use: ConsoleGateway.send. `queue` lets a run wait behind a busy standing mission. */
-  send(id: string, text: string, author?: { userId: string; displayName: string }, mode?: "queue"): Promise<unknown>;
+  send(id: string, text: string, author?: { userId: string; displayName: string }, mode?: "queue", automated?: boolean): Promise<unknown>;
   pendingDecisions(id: string): number;
   /** Mission event stream (user, usage, turn-complete, error). Required for status/cost/budget tracking. */
   subscribe?(id: string, listener: (event: SentinelSessionEvent) => void): () => void;
@@ -287,41 +287,48 @@ export class SentinelRunner {
       if (sentinelNeedsReview(sentinel)) throw new SentinelRunError("Agent needs review before it can run on its own.", 409, "review");
     }
     const nowMs = this.#now();
-    const ledger = this.#store.ledger(sentinelId, isoAt(nowMs - DAY_MS));
     const { budget } = sentinel;
-    const breach = ledger.runs >= budget.maxRunsPerDay ? `Daily run limit (${budget.maxRunsPerDay}) reached.`
-      : ledger.costUsd >= budget.dailyUsd ? `Daily budget ($${budget.dailyUsd}) used.` : undefined;
-    if (breach) {
+    // The cap check and the activation row are one store transaction (see reserveActivation), so concurrent launches cannot both take the last slot.
+    const reserved = this.#store.reserveActivation({
+      sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "running",
+      ...(options.automation ? { automationId: options.automation.id } : {}), skills: [...sentinel.skills], ownerPid: process.pid,
+    }, { sinceIso: isoAt(nowMs - DAY_MS), maxRuns: budget.maxRunsPerDay, dailyUsd: budget.dailyUsd });
+    if ("breach" in reserved) {
+      const breach = reserved.breach === "runs" ? `Daily run limit (${budget.maxRunsPerDay}) reached.` : `Daily budget ($${budget.dailyUsd}) used.`;
       if (options.autonomous) {
         this.#store.createActivation({ sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "skipped", skills: [...sentinel.skills], error: breach, finishedAt: isoAt(nowMs) });
         this.#pauseForBudget(sentinel, breach, nowMs);
       }
       throw new SentinelRunError(breach, 429, "budget");
     }
-    const remainingUsd = budget.dailyUsd - ledger.costUsd;
-
-    const home = await this.#homeMission(sentinel, options.actor);
-    const sharedHome = options.automation?.runIn === "sentinel-home";
-    const title = `${sentinel.name}: ${options.automation ? options.automation.name : "run"}`;
-    let missionId = home;
-    const prRepo = options.trigger.kind === "github-pr" ? options.trigger.event?.["repo"] : undefined;
-    const checkout = !sharedHome && typeof prRepo === "string" ? await this.#checkout(prRepo) : undefined;
-    if (!sharedHome) {
-      missionId = this.#missions.create({ ...this.#missionConfig(sentinel, title, checkout), parentSessionId: home }).id;
-      options.actor?.onMissionCreated?.(missionId);
+    const reservation = reserved.activation;
+    const remainingUsd = budget.dailyUsd - reserved.ledger.costUsd;
+    let missionId: string; let home: string; let checkout: string | undefined; let sharedHome: boolean;
+    try {
+      home = await this.#homeMission(sentinel, options.actor);
+      sharedHome = options.automation?.runIn === "sentinel-home";
+      const title = `${sentinel.name}: ${options.automation ? options.automation.name : "run"}`;
+      missionId = home;
+      const prRepo = options.trigger.kind === "github-pr" ? options.trigger.event?.["repo"] : undefined;
+      checkout = !sharedHome && typeof prRepo === "string" ? await this.#checkout(prRepo) : undefined;
+      if (!sharedHome) {
+        missionId = this.#missions.create({ ...this.#missionConfig(sentinel, title, checkout), parentSessionId: home }).id;
+        options.actor?.onMissionCreated?.(missionId);
+      }
+    } catch (error) {
+      this.#store.updateActivation(reservation.id, { status: "failed", error: message(error), finishedAt: isoAt(this.#now()) });
+      throw error;
     }
     const baseline = this.#missions.usage?.(missionId)?.costUsd ?? 0;
-    const activation = this.#store.createActivation({
-      sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "running", missionId, parentMissionId: home,
-      ...(options.automation ? { automationId: options.automation.id } : {}), skills: [...sentinel.skills], ownerPid: process.pid,
-      ...(options.trigger.kind === "github-pr" ? { note: this.#executionNote(checkout) } : {}),
+    const activation = this.#store.updateActivation(reservation.id, {
+      missionId, parentMissionId: home, ...(options.trigger.kind === "github-pr" ? { note: this.#executionNote(checkout) } : {}),
     });
     if (options.autonomous) audit({ actor: `sentinel:${sentinelId}`, action: "sentinel.run", subject: sentinel.name, detail: { sentinelId, trigger: typeof options.trigger === "string" ? options.trigger : undefined } });
     const seed = this.#seed(sentinel, options, remainingUsd);
     const comment = options.comment;
     const watch = this.#watch(activation, sentinel, missionId, seed, baseline, comment ? () => this.#postSummary(sentinel, comment, missionId, activation.id) : undefined);
     try {
-      await this.#missions.send(missionId, seed, options.actor ? { userId: options.actor.userId, displayName: options.actor.displayName } : undefined, sharedHome ? "queue" : undefined);
+      await this.#missions.send(missionId, seed, options.actor ? { userId: options.actor.userId, displayName: options.actor.displayName } : undefined, sharedHome ? "queue" : undefined, options.autonomous);
     } catch (error) {
       watch.dispose(); this.#watches.delete(activation.id);
       this.#store.updateActivation(activation.id, { status: "failed", error: message(error), finishedAt: isoAt(this.#now()) });
@@ -396,7 +403,9 @@ export class SentinelRunner {
   /** Subscribes before the seed is sent so a fast turn cannot be missed. */
   #watch(activation: SentinelActivation, sentinel: Sentinel, missionId: string, seed: string, baseline: number, afterCompleted?: () => Promise<void>): Watch {
     let started = false; let ended = false; let stopping: string | undefined;
-    const costOf = () => Math.max(0, (this.#missions.usage?.(missionId)?.costUsd ?? baseline) - baseline);
+    // A turn queued behind another starts from the cost at its own start, so the previous turn's spend is never charged to it.
+    let base = baseline;
+    const costOf = () => Math.max(0, (this.#missions.usage?.(missionId)?.costUsd ?? base) - base);
     let unsubscribe: (() => void) | undefined;
     const dispose = () => { unsubscribe?.(); unsubscribe = undefined; };
     const finish = (status: SentinelActivation["status"], error?: string) => {
@@ -420,7 +429,7 @@ export class SentinelRunner {
     };
     const listener = (event: SentinelSessionEvent) => {
       if (ended) return;
-      if (!started) { if (event.type === "user" && event.text === seed) started = true; return; }
+      if (!started) { if (event.type === "user" && event.text === seed) { started = true; base = this.#missions.usage?.(missionId)?.costUsd ?? base; } return; }
       if (event.type === "usage") enforce();
       else if (event.type === "turn-complete") {
         const reason = typeof event.stopReason === "string" ? event.stopReason : "end_turn";
