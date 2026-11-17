@@ -7,7 +7,7 @@ import { Select } from "@/ui/components/select";
 import { useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
 import { SENTINEL_LIMITS, type Sentinel } from "@/sentinels/model";
 
-const BLANK_AVATAR = { color: "#4f6bed", icon: "sparkle" };
+const BLANK_AVATAR = { color: "#4f6bed", icon: "agent" };
 const BLANK = "";
 
 /** One small dialog: a name and an optional starting point. New Sentinels are created paused with safe defaults; everything else is set on its page. */

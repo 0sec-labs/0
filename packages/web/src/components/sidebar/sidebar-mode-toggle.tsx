@@ -1,11 +1,12 @@
-import { Bot, List } from "lucide-react";
+import { List } from "lucide-react";
+import { CapyAgentIcon } from "@/ui/icons/capy";
 import type { SidebarListMode } from "@/lib/sidebar-rows";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSidebarListMode } from "./use-sidebar-list";
 
 const OPTIONS = [
-  { value: "agents", label: "Agents", Icon: Bot },
+  { value: "agents", label: "Agents", Icon: CapyAgentIcon },
   { value: "threads", label: "Threads", Icon: List },
 ] as const;
 

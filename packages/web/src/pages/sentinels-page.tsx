@@ -2,7 +2,7 @@ import { useState } from "react";
 import { usePendingGate } from "@/lib/pending-gate";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { CapyAgentIcon } from "@/ui/icons/capy";
 import { v } from "@/lib/vocabulary";
 import { PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
@@ -49,8 +49,8 @@ export function SentinelsPage() {
   const owners = new Map(automations.definitions.map(item => [item.id, item.ownerSentinelId]));
   if (workflowId) return <><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></>;
   return <>
-    <PageHeader title={v("{Sentinels}")} actions={!readOnly && rows.length > 0 ? <><Button type="button" variant="ghost" onClick={() => setNewAutomation(true)}>New automation</Button><Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button></> : undefined} />
-    {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} action={readOnly ? undefined : <Button type="button" variant="secondary" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
+    <PageHeader title={v("{Sentinels}")} actions={!readOnly && rows.length > 0 ? <><Button type="button" variant="ghost" onClick={() => setNewAutomation(true)}>New automation</Button><Button type="button" variant="secondary" onClick={() => setCreating(true)}><CapyAgentIcon aria-hidden="true" />{v("New {sentinel}")}</Button></> : undefined} />
+    {rows.length === 0 ? <EmptyState icon={<CapyAgentIcon />} title={v("No {sentinels} yet")} action={readOnly ? undefined : <Button type="button" variant="secondary" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
       : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {rows.map(sentinel => <li key={sentinel.id} className="min-w-0"><Link to={sentinelHref(sentinel.id)} className="flex h-full min-w-0 flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none ui-row-hover focus-visible:outline-ring-inset">
           <span className="flex items-center gap-3"><SentinelAvatar sentinel={sentinel} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{sentinel.name}</span><SentinelStatusBadge sentinel={sentinel} /></span>

@@ -3,6 +3,7 @@ import { toast } from "@/ui/components/toast";
 import { useEffect, useState } from "react";
 import { Check, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProviderIcon } from "@/components/provider-icon";
 
 export const setupPrompt = `Help me use 0security for my task from this coding agent. Use the CLI directly when shell access is available; MCP is optional for clients that require a structured tool connection.
 
@@ -17,6 +18,8 @@ Discover definitions with 0 agents list --automation --help; inspect 0 agents ru
 MCP is optional: inspect 0 lab mcp-server --help and the client's actual configuration format, preserving other integrations. Use an absolute executable path if needed. Local stdio requires operator-selected host-local execution; with SmolVM, prefer isolated CLI workflows unless I explicitly choose host execution. Local workflows use --automations --workspace <authorized-absolute-root>, or --automations --scope <absolute-scope-json> for live targets. Remote engines use --automations --engine <registered-id> (optional --engines-config), require workflow-engine capability, and omit local workspace/scope/db-path flags. Expose only needed tools, inspect schemas, and verify discovery without launching work. Connecting does not attach this agent to a browser conversation; disconnect cancels local stdio runs but remote runs persist.
 
 Summarize readiness, any remaining sign-in or authorization, and the next command for my task.`;
+
+const AGENTS = ["claude", "codex", "cursor", "opencode"] as const;
 
 export function AgentOnboarding() {
   const [copied, setCopied] = useState(false);
@@ -56,6 +59,11 @@ export function AgentOnboarding() {
           >
             <TerminalSquare aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />
             <span>Set up your coding agent</span>
+            <span className="flex gap-1.5 text-icon-muted opacity-80" aria-hidden="true">
+              {AGENTS.map((id) => (
+                <ProviderIcon key={id} providerId={id} className="size-3.5" />
+              ))}
+            </span>
           </span>
           <span
             className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}

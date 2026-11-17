@@ -5,7 +5,7 @@ import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { SkillMarkIcon } from "@/components/skills/cells";
-import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
+import { CapyAgentIcon, CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openWhatsNew } from "@/lib/whats-new";
@@ -212,9 +212,9 @@ export function CommandPalette({
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
-      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyShieldIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
+      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
-        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyShieldIcon,
+        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyAgentIcon,
         keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),
       });
     }
