@@ -407,7 +407,15 @@ export class FindingRepository extends Repository {
   updateFindingTriage(findingId: string, triageStatus: FindingTriageStatus, triageNote?: string): void {
     const finding = this.owner.getFinding(findingId);
     if (!finding) throw new Error(`Finding ${findingId} not found`);
-    if (!finding.fingerprint) throw new Error(`Finding ${findingId} has no fingerprint`);
+    if (!finding.fingerprint) {
+      // Legacy rows can predate fingerprints: triage just that row by id.
+      this.db
+        .update(schema.findings)
+        .set({ triageStatus, triageNote: triageNote ?? null, triagedAt: new Date().toISOString() })
+        .where(eq(schema.findings.id, findingId))
+        .run();
+      return;
+    }
     this.owner.updateFindingTriageByFingerprint(finding.fingerprint, triageStatus, triageNote);
   }
 
