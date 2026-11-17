@@ -266,6 +266,19 @@ export class SentinelStore {
       return { turn, ledger, superseded: superseded.map(old => ({ ...old, status: "skipped" as const })) };
     })();
   }
+  /**
+   * A person's message in the Agent's own thread, recorded as a turn that has already started. It never goes through the caps:
+   * the turn limit is for trigger turns, and a person is never refused. Its cost still counts toward the day's spend.
+   */
+  recordUserTurn(input: { agentId: string; sessionId: string; userId?: string; nowIso: string; ownerPid: number; note?: string }): AgentTurn {
+    return this.#db.transaction(() => {
+      this.#require(input.agentId);
+      return this.#insertTurn({
+        id: randomUUID(), agentId: input.agentId, sessionId: input.sessionId, origin: "user", detail: input.userId ? { userId: input.userId } : {}, status: "running",
+        ownerPid: input.ownerPid, queuedAt: input.nowIso, startedAt: input.nowIso, ...(input.note ? { note: input.note } : {}),
+      })!;
+    })();
+  }
   updateTurn(id: string, update: Partial<Pick<AgentTurn, "status" | "sessionId" | "costUsd" | "error" | "note" | "startedAt" | "finishedAt" | "skippedReason">>): AgentTurn {
     return this.#db.transaction(() => {
       const current = this.getTurn(id);
@@ -366,7 +379,8 @@ export class SentinelStore {
       const activation = parseRow<SentinelActivation>(value, "activation_json");
       runs += 1; costUsd += activation.costUsd ?? 0;
     }
-    const own = this.#db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS cost FROM agent_turns WHERE agent_id = ? AND legacy_activation_id IS NULL AND COALESCE(started_at, queued_at) >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number; cost: number };
+    // A person's message costs money but is not an automatic turn: it never counts toward the turn cap.
+    const own = this.#db.prepare("SELECT COALESCE(SUM(CASE WHEN origin = 'user' THEN 0 ELSE 1 END), 0) AS n, COALESCE(SUM(cost_usd), 0) AS cost FROM agent_turns WHERE agent_id = ? AND legacy_activation_id IS NULL AND COALESCE(started_at, queued_at) >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number; cost: number };
     return { runs: runs + Number(own.n), costUsd: costUsd + Number(own.cost) };
   }
   countActivationsSince(sentinelId: string, sinceIso: string): number {

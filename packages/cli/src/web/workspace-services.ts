@@ -87,6 +87,15 @@ export async function createWorkspaceServices(options: Options) {
       resumeQueue: (id, messageId) => gateway.sendQueuedNow(id, messageId),
       usage: id => gateway.get(id).usage,
       exists: id => { try { gateway.get(id); return true; } catch { return false; } },
+      thread: id => {
+        try {
+          const snapshot = gateway.get(id);
+          const last = [...snapshot.messages].reverse().find(message => message.role === "assistant");
+          const text = last ? last.content.map(block => block.type === "text" ? block.text : "").join(" ") : "";
+          const clean = text.replace(/\s+/g, " ").trim().slice(0, 240);
+          return { status: snapshot.session.status, updatedAt: snapshot.session.updatedAt, ...(clean ? { lastAssistantText: clean } : {}) };
+        } catch { return undefined; }
+      },
       reopen: async id => ({ id: (await gateway.resume(id)).id }),
       findings: id => {
         const db = new osecDB(options.dbPath);

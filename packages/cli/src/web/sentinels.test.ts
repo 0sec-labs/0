@@ -18,7 +18,7 @@ function fixture() {
     send: vi.fn(async (_id: string, _text: string, _author?: { userId: string; displayName: string }) => ({})),
     pendingDecisions: vi.fn((id: string) => pending.get(id) ?? 0),
   };
-  const service = new WebSentinelService({ dbPath, missions });
+  const service = new WebSentinelService({ dbPath, missions, persistentThread: () => false });
   const workflows = new SecurityWorkflowStore(dbPath);
   const call = async (method: string, path: string, body?: unknown, actor?: SentinelActor) => {
     const url = new URL(`http://localhost${path}`);

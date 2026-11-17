@@ -1,6 +1,6 @@
 # Agents as threads
 
-Status: approved direction. Phases 0 and 1 are shipped. Phase 2 is shipped behind a flag that is off by default. Phases 3 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
+Status: approved direction. Phases 0 to 3 are shipped. Phases 4 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
 
 ## Status
 
@@ -8,12 +8,22 @@ Status: approved direction. Phases 0 and 1 are shipped. Phase 2 is shipped behin
 | --- | --- |
 | 0 | Shipped (#400). |
 | 1 | Shipped (#402). `agent_turns` is written alongside every activation; `GET /sentinels/:id/turns` returns turns with older activations projected as origin `legacy`. The daily ledger reads the union and counts each row once. Behaviour is unchanged. |
-| 2 | Shipped behind a flag, default off. With the flag off nothing changes: every firing still starts its own child thread. |
-| 3 to 6 | Not started. |
+| 2 | Shipped (#403) behind a flag. |
+| 3 | Backend: the flag is on by default and a person's message in an Agent's thread is recorded as a turn (see "Phase 3 backend" below). Web: see "Phase 3 web" below. |
+| 4 to 6 | Not started. |
 
-### Phase 2 flag
+### Phase 3 backend
 
-Set `ZERO_AGENTS_PERSISTENT_THREAD=1` in the environment of the engine (any of `1`, `true`, `on`, `yes`). It is read on every firing, so it can be flipped without losing state. It is an environment variable and not a setting on purpose: it is an experiment, it has no UI, and it goes away when Phase 3 makes it the default. It applies to schedule and GitHub pull request triggers only. A manual "Run now" still starts a child thread until Phase 3.
+`ZERO_AGENTS_PERSISTENT_THREAD` is now on unless it is set to `0`, `false`, `off` or `no`. It is read on every firing, so it can still be flipped without losing state. It is an environment variable and not a setting on purpose: it is the way back, it has no UI, and it is removed once the standing thread has been the default for a release. With it off every firing starts its own child thread again, as before Phase 2.
+
+- `POST /sentinels/:id/thread` returns the Agent's standing thread, restoring it after a restart or creating it if it does not exist. It never replaces a thread that exists. The Agent page uses it to open the real conversation.
+- `POST /sentinels/:id/run` (the old "Run now") is a person's message sent into that thread, queued if a turn is in progress. The reply keeps an `activation`-shaped field for older clients for one release. It starts no child thread.
+- The engine watches every live Agent thread. A message that nobody queued as a trigger turn and that is not an engine prompt is a person typing: it becomes an `agent_turns` row with origin `user` when it starts, and its cost is the thread cost across the turn. These rows count toward spend and never toward the turn cap (`ledger()` counts runs from non-`user` turns only). They are never stopped by the cap or by a pause, and a turn that starts while the day's spend is already over the budget carries the note `over_budget`.
+- Pause is "triggers off": a paused Agent is still answered. Over budget, the web shows a one-time warning and sends the message anyway.
+- The Agent view carries `thread: { status, updatedAt, lastMessage }` for the sidebar row.
+- A trigger turn that could not start is matched to its row by its queued message id. A turn that was never queued is never blamed for an error.
+
+The flag applies to schedule and GitHub pull request triggers. A person opening or messaging the thread keeps whatever thread exists, even if it was made under an older scope or model; the next trigger turn replaces it (see gap 1) and says so.
 
 With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web/agent-turns.ts`):
 
@@ -26,13 +36,13 @@ With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web
 - A turn that fails does not stall the queue. After three failed turns in a row the trigger turns itself off (`lastStatus: failing`) and the Agent shows "needs you". A person turning the trigger back on resets the count. Turns closed because the engine stopped do not count as failures, and the next turn is told that the previous one was interrupted.
 - When a person cancels a turn, the gateway pauses its queue; trigger turns waiting behind it are started again.
 
-### Known gaps in Phase 2 (all must be closed or accepted before Phase 3)
+### Known gaps in Phase 2 (status after Phase 3)
 
 1. The gateway pins scope, model and the skills allow-list when a thread is created and cannot change them afterwards. The runner therefore records the configuration the standing thread was created with (`homeFingerprint` on the Agent record) and never uses a thread whose configuration differs from the Agent's current scope, model or skills: it creates a fresh thread, tells the Agent so, and sends its notes again. The old thread stays as an ordinary thread. A standing thread from before the fingerprint existed is replaced once. This loses conversation continuity on every scope, model or skills edit until the gateway can reconfigure a live thread; a gateway `instructions` channel and a reconfigurable allow-list would remove the replacement.
 2. Pull request comments are not posted from the standing thread: findings are read per thread, so a comment would list every earlier review. The comment option is ignored while the flag is on.
 3. `messages[0]` of a thread survives compaction verbatim, so the first turn's envelope stays in context forever and can disagree with the current charter. The per-turn envelope says it overrides earlier messages; the system-prompt channel is the real fix.
-4. A person's message typed in the Agent's thread is not recorded as a turn (Phase 3).
-5. The per-turn gateway cost ceiling is not set; only the subscriber enforces the cap.
+4. Closed in Phase 3: a person's message is recorded as a turn.
+5. Accepted, still open: the per-turn gateway cost ceiling is not set. The gateway's `costCeilingUsd` can only be given when a thread is created and is cumulative for the thread's life, so it cannot bound one turn of a thread that never ends. Only the subscriber enforces the daily cap, and a trigger turn is cancelled when a usage event shows the cap is reached. A gateway call that sets the ceiling per turn would close it.
 
 ## Rule
 

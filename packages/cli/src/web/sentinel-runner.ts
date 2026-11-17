@@ -50,13 +50,18 @@ export interface SentinelMissionRuntime {
   reopen?(id: string): Promise<{ id: string }>;
   /** Findings the mission saved, as share-safe fields only. Used for the optional pull request comment. */
   findings?(id: string): ShareSafeReport["findings"];
+  /** The thread's current status and the last thing the Agent said in it. Used for the sidebar row; absent when the thread is not live. */
+  thread?(id: string): { status: string; updatedAt: string; lastAssistantText?: string } | undefined;
   /** Takes one queued message off the thread's queue (a newer pull request commit supersedes it). */
   removeQueued?(id: string, messageId: string): unknown;
   /** Starts a queued message now and un-pauses the queue; used after a person cancels a turn so trigger turns behind it still run. */
   resumeQueue?(id: string, messageId: string): unknown;
 }
-/** `ZERO_AGENTS_PERSISTENT_THREAD=1` delivers trigger turns into each Agent's one standing thread instead of starting a child thread per firing. Off by default. */
-export const agentsPersistentThreadFromEnv = (): boolean => /^(1|true|on|yes)$/i.test(process.env.ZERO_AGENTS_PERSISTENT_THREAD ?? "");
+/**
+ * An Agent is one thread that never ends: trigger turns and a person's messages all go into its standing thread. On by default.
+ * `ZERO_AGENTS_PERSISTENT_THREAD=0` (or `false`, `off`, `no`) turns it off, which makes every firing start its own child thread again.
+ */
+export const agentsPersistentThreadFromEnv = (): boolean => !/^(0|false|off|no)$/i.test((process.env.ZERO_AGENTS_PERSISTENT_THREAD ?? "").trim());
 /** Minimal `gh` seam (same shape as the engine's GhClient). Credentials stay in gh's own store. */
 export interface SentinelGhClient { run(args: string[]): Promise<{ stdout: string }> }
 const defaultSentinelGh = (): SentinelGhClient => ({ run: args => execute("gh", args, { timeout: 30_000, maxBuffer: 4_000_000 }).then(({ stdout }) => ({ stdout })) });
@@ -122,6 +127,7 @@ export class SentinelRunner {
   /** Starts the unref'd poll loop (default 15 s). Without it the runner only reacts to manual launches and explicit tick() calls. */
   start(pollIntervalMs = 15_000): void {
     if (this.#timer || this.#closed) return;
+    this.#observeHomes();
     this.#timer = setInterval(() => { if (!this.#ticking) this.#pending = this.tick().catch(() => { /* A transient database error is retried on the next tick. */ }); }, pollIntervalMs);
     this.#timer.unref?.();
   }
@@ -141,6 +147,7 @@ export class SentinelRunner {
     this.#ticking = true;
     try {
       this.#reconcile(nowMs);
+      this.#observeHomes();
       for (const trigger of this.#store.listDueTriggers(nowMs)) {
         if (this.#closed) break;
         try { await this.#fire(trigger, nowMs); } catch { /* One broken trigger must not stall the others. */ }
@@ -162,6 +169,60 @@ export class SentinelRunner {
   pullRequestTriggers(repo: string, baseBranch: string): SentinelTrigger[] {
     return this.#store.listTriggers().filter(trigger => trigger.kind === "github-pr" && trigger.enabled && trigger.github
       && trigger.github.repo.toLowerCase() === repo.toLowerCase() && (!trigger.github.baseBranch || trigger.github.baseBranch === baseBranch));
+  }
+
+  /** Is the one-standing-thread delivery on (the default)? */
+  get persistentThread(): boolean { return this.#persistent(); }
+
+  /** Records a person's messages in each live Agent thread as turns. A thread that is not live (or not restored yet) is picked up on a later pass. */
+  #observeHomes(): void {
+    if (!this.#persistent()) return;
+    try {
+      for (const sentinel of this.#store.list()) {
+        const home = sentinel.homeMissionId;
+        if (!home) continue;
+        if (sentinel.status === "archived") { this.#turns.forget(sentinel.id); continue; }
+        if (this.#turns.observing(sentinel.id, home)) continue;
+        if (this.#missions.exists?.(home) ?? true) this.#turns.observe(sentinel, home);
+      }
+    } catch { /* A transient database error is retried on the next pass. */ }
+  }
+
+  /** The Agent's standing thread for the web page: restored after a restart or created if it does not exist yet. Never replaces a live thread. */
+  async ensureThread(sentinelId: string, actor?: SentinelActor): Promise<{ missionId: string; created: boolean }> {
+    const sentinel = this.#store.get(sentinelId);
+    if (!sentinel) throw new SentinelRunError("Agent not found.", 404);
+    const had = sentinel.homeMissionId;
+    if (sentinel.status === "archived" && !had) throw new SentinelRunError("Archived Agents have no thread.", 409, "inactive");
+    const info = await this.#homeMissionInfo(sentinel, actor, sentinelReviewFingerprint(sentinel), false);
+    const current = this.#store.get(sentinelId) ?? sentinel;
+    if (this.#persistent()) this.#turns.observe(current, info.id);
+    return { missionId: info.id, created: !had || info.id !== had };
+  }
+
+  /**
+   * A person's message to the Agent, sent into its one thread (the old "Run now"). It is queued if a turn is in progress. It is
+   * never refused by a pause or a cap; the message is recorded as a turn when it starts.
+   */
+  async sendToThread(sentinelId: string, input: { text?: string; actor?: SentinelActor }): Promise<{ missionId: string; queued: boolean }> {
+    const sentinel = this.#store.get(sentinelId);
+    if (!sentinel) throw new SentinelRunError("Agent not found.", 404);
+    if (sentinel.status === "archived") throw new SentinelRunError("Archived Agents cannot take messages.", 409, "inactive");
+    const { missionId } = await this.ensureThread(sentinelId, input.actor);
+    const text = input.text?.trim() || "Do your standing job now and tell me what needs me.";
+    const sent = await this.#missions.send(missionId, text, input.actor ? { userId: input.actor.userId, displayName: input.actor.displayName } : undefined, "queue");
+    return { missionId, queued: Boolean(sent && typeof sent === "object" && "queuedMessageId" in sent && typeof sent.queuedMessageId === "string") };
+  }
+
+  /** What the sidebar shows for the Agent's thread: working or idle, and its last message. */
+  threadInfo(sentinel: Sentinel): { status: string; updatedAt: string; lastMessage?: string } | undefined {
+    const home = sentinel.homeMissionId;
+    if (!home) return undefined;
+    try {
+      const info = this.#missions.thread?.(home);
+      if (!info) return undefined;
+      return { status: info.status, updatedAt: info.updatedAt, ...(info.lastAssistantText ? { lastMessage: info.lastAssistantText } : {}) };
+    } catch { return undefined; }
   }
 
   /** Runs left "running" by a stopped engine can never finish; close them out so budgets and attention stay truthful. */
@@ -414,12 +475,13 @@ export class SentinelRunner {
    * model and skills: the gateway cannot change those on a live thread, so an older thread is replaced (`"changed"`) and
    * is never used for unattended work. Threads from before the fingerprint was recorded count as changed once.
    */
-  async #homeMissionInfo(sentinel: Sentinel, actor?: SentinelActor, fingerprint?: string): Promise<{ id: string; replaced: false | "lost" | "changed" }> {
+  async #homeMissionInfo(sentinel: Sentinel, actor?: SentinelActor, fingerprint?: string, enforce = true): Promise<{ id: string; replaced: false | "lost" | "changed" }> {
     const existing = sentinel.homeMissionId;
-    const stale = fingerprint !== undefined && Boolean(existing) && sentinel.homeFingerprint !== fingerprint;
+    // A person opening or messaging the thread keeps whatever thread exists (`enforce` false); only unattended turns insist on the current configuration.
+    const stale = enforce && fingerprint !== undefined && Boolean(existing) && sentinel.homeFingerprint !== fingerprint;
     if (existing && !stale && (this.#missions.exists?.(existing) ?? true)) return { id: existing, replaced: false };
     if (existing && !stale && this.#missions.reopen) {
-      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true, fingerprint); return { id: reopened.id, replaced: false }; } catch { /* Fall through to a fresh standing mission. */ }
+      try { const reopened = await this.#missions.reopen(existing); this.#store.setHomeMission(sentinel.id, reopened.id, true, enforce ? fingerprint : sentinel.homeFingerprint); return { id: reopened.id, replaced: false }; } catch { /* Fall through to a fresh standing mission. */ }
     }
     const home = this.#missions.create(this.#missionConfig(sentinel, `Agent: ${sentinel.name}`));
     actor?.onMissionCreated?.(home.id);
