@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
@@ -56,12 +57,13 @@ export function CatalogRow({ skill, publishers }: { skill: CatalogSkill; publish
 export function GithubSkillsSection({ query }: { query: string }) {
   const { inventory } = useSkillsCatalog();
   const data = inventory.data;
+  const loading = usePendingGate(inventory.isPending);
   const rows = data ? rankCatalog(data.skills, data.publishers, query, "all") : [];
   return <section aria-label="From GitHub" className="flex flex-col gap-3">
-    {inventory.isPending && <LoadingState label="Loading skills…" />}
+    {loading && <LoadingState label="Loading skills…" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
-    {data && rows.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "No matching skills." : "No skills are listed in this view."}</p>}
-    {data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
+    {!loading && data && rows.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "No matching skills." : "No skills are listed in this view."}</p>}
+    {!loading && data && rows.length > 0 && <ul className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">{rows.map(skill => <CatalogRow key={skill.id} skill={skill} publishers={data.publishers} />)}</ul>}
   </section>;
 }
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyDatabaseIcon, CapyPlusIcon as Plus, CapySearchIcon as SearchIcon } from "@/ui/icons/capy";
 import { queryKeys } from "@/queries";
@@ -37,7 +38,8 @@ export function MemoryPage() {
     onSuccess: () => { setError(""); setDraft(null); setForgetting(null); return cache.invalidateQueries({ queryKey: key }); },
     onError: cause => setError(errorText(cause, "Couldn’t save this change.")),
   });
-  if (query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
+  const loading = usePendingGate(query.isPending);
+  if (loading || query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
   if (query.error) return <><PageHeader title="Memory" /><ErrorState error={query.error} /></>;
   const { notes, folders, enabled, proposed = [], overflow = [] } = query.data;
   const notice = overflowNotice(overflow, filter);

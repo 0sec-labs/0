@@ -1,4 +1,5 @@
 import { queryKeys } from "@/queries";
+import { usePendingGate } from "@/lib/pending-gate";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
@@ -35,6 +36,7 @@ export function WorkersPage() {
   const connection = useBackendSelection();
   const hosts = useQuery({ queryKey: queryKeys.workerHosts(), queryFn: ({ signal }) => workerControlJson<{ hosts: SshHostEntry[] }>("/api/workers/hosts", { signal }) });
   const backends = useQuery({ queryKey: queryKeys.workerBackends(), queryFn: ({ signal }) => workerControlJson<{ backends: BackendDescriptor[] }>("/api/backends", { signal }), refetchInterval: 15000 });
+  const loadingBackends = usePendingGate(backends.isPending);
   const managed = useQuery({ queryKey: queryKeys.managedWorkers(), queryFn: ({ signal }) => workerControlJson<{ workers: { backendId: string }[] }>("/api/workers/managed", { signal }), refetchInterval: 15000 });
   const [stopCandidate, setStopCandidate] = useState<BackendDescriptor | null>(null);
   const availableHosts = backends.data?.backends ?? connection?.backends ?? [];
@@ -131,7 +133,7 @@ export function WorkersPage() {
       <PageHeader title="Computers" actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
 
       <section aria-label="Computers" className="space-y-3">
-        {backends.isPending && <LoadingState label="Loading computers…" rows={2} />}
+        {loadingBackends && <LoadingState label="Loading computers…" rows={2} />}
         {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
         {availableHosts.length > 0 && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">
           {availableHosts.map(backend => {

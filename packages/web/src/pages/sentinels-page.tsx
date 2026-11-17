@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
@@ -26,6 +27,7 @@ const VIEW_LABELS: Record<SentinelView, string> = { overview: "Overview", files:
 /** Index of Sentinels; also the landing target for "New Sentinel" from the command palette (`?new=1`). */
 export function SentinelsPage() {
   const { supported, sentinels, isLoading, error, refetch } = useSentinels();
+  const loading = usePendingGate(isLoading);
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const team = useTeamAccess();
@@ -38,7 +40,7 @@ export function SentinelsPage() {
   // Old "Set up" links carried the owner in the query; the automation now lives in that Agent's page.
   const legacyOwner = search.get("owner");
   if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner, "automations")} replace />;
-  if (isLoading) return <><LoadingState label="Loading" /></>;
+  if (loading || isLoading) return <><LoadingState label="Loading" /></>;
   if (error) return <><ErrorState error={error} onRetry={() => void refetch()} /></>;
   if (!supported) return <><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></>;
   const rows = orderSentinels(sentinels);

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { usePendingGate } from "@/lib/pending-gate";
 import { Link, useParams } from "react-router-dom";
 import { CapyArrowUpRightIcon as ArrowUpRight, CapyCheckIcon as Check, CapyMoreIcon as More } from "@/ui/icons/capy";
 import { EmptyState, LoadingState } from "@/components/state-panel";
@@ -24,13 +25,14 @@ const size = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).
 export function SkillCatalogDetailPage() {
   const { id = "" } = useParams();
   const { inventory, install, remove, canWrite } = useSkillsCatalog();
+  const loading = usePendingGate(inventory.isPending);
   const skill = inventory.data?.skills.find(item => item.id === id);
   const publisher = skill ? inventory.data?.publishers[skill.publisher] : undefined;
   const preview = usePreview(skill ? { id: skill.id } : null);
   const [dialog, setDialog] = useState<"add" | "remove" | null>(null);
   useBreadcrumbLabel(skill?.title);
 
-  if (inventory.isPending) return <><LoadingState label="Loading skill…" variant="cards" /></>;
+  if (loading || inventory.isPending) return <><LoadingState label="Loading skill…" variant="cards" /></>;
   if (!skill || !inventory.data) return <><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/skills?tab=browse" />}>Back to skills</Button>} /></>;
 
   const data = preview.data;

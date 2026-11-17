@@ -174,7 +174,6 @@ function ConsolePageContent({
     teamClient,
     archiveConsoleSession,
     closeConsoleSession,
-    configureConsoleSession,
     controlConsoleSession,
     deleteConsoleSession,
     deleteSavedConsoleSession,
@@ -1531,11 +1530,9 @@ function ConsolePageContent({
             onSubmit={(event) => {
               event.preventDefault();
               if (!rename || !renameValue.trim()) return;
-              void workspace
-                .perform(() => configureConsoleSession(rename.id, { title: renameValue.trim() }), rename.id)
-                .then((result) => {
-                  if (result) setRename(null);
-                });
+              // The dialog closes at once; a failed save restores the old title and shows the error.
+              void workspace.rename(rename.id, renameValue.trim());
+              setRename(null);
             }}
           >
             <Input

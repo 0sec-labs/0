@@ -47,6 +47,7 @@ import { SAVED_POLL_MS, sessionsRefetchInterval } from "./session-polling";
 import { SAVED_OPEN_WINDOW, savedTranscriptSnapshot } from "./saved-snapshot";
 import { rememberSessionAlias } from "./session-recovery";
 import { resumeSavedOnce } from "@/lib/lazy-resume";
+import { sessionsWithTitle, snapshotWithTitle } from "@/lib/optimistic-title";
 export { applyEvents, findingSignal, pollDelay, shouldResyncSnapshot, snapshotActive } from "./workspace-events";
 
 /** Host/account-scoped snapshots can be prefetched by history before navigation. */
@@ -89,6 +90,7 @@ export interface ConsoleWorkspace {
   forgetDrafts(id: string): void;
   refresh(): void;
   perform<T>(action: () => Promise<T>, owner?: string, failure?: string, removesSession?: boolean): Promise<T | undefined>;
+  rename(id: string, title: string): Promise<unknown>;
   /** `retry` re-runs the last turn in place instead of appending a second copy of its message. */
   send(input: ConsoleMessageInput, options?: { retry?: boolean }): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
@@ -523,6 +525,19 @@ export function useConsoleWorkspace(
       });
     }
   };
+  /** Rename shows at once in the open thread and the shared list; a failed save puts the old title back. */
+  const rename = async (id: string, title: string) => {
+    const previousSnapshot = queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey);
+    const previousList = queryClient.getQueryData<DesktopConsoleSession[]>(["console-sessions"]);
+    queryClient.setQueryData<ConsoleSessionSnapshot | undefined>(snapshotKey, (snapshot) => (snapshot ? snapshotWithTitle(snapshot, id, title) : snapshot));
+    queryClient.setQueryData<DesktopConsoleSession[] | undefined>(["console-sessions"], (list) => (list ? sessionsWithTitle(list, id, title) : list));
+    const result = await perform(() => api.configureConsoleSession(id, { title }), id);
+    if (result === undefined) {
+      if (previousSnapshot) queryClient.setQueryData(snapshotKey, previousSnapshot);
+      if (previousList) queryClient.setQueryData(["console-sessions"], previousList);
+    }
+    return result;
+  };
   /** Resume the saved mission (once) and deliver the message to its live session; the saved id then aliases to it. */
   const deliverMessage = async (id: string, input: ConsoleMessageInput, retry?: boolean) => {
     if (retry)
@@ -715,6 +730,7 @@ export function useConsoleWorkspace(
       );
     },
     perform,
+    rename,
     send,
     create,
     refresh,

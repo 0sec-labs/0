@@ -1,5 +1,4 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/geist-mono";
+@import "./fonts.css";
 @import "tailwindcss";
 @import "./ui/styles/motion.css";
 @import "./ui/styles/tokens.css";

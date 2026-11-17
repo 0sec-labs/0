@@ -1,10 +1,11 @@
 import { WhatsNewHost } from "@/components/whats-new-dialog";
+import { usePendingGate } from "@/lib/pending-gate";
 import { queryKeys } from "@/queries";
 import { pollInterval } from "@/lib/polling";
 import { v } from "@/lib/vocabulary";
 import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { AppShell } from "@/components/app-shell";
 import type { SearchMode, SearchRequest } from "@/components/search-events";
@@ -15,7 +16,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
   CommandPalette, ConsolePage, FindingsApiAccessPage, FindingsPage, MemoryPage, PageFallback, SavedConversationPage,
-  ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, useRoutePrefetch,
+  ExtensionsPage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, routeForPath, useRoutePrefetch,
 } from "@/pages/lazy-pages";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
@@ -25,9 +26,14 @@ import { usePageTitle } from "@/lib/page-title";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 
 export function OperationsApp() {
-  const { client, getDashboard } = useBackendApi();
+  const { client, getDashboard, getFindingFamily } = useBackendApi();
   const location = useLocation();
-  useRoutePrefetch();
+  const cache = useQueryClient();
+  useRoutePrefetch(target => {
+    // Data for the hovered target: the findings list for the Findings link, one finding's detail for its row.
+    if (target.kind === "finding") void cache.prefetchQuery({ queryKey: queryKeys.findingFamily(client.backendId, target.fingerprint), queryFn: () => getFindingFamily(target.fingerprint), staleTime: 10_000 });
+    else if (routeForPath(target.pathname) === "findings") void cache.prefetchQuery({ queryKey: queryKeys.dashboard(client.backendId), queryFn: getDashboard, staleTime: 5_000 });
+  });
   usePageTitle(location.pathname);
   const findingsVisible = /^\/findings(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
@@ -70,11 +76,12 @@ export function OperationsApp() {
   const legacyRedirect = ({ from, to, keep }: typeof LEGACY_REDIRECTS[number]) => (
     <Navigate to={{ pathname: keep === "path" ? `${to}${location.pathname.slice(from.length)}` : to, ...(keep === "none" ? {} : { search: location.search, hash: location.hash }) }} replace />
   );
+  const loadingDashboard = usePendingGate(dashboardQuery.isLoading) || dashboardQuery.isLoading;
   const dashboard = dashboardQuery.data;
   const startChat = (
     <Button variant="accent" size="sm" render={<NavLink to="/chats" />}>{v("Start {a mission}")}</Button>
   );
-  const findings = dashboardQuery.isLoading ? <LoadingState label="Loading" /> : dashboardQuery.error ? <ErrorState error={dashboardQuery.error} /> : dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />;
+  const findings = loadingDashboard ? <LoadingState label="Loading" /> : dashboardQuery.error ? <ErrorState error={dashboardQuery.error} /> : dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />;
   return (
     <DashboardPanelProvider>
       <MissionNotifications />
