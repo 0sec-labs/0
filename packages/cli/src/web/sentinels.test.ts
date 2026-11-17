@@ -56,6 +56,17 @@ describe("agent API", () => {
     expect(((await f.call("GET", `${P}?status=active`)).data as { sentinels: unknown[] }).sentinels).toHaveLength(0);
   });
 
+  it("creates an active Agent from a preset with no triggers or automations, so nothing runs by itself", async () => {
+    const f = fixture();
+    const created = await f.call("POST", P, { preset: "pen-tester", status: "active", scope: { repos: ["/work/app"] } });
+    expect(created.status).toBe(201);
+    const { sentinel, suggestedAutomations } = created.data as { sentinel: { id: string; status: string; scope: { repos: string[] }; attention: { needsReview: boolean } }; suggestedAutomations: Array<{ trigger: { kind: string } }> };
+    expect(sentinel).toMatchObject({ status: "active", scope: { repos: ["/work/app"] }, attention: { needsReview: false } });
+    expect(suggestedAutomations.some(item => item.trigger.kind === "schedule")).toBe(true);
+    expect((await f.call("GET", `${P}/${sentinel.id}/triggers`)).data).toEqual({ triggers: [] });
+    expect((await f.call("GET", `${P}/${sentinel.id}/automations`)).data).toEqual({ automations: [] });
+  });
+
   it("reads, patches with version checks, pauses, resumes and deletes", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string; version: number } };

@@ -7,10 +7,12 @@ An Agent is a persistent agent with a name, a standing job, a scope, files and a
 
 ## Create one
 
-1. Run `0` and open **Agents**.
-2. Pick a preset, or **Start from scratch**.
-3. Confirm the name. The Agent is created **paused**, with production targets off.
-4. On its page, set its scope, budget and instructions, then resume it. Scheduled and polled runs also need the review described below.
+1. Run `0` and click **+** next to **Agents** in the sidebar. The Agents page, the command palette and the **Create an agent** chip on the home screen open the same dialog.
+2. Optionally pick a **Start from** preset. It fills the name, avatar and instructions; **Blank** is the default. Click the avatar to change its glyph or colour.
+3. Type a name, then check the **Folder** it works on, the **Computer** it runs on and its **Model** (the current default unless you pick one).
+4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, budget, last 7 days, threads, files), Automations and Settings.
+
+Creating an agent never turns a schedule on. A preset only suggests automations; none exists until you add it on the Automations tab, and a schedule starts only after you review and turn it on. Production targets stay off.
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
@@ -18,7 +20,7 @@ Each Agent has a scope, a model, skills, a daily budget and memory files: `AGENT
 
 ## Presets
 
-A new Agent always starts paused and with production targets off. A preset fills in the job and skills. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
+A preset fills in the job, skills and instructions. A new Agent starts with production targets off and no automations; its Automations tab suggests the preset's automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
 | Preset | Job |
 | --- | --- |

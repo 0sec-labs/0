@@ -7,6 +7,7 @@ const SRC = join(__dirname, "..", "src");
 /** Files (relative to src) that may use rounded-lg/xl/2xl. Each entry needs a reason; the default radius is rounded-md (see DESIGN.md). */
 const ROUNDED_ALLOWED: Record<string, string> = {
   "components/sentinels/sentinel-avatar.tsx": "Large agent avatar tile is a deliberate squircle, like other avatars.",
+  "components/sentinels/avatar-picker.tsx": "The avatar button and glyph cells match the avatar tile squircle.",
   "components/skills/cells.tsx": "Catalog logo tiles are avatars and scale their radius with size.",
   "ui/components/toast.tsx": "Toast is a popover surface and uses the 8px menu radius from DESIGN.md.",
 };
@@ -20,6 +21,7 @@ const STYLE_ALLOWED: Record<string, string> = {
   "components/findings/findings-list.tsx": "Virtualised list height is computed from row layout.",
   "components/console-control/connections-control.tsx": "Drag-and-drop transform and progress bar width are runtime values.",
   "components/appearance/theme-gallery.tsx": "Preview tiles paint the colors of the theme being previewed.",
+  "components/sentinels/avatar-picker.tsx": "Colour swatches paint the avatar colour being offered.",
   "components/sentinels/sentinel-views.tsx": "Meter fill width is a runtime percentage.",
   "components/console-control/extra-settings-pages.tsx": "Meter fill width is a runtime percentage.",
   "console/viz/chart-view.tsx": "Series colors come from the chart palette per datum.",
