@@ -3786,6 +3786,63 @@ describe("ToolExecutor — structured scanner wrappers (0#555)", () => {
       expect(output.result?.tool).toBe("sqlmap");
     }
   });
+
+  it("run_scanner reaches executeScanner, respects cancellation, and does not degrade tool health", async () => {
+    const controller = new AbortController();
+    const ctx = await makeCtx({ allowScanners: true });
+    ctx.rateLimiter = {
+      acquire: async () => {
+        // Abort after passing top-level execute() guards, during scannerPreflight before executeScanner
+        controller.abort();
+      },
+    } as any;
+    const ex = new ToolExecutor(ctx, null);
+    const result = await ex.execute(
+      {
+        name: "run_scanner",
+        arguments: {
+          tool: "sqlmap", url: "https://api.example.com/?id=1", timeout: 2 },
+      },
+      { signal: controller.signal },
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/cancelled before dispatch/);
+    expect(ex.toolHealthSummary().byCategory["error"] ?? 0).toBe(0);
+  });
+
+  it("run_scanner records tool-health degradation on genuine scanner errors", async () => {
+    const ctx = await makeCtx({ allowScanners: true });
+    const ex = new ToolExecutor(ctx, null);
+    // Invoke executeScanner with an unallowlisted binary to produce an uncancelled error outcome
+    const result = await (ex as any).executeScanner(
+      "run_sqlmap",
+      "nonexistent_forbidden_binary",
+      ["-u", "http://127.0.0.1"],
+      () => ({ tool: "sqlmap", vulnerable: false, injectionPoints: [], databases: [], tables: [], columns: [], rawTail: "" }),
+      2,
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/failed/);
+    expect(ex.toolHealthSummary().byCategory["error"]).toBeGreaterThanOrEqual(1);
+  });
+
+  it("run_scanner stops at top-level execute guard if signal is already aborted before execute", async () => {
+    const ctx = await makeCtx({ allowScanners: true });
+    const ex = new ToolExecutor(ctx, null);
+    const controller = new AbortController();
+    controller.abort();
+    const result = await ex.execute(
+      {
+        name: "run_scanner",
+        arguments: {
+          tool: "sqlmap", url: "https://api.example.com/?id=1", timeout: 2 },
+      },
+      { signal: controller.signal },
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/aborted/i);
+    expect(ex.toolHealthSummary().byCategory["error"] ?? 0).toBe(0);
+  });
 });
 
 // ── Attribution-header injection at the executor surface (0#216) ──

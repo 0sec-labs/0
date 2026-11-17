@@ -1,12 +1,12 @@
 import { matchPath } from "react-router-dom";
 import { VOCAB } from "@/lib/vocabulary";
-import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
+import { CapyAgentIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPuzzleIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: VOCAB.mission.Plural, icon: CapyThreadListIcon },
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
-  { to: "/agents", label: "Agents", icon: CapyAutomationsIcon },
+  { to: "/agents", label: "Agents", icon: CapyAgentIcon },
   { to: "/skills", label: "Skills", icon: CapySparkleFourIcon },
   { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },

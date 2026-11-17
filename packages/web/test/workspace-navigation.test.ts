@@ -52,3 +52,8 @@ test("deleted pages redirect to the page that replaced them", () => {
   expect(target("/plugins/skills")).toBe("/skills");
   expect(LEGACY_REDIRECTS.every(row => row.routes.every(route => !WORKSPACE_DESTINATIONS.some(item => item.to === route)))).toBe(true);
 });
+
+test("agents are drawn with the Agent glyph everywhere, not lucide's Bot", async () => {
+  const { CapyAgentIcon } = await import("../src/ui/icons/capy");
+  expect(WORKSPACE_DESTINATIONS.find((item) => item.to === "/agents")?.icon).toBe(CapyAgentIcon);
+});

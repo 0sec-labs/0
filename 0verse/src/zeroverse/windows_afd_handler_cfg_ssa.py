@@ -454,9 +454,17 @@ def _validate_cfg_ssa(
         block_ids.append(block["id"])
         block_rows[block["id"]] = block
         expected_edges.extend({"source": block["id"], "target": target} for target in successors)
+    # Every block ID was just checked to be the string ``b<index>``, so a hashed
+    # lookup answers "is this a block?" in O(1). The ``isinstance`` guard keeps the
+    # list semantics for malformed (unhashable) JSON values: they are simply absent.
+    known_block_ids = frozenset(block_ids)
+
+    def is_block_id(candidate: object) -> bool:
+        return isinstance(candidate, str) and candidate in known_block_ids
+
     entry = value["entry_block_id"]
     if (
-        entry not in block_ids
+        not is_block_id(entry)
         or block_rows[entry]["predecessors"] != []
         or sum(row["predecessors"] == [] for row in blocks) != 1
         or edges != expected_edges
@@ -464,7 +472,7 @@ def _validate_cfg_ssa(
         raise ValueError("AFD normalized CFG edge projection mismatch")
     for edge in edges:
         _exact(edge, {"source", "target"}, "CFG edge")
-        if edge["source"] not in block_ids or edge["target"] not in block_ids:
+        if not is_block_id(edge["source"]) or not is_block_id(edge["target"]):
             raise ValueError("AFD normalized CFG edge closure mismatch")
         if edge["source"] not in block_rows[edge["target"]]["predecessors"]:
             raise ValueError("AFD normalized CFG predecessor closure mismatch")
@@ -497,7 +505,7 @@ def _validate_cfg_ssa(
     for op in ops:
         if set(op) != {"id", "block_id", "opcode", "source_ref", "output", "operands"}:
             raise ValueError("AFD normalized operation shape mismatch")
-        if not isinstance(op["id"], str) or op["id"] in op_ids or op["block_id"] not in block_ids:
+        if not isinstance(op["id"], str) or op["id"] in op_ids or not is_block_id(op["block_id"]):
             raise ValueError("AFD normalized operation identity mismatch")
         op_ids.add(op["id"])
         op_parents.add(op["block_id"])
@@ -598,7 +606,7 @@ def _validate_cfg_ssa(
                 or image_constant_id is not None
             ):
                 raise ValueError("AFD normalized opaque location identity mismatch")
-            if opaque not in opaque_locations:
+            if opaque not in opaque_location_sizes:
                 if opaque != f"a{len(opaque_locations)}":
                     raise ValueError("AFD normalized opaque location namespace mismatch")
                 opaque_locations.append(opaque)
@@ -607,12 +615,14 @@ def _validate_cfg_ssa(
                 raise ValueError("AFD normalized opaque location width mismatch")
         varnode_rows[row["id"]] = row
     image_constant_ids: list[str] = []
+    seen_image_constant_ids: set[str] = set()
     for row in varnodes:
         image_constant_id = row["image_constant_id"]
-        if image_constant_id is not None and image_constant_id not in image_constant_ids:
+        if image_constant_id is not None and image_constant_id not in seen_image_constant_ids:
             if image_constant_id != f"i{len(image_constant_ids)}":
                 raise ValueError("AFD normalized image-bearing constant namespace mismatch")
             image_constant_ids.append(image_constant_id)
+            seen_image_constant_ids.add(image_constant_id)
 
     expected_def_use: list[dict[str, object]] = []
     expected_live: list[dict[str, object]] = []
@@ -649,11 +659,11 @@ def _validate_cfg_ssa(
                 _exact(operand, {"kind", "varnode_id"}, "value operand")
             elif kind == "phi_value":
                 _exact(operand, {"kind", "block_id", "varnode_id"}, "PHI operand")
-                if operand["block_id"] not in block_ids:
+                if not is_block_id(operand["block_id"]):
                     raise ValueError("AFD normalized PHI predecessor mismatch")
             elif kind == "block_target":
                 _exact(operand, {"kind", "block_id"}, "block target operand")
-                if operand["block_id"] not in block_ids:
+                if not is_block_id(operand["block_id"]):
                     raise ValueError("AFD normalized branch target mismatch")
                 continue
             elif kind == "pcode_relative_delta_target":

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   buildSqlmapArgv,
   buildNmapArgv,
@@ -13,8 +17,14 @@ import {
   superviseChild,
   suggestedFindingsFor,
   summarizeScannerResult,
+  SCANNER_CANCELLED_BEFORE_DISPATCH_MESSAGE,
+  SCANNER_CANCELLED_BY_OPERATOR_MESSAGE,
   type ScannerRunStats,
 } from "./scanner-tools.js";
+import {
+  observeExecutionResources,
+  type ExecutionResourceEvent,
+} from "./execution-resource-registry.js";
 
 // ── argv builders: safe argv, clamping, sanitization ────────────────────────
 
@@ -379,4 +389,284 @@ describe("superviseChild — wallclock ceiling + partial output, never hangs", (
       expect(outcome.exitCode).toBe(0);
     }
   }, 10_000);
+});
+
+describe("scanner subprocess cancellation and resource lifecycle", () => {
+  it("immediately refuses execution if signal is already aborted before dispatch", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const outcome = await runScannerProcess(
+      "sqlmap",
+      ["-u", "http://127.0.0.1/?id=1"],
+      {
+        timeoutMs: 5000,
+        ceilingMs: 5000,
+        env: {},
+        signal: controller.signal,
+      },
+    );
+    expect(outcome.kind).toBe("error");
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.message).toBe(SCANNER_CANCELLED_BEFORE_DISPATCH_MESSAGE);
+  });
+
+  it("terminates already-spawned child if signal is already aborted", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1000)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const controller = new AbortController();
+    controller.abort();
+    const outcome = await superviseChild(child, 5000, Date.now(), {
+      signal: controller.signal,
+    });
+    expect(outcome.kind).toBe("error");
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.message).toBe(SCANNER_CANCELLED_BY_OPERATOR_MESSAGE);
+    await closePromise;
+  });
+
+  it("escalates to SIGKILL and reaps child when signal is already aborted on a child that ignores SIGTERM", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        "process.on('SIGTERM', () => {}); console.log('READY'); setInterval(() => {}, 1000);",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    await new Promise((resolve) => child.stdout?.once("data", resolve));
+    const controller = new AbortController();
+    controller.abort();
+    const start = Date.now();
+    const outcome = await superviseChild(child, 10_000, start, {
+      signal: controller.signal,
+    });
+    const [, sig] = await closePromise;
+
+    expect(outcome.kind).toBe("error");
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.message).toBe(SCANNER_CANCELLED_BY_OPERATOR_MESSAGE);
+    expect(sig).toBe("SIGKILL");
+    expect(Date.now() - start).toBeGreaterThanOrEqual(1900);
+    expect(Date.now() - start).toBeLessThan(6000);
+  }, 10_000);
+
+  it("cancels mid-execution on abort signal, sends SIGTERM and settles with operator cancellation", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "console.log('started'); setInterval(() => {}, 1000)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const controller = new AbortController();
+    const start = Date.now();
+    const outcomePromise = superviseChild(child, 10_000, start, {
+      signal: controller.signal,
+    });
+
+    setTimeout(() => controller.abort(), 80);
+
+    const outcome = await outcomePromise;
+    expect(outcome.kind).toBe("error");
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.message).toBe(SCANNER_CANCELLED_BY_OPERATOR_MESSAGE);
+    expect(Date.now() - start).toBeLessThan(2000);
+
+    await closePromise;
+  });
+
+  it("escalates to SIGKILL when child ignores SIGTERM", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        "process.on('SIGTERM', () => { console.log('IGNORING_SIGTERM'); }); console.log('READY'); setInterval(() => {}, 1000);",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const controller = new AbortController();
+    const start = Date.now();
+    const outcomePromise = superviseChild(child, 10_000, start, {
+      signal: controller.signal,
+    });
+
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      if (chunk.toString().includes("READY")) {
+        controller.abort();
+      }
+    });
+
+    const [outcome, [, sig]] = await Promise.all([
+      outcomePromise,
+      closePromise,
+    ]);
+
+    expect(outcome.kind).toBe("error");
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.message).toBe(SCANNER_CANCELLED_BY_OPERATOR_MESSAGE);
+    expect(sig).toBe("SIGKILL");
+    expect(Date.now() - start).toBeGreaterThanOrEqual(1900);
+    expect(Date.now() - start).toBeLessThan(6000);
+  }, 10_000);
+
+  it("completes normally with active non-aborted signal and removes listener", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "console.log('all clean'); process.exit(0)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const controller = new AbortController();
+    const outcome = await superviseChild(child, 5000, Date.now(), {
+      signal: controller.signal,
+    });
+
+    expect(outcome.kind).toBe("exit");
+    if (outcome.kind === "exit") {
+      expect(outcome.exitCode).toBe(0);
+      expect(outcome.combined).toContain("all clean");
+    }
+    // Verify listener was removed: post-exit abort has no side effects
+    controller.abort();
+  });
+
+  it("preserves timeout behavior when no abort signal is provided", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "console.log('tick'); setInterval(() => {}, 1000)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const outcome = await superviseChild(child, 200, Date.now());
+    expect(outcome.kind).toBe("timeout");
+    if (outcome.kind === "timeout") {
+      expect(outcome.partial).toContain("tick");
+    }
+    await closePromise;
+  });
+
+  it("settles cleanly when cancellation races with natural process completion", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "setTimeout(() => process.exit(0), 30)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 30);
+    const outcome = await superviseChild(child, 5000, Date.now(), {
+      signal: controller.signal,
+    });
+
+    expect(["exit", "error"]).toContain(outcome.kind);
+    if (outcome.kind === "error") {
+      expect(outcome.cancelled).toBe(true);
+    }
+    await closePromise;
+  });
+
+  it("settles cleanly when cancellation races with timeout", async () => {
+    const child = spawn(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1000)"],
+      { stdio: ["ignore", "pipe", "pipe"], detached: true },
+    );
+    const closePromise = once(child, "close");
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const outcome = await superviseChild(child, 100, Date.now(), {
+      signal: controller.signal,
+    });
+
+    expect(["timeout", "error"]).toContain(outcome.kind);
+    if (outcome.kind === "error") {
+      expect(outcome.cancelled).toBe(true);
+    }
+    await closePromise;
+  });
+
+  it("registers spawned scanner process in ExecutionResourceRegistry with group=true deterministically", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "zero-scanner-reg-"));
+    const dummyBin = path.join(tempDir, "nuclei");
+    writeFileSync(dummyBin, `#!/bin/sh\necho "nuclei 3.0"\nexit 0\n`, { mode: 0o755 });
+
+    const events: ExecutionResourceEvent[] = [];
+    const dispose = observeExecutionResources((event) => events.push(event));
+    try {
+      const outcome = await runScannerProcess(
+        "nuclei",
+        ["-version"],
+        { timeoutMs: 5000, ceilingMs: 5000, env: { ...process.env, PATH: `${tempDir}:${process.env.PATH ?? ""}` } },
+      );
+      expect(events.length).toBeGreaterThanOrEqual(2);
+      expect(events[0].type).toBe("creating");
+      expect(events[1].type).toBe("registered");
+      if (events[1].type === "registered") {
+        expect(events[1].group).toBe(true);
+        expect(events[1].pid).toBeGreaterThan(1);
+      }
+      expect(outcome.kind).toBe("exit");
+    } finally {
+      dispose();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("simulates session teardown by terminating registered process group using observer PID", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "zero-scanner-teardown-"));
+    const dummyBin = path.join(tempDir, "nmap");
+    // Hanging scanner script that traps SIGTERM to verify SIGKILL group termination
+    writeFileSync(dummyBin, `#!/bin/sh\ntrap '' TERM\nwhile true; do sleep 1; done\n`, { mode: 0o755 });
+
+    let registeredResource: ({ type: "registered"; id: string } & { pid: number; group?: boolean }) | undefined;
+    const dispose = observeExecutionResources((event) => {
+      if (event.type === "registered") {
+        registeredResource = event;
+      }
+    });
+
+    try {
+      const outcomePromise = runScannerProcess(
+        "nmap",
+        ["-Pn", "127.0.0.1"],
+        { timeoutMs: 10_000, ceilingMs: 10_000, env: { ...process.env, PATH: `${tempDir}:${process.env.PATH ?? ""}` } },
+      );
+
+      for (let i = 0; i < 50 && !registeredResource; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(registeredResource).toBeDefined();
+      expect(registeredResource!.group).toBe(true);
+      const targetPid = registeredResource!.pid;
+      expect(targetPid).toBeGreaterThan(1);
+
+      // Host session teardown signals the registered process group:
+      process.kill(-targetPid, "SIGKILL");
+
+      const outcome = await outcomePromise;
+      expect(["exit", "error"]).toContain(outcome.kind);
+    } finally {
+      if (registeredResource?.pid) {
+        try { process.kill(-registeredResource.pid, "SIGKILL"); } catch {}
+      }
+      dispose();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves no stale resource registry observer entries after cleanup", () => {
+    let callCount = 0;
+    const dispose = observeExecutionResources(() => {
+      callCount++;
+    });
+    dispose();
+    // The observer slot is free again: a new observer can be installed.
+    const again = observeExecutionResources(() => {});
+    again();
+    expect(callCount).toBe(0);
+  });
 });

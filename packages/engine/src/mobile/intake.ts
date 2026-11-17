@@ -386,11 +386,17 @@ function sortEndpointIndicators(endpoints: MobileEndpointIndicator[]): MobileEnd
 }
 
 function selectBackendCandidates(endpoints: MobileEndpointIndicator[]): MobileEndpointIndicator[] {
+  // Hosts already covered by a URL indicator, parsed once. Checking each bare
+  // host against this set avoids re-parsing every URL for every host.
+  const urlHosts = new Set<string>();
+  for (const endpoint of endpoints) {
+    if (endpoint.kind !== "url") continue;
+    const host = safeHost(endpoint.value);
+    if (host !== undefined) urlHosts.add(host);
+  }
   return sortEndpointIndicators(endpoints.filter((endpoint) => {
     if (endpoint.tags.includes("third-party")) return false;
-    if (endpoint.kind === "host" && endpoints.some((other) =>
-      other.kind === "url" && safeHost(other.value) === endpoint.value,
-    )) {
+    if (endpoint.kind === "host" && urlHosts.has(endpoint.value)) {
       return false;
     }
     return endpoint.priority === "high" || endpoint.priority === "medium";

@@ -122,10 +122,15 @@ export async function runAttacks(
   if (ctx.config.mode === "mcp") {
     const { results, findings } = await runMcpSecurityChecks(ctx);
     ctx.attacks.push(...results);
+    // Membership set over (templateId, title) so merging is one lookup per
+    // finding rather than a rescan of the growing ctx.findings array.
+    const findingKey = (finding: { templateId: string; title: string }) => JSON.stringify([finding.templateId, finding.title]);
+    const seenKeys = new Set(ctx.findings.map(findingKey));
     for (const finding of findings) {
-      if (!ctx.findings.some((existing) => existing.templateId === finding.templateId && existing.title === finding.title)) {
-        ctx.findings.push(finding);
-      }
+      const key = findingKey(finding);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      ctx.findings.push(finding);
     }
 
     return {
@@ -188,10 +193,12 @@ export async function runAttacks(
     });
 
     // Transfer findings from agent state to scan context
+    // Id set, kept in step with the pushes, replaces a per-finding rescan of ctx.findings.
+    const seenIds = new Set(ctx.findings.map((f) => f.id));
     for (const finding of agentState.findings) {
-      if (!ctx.findings.some((f) => f.id === finding.id)) {
-        ctx.findings.push(finding);
-      }
+      if (seenIds.has(finding.id)) continue;
+      seenIds.add(finding.id);
+      ctx.findings.push(finding);
     }
 
     return {

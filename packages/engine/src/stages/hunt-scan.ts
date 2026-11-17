@@ -1755,7 +1755,10 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
   // Every ingested candidate that did NOT make `confirmed` appears here
   // with its explicit reason. Nothing silently absent.
   const confirmedIds = new Set(confirmed.map((f) => f.id));
-  const duplicateIds = new Set(duplicates.map((d) => d.finding.id));
+  // Keyed by finding id so the dropped-array pass below is one lookup per
+  // candidate instead of a rescan of `duplicates`. First entry wins, as find() did.
+  const duplicateById = new Map<string, (typeof duplicates)[number]>();
+  for (const d of duplicates) if (!duplicateById.has(d.finding.id)) duplicateById.set(d.finding.id, d);
   // Build a set of finding IDs from timed-out finder reports so we can
   // distinguish judge-truncated findings from timeout partials. A timed-out
   // report's findings are `partials` (whatever streamed before the hang);
@@ -1773,17 +1776,15 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
     if (confirmedIds.has(item.finding.id)) continue;
     const record = records.get(item.finding.id);
     // Novelty duplicates get the explicit duplicate reason.
-    if (duplicateIds.has(item.finding.id)) {
-      const dupe = duplicates.find((d) => d.finding.id === item.finding.id);
+    const dupe = duplicateById.get(item.finding.id);
+    if (dupe) {
       dropped.push({
         finding: item.finding,
         candidatePath: item.candidate.path,
         lensId: item.lensId,
         ...(item.lensVersionDigest ? { lensVersionDigest: item.lensVersionDigest } : {}),
         dropReason: "novelty_duplicate",
-        detail: dupe
-          ? `duplicate of ${dupe.novelty.duplicates.map((d) => d.messageId).join(", ")}`
-          : "novelty match (duplicate)",
+        detail: `duplicate of ${dupe.novelty.duplicates.map((d) => d.messageId).join(", ")}`,
       });
       continue;
     }
