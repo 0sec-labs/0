@@ -260,6 +260,8 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   if (!ready.includes("ready")) throw new Error(`engine did not become ready: ${ready.trim()}`);
 
   say("Opening a secure connection...");
+  // A redeploy must not leave the previous tunnel holding the port, or the new one cannot bind it.
+  try { stopManagedTunnel(loadManagedWorker(backendId)); } catch { /* first deployment: nothing to stop */ }
   const tunnelPid = runner.tunnel(port);
   const tunnelReady = Promise.withResolvers<void>();
   setTimeout(tunnelReady.resolve, 2000);
