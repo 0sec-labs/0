@@ -91,6 +91,55 @@ A finding is a claim. Verification runs it. A fix is accepted only when the patc
 
 In the browser app, open a finding under **Findings**. The detail panel offers **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on its state, plus the equivalent terminal command under **Terminal command**.
 
+### From a scan to a verified fix in six commands
+
+This is the whole path for one source finding, tried end to end on a small Node app with a command injection. It needs `jq`, `git` and a model connection. For the last check to read **Verified**, it also needs Docker or podman.
+
+```bash
+# 1. Scan. Quick depth on a small app takes a couple of minutes and costs cents.
+0 scan ./my-app --depth quick --cost-ceiling 1
+
+# 2. Take the finding out of the run (newest run shown; the scan prints its fp: id).
+RUN=$(ls -td ~/.0/runs/*/ | head -1) && jq '.findings[0]' "$RUN/report.json" > finding.json
+
+# 3. Give it a PoC that runs and a spec that says what the vulnerable code looks like.
+#    The replay runs in its own scratch folder, so the PoC names the app by absolute path.
+cat > poc.json <<EOF
+{
+  "pocSteps": [{
+    "id": "inject", "kind": "exploit",
+    "summary": "A service name carrying a shell command runs it",
+    "action": { "type": "shell", "cmd": "rm -f /tmp/poc-marker; node -e 'try{require(\"$PWD/my-app/server.js\").tailLog(\"app.log; touch /tmp/poc-marker; echo \")}catch{}'" },
+    "expect": { "type": "file-exists", "path": "/tmp/poc-marker" }
+  }],
+  "verificationSpec": { "code": [{ "kind": "file-contains", "file": "server.js", "pattern": "execSync" }] }
+}
+EOF
+jq -s '.[0] + .[1]' finding.json poc.json > finding.poc.json
+
+# 4. Replay the PoC. Exit 0 means reproduced.
+0 scan verify finding.poc.json --runner local --output verification-result.json
+
+# 5. Ask for a fix. The check runs in a container with the network off.
+0 scan fix ./my-app --finding finding.poc.json --verification-result verification-result.json \
+  --test-command "npm test" --verify-image node@sha256:<digest> --cost-ceiling 1 \
+  --output fix.apply-patch > fix.json
+
+# 6. Apply it and run your tests yourself.
+jq -r .diff fix.json | git -C my-app apply && (cd my-app && npm test)
+```
+
+What you get back:
+
+- Step 4 writes `verification-result.json`. `"status": "reproduced"` means the PoC ran and its expectation held.
+- Step 5 prints `Verified by: npm test passed (5.4s)`, where the patch was written, and `Estimated model cost`. The JSON in `fix.json` has `status` (`validated_candidate` is the success), `attempts` (why earlier candidates were rejected), `patch` (apply_patch format, also written to `fix.apply-patch`), `diff` (a unified diff), `rationale` and `verification`.
+- `postcondition.passed: false` with `pattern not found` is the good result: the vulnerable shape from your spec is gone after the patch.
+- Your working tree is untouched until step 6 (or `--apply` in step 5). Without `--verify-image` the line reads `Not verified: ... passed on this machine without isolation`.
+- A candidate patch has to apply exactly, so a run can reject all three and end `not_fixed`. Run step 5 again; the reasons are under `attempts`.
+- `--cost-ceiling` stops the model calls. At the ceiling the command exits with `Stopped at the cost ceiling` and no patch.
+
+A scan's own PoC is often only a note ("check for a marker file"), which `0 scan verify` skips: nothing in it can run. Step 3 is where you turn it into a command and an expectation. `--finding-id` works too (it takes the id or the `fp:` fingerprint that `0 findings` prints), but only for findings that already carry a runnable PoC and spec.
+
 ### Verified, Not verified and Corroborated
 
 **Verified** means 0 ran a check itself and it passed: the check runs in a container on a copy of your changes, with the network off, after the Agent says it is done. The Agent cannot mark anything Verified. A fix shows one line under it:

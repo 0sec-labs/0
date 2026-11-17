@@ -112,8 +112,11 @@ export function loadFindingFocus(id: string, options: { dbPath?: string } = {}):
         };
       }
 
+      // `0 findings` prints `fp:7bbb53ecdf` and the web app F-7BBB53: both are fingerprint prefixes, so accept them too.
+      const fingerprintPrefix = requestedId.replace(/^(?:fp:|f-)/i, "").toLowerCase();
       const prefixMatches = (db.listFindings({ limit: 5000 }) as PersistedFindingRow[])
-        .filter((row) => typeof row.id === "string" && row.id.startsWith(requestedId));
+        .filter((row) => typeof row.id === "string" && (row.id.startsWith(requestedId)
+          || (fingerprintPrefix.length >= 6 && typeof row.fingerprint === "string" && row.fingerprint.toLowerCase().startsWith(fingerprintPrefix))));
       for (const row of prefixMatches) {
         const scan = db.getScan(typeof row.scanId === "string" ? row.scanId : "") as { target?: unknown } | undefined;
         matches.push({
@@ -128,7 +131,13 @@ export function loadFindingFocus(id: string, options: { dbPath?: string } = {}):
   }
 
   if (matches.length === 0) {
-    throw new Error(`Finding '${requestedId}' was not found. Use a full id or pass --db-path.`);
+    throw new Error(`Finding '${requestedId}' was not found. Use an id or fingerprint from \`0 findings\`, or pass --db-path (findings from \`0 scan\` are in ~/.0/runs/<scan-id>/state.db).`);
+  }
+  // The same issue found by several scans shares one fingerprint: take the most recent occurrence.
+  const fingerprints = new Set(matches.map((match) => match.row.fingerprint));
+  if (matches.length > 1 && fingerprints.size === 1 && typeof matches[0]!.row.fingerprint === "string" && matches[0]!.row.fingerprint) {
+    matches.sort((a, b) => Number(b.row.timestamp ?? 0) - Number(a.row.timestamp ?? 0));
+    matches.length = 1;
   }
   if (matches.length > 1) {
     throw new Error(`Finding prefix '${requestedId}' is ambiguous. Use a longer id or pass --db-path.`);

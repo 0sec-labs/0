@@ -582,7 +582,7 @@ describe("runUnified — exit codes", () => {
     }
     expect(tracker.firstCode).toBe(4);
     expect(errSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toMatch(
-      /cost ceiling exceeded/i,
+      /stopped at the cost ceiling/i,
     );
   });
 

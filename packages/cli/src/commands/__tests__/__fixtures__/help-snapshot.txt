@@ -3812,6 +3812,8 @@ Options:
   --apply                       Apply only a patch that passed isolated source recheck and
                                 regression command (default: false)
   --output <path>               Write the validated apply_patch DSL to this path
+  --cost-ceiling <usd>          Stop asking the model for patches once the estimated cost reaches
+                                this many USD
   -h, --help                    display help for command
 
 ### 0 scan package (hidden)

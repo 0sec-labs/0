@@ -3,6 +3,7 @@ import { Command } from "commander";
 
 const execution = vi.hoisted(() => vi.fn());
 const runtimeConfigs = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("../target-reachability.js", () => ({ assertTargetReachable: async () => undefined }));
 vi.mock("../run.js", () => ({ runUnified: execution }));
 vi.mock("@0/engine", async () => ({
   ...await vi.importActual<{ validateCyberAccessProgram: (value: unknown) => unknown }>("../../../../engine/src/runtime/cyber-access-program.js"),

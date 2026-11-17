@@ -1658,7 +1658,9 @@ export async function runDeterministicReplay(
 
   // Empty `pocSteps` → status `skipped`. Distinct from a runner failure: we
   // chose not to execute because the finding didn't tell us what to do.
-  if (steps.length === 0) {
+  // A PoC made only of `note` steps is narration for people; there is nothing to run, so it is skipped too.
+  const notesOnly = steps.length > 0 && steps.every((step) => step.action.type === "note");
+  if (steps.length === 0 || notesOnly) {
     const completedAt = new Date();
     return {
       runDir,
@@ -1678,7 +1680,9 @@ export async function runDeterministicReplay(
           arch: nodeArch,
           runner: runner.kind,
         },
-        summary: "no pocSteps to execute",
+        summary: notesOnly
+          ? "the PoC has only notes and no command or HTTP request to run; add a shell or http step with an expectation"
+          : "no pocSteps to execute",
       },
     };
   }

@@ -8,6 +8,7 @@ import type { ScanDepth, ScanGoal, OutputFormat, RuntimeMode, ScanMode, AuthConf
 import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/engine";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
+import { assertTargetReachable } from "./target-reachability.js";
 import { guidedScanPlan, parseScanModelAssignments } from "../guided-scan.js";
 import { reportSummarySchema, formatZodError } from "@0/engine/shared";
 
@@ -634,6 +635,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       }
       const hasAssignments = Object.keys(agentModels).length > 0;
       const branchFrom = opts.branchFrom as string | undefined;
+      if (!opts.resume && opts.mode !== "mcp" && opts.mode !== "http_audit") await assertTargetReachable(String(opts.target ?? ""));
       await runUnified({
         target: opts.target,
         targetType: "url",

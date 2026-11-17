@@ -723,6 +723,16 @@ describe("runDeterministicReplay — end-to-end", () => {
     expect(result.assertions).toHaveLength(0);
   });
 
+  it("skips a PoC made only of note steps instead of failing the runner", async () => {
+    const finding = makeFinding([
+      { id: "verify", kind: "verify", summary: "check the marker", action: { type: "note", text: "Look for /tmp/pwned on the host." } },
+    ]);
+    const { result } = await runDeterministicReplay(finding);
+    expect(result.status).toBe("skipped");
+    expect(result.summary).toContain("only notes");
+    expect(result.commands).toHaveLength(0);
+  });
+
   it("uses freestanding opts.assertions in addition to per-step expectations", async () => {
     const finding = makeFinding([
       {

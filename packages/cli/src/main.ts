@@ -106,7 +106,7 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-import { detectAndRoute, rewriteScanArgs } from "./routing.js";
+import { detectAndRoute, rewriteScanArgs, scanTargetProblem } from "./routing.js";
 import { shouldPrintMovedNotice } from "./command-aliases.js";
 import { formatMovedNotice, resolveInvocation } from "./command-compat.js";
 import { runStartupUpdate } from "./utils/update-check.js";
@@ -184,6 +184,11 @@ let userArgs = process.argv.slice(2);
   }
 }
 process.argv = [process.argv[0], process.argv[1], ...userArgs];
+const unroutableScan = scanTargetProblem(userArgs);
+if (unroutableScan) {
+  console.error(unroutableScan);
+  process.exit(2);
+}
 const scanRoute = rewriteScanArgs(userArgs);
 if (scanRoute) {
   userArgs = scanRoute;

@@ -126,4 +126,23 @@ describe("finding handoff", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("finds a finding by the fingerprint that `0 findings` and the app print, and explains a miss", () => {
+    const root = mkdtempSync(join(tmpdir(), "0-finding-focus-"));
+    const dbPath = join(root, "findings.sqlite");
+    const db = new osecDB(dbPath);
+    try {
+      const scanId = db.createScan({ target: "/work/app", depth: "default" } as Parameters<typeof db.createScan>[0]);
+      db.saveFinding(scanId, { ...finding, id: "F-77", fingerprint: "7bbb53ecdf0123456789" });
+    } finally {
+      db.close();
+    }
+    try {
+      expect(loadFindingFocus("fp:7bbb53", { dbPath }).finding.id).toBe("F-77");
+      expect(loadFindingFocus("F-7BBB53", { dbPath }).finding.id).toBe("F-77");
+      expect(() => loadFindingFocus("deadbeef", { dbPath })).toThrow(/0 findings.*state\.db/s);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

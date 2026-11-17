@@ -36,6 +36,9 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- `0 scan` now says what is wrong with a target instead of "unknown command" or a clean result: a folder that does not exist (`No such folder`), an unsupported package source such as `pip:` (with the `pypi:` form to use), an unknown kind of target, a web address that refuses the connection or cannot be found (no scan is started), and a package that is not on npm, PyPI or crates.io.
+- `0 scan verify` skips a PoC that only has notes, with a message that says so, instead of failing the replay runner with exit 3.
+- `0 scan fix` now prints where the patch was written and the estimated model cost, accepts `--cost-ceiling` and says when it stopped at it, and `--finding-id` takes the `fp:` fingerprint that `0 findings` prints. A scan that stops at its cost ceiling now says how much was spent and to raise `--cost-ceiling`.
 - The web Findings page now lists every finding: results of `0 scan` runs (one database per run) appear next to findings from threads and Agents, de-duplicated by fingerprint. Moving a finding on the board, accepting or dismissing it, notes, impact assessments and exports are saved in the database that holds it, and a finding's detail says where it came from (a scan and its date, an Agent, a thread). `0 findings` uses the same merged view. Older runs beyond 300 databases or 2 GB are skipped, newest kept.
 - Model calls now recover after a broken connection for real. The earlier fix never took effect on Node 24 and later, or in the compiled binary, so after a TLS `bad_record_mac` every call failed until you restarted the console. Each recovery now uses a new connection pool with no TLS session reuse, and `/healthz` shows the last failure code and whether a session was reused.
 - The thread list now says "Can’t reach this computer" instead of "No threads yet" while the engine is unreachable, so a restart no longer looks like lost threads.

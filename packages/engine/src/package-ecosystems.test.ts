@@ -134,7 +134,7 @@ describe("installNpmPackage — ERESOLVE retry with --legacy-peer-deps", () => {
         "9.9.9",
         () => {},
       ),
-    ).toThrow(/Failed to install/);
+    ).toThrow(/Failed to install totally-not-a-package@9\.9\.9: the package was not found on npm/);
 
     // The 404 error path must NOT trigger a second install attempt.
     expect(installCallCount).toBe(1);
@@ -332,5 +332,17 @@ describe("probePublicNpmRegistry", () => {
     });
     const res = await probePublicNpmRegistry("@acme/widgets", { fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(res.exists).toBe(false);
+  });
+});
+
+describe("describePackageFetchFailure", () => {
+  it("names a missing package and an unreachable registry in plain words, and keeps the first useful line otherwise", async () => {
+    const { describePackageFetchFailure } = await import("./package-ecosystems.js");
+    expect(describePackageFetchFailure("npm", "npm error code E404\nnpm error 404 Not Found")).toBe("the package was not found on npm. Check the name and spelling.");
+    expect(describePackageFetchFailure("crates.io", "curl: (22) The requested URL returned error: 404")).toContain("not found on crates.io");
+    expect(describePackageFetchFailure("PyPI", "getaddrinfo ENOTFOUND pypi.org")).toContain("PyPI could not be reached");
+    expect(describePackageFetchFailure("npm", "Command failed: npm install x\nnpm error something odd")).toBe("npm error something odd");
+    expect(describePackageFetchFailure("PyPI", Object.assign(new Error("Command failed: python3 -c import json"), { stderr: "Traceback\nurllib.error.HTTPError: HTTP Error 404: Not Found" }))).toContain("not found on PyPI");
+    expect(describePackageFetchFailure("PyPI", Object.assign(new Error("Command failed: python3 -c import json"), { stderr: "Traceback\nValueError: odd thing" }))).toBe("ValueError: odd thing");
   });
 });

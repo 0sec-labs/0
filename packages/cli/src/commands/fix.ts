@@ -35,6 +35,7 @@ interface FixOptions {
   maxAttempts: string;
   apply?: boolean;
   output?: string;
+  costCeiling?: string;
 }
 
 function parsePositiveInteger(value: string, option: string): number {
@@ -158,12 +159,15 @@ export function registerFixCommand(program: Command): void {
     .option("--max-attempts <n>", "Maximum candidate patches; capped at 3", "3")
     .option("--apply", "Apply only a patch that passed isolated source recheck and regression command", false)
     .option("--output <path>", "Write the validated apply_patch DSL to this path")
+    .option("--cost-ceiling <usd>", "Stop asking the model for patches once the estimated cost reaches this many USD")
     .action(async (repo: string, opts: FixOptions) => {
       const runtimeType = selectedRuntime(opts.runtime);
       const timeout = parsePositiveInteger(opts.timeout, "--timeout");
       const testTimeoutMs = parsePositiveInteger(opts.testTimeout, "--test-timeout");
       const maxAttempts = parsePositiveInteger(opts.maxAttempts, "--max-attempts");
       if (opts.verifyImage && !isPinnedImage(opts.verifyImage)) throw new Error("--verify-image must be pinned by digest (name@sha256:<64 hex>)");
+      const costCapUsd = opts.costCeiling === undefined ? undefined : Number(opts.costCeiling);
+      if (costCapUsd !== undefined && (!Number.isFinite(costCapUsd) || costCapUsd <= 0)) throw new Error("--cost-ceiling must be a positive number of US dollars");
       const finding = await resolveFixFinding(opts);
       if (opts.verificationResult) {
         Object.assign(finding as unknown as Record<string, unknown>, {
@@ -179,13 +183,15 @@ export function registerFixCommand(program: Command): void {
         throw new Error(`runtime '${runtimeType}' is not available`);
       }
 
+      let costUsd: number | undefined;
       const result = await executeManagedOperation({
         type: "fix", name: opts.apply ? "Source fix and explicit repository application" : "Source fix candidate and regression check",
         fixMode: opts.apply ? "apply" : "candidate", target: resolve(repo),
         timeCapMs: Math.min(86_400_000, (timeout + testTimeoutMs) * Math.min(maxAttempts, 3) + 60_000),
+        ...(costCapUsd === undefined ? {} : { costCapUsd }),
         inputs: { findingId: finding.id, testCommand: opts.testCommand, maxAttempts, testTimeoutMs },
         status: (result: SourceFixResult) => result.status === "error" || result.status === "precondition_failed" ? "failed" : "completed",
-        execute: context => runSourceFix({
+        execute: async context => { try { return await runSourceFix({
         repoRoot: resolve(repo),
         finding,
         runtime: workflowPolicyRuntime(budgetNativeRuntime(runtime, context.costLedger, context.signal, context.plan.costCapUsd, context.plan)),
@@ -195,7 +201,7 @@ export function registerFixCommand(program: Command): void {
         apply: opts.apply,
         maxAttempts,
         testTimeoutMs,
-        }),
+        }); } finally { costUsd = context.costLedger.totalCostUsd(); } },
       });
 
       if (opts.output && result.patch) {
@@ -203,6 +209,14 @@ export function registerFixCommand(program: Command): void {
       }
 
       if (result.test) process.stderr.write(`${result.verification ? verificationLine(result.verification) : "Not verified: no check was recorded"}\n`);
+      if (result.status === "validated_candidate" || result.status === "applied_and_retested") {
+        process.stderr.write(`Fix for ${result.sourceFile} ${result.applied ? "applied to your working tree" : "not applied yet"}${opts.output && result.patch ? `; patch written to ${resolve(opts.output)}` : ""}.\n`);
+      } else if (result.status === "error" && /cost ceiling exceeded/i.test(result.error ?? "")) {
+        process.stderr.write(`Stopped at the cost ceiling${costCapUsd === undefined ? "" : ` of $${costCapUsd}`} before a fix was accepted. Raise --cost-ceiling to let it try again.\n`);
+      } else {
+        process.stderr.write(`No fix was accepted (${result.status}). Each attempt's reason is under "attempts" in the result below.\n`);
+      }
+      if (costUsd !== undefined) process.stderr.write(`Estimated model cost: $${costUsd.toFixed(costUsd < 0.01 ? 4 : 2)}\n`);
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       process.exitCode = exitCodeFor(result);
     });
