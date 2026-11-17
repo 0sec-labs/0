@@ -39,6 +39,8 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- A thread's first reply no longer disappears behind the collapsed "Worked" divider when the model thought before answering and the history was reopened. The day stamp and the "Worked" label now line up, and the context meter shows a token count instead of an empty ring that looked like a stuck spinner when the model's context size is unknown.
+
 - `0 scan` now says what is wrong with a target instead of "unknown command" or a clean result: a folder that does not exist (`No such folder`), an unsupported package source such as `pip:` (with the `pypi:` form to use), an unknown kind of target, a web address that refuses the connection or cannot be found (no scan is started), and a package that is not on npm, PyPI or crates.io.
 - `0 scan verify` skips a PoC that only has notes, with a message that says so, instead of failing the replay runner with exit 3.
 - `0 scan fix` now prints where the patch was written and the estimated model cost, accepts `--cost-ceiling` and says when it stopped at it, and `--finding-id` takes the `fp:` fingerprint that `0 findings` prints. A scan that stops at its cost ceiling now says how much was spent and to raise `--cost-ceiling`.
