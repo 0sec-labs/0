@@ -15,6 +15,7 @@ import { findBlankSession } from "@/console/blank-session";
 import { resolveSessionAlias } from "@/console/session-recovery";
 import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
 import { useBackendApi } from "@/api";
+import { openNewAgent } from "@/lib/new-agent";
 import { useBackendSelection } from "@/backend-context";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/ui/components/kbd";
@@ -212,7 +213,7 @@ export function CommandPalette({
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
-      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/agents?new=1") });
+      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => openNewAgent() });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
         id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyAgentIcon,
         keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),

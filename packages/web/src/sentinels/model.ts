@@ -249,11 +249,16 @@ export function avatarInitials(sentinel: Pick<Sentinel, "name" | "avatar">): str
   return ((words[0]?.[0] ?? "S") + (words.length > 1 ? words[words.length - 1]![0]! : "")).toUpperCase();
 }
 
-export const sentinelHref = (id: string, view?: SentinelView) => `/agents/${encodeURIComponent(id)}${view && view !== "overview" ? `?view=${view}` : ""}`;
+/** An agent's own page is its thread; `view` opens the detail page on one of three tabs. */
+export const sentinelHref = (id: string, view?: SentinelView) => `/agents/${encodeURIComponent(id)}${view ? `?view=${view}` : ""}`;
 
-export const SENTINEL_VIEWS = ["overview", "files", "automations", "activations", "settings"] as const;
+export const SENTINEL_VIEWS = ["overview", "automations", "settings"] as const;
 export type SentinelView = (typeof SENTINEL_VIEWS)[number];
-export const parseView = (value: string | null): SentinelView => (SENTINEL_VIEWS as readonly string[]).includes(value ?? "") ? value as SentinelView : "overview";
+/** Null means the thread. Older links to the Files and Activations tabs land on Overview, where both now live. */
+export function parseView(value: string | null): SentinelView | null {
+  if (value === "files" || value === "activations") return "overview";
+  return (SENTINEL_VIEWS as readonly string[]).includes(value ?? "") ? value as SentinelView : null;
+}
 
 /** Whether the viewer must treat a save as a revision conflict (HTTP 409 from the files endpoint). */
 export class SentinelApiError extends Error {

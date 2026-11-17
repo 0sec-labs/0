@@ -18,6 +18,7 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BreadcrumbProvider } from "@/lib/breadcrumbs";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { NewAgentHost } from "@/components/sentinels/new-agent-host";
 
 /** Drawer copy of the sidebar: closing and navigating dismiss the drawer rather than touching the docked state. */
 function MobileSidebar({ settings, returnTo, settingsHref, onHistorySlot }: { settings: boolean; returnTo: string; settingsHref: string; onHistorySlot: (element: HTMLDivElement | null) => void }) {
@@ -85,5 +86,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Sheet>
       </SharedWorkspaceLayout>}
     </SidebarLayout>
+    <NewAgentHost />
   </div></AppNoticeProvider></BreadcrumbProvider></SidebarHistoryContext.Provider>;
 }

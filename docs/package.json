@@ -9,9 +9,9 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "^7.2.4",
+    "@astrojs/markdown-remark": "^7.3.9",
     "@astrojs/starlight": "^0.43.1",
-    "astro": "7.4.7",
+    "astro": "7.4.12",
     "rehype-mermaid": "^3.0.0",
     "sharp": "^0.35.4"
   }

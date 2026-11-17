@@ -51,8 +51,9 @@ describe("presentation", () => {
   });
   test("routes and vocabulary", () => {
     expect(sentinelHref("a b")).toBe("/agents/a%20b");
-    expect(sentinelHref("x", "files")).toBe("/agents/x?view=files");
-    expect(parseView("bogus")).toBe("overview");
+    expect(sentinelHref("x", "automations")).toBe("/agents/x?view=automations");
+    expect(parseView("bogus")).toBeNull();
+    expect(parseView("files")).toBe("overview");
     expect(parseView("settings")).toBe("settings");
     expect(v("Create {a sentinel}")).toBe("Create an agent");
   });
