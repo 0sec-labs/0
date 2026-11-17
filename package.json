@@ -148,7 +148,7 @@
       "postcss-selector-parser@^6.0.0": "^7.1.6",
       "postcss-selector-parser@^7.0.0": "^7.1.6",
       "zod": "4.6.6",
-      "vitest": "4.1.12",
+      "vitest": "5.1.0",
       "astro": "7.4.12",
       "vite": "^8.2.4",
       "@astrojs/markdown-remark": "^7.3.0",
