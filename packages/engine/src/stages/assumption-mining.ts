@@ -1946,9 +1946,11 @@ export async function runAssumptionHunt(input: AssumptionHuntInput): Promise<Ass
     const excerptDir = input.excerptDir ?? join(tmpdir(), `0-assumption-excerpts-${process.pid}`);
     const focused = buildFocusedCandidates(crossCheck.kept, allContexts, bodies, excerptDir);
     const missed = new Set(focused.missedCallers);
-    const fallback = plan.candidates.filter((c) =>
-      allContexts.some((ctx) => missed.has(ctx.caller) && ctx.callerFile === c.path),
-    );
+    // Files owning a missed caller, collected in one pass over the contexts, so
+    // each candidate is a set lookup rather than a rescan of every context.
+    const missedCallerFiles = new Set<string>();
+    for (const ctx of allContexts) if (missed.has(ctx.caller)) missedCallerFiles.add(ctx.callerFile);
+    const fallback = plan.candidates.filter((c) => missedCallerFiles.has(c.path));
     candidates = [...focused.candidates, ...fallback];
     log(
       `[assumption] finder-targeting: ${focused.candidates.length} focused excerpt(s) in ${excerptDir}` +
