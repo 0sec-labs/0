@@ -3381,7 +3381,7 @@ to work there. `worker` still works as an older name.
 0 computers
 ```
 
-Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [hosts](#computers-hosts).
+Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [remove](#computers-remove) · [hosts](#computers-hosts).
 
 Aliases: `worker`.
 
@@ -3427,6 +3427,7 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the remote server clones into the engine folder instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
+| `--trust-new-host` | `false` | Trust and remember the computer's SSH host key if it is not known yet |
 | `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
@@ -3470,6 +3471,25 @@ redeployed later.
 | Argument | Required | Description |
 | --- | --- | --- |
 | `backend-id` | Yes |  |
+
+#### computers remove
+
+Remove a remote computer from this machine: closes the tunnel and forgets its
+saved connection. Files on the remote computer stay in place.
+
+```text
+0 computers remove [options] <backend-id>
+```
+
+Run `0 computers list` to see the IDs.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engines-config <path>` | — | Engine registry path |
 
 #### computers hosts
 
