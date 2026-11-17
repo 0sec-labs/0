@@ -664,7 +664,9 @@ describe("scanner subprocess cancellation and resource lifecycle", () => {
       callCount++;
     });
     dispose();
-    const child = spawn(process.execPath, ["-e", "process.exit(0)"], { stdio: "ignore" });
+    // The observer slot is free again: a new observer can be installed.
+    const again = observeExecutionResources(() => {});
+    again();
     expect(callCount).toBe(0);
   });
 });
