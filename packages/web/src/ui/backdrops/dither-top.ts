@@ -1,5 +1,5 @@
 import { BAND } from "./kinds.js"
-import { smooth, snoise } from "./noise.js"
+import { smooth, snoiseBatch } from "./noise.js"
 import { Grid, cellLayout } from "./pixels.js"
 import { pack, type Scene, type Sketch } from "./sketch.js"
 
@@ -26,14 +26,18 @@ const maskAt = (x: number, y: number, w: number, h: number) => {
  */
 export function createDitherTop(): Sketch {
   let width = 0, height = 0, g: Grid | null = null, key = "", gw = 0, gh = 0, V = new Float32Array(0), word = new Uint32Array(0), c0 = new Int32Array(0), cf = new Float32Array(0), x0 = 0, y0 = 0
+  // Lattice noise coordinates (fixed per size) and stage buffers, reused every frame so a frame allocates nothing.
+  let PX0 = new Float64Array(0), PY0 = PX0, XS = PX0, YS = PX0, N1 = PX0, N2 = PX0
   const build = (c: CanvasRenderingContext2D, scene: Scene) => {
     const { u, cs, W, H } = cellLayout(PX, scene.dpr, width, height)
     g = new Grid(W, H, cs, u, 1, 0, 0, c, scene.lowres)
     gw = Math.ceil(W / STEP) + 2; gh = Math.ceil(H / STEP) + 2; V = new Float32Array(gw * gh)
+    PX0 = new Float64Array(gw * gh); PY0 = new Float64Array(PX0.length); XS = new Float64Array(PX0.length); YS = new Float64Array(PX0.length); N1 = new Float64Array(PX0.length); N2 = new Float64Array(PX0.length)
     c0 = new Int32Array(W); cf = new Float32Array(W)
     for (let i = 0; i < W; i++) { const k = i / STEP; c0[i] = k | 0; cf[i] = k - (k | 0) }
     const vw = width / u, vh = height / u / BAND, tone = scene.still ? 1 : scene.dark ? TONE.dark : TONE.light
     x0 = vw / 2; y0 = vh / 2
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { PX0[j * gw + i] = (i * STEP * cs - x0) * FIELD; PY0[j * gw + i] = (y0 - j * STEP * cs) * FIELD }
     word = new Uint32Array(W * H)
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const y = (j + 0.5) * cs
@@ -49,15 +53,13 @@ export function createDitherTop(): Sketch {
     frame(c, _w, _h, seconds, _pointer, scene) {
       const next = `${scene.ink.join()}|${scene.dark}|${scene.dpr}|${scene.still}`
       if (!g || next !== key) { key = next; build(c, scene) }
-      const grid = g!, t = seconds * SPEED, step = STEP * grid.CS, { W, H, b32 } = grid
-      for (let j = 0; j < gh; j++) {
-        const py = (y0 - j * step) * FIELD
-        for (let i = 0; i < gw; i++) {
-          const px = (i * step - x0) * FIELD
-          const n = 0.5 * snoise(px, py - 0.3 * t) + 0.5 * snoise(2 * px, 2 * py + 0.32 * t)
-          V[j * gw + i] = smooth(0.3, 0.9, 0.5 + 0.5 * n)
-        }
-      }
+      const grid = g!, t = seconds * SPEED, { W, H, b32 } = grid
+      const n = gw * gh
+      for (let m = 0; m < n; m++) { XS[m] = PX0[m]!; YS[m] = PY0[m]! - 0.3 * t }
+      snoiseBatch(N1, XS, YS, n)
+      for (let m = 0; m < n; m++) { XS[m] = 2 * PX0[m]!; YS[m] = 2 * PY0[m]! + 0.32 * t }
+      snoiseBatch(N2, XS, YS, n)
+      for (let m = 0; m < n; m++) V[m] = smooth(0.3, 0.9, 0.5 + 0.5 * (0.5 * N1[m]! + 0.5 * N2[m]!))
       for (let j = 0; j < H; j++) {
         const k = j / STEP, r0 = (k | 0) * gw, r1 = r0 + gw, fy = k - (k | 0), bj = (j & 3) << 2, row = j * W
         for (let i = 0; i < W; i++) {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { contrastRatio, parseColor } from "../../lib/appearance-model"
 import { COLOR_THEMES, mixSrgb, tokensFor, type ThemeMode } from "../../lib/color-themes"
 import { safeAlpha } from "./contrast"
+import { snoise, snoiseBatch, vnoise, vnoiseBatch } from "./noise"
 import { MAX_DPR, MAX_FPS, STILL_TIME, cappedDpr, createLoop, shouldAnimate, watchActivity, type LoopEnv } from "./engine"
 import { BACKDROPS, BAND, DEFAULT_BACKDROP, LEGACY_BACKDROPS, PEAK_ALPHA, REMOVED_BACKDROPS, isBackdrop, parseBackdrop } from "./kinds"
 import { makeScene } from "./scene"
@@ -114,6 +115,25 @@ describe("loop and activity", () => {
     expect(rafs).toBe(before + 1); expect(frame).toHaveBeenCalledTimes(1)
     loop.pause(); expect(cancelled).toContain(2)
   })
+  it("halves its own rate when most frames in a 2 s window run over budget, and when battery saver asks", () => {
+    const run = (cost: number, saver = false) => {
+      let clockNow = 0, spent = 0, tick: ((now: number) => void) | undefined
+      const env: LoopEnv = { raf: cb => { tick = cb; return 0 }, caf: () => {}, now: () => clockNow + spent }
+      const loop = createLoop(() => { spent += cost }, env, 20)
+      loop.lowPower(saver); loop.play()
+      for (let now = 0; now <= 6000; now += 1000 / 60) { clockNow = now; tick!(now) }
+      return loop
+    }
+    expect(run(1).halved).toBe(false)
+    expect(run(20).halved).toBe(true)
+    expect(run(1, true).halved).toBe(true)
+  })
+  it("noise batches match the single-point noise", () => {
+    const xs = Float64Array.from([0.3, 5.7, -2.2, 41.9]), ys = Float64Array.from([1.1, -0.4, 9.3, 7.7]), out = new Float64Array(4)
+    snoiseBatch(out, xs, ys, 4); for (let i = 0; i < 4; i++) expect(out[i]).toBeCloseTo(snoise(xs[i]!, ys[i]!), 12)
+    vnoiseBatch(out, xs, ys, 3.3, 4); for (let i = 0; i < 4; i++) expect(out[i]).toBeCloseTo(vnoise(xs[i]!, ys[i]!, 3.3), 12)
+    for (const v of out) expect(v).toBeGreaterThanOrEqual(0)
+  })
   it("never paints faster than 30 fps and cancels its frame when paused", () => {
     const { env, step, pending } = fakeEnv()
     const frame = vi.fn()
@@ -190,8 +210,8 @@ describe("canvas scenes", () => {
       expect(calls.stroke + calls.fill + calls.text + calls.rect, `${kind} ${w}x${h} ${dark ? "dark" : "light"}`).toBeGreaterThan(0)
     }
   })
-  it("slow scenes cap their own frame rate at 10 to 20 fps (Dither drifts slowly enough for 6)", () => {
-    for (const kind of kinds) { const fps = SKETCHES[kind]().fps; if (kind === "dither-top") { expect(fps).toBeLessThanOrEqual(8); continue } expect(fps, kind).toBeGreaterThanOrEqual(10); expect(fps, kind).toBeLessThanOrEqual(20) }
+  it("slow scenes cap their own frame rate at 5 to 20 fps (Dither and Contours drift slowly enough for 8 and 5)", () => {
+    for (const kind of kinds) { const fps = SKETCHES[kind]().fps; if (kind === "dither-top") { expect(fps).toBeLessThanOrEqual(8); continue } expect(fps, kind).toBeGreaterThanOrEqual(5); expect(fps, kind).toBeLessThanOrEqual(20) }
   })
   it("Dither paints only the top band, fades out below it, stays still-cheap and keeps the original dot size", () => {
     const sketch = SKETCHES["dither-top"](), w = 1440, h = Math.round(900 * BAND), rows = new Set<number>(), centre: number[] = []

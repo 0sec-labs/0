@@ -1,3 +1,4 @@
+import { hyp } from "./noise.js"
 import { seeded } from "./engine.js"
 import type { Grid } from "./pixels.js"
 
@@ -38,25 +39,25 @@ export function stepShoal(g: Grid, layers: ShoalLayerState[], dt: number) {
         const o = F[j]!, dx = o.x - f.x, dy = o.y - f.y, d2 = dx * dx + dy * dy
         if (d2 < ly.R2) {
           c++
-          const os = Math.hypot(o.vx, o.vy) || 1
+          const os = hyp(o.vx, o.vy) || 1
           ax += o.vx / os; ay += o.vy / os; cx += dx; cy += dy
           if (d2 < ly.S2 && d2 > 0.01) { const k = 1 / d2; sx -= dx * k; sy -= dy * k }
         }
       }
       let dx = 0, dy = 0
-      const sm = Math.hypot(sx, sy)
+      const sm = hyp(sx, sy)
       if (sm > 0) { dx += sx / sm * 2.4; dy += sy / sm * 2.4 }
-      if (c) { const am = Math.hypot(ax, ay) || 1; dx += ax / am * 1.7; dy += ay / am * 1.7; const cm = Math.hypot(cx, cy) || 1; dx += cx / cm * 0.3; dy += cy / cm * 0.3 }
-      const t = ly.atts[f.g]!, tx = t.x - f.x, ty = t.y - f.y, tm = Math.hypot(tx, ty) || 1
+      if (c) { const am = hyp(ax, ay) || 1; dx += ax / am * 1.7; dy += ay / am * 1.7; const cm = hyp(cx, cy) || 1; dx += cx / cm * 0.3; dy += cy / cm * 0.3 }
+      const t = ly.atts[f.g]!, tx = t.x - f.x, ty = t.y - f.y, tm = hyp(tx, ty) || 1
       dx += tx / tm * 0.7; dy += ty / tm * 0.7
       f.wob += dt * 0.4; dx += Math.cos(f.wob * 2.3) * 0.1; dy += Math.sin(f.wob * 1.7) * 0.1
       const m = ly.len * 1.2
       if (f.x < m) dx += 2; if (f.x > W - m) dx -= 2; if (f.y < m) dy += 2; if (f.y > H - m) dy -= 2
       if (ptr.act > 0.02) {
-        const qx = f.x - ptr.sx, qy = f.y - ptr.sy, pd = Math.hypot(qx, qy), r = 300 / CS
+        const qx = f.x - ptr.sx, qy = f.y - ptr.sy, pd = hyp(qx, qy), r = 300 / CS
         if (pd < r && pd > 1) { const w = (1 - pd / r) * ptr.act * 0.9; dx += -qy / pd * w; dy += qx / pd * w }
       }
-      const dm = Math.hypot(dx, dy) || 1, sp = ly.sp * f.sf * (1 + 0.12 * Math.sin(f.wob * 3))
+      const dm = hyp(dx, dy) || 1, sp = ly.sp * f.sf * (1 + 0.12 * Math.sin(f.wob * 3))
       const k = Math.min(1, ly.turn * dt)
       f.vx += (dx / dm * sp - f.vx) * k; f.vy += (dy / dm * sp - f.vy) * k
       f.x += f.vx * dt; f.y += f.vy * dt; f.ph += dt * (5 + sp * 0.35 / (ly.len / 10)) * 0.9

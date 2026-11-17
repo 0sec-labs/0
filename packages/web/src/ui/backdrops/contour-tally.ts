@@ -1,4 +1,4 @@
-import { clamp, hash, smooth } from "./noise.js"
+import { clamp, hash, hyp, smooth } from "./noise.js"
 import { rgbaCss, type Rgb3 } from "./sketch.js"
 
 export interface Tally { x: number; y: number; ang: number; n: number; fade: number }
@@ -21,7 +21,7 @@ export function tallyAnchors(field: (x: number, y: number) => number, levelStep:
       const s = (f - Lm) / g2
       x -= gxv * s; y -= gyv * s
     }
-    const dist = Math.hypot(x - ax, y - ay), fade = smooth(S * 0.42, S * 0.25, dist) * inkAt(x, y) * smooth(30, 90, Math.min(x, y, vw - x, vh - y))
+    const dist = hyp(x - ax, y - ay), fade = smooth(S * 0.42, S * 0.25, dist) * inkAt(x, y) * smooth(30, 90, Math.min(x, y, vw - x, vh - y))
     if (ok && fade > 0.02) items.push({ x, y, ang: Math.atan2(gxv, -gyv), n: Math.round(Lm / major), fade })
   }
   return items
@@ -36,9 +36,12 @@ export function drawTallies(c: CanvasRenderingContext2D, items: Tally[], peak: n
     const n = clamp(it.n + 3, 1, 7), cs = Math.cos(it.ang), sn = Math.sin(it.ang), per = 5.6
     c.globalAlpha = peak * clamp(it.fade * 1.6, 0, 1); c.fillStyle = rgbaCss(it.n > 0 ? accent : ink, 1)
     const row1 = Math.min(n, 4), row2 = n - row1
+    c.beginPath()
     for (let q = 0; q < n; q++) {
       const r = q < row1 ? 0 : 1, m = r === 0 ? row1 : row2, o = (q - (r === 0 ? 0 : row1) - (m - 1) / 2) * per, off = (r - (row2 ? 0.5 : 0)) * per
-      c.beginPath(); c.arc(it.x + cs * o - sn * off, it.y + sn * o + cs * off, 1.9, 0, 7); c.fill()
+      const px = it.x + cs * o - sn * off, py = it.y + sn * o + cs * off
+      c.moveTo(px + 1.9, py); c.arc(px, py, 1.9, 0, 7)
     }
+    c.fill()
   }
 }

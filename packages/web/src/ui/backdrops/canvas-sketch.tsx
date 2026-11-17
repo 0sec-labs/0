@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { resolveRgb } from "./contrast.js"
-import { cappedDpr, createLoop, STILL_TIME, type Loop } from "./engine.js"
+import { cappedDpr, createLoop, STILL_TIME, watchBattery, type Loop } from "./engine.js"
 import { makeScene } from "./scene.js"
 import { cellLayout } from "./pixels.js"
 import type { Pointer, Scene, Sketch } from "./sketch.js"
@@ -58,7 +58,9 @@ function CanvasSketch({ create, animate }: { create: () => Sketch; animate: bool
       if (x >= 0 && y >= 0 && x <= box.width && y <= box.height) { pointer.x = x; pointer.y = y; pointer.fresh = true }
     }
     if (sketch.pointer) window.addEventListener("pointermove", onMove, { passive: true })
+    const unwatchBattery = watchBattery(saver => loop.lowPower(saver))
     return () => {
+      unwatchBattery()
       loop.pause(); loopRef.current = null
       sized.disconnect(); themed.disconnect()
       window.removeEventListener("pointermove", onMove)

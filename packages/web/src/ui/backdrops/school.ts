@@ -1,10 +1,11 @@
+import { hyp } from "./noise.js"
 import { stepShoal, createShoal, type Fish, type ShoalLayer, type ShoalLayerState } from "./boids.js"
 import { BAYER } from "./bayer.js"
 import { pixelSketch } from "./pixel-sketch.js"
 import { decayFrames, type Grid } from "./pixels.js"
 import type { Sketch } from "./sketch.js"
 
-const FPS = 20
+const FPS = 15
 /** Back to front: huge slow dim fish behind, small quick bright ones in front. Lengths and widths in logical px, speed in px/s. */
 const LAYERS: readonly ShoalLayer[] = [
   { n: 11, len: 130, wid: 38, speed: 24, alpha: 0.58, trail: 0.16, turn: 0.9, groups: 3 },
@@ -16,7 +17,7 @@ const CALM = 0.45, ACCENT_SHARE = 0.2, KEEP = decayFrames(1, Math.exp(-(1 / FPS)
 /** A tapered fish with a tail beat, plotted as max-alpha points into `b`. */
 function drawFish(g: Grid, b: Float32Array, f: Fish, ly: ShoalLayerState, a: number) {
   const { W, H, blk, BW } = g
-  const s = Math.hypot(f.vx, f.vy) || 1, hx = f.vx / s, hy = f.vy / s, nx = -hy, ny = hx, Lc = ly.len, Wc = ly.wid
+  const s = hyp(f.vx, f.vy) || 1, hx = f.vx / s, hy = f.vy / s, nx = -hy, ny = hx, Lc = ly.len, Wc = ly.wid
   const plot = (px: number, py: number, v: number) => {
     const x = Math.round(px), y = Math.round(py)
     if (x < 0 || y < 0 || x >= W || y >= H) return

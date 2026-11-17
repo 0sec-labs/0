@@ -1,3 +1,4 @@
+import { hyp } from "./noise.js"
 import { BAYER } from "./bayer.js"
 import { seeded } from "./engine.js"
 import { pixelSketch } from "./pixel-sketch.js"
@@ -46,7 +47,7 @@ export const createPlankton = (): Sketch => pixelSketch({
       for (let y = y0; y <= y1; y++) { const dy = y - cy, dy2 = dy * dy; for (let x = x0; x <= x1; x++) { const dx = x - cx, q = (dx * dx + dy2) * k; if (q >= 1023) continue; F[y * W + x] += a * PROFILE[q | 0]! } }
     }
     const seg = (F: Float32Array, x0: number, y0: number, x1: number, y1: number, a0: number, a1: number) => {
-      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 0.8))
+      const n = Math.max(1, Math.ceil(hyp(x1 - x0, y1 - y0) / 0.8))
       for (let i = 0; i <= n; i++) {
         const t = i / n, x = Math.round(x0 + (x1 - x0) * t), y = Math.round(y0 + (y1 - y0) * t)
         if (x < 0 || y < 0 || x >= W || y >= H) continue
@@ -60,7 +61,7 @@ export const createPlankton = (): Sketch => pixelSketch({
         const { ptr, time } = g
         for (const m of motes) {
           m.ph += dt * m.pf * 6.28; m.wx += dt * 0.3; m.y += m.vy * dt; m.x += Math.sin(m.wx + m.ph) * 4 * dt / CS * 3
-          if (ptr.act > 0.02) { const dx = m.x - ptr.sx, dy = m.y - ptr.sy, d = Math.hypot(dx, dy), r = 200 / CS; if (d < r && d > 1) { const w = (1 - d / r) * ptr.act * 14 * dt; m.x += dx / d * w; m.y += dy / d * w } }
+          if (ptr.act > 0.02) { const dx = m.x - ptr.sx, dy = m.y - ptr.sy, d = hyp(dx, dy), r = 200 / CS; if (d < r && d > 1) { const w = (1 - d / r) * ptr.act * 14 * dt; m.x += dx / d * w; m.y += dy / d * w } }
           if (m.y < -m.sig * 2) spawnMote(m, false)
         }
         for (const j of jellies) {
@@ -78,7 +79,7 @@ export const createPlankton = (): Sketch => pixelSketch({
               const a = p[k - 1]!, b = p[k]!
               const tx = a.x + Math.sin(time * 0.8 + k * 0.55 + T.ox * 3) * T.seg * 0.9 * Math.min(1, k / 4), ty = a.y + T.seg
               b.x += (tx - b.x) * 0.28; b.y += (ty - b.y) * 0.28
-              const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1
+              const dx = b.x - a.x, dy = b.y - a.y, d = hyp(dx, dy) || 1
               if (d > T.seg * 1.08) { b.x = a.x + dx / d * T.seg * 1.08; b.y = a.y + dy / d * T.seg * 1.08 }
             }
           }

@@ -4,7 +4,7 @@ import { pixelSketch } from "./pixel-sketch.js"
 import { decayFrames } from "./pixels.js"
 import type { Sketch } from "./sketch.js"
 
-const FPS = 20, TRAIL = 2.2, INK = 0.2, CALM = 0.55
+const FPS = 15, TRAIL = 2.2, INK = 0.2, CALM = 0.55
 const DECAY = Math.exp(-(1 / FPS) / (TRAIL / 3.2)), KEEP = decayFrames(1, DECAY, 0.004)
 
 /** Ink plumes: ~3400 particles leave fading trails that thin into dithered wisps. */

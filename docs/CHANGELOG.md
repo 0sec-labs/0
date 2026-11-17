@@ -18,6 +18,7 @@ on the GitHub Release tag.
 
 ### Changed
 
+- The backdrops use less CPU while idle (Contours about 6% to 2.5% of a core, Dither flow, Ink and School about a third less in headless Chromium): Contours redraws at 5 frames a second on a coarser grid, Dither flow, School, Ink and Glyph run at 8 to 15 frames a second with the same look, noise is computed in batches with no per-frame allocation, and any backdrop halves its frame rate by itself when frames keep running slow or the battery is at 20% or less and unplugged.
 - Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
 - The thread view reads like Capy: replies are 13px text in a 660px column, the composer is 712px wide, time stamps appear only after a 30 minute gap, "Worked" rows show a red x when a call failed, and a thread waiting on you says "Needs you" in the accent colour.
 - The default look follows Capy's visual system: a blue accent (buttons, send, selection, focus ring, links) in dark and light, 3/6/8/12px radii, 0.8px control borders, 14px icons, 100ms colour-only control feedback with no press dim, and one-icon suggestion chips. Neutral stays as an accent choice. Tokens are listed in docs/design/tokens.md.
