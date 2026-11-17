@@ -5,7 +5,7 @@
 # Kali is opt-in and requires a pre-provisioned immutable base (see architecture doc).
 ARG WORKBENCH_BASE=debian-base
 ARG KALI_IMAGE=scratch
-FROM rust:1.93-bookworm@sha256:e469417188261e17b3ec9c14a54c2802beafe400bf9baf9688fdb5294d925c06 AS foxguard-builder
+FROM rust:1.93-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac2fb2ea5be46823f31 AS foxguard-builder
 # The released 0.14.0 binary predates the v2 policy used by this repository.
 # Pin both source identity and archive bytes until that support is released.
 ENV RUSTUP_TOOLCHAIN=1.93.1 CARGO_BUILD_JOBS=2
