@@ -1419,10 +1419,13 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       // 'false-positive'. We can — and must — short-circuit before
       // consulting `verificationRuntime`. Otherwise the runtime fail-close
       // below (Bug B) clobbers those persisted verdicts.
+      // Id set: one pass over each list rather than rescanning the verified
+      // findings for every current finding.
+      const existingVerifiedIds = new Set(existingVerifiedFindings.map(previous => previous.id));
       const canSkipVerify =
         existingVerifiedFindings.length === findings.length &&
         findings.length > 0 &&
-        findings.every(finding => existingVerifiedFindings.some(previous => previous.id === finding.id));
+        findings.every(finding => existingVerifiedIds.has(finding.id));
 
       startPhase("verify");
       emit({
