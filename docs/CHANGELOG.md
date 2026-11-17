@@ -42,7 +42,6 @@ on the GitHub Release tag.
 ### Fixed
 
 - A message you send now appears in the thread the moment you send it, not only once the model starts thinking. This holds for follow-ups, for messages sent while a reply is running (shown as queued) and for messages with images. If the send fails, the message goes back to the composer.
-
 - An agent's schedule that fires while its own thread is busy now waits its turn instead of failing with "already processing a turn", and a scheduled message that cannot start no longer holds up the ones behind it.
 - Deleting an agent now also removes its activity history, as the delete dialog says.
 - An agent's own thread is no longer hidden by the automatic archive of idle threads.
