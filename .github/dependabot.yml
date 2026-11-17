@@ -13,6 +13,10 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Grammar ABI must match the vendored tree-sitter 0.21.1 runtime.
+      - dependency-name: tree-sitter-c
+        update-types: [version-update:semver-minor, version-update:semver-major]
   - package-ecosystem: github-actions
     directories: [/, /.github/actions/setup-ci]
     schedule:
