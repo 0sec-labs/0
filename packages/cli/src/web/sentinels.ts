@@ -56,7 +56,7 @@ export class WebSentinelService {
   /** Webhook acceleration: the triggers a delivery for this repository and base branch may check. */
   webhookTargets(repo: string, baseBranch: string): Array<{ id: string }> { return this.#runner.pullRequestTriggers(repo, baseBranch).map(trigger => ({ id: trigger.id })); }
   /** Webhook acceleration: runs the poller's own check for one trigger now (same draft, fork, comment and head-SHA rules). */
-  checkTrigger(triggerId: string): Promise<boolean> { return this.#runner.checkNow(triggerId); }
+  checkTrigger(triggerId: string): Promise<boolean> { return this.#runner.checkNow(triggerId, "webhook"); }
   /** Drives one scheduler pass; the background timer calls this. Exposed for tests and for an explicit "check now". */
   tick(nowMs?: number): Promise<void> { return this.#runner.tick(nowMs); }
   async dispose(): Promise<void> { await this.#runner.dispose(); this.#store.close(); this.#workflows.close(); }
@@ -163,6 +163,11 @@ export class WebSentinelService {
       this.#requireSentinel(id);
       const limit = query.has("limit") ? parse(z.number().int().min(1).max(200), Number(query.get("limit"))) : 50;
       return { status: 200, data: { activations: this.#store.listActivations(id, limit) } };
+    }
+    if (rest === "turns" && method === "GET") {
+      this.#requireSentinel(id);
+      const limit = query.has("limit") ? parse(z.number().int().min(1).max(200), Number(query.get("limit"))) : 50;
+      return { status: 200, data: { turns: this.#store.listTurns(id, limit) } };
     }
     if (rest === "automations" && method === "GET") { this.#requireSentinel(id); return { status: 200, data: { automations: this.#automations(id) } }; }
     if (rest === "files" || rest.startsWith("files/")) return this.#files(id, rest === "files" ? "" : rest.slice("files/".length), method, input, query, actor);
