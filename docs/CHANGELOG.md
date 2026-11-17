@@ -18,6 +18,8 @@ on the GitHub Release tag.
 
 ### Changed
 
+- Agents use one robot-head glyph in the same line style as the other sidebar icons (the Agents toggle, the Agents entry in the rail, the New agent button, the empty state and the command palette) instead of a generic bot, a shield or the automations clock; new agents default to it.
+- The "Set up your coding agent" chip shows the Claude, OpenAI, Cursor and OpenCode marks again, small and muted, after the label.
 - The backdrops use less CPU while idle (Contours about 6% to 2.5% of a core, Dither flow, Ink and School about a third less in headless Chromium): Contours redraws at 5 frames a second on a coarser grid, Dither flow, School, Ink and Glyph run at 8 to 15 frames a second with the same look, noise is computed in batches with no per-frame allocation, and any backdrop halves its frame rate by itself when frames keep running slow or the battery is at 20% or less and unplugged.
 - Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
 - The thread view reads like Capy: replies are 13px text in a 660px column, the composer is 712px wide, time stamps appear only after a 30 minute gap, "Worked" rows show a red x when a call failed, and a thread waiting on you says "Needs you" in the accent colour.
