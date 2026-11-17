@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SentinelStore } from "@0/engine/storage";
 import { loadSession, saveSession, type StoredSession } from "../state/session-store.js";
-import { archiveIdleExceptAgentThreads, sendToMission } from "./workspace-services.js";
+import { archiveIdleExceptAgentThreads, createMission, sendToMission } from "./workspace-services.js";
 
 const dirs: string[] = [];
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), "zero-workspace-services-")); dirs.push(dir); return dir; };
@@ -25,6 +25,19 @@ describe("Agent runner send adapter", () => {
     const send = vi.fn(async () => ({}));
     await sendToMission({ send } as never, "thread-1", "hi", { userId: "u", displayName: "U" });
     expect(send).toHaveBeenCalledWith("thread-1", { text: "hi" }, { userId: "u", displayName: "U" }, undefined);
+  });
+});
+
+describe("Agent thread creation", () => {
+  it("applies the Agent's folder with configure, because create does not accept it", async () => {
+    const create = vi.fn(() => ({ id: "thread-1" }));
+    const configure = vi.fn(async () => ({}));
+    expect(createMission({ create, configure } as never, { title: "Agent: Watcher", workspacePath: "/work/app", skillAllowList: [] })).toEqual({ id: "thread-1" });
+    expect(create).toHaveBeenCalledWith({ title: "Agent: Watcher", skillAllowList: [] });
+    expect(configure).toHaveBeenCalledWith("thread-1", { workspacePath: "/work/app" });
+    create.mockClear(); configure.mockClear();
+    createMission({ create, configure } as never, { title: "No folder" });
+    expect(configure).not.toHaveBeenCalled();
   });
 });
 
