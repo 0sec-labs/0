@@ -1,6 +1,6 @@
 # Agents as threads
 
-Status: approved direction, not built. Phase 0 (defect fixes) is in `origin/main`; Phases 1 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
+Status: approved direction, not built. Phase 0 (defect fixes) ships as its own PR; Phases 1 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
 
 ## Rule
 
@@ -116,7 +116,7 @@ Each phase ships alone, adds before it removes, and is one PR. Phases 0 and 1 st
 
 | Phase | What | Notes |
 | --- | --- | --- |
-| 0 | Defect fixes found in the audit | Done: the runner adapter keeps queue mode; a scheduled message that cannot start no longer blocks the next; deleting an Agent removes its activity history; the boot idle archive protects Agent threads; a queued turn is charged only its own cost; the daily cap check and the activation row are one transaction. |
+| 0 | Defect fixes found in the audit | Own PR: the runner adapter keeps queue mode; a scheduled message that cannot start no longer blocks the next; deleting an Agent removes its activity history; the boot idle archive protects Agent threads; a queued turn is charged only its own cost; the daily cap check and the activation row are one transaction. |
 | 1 | Turn ledger, behaviour unchanged | `agent_turns`, dual write from activations, `GET /sentinels/:id/turns` unioned with legacy, ledger reads the union. Invariant test: every activation has exactly one turn. |
 | 2 | One persistent thread as the delivery path, behind a flag | `agentsPersistentThread`, default off. Eager home thread, queue-mode send, no child thread, per-turn charter envelope, queue coalescing and `skipped` reasons, pending-decision skip, trigger status written at turn completion, `reserveTurn`, restart reconcile. Tests with a real gateway and compaction forced. |
 | 3 | Default on; UI input goes into the thread | `POST /sentinels/:id/run` becomes "send a message to the Agent's thread" with an old-shape shim for one release. The Agent page renders the real thread and stops navigating away. One-time notice (same pattern as the access upgrade notice) that scheduled work now lands in its thread. Reversal point for the decided defaults. |
