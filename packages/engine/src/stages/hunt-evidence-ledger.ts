@@ -574,24 +574,31 @@ export function unresolvedHuntClaims(resolved: ReadonlyMap<string, ResolvedHuntC
 export function staleHuntClaims(resolved: ReadonlyMap<string, ResolvedHuntClaim>): ResolvedHuntClaim[] {
   const disproven = new Set(disprovenHuntClaims(resolved).map((claim) => claim.claimKey));
   if (disproven.size === 0) return [];
+  // Reverse the dependency edges once: claimKey -> the claims formed on top of it.
+  const dependents = new Map<string, string[]>();
+  for (const claim of resolved.values()) {
+    for (const dependency of claim.dependsOn) {
+      const list = dependents.get(dependency);
+      if (list) list.push(claim.claimKey);
+      else dependents.set(dependency, [claim.claimKey]);
+    }
+  }
+  // A single walk outward from the disproven claims reaches every claim that
+  // rests on one, so each claim and edge is visited once instead of running a
+  // fresh search per claim. The `undermined` set doubles as the cycle guard.
+  const undermined = new Set<string>(disproven);
+  const pending = [...disproven];
+  while (pending.length > 0) {
+    const key = pending.pop()!;
+    for (const dependent of dependents.get(key) ?? []) {
+      if (undermined.has(dependent)) continue;
+      undermined.add(dependent);
+      pending.push(dependent);
+    }
+  }
   const stale: ResolvedHuntClaim[] = [];
   for (const claim of resolved.values()) {
-    if (disproven.has(claim.claimKey)) continue;
-    const visited = new Set<string>([claim.claimKey]);
-    const queue = [...claim.dependsOn];
-    let hit = false;
-    while (queue.length > 0 && !hit) {
-      const key = queue.shift()!;
-      if (visited.has(key)) continue;
-      visited.add(key);
-      if (disproven.has(key)) {
-        hit = true;
-        break;
-      }
-      const dep = resolved.get(key);
-      if (dep) queue.push(...dep.dependsOn);
-    }
-    if (hit) stale.push(claim);
+    if (!disproven.has(claim.claimKey) && undermined.has(claim.claimKey)) stale.push(claim);
   }
   return stale;
 }
