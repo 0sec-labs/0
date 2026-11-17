@@ -1257,6 +1257,7 @@ Guide: [Read the workflow](/findings/#verify-and-fix).
 | `--max-attempts <n>` | `3` | Maximum candidate patches; capped at 3 |
 | `--apply` | `false` | Apply only a patch that passed isolated source recheck and regression command |
 | `--output <path>` | — | Write the validated apply_patch DSL to this path |
+| `--cost-ceiling <usd>` | — | Stop asking the model for patches once the estimated cost reaches this many USD |
 
 ## Findings & evidence
 
