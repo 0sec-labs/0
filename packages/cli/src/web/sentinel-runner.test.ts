@@ -409,6 +409,21 @@ describe("GitHub pull request polling", () => {
     expect(f.missions.send).toHaveBeenCalledTimes(2);
   });
 
+  it("persistent thread: a pause that lands while the pull request diff is being fetched stops the turn", async () => {
+    let listing = [pr(1, "aaa")];
+    let pause: (() => Promise<unknown>) | undefined;
+    const run = vi.fn(async (args: string[]) => { if (args.includes("diff")) await pause?.(); return { stdout: args.includes("diff") ? "diff" : JSON.stringify(listing) }; });
+    const { f, id, triggerId } = await armedPr({ run }, {}, { persistent: true });
+    await f.service.tick();
+    listing = [pr(1, "bbb")];
+    pause = () => f.call("POST", `${P}/${id}/pause`, {});
+    vi.setSystemTime(T0 + 2 * MIN);
+    await f.service.tick();
+    expect(f.missions.send).not.toHaveBeenCalled();
+    expect(f.store.listTurns(id)).toEqual([]);
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "paused", lastError: "Agent is paused." });
+  });
+
   it("persistent thread: a pull request that arrives while the thread waits on a person is offered again later, not lost", async () => {
     let listing = [pr(1, "aaa")];
     const run = vi.fn(async (args: string[]) => ({ stdout: args.includes("diff") ? "" : JSON.stringify(listing) }));

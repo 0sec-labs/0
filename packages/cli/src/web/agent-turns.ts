@@ -1,5 +1,5 @@
 import { SentinelStore } from "@0/engine/storage";
-import { sentinelReviewFingerprint, type AgentTurn, type AgentTurnOriginDetail, type Sentinel, type SecurityWorkflow } from "@0/engine/shared";
+import { sentinelNeedsReview, sentinelReviewFingerprint, type AgentTurn, type AgentTurnOriginDetail, type Sentinel, type SecurityWorkflow } from "@0/engine/shared";
 import { audit } from "./audit.js";
 import type { SentinelMissionRuntime, SentinelSessionEvent } from "./sentinel-runner.js";
 
@@ -36,7 +36,7 @@ export type TurnResult =
   /** Recorded but not delivered. `consumed` is false when the cause should be offered again later (the thread is waiting on a person). */
   | { status: "skipped"; turn: AgentTurn; reason: string; consumed: boolean }
   /** A cap stopped it; the Agent was paused. */
-  | { status: "refused"; kind: "budget" | "failed"; reason: string };
+  | { status: "refused"; kind: "budget" | "failed" | "inactive" | "review"; reason: string };
 
 export interface TurnContext {
   store: SentinelStore;
@@ -73,8 +73,13 @@ export class AgentTurnDelivery {
   dispose(): void { for (const watch of this.#watches.values()) watch.unsubscribe?.(); this.#watches.clear(); }
 
   async deliver(request: TurnRequest): Promise<TurnResult> {
-    const { sentinel } = request;
     const ctx = this.#ctx;
+    // The caller's snapshot may be older than the pause or review that landed while it fetched context: gate on the current record.
+    const sentinel = ctx.store.get(request.sentinel.id);
+    if (!sentinel) return { status: "refused", kind: "failed", reason: "Agent not found." };
+    if (sentinel.status !== "active") return { status: "refused", kind: "inactive", reason: "Agent is paused." };
+    if (sentinelNeedsReview(sentinel)) return { status: "refused", kind: "review", reason: "Agent needs review before it can run on its own." };
+    request = { ...request, sentinel };
     const nowMs = ctx.now();
     const nowIso = isoAt(nowMs);
     const detail: AgentTurnOriginDetail = {

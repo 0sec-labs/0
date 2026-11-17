@@ -42,6 +42,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
     const store = new SentinelStore(dbPath);
     const workflows = new SecurityWorkflowStore(dbPath);
     const agent = store.create({ name: "Guard", instructions: "Review dependencies.", scope: { targets: ["https://staging.example.com"], outOfScope: ["https://staging.example.com/admin"] } });
+    store.setStatus(agent.id, "active", undefined, undefined, true);
     const automation = workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: agent.id });
     const trigger = store.createTrigger(agent.id, { automationId: automation.id, kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: false });
     const delivery = new AgentTurnDelivery({

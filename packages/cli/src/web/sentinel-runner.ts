@@ -207,7 +207,7 @@ export class SentinelRunner {
   }
   /** What the trigger shows once its turn is queued or refused. The turn's own outcome is written at completion (never overwritten here once it has finished). */
   #turnRelease(outcome: TurnResult, triggerId: string): { lastStatus?: string; lastError?: string } {
-    if (outcome.status === "refused") return { lastStatus: outcome.kind === "budget" ? "budget" : "error", lastError: outcome.reason };
+    if (outcome.status === "refused") return { lastStatus: outcome.kind === "budget" ? "budget" : outcome.kind === "inactive" ? "paused" : outcome.kind === "review" ? "needs_review" : "error", lastError: outcome.reason };
     if (outcome.status === "skipped") return { lastStatus: outcome.reason === "Waiting on you" ? "waiting" : "skipped", lastError: outcome.reason };
     const current = this.#store.getTrigger(triggerId);
     return outcome.status === "queued" && (!current || current.lastStatus === "starting") ? { lastStatus: "queued", lastError: undefined } : {};
