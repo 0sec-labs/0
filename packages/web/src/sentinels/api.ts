@@ -5,7 +5,7 @@ import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import {
   SENTINEL_RUN_APPROVAL, SENTINEL_TRIGGER_APPROVAL, SentinelApiError,
-  type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
+  type AgentTurn, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
 } from "./model";
 
 type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
@@ -44,7 +44,10 @@ export function createSentinelClient(webFetch: Fetch) {
     update: (sentinelId: string, version: number, fields: Record<string, unknown>) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}`, body("PATCH", { version, ...fields })).then(data => data.sentinel),
     remove: (sentinelId: string, version: number) => call<{ ok: true }>(`sentinels/${id(sentinelId)}?version=${version}`, { method: "DELETE" }),
     setPaused: (sentinelId: string, paused: boolean, version: number) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/${paused ? "pause" : "resume"}`, body("POST", { version })).then(data => data.sentinel),
-    run: (sentinelId: string, version: number, task?: string) => call<{ activation: SentinelActivation; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/run`, body("POST", { approval: SENTINEL_RUN_APPROVAL, version, ...(task?.trim() ? { task: task.trim() } : {}) })),
+    /** The Agent's one thread: restored after a restart or created if it does not exist. Never replaces a live thread. */
+    thread: (sentinelId: string) => call<{ missionId: string; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/thread`, body("POST", {})),
+    turns: (sentinelId: string, signal?: AbortSignal) => call<{ turns: AgentTurn[] }>(`sentinels/${id(sentinelId)}/turns?limit=100`, { signal }).then(data => data.turns),
+    run: (sentinelId: string, version: number, task?: string) => call<{ missionId?: string; activation: SentinelActivation; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/run`, body("POST", { approval: SENTINEL_RUN_APPROVAL, version, ...(task?.trim() ? { task: task.trim() } : {}) })),
     activations: (sentinelId: string, signal?: AbortSignal) => call<{ activations: SentinelActivation[] }>(`sentinels/${id(sentinelId)}/activations?limit=50`, { signal }).then(data => data.activations),
     acknowledge: (sentinelId: string, version: number) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/acknowledge`, body("POST", { version })).then(data => data.sentinel),
     budget: (sentinelId: string, signal?: AbortSignal) => call<SentinelBudgetReport>(`sentinels/${id(sentinelId)}/budget`, { signal }),
@@ -90,6 +93,11 @@ export function useSentinelActivations(sentinelId: string) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "activations", sentinelId), queryFn: ({ signal }) => client.activations(sentinelId, signal), refetchInterval: 5_000, retry: false });
 }
+/** The Agent's turns, newest first: what woke it, how it ended and what it cost. Polled while the page is open. */
+export function useAgentTurns(sentinelId: string, enabled = true) {
+  const { client, backendId } = useSentinelClient();
+  return useQuery({ queryKey: queryKeys.sentinels(backendId, "turns", sentinelId), queryFn: ({ signal }) => client.turns(sentinelId, signal), enabled: enabled && Boolean(sentinelId), refetchInterval: 4_000, retry: false });
+}
 export function useSentinelAutomations(sentinelId: string) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "automations", sentinelId), queryFn: ({ signal }) => client.automations(sentinelId, signal), retry: false });
@@ -119,14 +127,14 @@ export function useSentinelMutations() {
     create: useMutation({ mutationFn: (input: Record<string, unknown>) => client.create(input), onSuccess: refresh }),
     update: useMutation({ mutationFn: (input: { id: string; version: number; fields: Record<string, unknown> }) => client.update(input.id, input.version, input.fields), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (input: { id: string; version: number }) => client.remove(input.id, input.version), onSuccess: (_result, input) => {
-      for (const part of ["one", "files", "file", "activations", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: queryKeys.sentinels(backendId, part, input.id) });
+      for (const part of ["one", "files", "file", "activations", "turns", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: queryKeys.sentinels(backendId, part, input.id) });
       void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "list") });
     } }),
     setPaused: useMutation({ mutationFn: (input: { id: string; paused: boolean; version: number }) => client.setPaused(input.id, input.paused, input.version), onSuccess: refresh }),
     run: useMutation({ mutationFn: (input: { id: string; version: number; task?: string }) => client.run(input.id, input.version, input.task), onSuccess: refresh }),
     acknowledge: useMutation({ mutationFn: (input: { id: string; version: number }) => client.acknowledge(input.id, input.version), onSuccess: refresh }),
     createTrigger: useMutation({ mutationFn: (input: { id: string; automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string; commentOnPr?: boolean; includeForks?: boolean } }) => client.createTrigger(input.id, { automationId: input.automationId, kind: input.kind, ...(input.schedule ? { schedule: input.schedule } : {}), ...(input.github ? { github: input.github } : {}) }), onSuccess: refresh }),
-    updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled: boolean }) => client.updateTrigger(input.id, input.triggerId, input.version, { enabled: input.enabled }), onSuccess: refresh }),
+    updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled?: boolean; schedule?: SentinelSchedule }) => client.updateTrigger(input.id, input.triggerId, input.version, { ...(input.enabled !== undefined ? { enabled: input.enabled } : {}), ...(input.schedule ? { schedule: input.schedule } : {}) }), onSuccess: refresh }),
     removeTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string }) => client.removeTrigger(input.id, input.triggerId), onSuccess: refresh }),
     deleteFile: useMutation({ mutationFn: (input: { id: string; path: string; revision: number }) => client.deleteFile(input.id, input.path, input.revision), onSuccess: (_result, input) => { void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "files", input.id) }); } }),
     saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "files", input.id) }); void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "file", input.id, input.path) }); } }),

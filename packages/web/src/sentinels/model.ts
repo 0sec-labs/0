@@ -45,6 +45,28 @@ export interface Sentinel {
   createdAt: string;
   updatedAt: string;
   attention?: SentinelAttention;
+  /** The Agent's one thread as the engine sees it now: working or idle, and the last thing it said. Absent until it has a live thread. */
+  thread?: { status: string; updatedAt: string; lastMessage?: string };
+}
+
+/** Why a turn happened. `user` is a person's own message; `legacy` is an older run from before turns were recorded. */
+export type AgentTurnOrigin = "schedule" | "github" | "user" | "promote" | "legacy";
+export interface AgentTurn {
+  id: string;
+  agentId: string;
+  sessionId?: string;
+  seq?: number;
+  origin: AgentTurnOrigin;
+  detail: { via?: string; triggerId?: string; automationId?: string; userId?: string; event?: Record<string, string | number> };
+  triggerId?: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "skipped";
+  costUsd?: number;
+  error?: string;
+  note?: string;
+  skippedReason?: string;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface SentinelPresetAutomation {
@@ -212,10 +234,10 @@ export function budgetMeters(report: Pick<SentinelBudgetReport, "budget" | "usag
   const { budget, usage } = report;
   return [
     { key: "usd", label: "Spend today", used: `$${usage.costUsd.toFixed(2)}`, limit: `$${budget.dailyUsd}`, percent: percent(usage.costUsd, budget.dailyUsd) },
-    { key: "runs", label: "Runs today", used: String(usage.runs), limit: String(budget.maxRunsPerDay), percent: percent(usage.runs, budget.maxRunsPerDay) },
+    { key: "runs", label: "Automatic turns today", used: String(usage.runs), limit: String(budget.maxRunsPerDay), percent: percent(usage.runs, budget.maxRunsPerDay) },
   ];
 }
-export const dailyCaps = (budget: SentinelBudget): string => `$${budget.dailyUsd} and ${budget.maxRunsPerDay} runs a day`;
+export const dailyCaps = (budget: SentinelBudget): string => `$${budget.dailyUsd} and ${budget.maxRunsPerDay} automatic turns a day`;
 
 /** Review gate copy: why a Sentinel cannot run on its own and what acknowledging does. */
 export const NEEDS_REVIEW_COPY = "Its scope, model, tools or access changed. It will not run on its own until you review the change and acknowledge it.";
@@ -305,4 +327,9 @@ export function triggerRequestFromDraft(draft: TriggerDraft): { ok: true; reques
     schedule.cron = draft.cron.trim();
   }
   return { ok: true, request: { automationId: draft.automationId, kind: "schedule", schedule } };
+}
+
+/** The editable draft for an existing schedule, so a trigger's real fields (frequency, time, day, timezone) can be changed in place. */
+export function draftFromSchedule(schedule: SentinelSchedule, automationId = ""): TriggerDraft {
+  return { ...blankTriggerDraft(automationId), kind: "schedule", frequency: schedule.frequency, every: String(schedule.every ?? 15), time: schedule.time ?? "09:00", weekday: String(schedule.weekday ?? 1), cron: schedule.cron ?? "", timezone: schedule.timezone };
 }

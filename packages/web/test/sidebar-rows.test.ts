@@ -41,6 +41,15 @@ describe("agent badge and subtitle", () => {
     expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toEqual({ text: "Needs you", tone: "accent" });
     expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1, reason: "Approve the scan" } })).text).toBe("Approve the scan");
   });
+  test("the last thing it said wins over the job line; failed and working show, idle and paused draw no glyph", () => {
+    const talking = agent({ thread: { status: "working", updatedAt: "2026-01-02T00:00:00Z", lastMessage: "Found two outdated packages." } });
+    expect(agentSubtitle(talking)).toEqual({ text: "Found two outdated packages.", tone: "muted" });
+    expect(agentBadge(talking)).toBe("running");
+    expect(agentBadge(agent({ thread: { status: "failed", updatedAt: "" } }))).toBe("failed");
+    expect(agentSubtitle(agent({ status: "paused" })).text).toBe("Paused. Triggers are off.");
+    expect(agentRow(talking, Date.parse("2026-01-02T01:00:00Z"))).toMatchObject({ age: "1h", needsYou: false, badge: "running", badgeLabel: "Working" });
+    expect(agentRow(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toMatchObject({ needsYou: true, badge: "needs-you" });
+  });
   test("row", () => {
     expect(agentRow(agent(), Date.parse("2026-01-03T00:00:00Z"))).toMatchObject({ href: "/agents/a1", age: "2d", badge: "idle", badgeLabel: "Idle" });
   });

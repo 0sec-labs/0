@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   drafts: "0-console-drafts",
   attachmentDrafts: "0-console-attachment-drafts",
   editorChatSessions: "0-editor-chat-sessions",
+  agentBudgetWarned: "0-agent-budget-warned",
   recentWorkspaces: "0-recent-workspaces",
   sidebarOpen: "0-sidebar-open",
   sidebarWidth: "0-sidebar-width",

@@ -6,7 +6,7 @@ import { presentStatus, sentinelHref, type Sentinel } from "@/sentinels/model";
 export type SidebarListMode = "agents" | "threads";
 export type SidebarDensity = "comfortable" | "compact";
 export type AgentSort = "recent" | "name";
-export type AgentBadge = "running" | "needs-you" | "paused" | "idle";
+export type AgentBadge = "running" | "needs-you" | "failed" | "paused" | "idle";
 
 /** The stored choice wins; with none, Agents when there are any, else Threads. Servers without Agents always show Threads. */
 export function resolveListMode(stored: SidebarListMode | null, agentCount: number, supported: boolean): SidebarListMode {
@@ -14,31 +14,33 @@ export function resolveListMode(stored: SidebarListMode | null, agentCount: numb
   return stored ?? (agentCount > 0 ? "agents" : "threads");
 }
 
-/** Badge priority: waiting on the operator, then running, then paused, else idle. */
-export function agentBadge(agent: Pick<Sentinel, "status" | "attention">, running = false): AgentBadge {
+/** Badge priority: waiting on the operator, then failed, then working, then paused, else idle. Only working, waiting and failed draw a glyph. */
+export function agentBadge(agent: Pick<Sentinel, "status" | "attention"> & { thread?: Sentinel["thread"] }, running = agent.thread?.status === "working"): AgentBadge {
   const status = presentStatus(agent);
   if (status.needsYou || status.needsReview) return "needs-you";
+  if (agent.thread?.status === "failed") return "failed";
   if (agent.status === "paused") return "paused";
   return running ? "running" : "idle";
 }
 
-export const AGENT_BADGE_LABEL: Record<AgentBadge, string> = { running: "Running", "needs-you": "Needs you", paused: "Paused", idle: "Idle" };
+export const AGENT_BADGE_LABEL: Record<AgentBadge, string> = { running: "Working", "needs-you": "Needs you", failed: "Failed", paused: "Paused", idle: "Idle" };
 
 export interface AgentSubtitle { text: string; tone: "muted" | "accent" }
 
-/** Line 2: what needs the operator, why it paused, else the job line. */
-export function agentSubtitle(agent: Pick<Sentinel, "status" | "attention" | "mission" | "pauseReason">): AgentSubtitle {
+/** Line 2: what needs the operator, why it paused, else the last thing it said (the job line before it has said anything). */
+export function agentSubtitle(agent: Pick<Sentinel, "status" | "attention" | "mission" | "pauseReason"> & { thread?: Sentinel["thread"] }): AgentSubtitle {
   const status = presentStatus(agent);
   if (status.needsYou || status.needsReview) return { text: agent.attention?.reason?.trim() || status.label, tone: "accent" };
-  if (agent.status === "paused" && agent.pauseReason?.message) return { text: agent.pauseReason.message, tone: "muted" };
-  return { text: agent.mission.trim(), tone: "muted" };
+  if (agent.status === "paused") return { text: agent.pauseReason?.message ?? "Paused. Triggers are off.", tone: "muted" };
+  return { text: agent.thread?.lastMessage?.trim() || agent.mission.trim(), tone: "muted" };
 }
 
-export interface AgentRow { id: string; name: string; href: string; age: string; badge: AgentBadge; badgeLabel: string; subtitle: AgentSubtitle }
+export interface AgentRow { id: string; name: string; href: string; age: string; needsYou: boolean; badge: AgentBadge; badgeLabel: string; subtitle: AgentSubtitle }
 
-export function agentRow(agent: Sentinel, now = Date.now(), running = false): AgentRow {
+export function agentRow(agent: Sentinel, now = Date.now(), running = agent.thread?.status === "working"): AgentRow {
   const badge = agentBadge(agent, running);
-  return { id: agent.id, name: agent.name, href: sentinelHref(agent.id), age: formatRelativeAge(Date.parse(agent.updatedAt), now), badge, badgeLabel: AGENT_BADGE_LABEL[badge], subtitle: agentSubtitle(agent) };
+  const status = presentStatus(agent);
+  return { id: agent.id, name: agent.name, href: sentinelHref(agent.id), age: formatRelativeAge(Date.parse(agent.thread?.updatedAt ?? agent.updatedAt), now), needsYou: status.needsYou || status.needsReview, badge, badgeLabel: AGENT_BADGE_LABEL[badge], subtitle: agentSubtitle(agent) };
 }
 
 /** Recent keeps the waiting-first order from the model; name is plain alphabetical. */
