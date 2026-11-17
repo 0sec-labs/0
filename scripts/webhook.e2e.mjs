@@ -79,7 +79,7 @@ const port = await new Promise(done => { const probe = createServer(); probe.lis
 const origin = `http://localhost:${port}`;
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !SCRUB.test(key)));
 Object.assign(env, {
-  HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, ZERO_0VERSE_MCP: '0', ZERO_NO_TELEMETRY: '1', NO_COLOR: '1', ZERO_SKIP_UPDATE_CHECK: '1',
+  HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, ZERO_0VERSE_MCP: '0', ZERO_NO_TELEMETRY: '1', ZERO_AGENTS_PERSISTENT_THREAD: '0', NO_COLOR: '1', ZERO_SKIP_UPDATE_CHECK: '1',
   ZERO_NO_DEPRECATION_WARNINGS: '1', ZERO_ACCESS_TOKEN: accessToken, ZERO_E2E_ENGINE_TOKEN: engineToken,
 });
 

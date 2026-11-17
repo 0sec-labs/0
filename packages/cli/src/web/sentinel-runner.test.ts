@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SecurityWorkflowStore, SentinelStore } from "@0/engine/storage";
 import { createSecurityWorkflowTemplate } from "@0/engine/shared";
 import { WebSentinelService, type SentinelActor } from "./sentinels.js";
-import type { SentinelSessionEvent } from "./sentinel-runner.js";
+import { agentsPersistentThreadFromEnv, type SentinelSessionEvent } from "./sentinel-runner.js";
 
 const T0 = Date.parse("2026-03-02T10:00:00Z");
 const MIN = 60_000;
@@ -33,7 +33,7 @@ function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: st
     removeQueued: vi.fn((_id: string, _messageId: string) => ({})),
     resumeQueue: vi.fn((_id: string, _messageId: string) => ({})),
   };
-  const service = new WebSentinelService({ dbPath, missions, executionProfile: () => options.profile ?? "local", checkout: async repo => options.checkouts?.[repo], ...(options.persistent ? { persistentThread: () => true } : {}), ...(options.gh ? { gh: options.gh } : {}) });
+  const service = new WebSentinelService({ dbPath, missions, executionProfile: () => options.profile ?? "local", checkout: async repo => options.checkouts?.[repo], persistentThread: () => options.persistent === true, ...(options.gh ? { gh: options.gh } : {}) });
   const workflows = new SecurityWorkflowStore(dbPath);
   const store = new SentinelStore(dbPath);
   const call = async (method: string, path: string, body?: unknown, actor?: SentinelActor) => {
@@ -588,6 +588,27 @@ describe("GitHub pull request polling", () => {
     const edit = calls.find(args => args[0] === "api" && args[1] === "--method")!;
     expect(edit).toEqual(expect.arrayContaining(["PATCH", "repos/o/r/issues/comments/777"]));
   });
+  it("persistent thread: the pull request comment lists only the findings this turn added to the shared thread", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    const old = { id: "old", templateId: "t", title: "Earlier finding", severity: "low", category: "x", status: "open", location: { path: "a.ts", startLine: 1 } };
+    const fresh = { id: "new", templateId: "t", title: "Fresh finding", severity: "high", category: "x", status: "open", location: { path: "b.ts", startLine: 2 } };
+    const github = gh(() => listing, calls, args => (args[0] === "api" && args[1] === "--paginate" ? "" : args[0] === "pr" && args[1] === "comment" ? "" : undefined));
+    const { f, id } = await armedPr(github, { commentOnPr: true }, { persistent: true });
+    const findings = vi.fn(() => [old]);
+    (f.missions as unknown as { findings: unknown }).findings = findings;
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    expect(f.store.listTurns(id)[0]).toMatchObject({ origin: "github", status: "running" });
+    findings.mockImplementation(() => [old, fresh]);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    const post = calls.find(args => args[0] === "pr" && args[1] === "comment")!;
+    const body = post[post.indexOf("--body") + 1]!;
+    expect(body).toContain("`b.ts:2`");
+    expect(body).not.toContain("a.ts");
+  });
   it("webhook checks use the poller's routine: targets match repo and base only, one head SHA launches once across webhook and poll, drafts and forks keep their rules", async () => {
     let listing = [pr(1, "aaa")];
     const { f, id, triggerId } = await armedPr(gh(() => listing));
@@ -792,5 +813,85 @@ describe("persistent thread delivery (flag on)", () => {
     expect(f.store.getTurn(reserved.turn.id)).toMatchObject({ status: "failed", error: "The engine stopped before this finished.", note: "interrupted" });
     await fire(f, 5);
     expect(f.missions.send.mock.calls[0]![1]).toContain("previous turn was interrupted");
+  });
+});
+
+describe("a person in the Agent's thread", () => {
+  const turnsOf = (f: ReturnType<typeof fixture>, id: string) => f.store.listTurns(id).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+  const fire = async (f: ReturnType<typeof fixture>, minutes: number) => { vi.setSystemTime(T0 + minutes * MIN + 1_000); await f.service.tick(); };
+  const open = async (f: ReturnType<typeof fixture>, id: string) => (await f.call("POST", `${P}/${id}/thread`, {})).data as { missionId: string };
+
+  it("is on by default and turns off with the environment variable", () => {
+    const saved = process.env.ZERO_AGENTS_PERSISTENT_THREAD;
+    try {
+      delete process.env.ZERO_AGENTS_PERSISTENT_THREAD;
+      expect(agentsPersistentThreadFromEnv()).toBe(true);
+      for (const off of ["0", "false", "off", "NO"]) { process.env.ZERO_AGENTS_PERSISTENT_THREAD = off; expect(agentsPersistentThreadFromEnv()).toBe(false); }
+      process.env.ZERO_AGENTS_PERSISTENT_THREAD = "1";
+      expect(agentsPersistentThreadFromEnv()).toBe(true);
+    } finally { if (saved === undefined) delete process.env.ZERO_AGENTS_PERSISTENT_THREAD; else process.env.ZERO_AGENTS_PERSISTENT_THREAD = saved; }
+  });
+
+  it("creates the thread on demand, records each message as a turn from the person, and counts its cost but not toward the turn cap", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed({ budget: { dailyUsd: 5, maxRunsPerDay: 1 } });
+    const { missionId } = await open(f, id);
+    expect(missionId).toBe("mission-1");
+    expect((await open(f, id)).missionId).toBe("mission-1");
+    expect(f.missions.create).toHaveBeenCalledTimes(1);
+    f.emit(missionId, { type: "user", text: "look at the lockfile", author: { userId: "peak", displayName: "Peak" } });
+    expect(turnsOf(f, id)).toHaveLength(1);
+    expect(turnsOf(f, id)[0]).toMatchObject({ origin: "user", status: "running", sessionId: missionId, detail: { userId: "peak" } });
+    f.costs.set(missionId, 0.4);
+    f.emit(missionId, { type: "usage" });
+    f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "completed", costUsd: 0.4 });
+    expect(f.store.ledger(id, new Date(T0 - 1).toISOString())).toEqual({ runs: 0, costUsd: 0.4 });
+    // The one automatic turn a day is still available, and it is not mistaken for a person's message.
+    await fire(f, 5);
+    expect(turnsOf(f, id).map(turn => turn.origin)).toEqual(["user", "schedule"]);
+    f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
+  });
+
+  it("ignores messages the engine writes to the thread itself", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    const { missionId } = await open(f, id);
+    f.emit(missionId, { type: "user", text: "[Agent completion] Process the pending agent messages and continue." });
+    expect(turnsOf(f, id)).toHaveLength(0);
+  });
+
+  it("lets a person message a paused Agent, even over budget, and never cancels their turn", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed({ budget: { dailyUsd: 0.5, maxRunsPerDay: 10 } });
+    const { missionId } = await open(f, id);
+    f.store.setStatus(id, "paused", undefined, { kind: "budget", message: "Daily budget ($0.5) used.", at: new Date(T0).toISOString() });
+    f.emit(missionId, { type: "user", text: "one more thing", author: { userId: "peak", displayName: "Peak" } });
+    f.costs.set(missionId, 0.9);
+    f.emit(missionId, { type: "usage" });
+    expect(f.missions.cancel).not.toHaveBeenCalled();
+    f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
+    expect(turnsOf(f, id)[0]).toMatchObject({ origin: "user", status: "completed", costUsd: 0.9 });
+    const run = await f.call("POST", `${P}/${id}/run`, { approval: "launch-authorized-run", version: (await f.view(id)).version, task: "status?" });
+    expect(run.status).toBe(202);
+    expect(f.missions.create).toHaveBeenCalledTimes(1); // no child thread
+    expect(f.missions.send.mock.calls.at(-1)).toEqual([missionId, "status?", undefined, "queue"]);
+    // The turns that start on their own stay off while it is paused.
+    await fire(f, 5);
+    expect(turnsOf(f, id).filter(turn => turn.origin === "schedule")).toHaveLength(0);
+  });
+
+  it("matches a trigger turn that could not start by its queued message, not by guessing", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    f.missions.send.mockImplementation(async () => ({ queuedMessageId: "q1" }));
+    await fire(f, 5);
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "queued" });
+    f.emit("mission-1", { type: "queued", messages: [{ id: "q1" }] });
+    f.emit("mission-1", { type: "error", message: "something else failed" });
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "queued" });
+    f.emit("mission-1", { type: "queued", messages: [] });
+    f.emit("mission-1", { type: "error", message: "The folder is gone" });
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "failed", error: "The folder is gone" });
   });
 });

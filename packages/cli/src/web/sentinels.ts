@@ -93,7 +93,10 @@ export class WebSentinelService {
     const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
     return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview || failing, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
-  #view(sentinel: Sentinel) { return { ...sentinel, attention: this.#attention(sentinel) }; }
+  #view(sentinel: Sentinel) {
+    const thread = this.#runner.threadInfo(sentinel);
+    return { ...sentinel, attention: this.#attention(sentinel), ...(thread ? { thread } : {}) };
+  }
   #automations(id: string) { return this.#workflows.list().filter(workflow => workflow.ownerSentinelId === id); }
 
   async #route(path: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
@@ -159,6 +162,14 @@ export class WebSentinelService {
       return { status: 200, data: { budget: sentinel.budget, usage: this.#store.ledger(id, new Date(now - DAY_MS).toISOString()), windowMs: DAY_MS, pauseReason: sentinel.pauseReason ?? null } };
     }
     if (rest === "triggers" || rest.startsWith("triggers/")) return await this.#triggers(id, rest === "triggers" ? "" : rest.slice("triggers/".length), method, input, actor);
+    if (rest === "thread" && method === "POST") {
+      this.#requireWriter(actor);
+      this.#requireSentinel(id);
+      try {
+        const { missionId, created } = await this.#runner.ensureThread(id, actor);
+        return { status: created ? 201 : 200, data: { missionId, sentinel: this.#view(this.#requireSentinel(id)) } };
+      } catch (error) { if (error instanceof SentinelRunError) throw new SentinelRequestError(error.message, error.statusCode); throw error; }
+    }
     if (rest === "run" && method === "POST") { this.#requireWriter(actor); return await this.#run(id, input, actor); }
     if (rest === "activations" && method === "GET") {
       this.#requireSentinel(id);
@@ -247,11 +258,20 @@ export class WebSentinelService {
     throw new SentinelRequestError("Use GET, PUT or DELETE for a file.", 405);
   }
 
-  /** Manual activation: a new mission seeded from the charter, through the same session path chats use. */
+  /**
+   * "Run now" / a task from the old composer. With the standing thread on (the default) this is a person's message sent into the
+   * Agent's one thread; the response keeps an `activation` shape for older clients for one release. With it off it starts a child thread as before.
+   */
   async #run(id: string, input: unknown, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
     const body = parse(z.object({ approval: z.literal("launch-authorized-run"), version: z.number().int().positive(), task: z.string().trim().max(4_000).optional() }).strict(), bodyOf(input));
     const sentinel = this.#requireSentinel(id);
     if (sentinel.version !== body.version) throw new SentinelRequestError("Agent changed. Review it again before running.", 409);
+    if (this.#runner.persistentThread) {
+      try {
+        const { missionId, queued } = await this.#runner.sendToThread(id, { ...(body.task ? { text: body.task } : {}), ...(actor ? { actor } : {}) });
+        return { status: 202, data: { missionId, queued, activation: { id: missionId, sentinelId: id, status: queued ? "queued" : "running", missionId, trigger: { kind: "manual" } }, sentinel: this.#view(this.#requireSentinel(id)) } };
+      } catch (error) { if (error instanceof SentinelRunError) throw new SentinelRequestError(error.message, error.statusCode); throw error; }
+    }
     let activation: SentinelActivation;
     try { activation = await this.#runner.launch(id, { trigger: { kind: "manual" }, ...(body.task ? { task: body.task } : {}), ...(actor ? { actor } : {}), autonomous: false }); }
     catch (error) { if (error instanceof SentinelRunError) throw new SentinelRequestError(error.message, error.statusCode); throw error; }

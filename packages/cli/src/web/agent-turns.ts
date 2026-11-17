@@ -28,6 +28,8 @@ export interface TurnRequest {
   untrusted?: boolean;
   /** Extra untrusted context fenced into the message (for example the pull request diff). */
   context?: { label: string; text: string };
+  /** Post (or edit in place) one summary comment on this pull request when the turn completes. Only findings the thread gained during this turn are listed. */
+  comment?: { repo: string; pr: number; headSha: string; fork: boolean };
 }
 export type TurnResult =
   | { status: "queued"; turn: AgentTurn }
@@ -49,10 +51,15 @@ export interface TurnContext {
    */
   ensureHome(sentinel: Sentinel): Promise<{ id: string; replaced: false | "lost" | "changed" }>;
   pauseForBudget(sentinel: Sentinel, reason: string, nowMs: number): void;
+  /** Posts the pull request summary for a completed turn. `exclude` is the finding ids the thread already had when the turn started. */
+  postSummary?(sentinel: Sentinel, comment: NonNullable<TurnRequest["comment"]>, missionId: string, turnId: string, exclude: ReadonlySet<string>): Promise<void>;
 }
 
-interface Tracked { turnId: string; sentinel: Sentinel; text: string; triggerId?: string; messageId?: string; base: number }
-interface ThreadWatch { missionId: string; unsubscribe?: () => void; queued: Tracked[]; running?: Tracked; inQueue?: Set<string> }
+interface Tracked { turnId: string; sentinel: Sentinel; text: string; triggerId?: string; messageId?: string; base: number; /** A person's message: never capped. */ person?: boolean; comment?: TurnRequest["comment"]; baseline?: ReadonlySet<string> }
+/** `home` threads are watched for as long as the engine lives, so a person's messages in them are recorded as turns. */
+interface ThreadWatch { missionId: string; agentId?: string; home?: boolean; unsubscribe?: () => void; queued: Tracked[]; running?: Tracked; inQueue?: Set<string> }
+/** Messages the engine sends on its own (not typed by the person) must not be recorded as the person's turns. */
+const ENGINE_PROMPTS = [/^\s*\[Agent completion\]/i, /^\s*Continue the existing authorized investigation from the latest retained state\b/i, /^\s*The runtime now handles dropped model connections automatically\b/i, /^\s*Resume only genuinely unfinished\b/i];
 
 /**
  * Delivery of trigger turns into an Agent's one standing thread (Phase 2 of "agents as threads"; behind a flag).
@@ -65,12 +72,35 @@ export class AgentTurnDelivery {
   /** Per Agent: what the thread last saw, so edits are announced once. In memory only; after a restart everything is sent again. */
   readonly #seen = new Map<string, { charter?: number; notes?: number; fingerprint: string }>();
   readonly #messageIds = new Map<string, { missionId: string; messageId: string }>();
+  readonly #homes = new Map<string, string>();
 
   constructor(context: TurnContext) { this.#ctx = context; }
 
   /** Turn ids this engine is tracking right now. */
   tracking(): Set<string> { return new Set([...this.#watches.values()].flatMap(watch => [...watch.queued, ...(watch.running ? [watch.running] : [])].map(item => item.turnId))); }
   dispose(): void { for (const watch of this.#watches.values()) watch.unsubscribe?.(); this.#watches.clear(); }
+
+  /** Is this Agent's thread already being watched for a person's messages? */
+  observing(agentId: string, missionId: string): boolean { return this.#watches.get(missionId)?.home === true && this.#watches.get(missionId)?.agentId === agentId; }
+  /**
+   * Starts recording a person's messages in the Agent's thread as turns (origin `user`). Idempotent. The watch stays for the life of the
+   * engine; a thread that was replaced stops being watched when its Agent no longer points at it (see `forget`).
+   */
+  observe(sentinel: Sentinel, missionId: string): void {
+    const previous = this.#homes.get(sentinel.id);
+    if (previous && previous !== missionId) this.forget(sentinel.id);
+    const watch = this.#watch(missionId);
+    watch.home = true; watch.agentId = sentinel.id;
+    this.#homes.set(sentinel.id, missionId);
+  }
+  /** Stops watching an Agent's thread that is no longer its home (replaced or deleted). */
+  forget(agentId: string): void {
+    const missionId = this.#homes.get(agentId);
+    this.#homes.delete(agentId);
+    const watch = missionId ? this.#watches.get(missionId) : undefined;
+    if (watch) { watch.home = false; this.#release(watch); }
+  }
+  homeOf(agentId: string): string | undefined { return this.#homes.get(agentId); }
 
   async deliver(request: TurnRequest): Promise<TurnResult> {
     const ctx = this.#ctx;
@@ -92,6 +122,7 @@ export class AgentTurnDelivery {
     catch (error) { return { status: "refused", kind: "failed", reason: message(error) }; }
     // A fresh thread has seen nothing: send the notes again.
     if (home.replaced) this.#seen.delete(sentinel.id);
+    this.observe(sentinel, home.id);
     // A thread that is waiting on a person would hold trigger turns behind it forever: record them as skipped instead.
     let pending = 0;
     try { pending = ctx.missions.pendingDecisions(home.id); } catch { /* A thread that cannot be read has nothing pending. */ }
@@ -117,7 +148,7 @@ export class AgentTurnDelivery {
     const turn = reserved.turn;
     const text = this.#compose(request, turn, { remainingUsd: budget.dailyUsd - reserved.ledger.costUsd, notices: [...(home.replaced === "lost" ? ["Your earlier conversation could not be restored, so this is a fresh thread. Your notes below are the record of earlier work."] : home.replaced === "changed" ? ["Your scope, model or skills changed, so you are on a fresh thread configured with the current ones. Your notes below are the record of earlier work."] : []), ...(interrupted ? ["Your previous turn was interrupted when the engine stopped; check what it left half done before you continue."] : [])] });
     const watch = this.#watch(home.id);
-    const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0 };
+    const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0, ...(request.comment ? { comment: request.comment } : {}) };
     watch.queued.push(tracked);
     try {
       const sent = await ctx.missions.send(home.id, text, undefined, "queue", true);
@@ -197,7 +228,7 @@ export class AgentTurnDelivery {
     return watch;
   }
   #release(watch: ThreadWatch): void {
-    if (watch.running || watch.queued.length) return;
+    if (watch.running || watch.queued.length || watch.home) return;
     watch.unsubscribe?.(); watch.unsubscribe = undefined;
     if (this.#watches.get(watch.missionId) === watch) this.#watches.delete(watch.missionId);
   }
@@ -208,14 +239,16 @@ export class AgentTurnDelivery {
     if (!watch.running) {
       if (event.type === "user") {
         const next = watch.queued.find(item => item.text === event.text);
-        if (!next) return;
+        if (!next) { this.#beginPersonTurn(watch, event); return; }
         watch.queued = watch.queued.filter(item => item !== next);
         next.base = this.#ctx.missions.usage?.(watch.missionId)?.costUsd ?? next.base;
+        if (next.comment) { try { next.baseline = new Set((this.#ctx.missions.findings?.(watch.missionId) ?? []).flatMap(finding => finding.id ? [finding.id] : [])); } catch { next.baseline = new Set(); } }
         watch.running = next;
         try { this.#ctx.store.updateTurn(next.turnId, { status: "running", startedAt: isoAt(this.#ctx.now()), sessionId: watch.missionId }); } catch { /* The Agent was deleted. */ }
       } else if (event.type === "error") {
         // A message that was taken off the queue and could not start is dropped by the gateway (scheduled work is not retried).
-        const left = watch.queued.find(item => !item.messageId || !watch.inQueue?.has(item.messageId));
+        // Only a message that was queued (it has an id) and has left the queue without starting can be the one that failed.
+        const left = watch.queued.find(item => item.messageId && !watch.inQueue?.has(item.messageId));
         if (left) { watch.queued = watch.queued.filter(item => item !== left); this.#end(left.turnId, left.triggerId, "failed", typeof event.message === "string" ? event.message : "The turn could not start."); this.#release(watch); }
       }
       return;
@@ -230,9 +263,28 @@ export class AgentTurnDelivery {
     } else if (event.type === "error") this.#finish(watch, running, "failed", typeof event.message === "string" ? event.message.slice(0, 2_000) : "The turn failed.");
   }
 
+  /** A message nobody queued as a trigger turn arrived in a watched home thread: a person typed it. Recorded, never capped. */
+  #beginPersonTurn(watch: ThreadWatch, event: SentinelSessionEvent): void {
+    if (!watch.home || !watch.agentId || typeof event.text !== "string") return;
+    if (ENGINE_PROMPTS.some(pattern => pattern.test(event.text as string))) return;
+    const store = this.#ctx.store;
+    const sentinel = store.get(watch.agentId);
+    if (!sentinel) return;
+    const author = event.author && typeof event.author === "object" ? (event.author as { userId?: unknown }).userId : undefined;
+    const nowMs = this.#ctx.now();
+    let over = false;
+    try { over = store.ledger(sentinel.id, isoAt(nowMs - DAY_MS)).costUsd >= sentinel.budget.dailyUsd; } catch { /* Advisory only. */ }
+    try {
+      const turn = store.recordUserTurn({ agentId: sentinel.id, sessionId: watch.missionId, nowIso: isoAt(nowMs), ownerPid: process.pid, ...(typeof author === "string" ? { userId: author } : {}), ...(over ? { note: "over_budget" } : {}) });
+      watch.running = { turnId: turn.id, sentinel, text: event.text, base: this.#ctx.missions.usage?.(watch.missionId)?.costUsd ?? 0, person: true };
+    } catch { /* The Agent was deleted. */ }
+  }
+
   #enforce(watch: ThreadWatch, turn: Tracked): void {
     const store = this.#ctx.store;
     try { store.updateTurn(turn.turnId, { costUsd: this.#costOf(watch, turn) }); } catch { return; }
+    // A person's message counts toward spend but is never stopped by the cap.
+    if (turn.person) return;
     const daily = store.ledger(turn.sentinel.id, isoAt(this.#ctx.now() - DAY_MS));
     if (daily.costUsd < turn.sentinel.budget.dailyUsd) return;
     const reason = `Daily budget ($${turn.sentinel.budget.dailyUsd}) used.`;
@@ -249,6 +301,7 @@ export class AgentTurnDelivery {
     watch.running = undefined;
     const cost = this.#costOf(watch, turn);
     this.#end(turn.turnId, turn.triggerId, status, error, { costUsd: cost });
+    if (status === "completed" && turn.comment && this.#ctx.postSummary) void this.#ctx.postSummary(turn.sentinel, turn.comment, watch.missionId, turn.turnId, turn.baseline ?? new Set()).catch(() => { /* Reported on the turn by the poster. */ });
     // A cancelled turn pauses the gateway queue; trigger turns behind it must still run.
     const next = watch.queued.find(item => item.messageId);
     if (status === "cancelled" && next?.messageId && this.#ctx.missions.resumeQueue) {

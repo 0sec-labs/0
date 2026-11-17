@@ -23,6 +23,14 @@ export function sendToMission(gateway: Pick<ConsoleGateway, "send">, id: string,
   return gateway.send(id, { text, ...(mode ? { mode } : {}) }, author, automated ? { automated: true } : undefined);
 }
 
+/** Creates a thread for an Agent. The Agent's folder is not accepted by `create`, so it is applied with `configure` straight afterwards (a first message waits for it). */
+export function createMission(gateway: Pick<ConsoleGateway, "create" | "configure">, input: Record<string, unknown>): { id: string } {
+  const { workspacePath, ...rest } = input;
+  const session = gateway.create(rest);
+  if (typeof workspacePath === "string" && workspacePath) void gateway.configure(session.id, { workspacePath }).catch(() => { /* The first message reports a folder that cannot be opened. */ });
+  return session;
+}
+
 /** Opt-in idle archive that never touches an Agent's standing thread. */
 export function archiveIdleExceptAgentThreads(days: number, dbPath: string | undefined, stateDir: string | undefined): number {
   const store = new SentinelStore(dbPath);
@@ -78,7 +86,8 @@ export async function createWorkspaceServices(options: Options) {
     gateway.attachScheduleLifecycle({ invoke: (sessionId, name, args, context) => schedules.invokeLifecycle(sessionId, name, args, context) });
     github = new GitHubPublicationAuth();
     sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: {
-      create: input => gateway.create(input),
+      // `workspacePath` is not a create-time field of the gateway; it is applied right after, and the first send waits for it.
+      create: input => createMission(gateway, input),
       send: (id, text, author, mode, automated) => sendToMission(gateway, id, text, author, mode, automated),
       pendingDecisions: id => gateway.get(id).pendingDecisions.length,
       subscribe: (id, listener) => gateway.subscribe(id, event => listener(event as unknown as { type: string })),
@@ -87,6 +96,15 @@ export async function createWorkspaceServices(options: Options) {
       resumeQueue: (id, messageId) => gateway.sendQueuedNow(id, messageId),
       usage: id => gateway.get(id).usage,
       exists: id => { try { gateway.get(id); return true; } catch { return false; } },
+      thread: id => {
+        try {
+          const snapshot = gateway.get(id);
+          const last = [...snapshot.messages].reverse().find(message => message.role === "assistant");
+          const text = last ? last.content.map(block => block.type === "text" ? block.text : "").join(" ") : "";
+          const clean = text.replace(/\s+/g, " ").trim().slice(0, 240);
+          return { status: snapshot.session.status, updatedAt: snapshot.session.updatedAt, ...(clean ? { lastAssistantText: clean } : {}) };
+        } catch { return undefined; }
+      },
       reopen: async id => ({ id: (await gateway.resume(id)).id }),
       findings: id => {
         const db = new osecDB(options.dbPath);
