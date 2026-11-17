@@ -73,6 +73,8 @@ export interface SentinelTrigger {
   cursor?: Record<string, string>;
   lastStatus?: string;
   lastError?: string;
+  /** Failed turns in a row (persistent-thread delivery). Three turn the trigger off; a person turning it back on resets it. */
+  consecutiveFailures?: number;
   lastActivationId?: string;
   activeClaim?: string;
   createdAt: string;

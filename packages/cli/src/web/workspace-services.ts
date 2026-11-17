@@ -83,6 +83,8 @@ export async function createWorkspaceServices(options: Options) {
       pendingDecisions: id => gateway.get(id).pendingDecisions.length,
       subscribe: (id, listener) => gateway.subscribe(id, event => listener(event as unknown as { type: string })),
       cancel: id => gateway.cancel(id),
+      removeQueued: (id, messageId) => gateway.removeQueued(id, messageId),
+      resumeQueue: (id, messageId) => gateway.sendQueuedNow(id, messageId),
       usage: id => gateway.get(id).usage,
       exists: id => { try { gateway.get(id); return true; } catch { return false; } },
       reopen: async id => ({ id: (await gateway.resume(id)).id }),

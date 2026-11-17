@@ -1,6 +1,38 @@
 # Agents as threads
 
-Status: approved direction, not built. Phase 0 (defect fixes) ships as its own PR; Phases 1 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
+Status: approved direction. Phases 0 and 1 are shipped. Phase 2 is shipped behind a flag that is off by default. Phases 3 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
+
+## Status
+
+| Phase | State |
+| --- | --- |
+| 0 | Shipped (#400). |
+| 1 | Shipped (#402). `agent_turns` is written alongside every activation; `GET /sentinels/:id/turns` returns turns with older activations projected as origin `legacy`. The daily ledger reads the union and counts each row once. Behaviour is unchanged. |
+| 2 | Shipped behind a flag, default off. With the flag off nothing changes: every firing still starts its own child thread. |
+| 3 to 6 | Not started. |
+
+### Phase 2 flag
+
+Set `ZERO_AGENTS_PERSISTENT_THREAD=1` in the environment of the engine (any of `1`, `true`, `on`, `yes`). It is read on every firing, so it can be flipped without losing state. It is an environment variable and not a setting on purpose: it is an experiment, it has no UI, and it goes away when Phase 3 makes it the default. It applies to schedule and GitHub pull request triggers only. A manual "Run now" still starts a child thread until Phase 3.
+
+With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web/agent-turns.ts`):
+
+- The Agent's home thread is ensured first (reused, restored after a restart, or created). No child thread is created. If the old thread cannot be restored the next turn says so.
+- The turn is reserved in one store transaction (`reserveTurn`): replayed cause (idempotency key), second queued occurrence of the same schedule (`skipped`: "Still working on the previous one"), a newer commit of a pull request that is still queued (the older one becomes `skipped`: "Superseded by a newer commit" and leaves the gateway queue), and the daily turn and spend caps.
+- A thread that has a pending decision records the turn as `skipped` ("Waiting on you") and does not queue it. A pull request is not marked as handled in that case, so it is offered again at the next poll.
+- The send is queue mode and automated, so a message that cannot start is dropped by the gateway and the next one runs. A full gateway queue is recorded as `skipped` ("The queue is full").
+- Every turn starts with a header (`[Turn from schedule "..." at ... UTC · turn <id>]`) and then a compact envelope: the charter (up to 6,000 characters), the scope, the skills allow-list and the remaining budget, followed by the trigger prompt and fenced untrusted event data. `NOTES.md` is sent when its revision changed. The envelope is sent with every turn, so a compaction cannot drop it. A test with a real gateway and a forced compaction shows that the turn after the compaction carries an edited charter and the scope.
+- Cost is the thread's cost at the end of the turn minus its cost at the start of that turn. Mid-turn enforcement on usage events stays: reaching the daily cap cancels the turn, pauses the Agent and records the turns waiting behind it.
+- A turn that fails does not stall the queue. After three failed turns in a row the trigger turns itself off (`lastStatus: failing`) and the Agent shows "needs you". A person turning the trigger back on resets the count. Turns closed because the engine stopped do not count as failures, and the next turn is told that the previous one was interrupted.
+- When a person cancels a turn, the gateway pauses its queue; trigger turns waiting behind it are started again.
+
+### Known gaps in Phase 2 (all must be closed or accepted before Phase 3)
+
+1. The gateway pins scope, model and the skills allow-list when the thread is created, and cannot change the skills allow-list afterwards. The envelope always states the current scope and skills, but the thread's enforced allow-list can be older than the Agent's after an edit. A gateway `instructions` channel and a way to reconfigure the skill allow-list are needed.
+2. Pull request comments are not posted from the standing thread: findings are read per thread, so a comment would list every earlier review. The comment option is ignored while the flag is on.
+3. `messages[0]` of a thread survives compaction verbatim, so the first turn's envelope stays in context forever and can disagree with the current charter. The per-turn envelope says it overrides earlier messages; the system-prompt channel is the real fix.
+4. A person's message typed in the Agent's thread is not recorded as a turn (Phase 3).
+5. The per-turn gateway cost ceiling is not set; only the subscriber enforces the cap.
 
 ## Rule
 

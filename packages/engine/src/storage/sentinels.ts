@@ -22,6 +22,7 @@ const MAX_CURSOR_ENTRIES = 200;
 /** A trigger claim only covers the launch itself; an older one belongs to a crashed engine. */
 export const SENTINEL_CLAIM_STALE_MS = 600_000;
 const MAX_TURNS_LIST = 200;
+interface SkippedTurnInput { agentId: string; origin: Exclude<AgentTurnOrigin, "legacy">; detail: AgentTurnOriginDetail; triggerId?: string; sessionId?: string; idempotencyKey?: string; reason: string; nowIso: string }
 const parseRow = <T>(value: unknown, key: string): T => JSON.parse(String((value as Record<string, unknown>)[key])) as T;
 /** Files from removed features: stored rows stay untouched but are not listed. */
 const HIDDEN_FILES = new Set(["CREW.md"]);
@@ -212,6 +213,97 @@ export class SentinelStore {
     insert(row);
     return row;
   }
+  /** Consecutive failed turns after which a trigger turns itself off. */
+  static readonly TRIGGER_FAILURE_LIMIT = 3;
+  /**
+   * Records a turn that was never queued (skipped before delivery) so it shows in the Agent's activity. Idempotent by key:
+   * the same cause is recorded once and later calls return the existing row.
+   */
+  recordSkippedTurn(input: SkippedTurnInput): AgentTurn {
+    return this.#db.transaction(() => this.#recordSkipped(input))();
+  }
+  #recordSkipped(input: SkippedTurnInput): AgentTurn {
+    this.#require(input.agentId);
+    const existing = input.idempotencyKey ? this.getTurnByKey(input.agentId, input.idempotencyKey) : null;
+    if (existing) return existing;
+    return this.#insertTurn({
+      id: randomUUID(), agentId: input.agentId, origin: input.origin, detail: input.detail, status: "skipped", skippedReason: input.reason, error: input.reason,
+      queuedAt: input.nowIso, finishedAt: input.nowIso, ...(input.triggerId ? { triggerId: input.triggerId } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    })!;
+  }
+  /**
+   * Phase 2 delivery: one transaction decides what happens to a trigger turn. Replayed cause: `duplicate`. Same trigger
+   * already queued (schedule): recorded as skipped. Same pull request already queued (github): the older queued turn is
+   * superseded and returned so the caller can take its message off the queue. Caps are checked in the same transaction
+   * as the insert, so two firings cannot both take the last slot.
+   */
+  reserveTurn(input: { agentId: string; origin: Exclude<AgentTurnOrigin, "legacy" | "promote">; detail: AgentTurnOriginDetail; triggerId?: string; sessionId: string; idempotencyKey?: string; coalesce?: { pr: number }; ownerPid: number; nowIso: string },
+    caps: { sinceIso: string; maxRuns: number; dailyUsd: number }): { duplicate: AgentTurn } | { skipped: AgentTurn } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } | { turn: AgentTurn; ledger: { runs: number; costUsd: number }; superseded: AgentTurn[] } {
+    return this.#db.transaction(() => {
+      this.#require(input.agentId);
+      if (input.idempotencyKey) {
+        const existing = this.getTurnByKey(input.agentId, input.idempotencyKey);
+        if (existing && existing.status !== "failed") return { duplicate: existing };
+        // A failed delivery of the same cause may be retried: release its key.
+        if (existing) this.#db.prepare("UPDATE agent_turns SET idempotency_key = NULL WHERE id = ?").run(existing.id);
+      }
+      const queued = input.triggerId ? this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? AND trigger_id = ? AND status = 'queued' AND legacy_activation_id IS NULL ORDER BY seq").all(input.agentId, input.triggerId).map(turnFromRow) : [];
+      const superseded: AgentTurn[] = [];
+      if (input.coalesce) {
+        for (const turn of queued) if (turn.detail.event?.pr === input.coalesce.pr) superseded.push(turn);
+      } else if (queued.length) {
+        return { skipped: this.#recordSkipped({ agentId: input.agentId, origin: input.origin, detail: input.detail, ...(input.triggerId ? { triggerId: input.triggerId } : {}), sessionId: input.sessionId, reason: "Still working on the previous one", nowIso: input.nowIso }) };
+      }
+      const ledger = this.ledger(input.agentId, caps.sinceIso);
+      if (ledger.runs >= caps.maxRuns) return { breach: "runs" as const, ledger };
+      if (ledger.costUsd >= caps.dailyUsd) return { breach: "budget" as const, ledger };
+      for (const turn of superseded) this.#db.prepare("UPDATE agent_turns SET status = 'skipped', skipped_reason = ?, error = ?, finished_at = ? WHERE id = ?").run("Superseded by a newer commit", "Superseded by a newer commit", input.nowIso, turn.id);
+      const turn = this.#insertTurn({
+        id: randomUUID(), agentId: input.agentId, sessionId: input.sessionId, origin: input.origin, detail: input.detail, status: "queued", ownerPid: input.ownerPid, queuedAt: input.nowIso,
+        ...(input.triggerId ? { triggerId: input.triggerId } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      })!;
+      return { turn, ledger, superseded: superseded.map(old => ({ ...old, status: "skipped" as const })) };
+    })();
+  }
+  updateTurn(id: string, update: Partial<Pick<AgentTurn, "status" | "sessionId" | "costUsd" | "error" | "note" | "startedAt" | "finishedAt" | "skippedReason">>): AgentTurn {
+    return this.#db.transaction(() => {
+      const current = this.getTurn(id);
+      if (!current) throw new SentinelStoreError("Turn not found.", 404);
+      const next: AgentTurn = { ...current, ...update };
+      this.#db.prepare("UPDATE agent_turns SET status = ?, session_id = ?, cost_usd = ?, error = ?, note = ?, skipped_reason = ?, started_at = ?, finished_at = ? WHERE id = ?")
+        .run(next.status, next.sessionId ?? null, next.costUsd ?? null, next.error ?? null, next.note ?? null, next.skippedReason ?? null, next.startedAt ?? null, next.finishedAt ?? null, id);
+      return next;
+    })();
+  }
+  /** Turns of the persistent-thread path that have not finished (queued or running). */
+  listOpenTurns(): AgentTurn[] {
+    return this.#db.prepare("SELECT * FROM agent_turns WHERE status IN ('queued', 'running') AND legacy_activation_id IS NULL ORDER BY queued_at LIMIT 500").all().map(turnFromRow);
+  }
+  /** The newest turn that was actually delivered (skipped ones excluded). */
+  lastDeliveredTurn(agentId: string): AgentTurn | null {
+    const found = this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? AND status != 'skipped' ORDER BY seq DESC LIMIT 1").all(agentId)[0];
+    return found ? turnFromRow(found) : null;
+  }
+  /**
+   * Writes a finished turn's outcome onto its trigger (replacing the "running" status the launch left behind) and applies
+   * the circuit breaker: after TRIGGER_FAILURE_LIMIT failures in a row the trigger turns itself off with `failing`.
+   */
+  noteTurnResult(triggerId: string, result: { status: "completed" | "failed" | "cancelled"; error?: string; countsAsFailure?: boolean }, nowMs = Date.now()): { trigger: SentinelTrigger; disabled: boolean } | null {
+    return this.#db.transaction(() => {
+      const current = this.getTrigger(triggerId);
+      if (!current) return null;
+      const failed = result.status === "failed" && result.countsAsFailure !== false;
+      const streak = result.status === "completed" ? 0 : failed ? (current.consecutiveFailures ?? 0) + 1 : current.consecutiveFailures ?? 0;
+      const disabled = failed && streak >= SentinelStore.TRIGGER_FAILURE_LIMIT && current.enabled;
+      const next: SentinelTrigger = {
+        ...current, consecutiveFailures: streak, enabled: disabled ? false : current.enabled, updatedAt: new Date(nowMs).toISOString(),
+        lastStatus: disabled ? "failing" : result.status,
+        ...(disabled ? { lastError: `Turned off after ${SentinelStore.TRIGGER_FAILURE_LIMIT} failed turns in a row.${result.error ? ` Last error: ${result.error}` : ""}`.slice(0, 1000) } : result.error ? { lastError: result.error.slice(0, 1000) } : { lastError: undefined }),
+      };
+      this.#writeTrigger(next);
+      return { trigger: next, disabled };
+    })();
+  }
   getTurnByKey(agentId: string, idempotencyKey: string): AgentTurn | null {
     const found = this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? AND idempotency_key = ?").all(agentId, idempotencyKey)[0];
     return found ? turnFromRow(found) : null;
@@ -382,7 +474,7 @@ export class SentinelStore {
         ...current, enabled, version: current.version + 1, updatedAt: new Date(nowMs).toISOString(),
         ...(merged.data.schedule ? { schedule: merged.data.schedule } : {}), ...(merged.data.github ? { github: merged.data.github } : {}),
         nextFireAt: merged.data.schedule ? new Date(nextSentinelFire(merged.data.schedule, nowMs)).toISOString() : merged.data.github ? new Date(nowMs).toISOString() : null,
-        lastStatus: enabled ? "scheduled" : "paused", lastError: undefined,
+        lastStatus: enabled ? "scheduled" : "paused", lastError: undefined, ...(enabled && !current.enabled ? { consecutiveFailures: 0 } : {}),
         ...(changedSource ? { cursor: undefined } : {}),
       };
       this.#writeTrigger(next);
