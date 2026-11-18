@@ -59,10 +59,11 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
       if (n === 1) return call("bash", { command: `while true; do printf x >> '${sentinel}'; sleep 0.05; done`, timeout: 120 });
       return done();
     }
-    if (actor === "CHILD_290_READONLY") {
-      if (n === 0) return call("str_replace", { path: file, old_string: "written", new_string: "FORBIDDEN" });
+    if (actor === "CHILD_290_READER") {
+      if (n === 0) return call("bash", { command: `cat '${file}'` });
       return done();
     }
+    if (actor === "CHILD_290_SECOND") return done();
     if (actor === "CHILD_290_FAILURE") {
       if (n === 0) return call("str_replace", { path: file, old_string: "written", new_string: "failure-written" });
       return Response.json({ error: { message: "Deterministic offline worker provider failure", type: "invalid_request_error" } }, { status: 400 });
@@ -71,7 +72,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
     if (n > 0) return done();
     if (actor === "OP_290_WRITER") return call("spawn_agent", { task: "CHILD_290_WRITER: perform the fixture edit then run the bounded sentinel shell until stopped.", name: "writer", wait: false });
     if (actor === "OP_290_SECOND") return call("spawn_agent", { task: "CHILD_290_SECOND: no work", name: "second-writer", wait: false });
-    if (actor === "OP_290_READONLY") return call("spawn_agent", { task: "CHILD_290_READONLY: attempt the fixture edit once and report the actual tool result.", name: "readonly", read_only: true, wait: false });
+    if (actor === "OP_290_READER") return call("spawn_agent", { task: "CHILD_290_READER: read the fixture with the shell and report what it says.", name: "reader", wait: false });
     if (actor === "OP_290_FAILURE") return call("spawn_agent", { task: "CHILD_290_FAILURE: attempt the fixture edit once then encounter the deterministic provider failure.", name: "failure", wait: false });
     if (actor === "OP_290_EARLY") return call("spawn_agent", { task: "CHILD_290_EARLY: no tool may execute before the deterministic provider failure.", name: "early-failure", wait: false });
     if (actor === "OP_290_STOP") return call("spawn_agent", { op: "stop", agent_id: stopId });
@@ -114,13 +115,11 @@ try {
   await until(() => existsSync(sentinel) && readFileSync(sentinel).length > 1, "actual child edit and owned shell");
   assert.equal(readFileSync(file, "utf8"), "written\n");
   const second = await op("OP_290_SECOND");
-  assert.equal(second.success, false, "Second shared-checkout writer was admitted");
-  assert.match(JSON.stringify(second), /writ|workspace/i);
+  assert.equal(second.success, true, `A second worker in the same folder must be admitted: ${JSON.stringify(second)}`);
   const list = await op("OP_290_LIST");
   assert(list.success);
-  const writer = (list.output as { workers: Array<{ id: string; workspace: { writeCapable: boolean }; localEffects: { attempts: number; observedWrites: number; tools: string[] }; effects: string }> }).workers.find(item => item.id === stopId);
+  const writer = (list.output as { workers: Array<{ id: string; localEffects: { attempts: number; observedWrites: number; tools: string[] }; effects: string }> }).workers.find(item => item.id === stopId);
   assert(writer);
-  assert.equal(writer.workspace.writeCapable, true);
   assert.equal(writer.localEffects.observedWrites, 1);
   assert(writer.localEffects.attempts >= 2);
   assert.equal(writer.effects, "unknown", "Cleanup/effect knowledge must remain distinct");
@@ -136,11 +135,11 @@ try {
   const bytes = readFileSync(sentinel).length;
   await Bun.sleep(250);
   assert.equal(readFileSync(sentinel).length, bytes, "Stopped owned shell continued writing");
-  assert((await op("OP_290_READONLY")).success);
-  await until(() => (counts.get("CHILD_290_READONLY") ?? 0) >= 2, "readonly attempt result");
-  assert.equal(readFileSync(file, "utf8"), "written\n", "read_only was advisory");
-  assert.match(JSON.stringify(traces.filter(t => t.actor === "CHILD_290_READONLY").at(-1)?.outputs), /read.only|denied|not.allowed|not.available/i);
-  type Worker = { name: string; status: string; live: boolean; cleanup: string; workspace: { readOnly: boolean; writeCapable: boolean }; localEffects: { attempts: number; observedWrites: number; tools: string[] }; effects: string };
+  assert((await op("OP_290_READER")).success);
+  await until(() => (counts.get("CHILD_290_READER") ?? 0) >= 2, "reader shell result");
+  assert.equal(readFileSync(file, "utf8"), "written\n", "a read changed the file");
+  assert.match(JSON.stringify(traces.filter(t => t.actor === "CHILD_290_READER").at(-1)?.outputs), /written/);
+  type Worker = { name: string; status: string; live: boolean; cleanup: string; localEffects: { attempts: number; observedWrites: number; tools: string[] }; effects: string };
   const waitFailed = async (name: string) => {
     const deadline = Date.now() + 15000;
     while (true) {
@@ -166,16 +165,14 @@ try {
   assert.equal(beforeTools.localEffects.attempts, 0);
   assert.deepEqual(beforeTools.localEffects.tools, []);
   assert.equal(readFileSync(file, "utf8"), "failure-written\n");
-  const readonly = workers.find(item => item.name === "readonly");
-  assert(readonly);
-  assert.equal(readonly.workspace.readOnly, true);
-  assert.equal(readonly.workspace.writeCapable, false);
-  assert.equal(readonly.localEffects.observedWrites, 0);
+  const reader = workers.find(item => item.name === "reader");
+  assert(reader);
+  assert.equal(reader.localEffects.observedWrites, 0);
   assert((await op("OP_290_STOPALL")).success);
   const proof = await session.forceStop();
   assert.deepEqual(proof, { processExited: true, resourcesStopped: true, quarantined: false });
   console.log(JSON.stringify({ builtCli: cli, loopbackRequests: requests, publicSpawnListStop: true, observedChildEdit: true,
-    stoppedShellStable: true, readOnlyEnforced: true, sharedWriterBoundEnforced: true, failedWorkersObservedBeforeAndAfterWrite: true, ownershipProof: proof }));
+    stoppedShellStable: true, childShellAvailable: true, parallelWorkersAdmitted: true, failedWorkersObservedBeforeAndAfterWrite: true, ownershipProof: proof }));
 } finally {
   const cleanup = session ? await Promise.allSettled([session.cleanup()]) : [];
   server.stop(true);
