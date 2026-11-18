@@ -101,11 +101,20 @@ export class AgentTurnDelivery {
 
   async deliver(request: TurnRequest): Promise<TurnResult> {
     const ctx = this.#ctx;
-    // The caller's snapshot may be older than the pause or review that landed while it fetched context: gate on the current record.
-    const sentinel = ctx.store.get(request.sentinel.id);
-    if (!sentinel) return { status: "refused", kind: "failed", reason: "Sentinel not found." };
-    if (sentinel.status !== "active") return { status: "refused", kind: "inactive", reason: "Sentinel is paused." };
-    if (sentinelNeedsReview(sentinel)) return { status: "refused", kind: "review", reason: "Sentinel needs review before it can run on its own." };
+    // The caller's snapshot may be older than a pause, review, or circuit-breaker trip that landed while fetching context: gate on live records.
+    const gate = (): { sentinel: Sentinel } | { refused: Extract<TurnResult, { status: "refused" }> } => {
+      const sentinel = ctx.store.get(request.sentinel.id);
+      if (!sentinel) return { refused: { status: "refused", kind: "failed", reason: "Sentinel not found." } };
+      if (sentinel.status !== "active") return { refused: { status: "refused", kind: "inactive", reason: "Sentinel is paused." } };
+      if (sentinelNeedsReview(sentinel)) return { refused: { status: "refused", kind: "review", reason: "Sentinel needs review before it can run on its own." } };
+      const trigger = ctx.store.getTrigger(request.trigger.id);
+      if (!trigger) return { refused: { status: "refused", kind: "failed", reason: "Trigger not found." } };
+      if (!trigger.enabled) return { refused: { status: "refused", kind: "inactive", reason: trigger.lastError ?? "Trigger is off." } };
+      return { sentinel };
+    };
+    const initial = gate();
+    if ("refused" in initial) return initial.refused;
+    let sentinel = initial.sentinel;
     request = { ...request, sentinel };
     const nowMs = ctx.now();
     const nowIso = isoAt(nowMs);
@@ -120,6 +129,11 @@ export class AgentTurnDelivery {
     // A fresh thread has seen nothing: send the notes again.
     if (home.replaced) this.#seen.delete(sentinel.id);
     this.observe(sentinel, home.id);
+    // Re-check live Sentinel and trigger state after async preparation (`ensureHome`) before reserving or sending.
+    const live = gate();
+    if ("refused" in live) return live.refused;
+    sentinel = live.sentinel;
+    request = { ...request, sentinel };
     // A thread that is waiting on a person would hold trigger turns behind it forever: record them as skipped instead.
     let pending = 0;
     try { pending = ctx.missions.pendingDecisions(home.id); } catch { /* A thread that cannot be read has nothing pending. */ }
@@ -132,6 +146,7 @@ export class AgentTurnDelivery {
       ...base, sessionId: home.id, idempotencyKey: request.idempotencyKey, ownerPid: process.pid,
       ...(request.trigger.kind === "github-pr" && typeof request.event?.["pr"] === "number" ? { coalesce: { pr: request.event["pr"] } } : {}),
     });
+    if ("refused" in reserved) return { status: "refused", kind: "inactive", reason: reserved.refused };
     if ("duplicate" in reserved) return { status: "duplicate", turn: reserved.duplicate };
     if ("skipped" in reserved) return { status: "skipped", turn: reserved.skipped, reason: reserved.skipped.skippedReason ?? "Skipped", consumed: true };
     for (const old of reserved.superseded) this.#withdraw(old.id);
@@ -140,9 +155,10 @@ export class AgentTurnDelivery {
     const watch = this.#watch(home.id);
     const tracked: Tracked = { turnId: turn.id, sentinel, text, triggerId: request.trigger.id, base: ctx.missions.usage?.(home.id)?.costUsd ?? 0, ...(request.comment ? { comment: request.comment } : {}) };
     watch.queued.push(tracked);
+    let messageId: string | undefined;
     try {
       const sent = await ctx.missions.send(home.id, text, undefined, "queue", true);
-      const messageId = sent && typeof sent === "object" && "queuedMessageId" in sent && typeof sent.queuedMessageId === "string" ? sent.queuedMessageId : undefined;
+      messageId = sent && typeof sent === "object" && "queuedMessageId" in sent && typeof sent.queuedMessageId === "string" ? sent.queuedMessageId : undefined;
       if (messageId) { tracked.messageId = messageId; this.#messageIds.set(turn.id, { missionId: home.id, messageId }); }
     } catch (error) {
       watch.queued = watch.queued.filter(item => item !== tracked);
@@ -152,6 +168,36 @@ export class AgentTurnDelivery {
       if (full) ctx.store.updateTurn(turn.id, { status: "skipped", skippedReason: reason, error: reason, finishedAt: isoAt(ctx.now()) });
       else this.#end(turn.id, request.trigger.id, "failed", reason);
       return full ? { status: "skipped", turn: ctx.store.getTurn(turn.id)!, reason, consumed: true } : { status: "refused", kind: "failed", reason };
+    }
+    // Re-check live state after awaiting `missions.send()`: if the trigger or Sentinel turned off while queueing, withdraw the queued message if possible.
+    const afterSend = gate();
+    if ("refused" in afterSend) {
+      let withdrawn = false;
+      if (messageId && watch.running !== tracked && watch.queued.includes(tracked) && ctx.missions.removeQueued) {
+        try {
+          const removed = ctx.missions.removeQueued(home.id, messageId);
+          if (removed && typeof (removed as PromiseLike<unknown>).then === "function") await removed;
+          withdrawn = watch.running !== tracked && watch.queued.includes(tracked);
+        } catch {
+          withdrawn = false;
+        }
+      }
+      if (withdrawn) {
+        watch.queued = watch.queued.filter(item => item !== tracked);
+        this.#messageIds.delete(turn.id);
+        this.#release(watch);
+        try {
+          ctx.store.updateTurn(turn.id, { status: "skipped", skippedReason: afterSend.refused.reason, error: afterSend.refused.reason, finishedAt: isoAt(ctx.now()), releaseIdempotencyKey: true });
+        } catch { /* The Sentinel was deleted. */ }
+      } else {
+        try {
+          const currentTurn = ctx.store.getTurn(turn.id);
+          if (currentTurn && (currentTurn.status === "queued" || currentTurn.status === "running")) {
+            ctx.store.updateTurn(turn.id, { note: "Trigger turned off while queueing; queued message could not be withdrawn and may still run." });
+          }
+        } catch { /* The Sentinel was deleted. */ }
+      }
+      return afterSend.refused;
     }
     audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.run", subject: sentinel.name, detail: { sentinelId: sentinel.id, turnId: turn.id, origin: request.origin } });
     return { status: "queued", turn: ctx.store.getTurn(turn.id) ?? turn };
@@ -297,7 +343,9 @@ export class AgentTurnDelivery {
     try {
       const result = store.noteTurnResult(triggerId, { status, ...(error ? { error } : {}), countsAsFailure: !extra.interrupted }, this.#ctx.now());
       if (result?.disabled) audit({ actor: "system", action: "sentinel.trigger.failing", subject: triggerId, outcome: "denied", detail: { triggerId, failures: SentinelStore.TRIGGER_FAILURE_LIMIT } });
-    } catch { /* Best effort. */ }
+    } catch (noteError) {
+      audit({ actor: "system", action: "sentinel.trigger.result_error", subject: triggerId, outcome: "error", detail: { triggerId, id: turnId, status, reason: message(noteError) } });
+    }
   }
 
   /** A superseded turn's message comes off the gateway queue. Best effort: if it already started, it simply runs. */

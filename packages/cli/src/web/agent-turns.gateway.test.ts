@@ -44,7 +44,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
     const agent = store.create({ name: "Guard", instructions: "Review dependencies." });
     store.setStatus(agent.id, "active", undefined, true);
     const automation = workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: agent.id });
-    const trigger = store.createTrigger(agent.id, { automationId: automation.id, kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: false });
+    const trigger = store.createTrigger(agent.id, { automationId: automation.id, kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: true });
     const delivery = new AgentTurnDelivery({
       store, now: Date.now,
       missions: {
