@@ -321,33 +321,6 @@ suggested_replacement: ${"x".repeat(20_001)}
     });
   });
 
-  it("promotes a C/C++ structured finding when sanitizer_log parses", () => {
-    mkdirSync(join(scope, "src"), { recursive: true });
-    writeFileSync(join(scope, "src", "decoder.c"), "int decode(void) { return 0; }");
-    const output = `
----FINDING---
-title: Decoder reads past allocation
-severity: high
-category: other
-description: The decoder reads past the allocated packet.
-file: src/decoder.c:1
-harness: /tmp/0-harness/decoder/harness.c
-sanitizer_log: ==1==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x6020000000fb at pc 0x401000 bp 0x7fff sp 0x7fff
-READ of size 1 at 0x6020000000fb thread T0
-    #0 0x401000 in decode src/decoder.c:1:3
-0x6020000000fb is located 0 bytes to the right of 11-byte region [0x6020000000f0,0x6020000000fb)
-SUMMARY: AddressSanitizer: heap-buffer-overflow src/decoder.c:1:3 in decode
-tier: 1
----END---
-`;
-    const findings = parseFindingsFromCliOutput(output, { scopePath: scope });
-    expect(findings).toHaveLength(1);
-    expect(findings[0].status).toBe("confirmed");
-    expect(findings[0].confidence).toBe(0.95);
-    expect(findings[0].category).toBe("out-of-bounds-read");
-    expect(findings[0].evidence.response).toContain("AddressSanitizer: heap-buffer-overflow");
-    expect(findings[0].evidence.analysis).toContain("Sanitizer verdict: ASAN heap-buffer-overflow");
-  });
 });
 
 describe("parseFindingsFromCliOutput — JSON output with scopePath", () => {
@@ -404,27 +377,6 @@ describe("parseFindingsFromCliOutput — JSON output with scopePath", () => {
       startLine: 1,
       suggestion: '{"scripts": {}}',
     });
-  });
-
-  it("promotes JSON findings with sanitizer_log evidence", () => {
-    writeFileSync(join(scope, "test.cc"), "#include <limits>\n\nint main() { return 0; }");
-    const output = JSON.stringify({
-      findings: [
-        {
-          title: "Integer overflow",
-          severity: "medium",
-          category: "other",
-          description: "UBSan confirms signed overflow.",
-          file: "test.cc:3",
-          sanitizer_log: "test.cc:3:5: runtime error: signed integer overflow: 2147483647 + 1 cannot be represented in type 'int'",
-        },
-      ],
-    });
-    const findings = parseFindingsFromCliOutput(output, { scopePath: scope });
-    expect(findings).toHaveLength(1);
-    expect(findings[0].status).toBe("confirmed");
-    expect(findings[0].category).toBe("integer-overflow");
-    expect(findings[0].evidence.analysis).toContain("UBSAN signed-integer-overflow");
   });
 
   it("drops fenced or unified-diff suggestions (location kept)", () => {

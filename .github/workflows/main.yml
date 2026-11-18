@@ -46,8 +46,6 @@ jobs:
       docs: ${{ steps.diff.outputs.docs }}
       docker: ${{ steps.diff.outputs.docker }}
       replay: ${{ steps.diff.outputs.replay }}
-      windows: ${{ steps.diff.outputs.windows }}
-      action: ${{ steps.diff.outputs.action }}
       deps: ${{ steps.diff.outputs.deps }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,7 +113,7 @@ jobs:
         run: node scripts/run-checks.mjs static
 
   engine:
-    name: engine and bench tests
+    name: engine tests
     needs: [changes, build]
     if: ${{ !cancelled() && needs.build.result == 'success' && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.engine == 'true')) }}
     runs-on: graphide
@@ -237,32 +235,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm test:public:scripts
 
-  windows-storage:
-    name: windows storage
-    # Windows runners bill at 2x: only when the code it exercises can have changed.
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.windows == 'true')) }}
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Check native NTFS privacy, artifacts and junction rejection
-        working-directory: packages/engine
-        run: pnpm exec vitest run src/improvement/private-storage.test.ts src/improvement/private-storage.windows.test.ts
-      - name: Check the Bun 1.3.14 standalone Windows runtime
-        run: |
-          bun build --compile scripts/check-windows-storage-bun.ts --outfile windows-storage-check.exe
-          ./windows-storage-check.exe
-
   docker-server:
     name: docker server smoke
     # Builds the image and checks the single-node server story end to end:
@@ -364,50 +336,6 @@ jobs:
       - name: Exercise real containers, scope, timeout cleanup, and patch controls
         run: node scripts/smoke-docker-replay.mjs
 
-  action:
-    name: GitHub Action contracts
-    # Composite action wiring with a stub CLI: no model credentials, read-only token.
-    needs: changes
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || (needs.changes.result == 'success' && needs.changes.outputs.action == 'true')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - name: Check shell syntax
-        run: bash -n scripts/run-github-action.sh
-      - name: Check CI execution, reports, and failure gates
-        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs scripts/post-github-suggestions.test.mjs
-      - name: Create stub CLI (no model calls)
-        run: |
-          mkdir -p "$RUNNER_TEMP/stub"
-          cat > "$RUNNER_TEMP/stub/0" <<'STUB'
-          #!/usr/bin/env node
-          if (process.argv[2] === '--version') { console.log('0 selftest-stub'); process.exit(0); }
-          process.stdout.write(JSON.stringify({ findings: [], warnings: [], summary: { totalFindings: 0 } }));
-          STUB
-          chmod +x "$RUNNER_TEMP/stub/0"
-      - name: Run the action against this repository
-        id: zero
-        uses: ./
-        with:
-          cli-path: ${{ runner.temp }}/stub/0
-          report-dir: ${{ runner.temp }}/0-report
-          cost-ceiling: '1'
-      - name: Assert outputs
-        env:
-          SKIPPED: ${{ steps.zero.outputs.skipped }}
-          SHOULD_FAIL: ${{ steps.zero.outputs.should-fail }}
-          EXEC_OK: ${{ steps.zero.outputs.execution-successful }}
-        run: |
-          [[ "$SHOULD_FAIL" == false && "$EXEC_OK" == true ]]
-          echo "skipped=$SKIPPED"
-
   docs:
     name: docs site build
     needs: changes
@@ -460,7 +388,7 @@ jobs:
 
   verify:
     name: verify
-    needs: [changes, build, static, engine, browser, smoke, unit, windows-storage, docker-server, docker-replay, action, docs]
+    needs: [changes, build, static, engine, browser, smoke, unit, docker-server, docker-replay, docs]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

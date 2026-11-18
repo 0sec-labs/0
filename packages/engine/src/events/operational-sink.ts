@@ -17,7 +17,7 @@
  */
 import type { EventType, EventSink } from "./bus.js";
 import { eventBus } from "./bus.js";
-import { redactSensitiveHeaders } from "../disclose/template.js";
+import { redactSensitiveHeaders } from "../shared/redact-headers.js";
 
 // ── Bounds ──────────────────────────────────────────────────────────────────
 

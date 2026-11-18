@@ -56,10 +56,7 @@ export type {
   EngagementProfileInputs,
 } from "./scope/engagement-profile.js";
 
-/** @deprecated legacy-bench entry: bench runners only. Use executeAssessment. */
-export { scan } from "./legacy-bench/index.js";
 export type { ScanEvent } from "./events/scan-event.js";
-export { agenticScan } from "./agentic-scanner.js";
 export {
   finalize,
 } from "./context.js";
@@ -118,122 +115,33 @@ export {
 export { runAnalysisAgent } from "./agent-runner.js";
 
 // Package audit
-/** @deprecated legacy-bench entry: bench runners only. Use executeAssessment. */
-export { packageAudit } from "./legacy-bench/index.js";
 
 // Source code review
-export { huntAppFixVariants, appFixVariantsToSeedFindings } from "./review/app-fix-variants.js";
-export { checkAlreadyFixed } from "./kernel/fix-commit-intel.js";
 export type {
   CrossValidatedLead,
   CrossValidatedLeads,
   CrossValidatedLeadSource,
 } from "./shared/index.js";
-export {
-  scaffoldTier1Harness,
-  scaffoldTier2Harness,
-} from "./review/c-cpp-profile.js";
-export {
-  buildTier2Harness,
-} from "./review/c-cpp-tier2.js";
-export type {
-  Sanitizer,
-} from "./review/c-cpp-tier2.js";
-export {
-  extractCorpus,
-} from "./review/corpus.js";
-export {
-  runTier3Validation,
-} from "./review/c-cpp-tier3.js";
-export type {
-  MemSafetyTarget,
-  CrashArtifact,
-} from "./triage/memsafety-types.js";
 // Integration spine (0#700): the A→B→C memory-safety scan stage that
 // chains the playbook, fuzz loop, and crash triage into Findings.
-export {
-  runMemSafetyScan,
-  crashArtifactToFinding,
-} from "./stages/memsafety-scan.js";
 // npm-ecosystem dynamic-discovery stage + its extensible DETECTOR registry
 // (sspp-fuzz, read-unstable, parser-diff). LLM-proposes / harness-disposes;
 // confirmed only on an observed runtime consequence (assume-FP). New bug classes
 // plug in as detectors — see docs/operations/detector-from-finding.md.
-export {
-  runNpmDynamicDiscovery,
-} from "./stages/npm-dynamic-discovery.js";
-export type {
-  NpmDynamicDiscoveryResult,
-} from "./stages/npm-dynamic-discovery.js";
-export {
-  DETECTOR_REGISTRY,
-  getDetectorById,
-  listDetectorIds,
-  resolveDetectors,
-  runDetectorOnPackage,
-  guardPackage,
-  dedupConfirmation,
-  createOsvAdvisoryLookup,
-  deriveForkSiblings,
-  OsvLookupError,
-  inProcessProbe,
-  staticProbe,
-  ssppFuzzDetector,
-  readUnstableDetector,
-  parserDiffDetector,
-} from "./stages/npm-detectors/index.js";
-export type {
-  Detector,
-  DedupVerdict,
-  PackageRef,
-} from "./stages/npm-detectors/index.js";
 // Craft scan stage (agentic reason→craft→submit→refine, injectable PoC oracle):
 // the sibling of the fuzz path that needs no target build.
-export {
-  runCraftScan,
-} from "./stages/craft-scan.js";
-export {
-  defaultCraftCandidateReviewer,
-} from "./stages/craft-adversarial-review.js";
 // Ensemble craft stage (multi-model best-of-N craft + LLM judge → one PoC).
-export {
-  runEnsembleCraft,
-  parseEnsembleModels,
-} from "./stages/ensemble-craft.js";
-export type {
-  CraftCandidateJudge,
-} from "./stages/ensemble-craft.js";
 // Exploit scan stage (agentic weaponize-to-root, injectable target executor).
-export { runExploitScan } from "./stages/exploit-scan.js";
 // Nonce-bound root proof + out-of-band module-load denial for the exploit lane.
 // A `uid=0` regex over model-influenced output is NOT a root proof; adapters
 // (ExploitGym) must verify their own proof artifact against the same challenge.
-export {
-  mintRootProofChallenge,
-  verifyRootProof,
-  rootProofInstructions,
-} from "./stages/exploit-stage-gate.js";
-export type {
-  RootProofChallenge,
-  RootProofVerdict,
-} from "./stages/exploit-stage-gate.js";
 // Hunt scan stage (parallel novel-bug discovery: fan-out finders -> skeptic+prover gate).
-export { runHuntScan, makeSkepticVerifier, composeGate, makeMultiLensVerifier } from "./stages/hunt-scan.js";
-export { createEvolvedFinder } from "./stages/evolved-finder.js";
 // Deployment-context classification — path heuristics + severity cap for findings
 // that target dev/test/build-only code paths (issue #1215, deep-review postmortem).
-export {
-  classifyDeploymentContext,
-} from "./stages/deployment-context.js";
 export type { DeploymentContext } from "./shared/index.js";
 // Depth-method specialized-lens sets, per on-chain review profile. These are
 // the ready-made `*FinderLenses` / `*VerifyLenses` fan-out + verify-quorum
 // axes the seedless `deep-review` command wires into runHuntScan (G-A).
-export { evmFinderLenses, evmVerifyLenses } from "./review/evm-onchain-profile.js";
-export { solanaFinderLenses, solanaVerifyLenses } from "./review/solana-onchain-profile.js";
-export { cardanoFinderLenses, cardanoVerifyLenses } from "./review/cardano-onchain-profile.js";
-export { cairoFinderLenses, cairoVerifyLenses } from "./review/cairo-onchain-profile.js";
-export { moveFinderLenses, moveVerifyLenses } from "./review/move-onchain-profile.js";
 // Deterministic source-file walkers (shared by the review pipeline + the
 // seedless deep-review candidate enumeration + its 5000-file scope cap).
 export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
@@ -241,99 +149,28 @@ export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // flywheel.py): a preseeded 5-layer memory that PRIMES the best-of-N judge
 // ordering + attempt-budget cost-router — it never confirms; see
 // hunt-flywheel.ts's header for the invariant.
-export {
-  PRIME_MIN,
-} from "./stages/hunt-flywheel.js";
 // Learned negatives (ZERO_HUNT_NEGATIVES, default ON): a known-refuted-shape
 // memory that attaches prior refute reasons to the skeptic prompt as context.
 // Never auto-rejects, and inert until a caller supplies a corpus; see
 // hunt-negatives.ts's header.
-export {
-  loadKnownNegativesFromEnv,
-} from "./stages/hunt-negatives.js";
 // Kernel archetype catalog (multi-archetype hunt seeding; ported from 0verse's
 // 90-archetype registry, kernel-domain subset). Data + brief mapping are always
 // inert/available; `planArchetypeSweep` is env-gated (ZERO_ARCHETYPE_SWEEP=1).
-export {
-  loadKernelArchetypes,
-  loadFreebsdArchetypes,
-  FREEBSD_BARE_KERNEL_WORDS,
-  loadChromiumArchetypes,
-  CHROMIUM_BARE_WORDS,
-  filterArchetypes,
-  symbolsFromDetectionSignature,
-  archetypeSweepEnabled,
-  planArchetypeSweep,
-} from "./stages/archetype-catalog.js";
-export type {
-  ArchetypeRoute,
-  ArchetypeDomain,
-  ArchetypeCandidateOptions,
-  ArchetypeSweepPlan,
-} from "./stages/archetype-catalog.js";
 // The cross-language appsec lens registry — the data-driven sibling of the
 // kernel/FreeBSD/Chromium archetype packs, mapped straight to FinderLens[] for
 // the seedless finder surfaces (`deep-review` / `hunt`). See appsec-catalog.ts.
-export {
-  loadAppsecFinderLenses,
-} from "./stages/appsec-catalog.js";
 // Self-improving lens loop — miss ─▶ synthesize ─▶ bench-validate ─▶ register.
 // Turns a confirmed finder MISS into a new, validated, registered appsec lens.
 // Fail-closed; adds LENSES, never confirms FINDINGS. See stages/lens-synthesis/.
-export {
-  runLensSynthesisLoop,
-  validateCandidateLens,
-  makeFinderLensProbe,
-  prepareValidationCorpus,
-  inspectLensRegistry,
-  retireArchetype,
-  captureObservation,
-  listObservations,
-  approveObservation,
-  claimForProcessing,
-  markProcessed,
-  getObservation,
-  releaseClaim,
-  parseObservationInput,
-  parseApprovedObservationShape,
-} from "./stages/lens-synthesis/index.js";
-export type {
-  ConfirmedMiss,
-  MissInput,
-  ValidationFixture,
-  ValidationCorpus,
-  LensBaselineSnapshot,
-  LensProbe,
-  LensProbeOutcome,
-  LensSynthesisInput,
-  LensSynthesisResult,
-  LensSynthesisModel,
-  LensRegistryStatus,
-  ObservationStatus,
-  CaptureObservationInput,
-} from "./stages/lens-synthesis/index.js";
-export {
-  syncLoreMirror,
-  localMirrors,
-  makeLloreJudge,
-} from "./stages/novelty-check.js";
-export { generateVariantCandidates } from "./stages/variant-candidates.js";
 // Recency flywheel (kernelCTF freshness window): git diff a fresh linux-next
 // range → reachability filter → semantic-vs-cosmetic classifier → the refined
 // invariant engine → adversarial verify → ranked report. Beats the audit-density
 // wall by hunting just-committed code before syzbot/top-groups harden it.
-export {
-  runRecencyHunt,
-  renderRecencyReportMarkdown,
-} from "./stages/recency-hunt.js";
 // Whole-subsystem invariant-model hunting (Engine A, the SEEDLESS discovery
 // axis): an LLM builds a stored per-object lock/refcount/lifetime model ONCE,
 // then a deterministic tree-sitter dataflow checker (c-dataflow.ts) re-finds
 // violations against every new revision for free. `InvariantHuntPlan` is
 // aliased — invariant-candidates (above) already owns that name in the barrel.
-export {
-  buildInvariantModel,
-} from "./stages/subsystem-invariant-model.js";
 // Assumption-mining (Engine A', the FOURTH seedless axis): an LLM MINES the
 // implicit relied-on preconditions each function makes (+ the token a caller/
 // lock/API uses to establish each) ONCE; then a deterministic 1b cross-check +
@@ -341,68 +178,23 @@ export {
 // reach a relied-on subject WITHOUT establishing its precondition — the
 // dual-view/DirtyCred/AF_UNIX-GC/io_uring shape our fixed-schema checkers cannot
 // represent. `AssumptionHuntPlan` is aliased to avoid a barrel name clash.
-export {
-  runAssumptionHunt,
-} from "./stages/assumption-mining.js";
-export type {
-  Assumption,
-  AssumptionModel,
-} from "./stages/assumption-mining.js";
 // Engine A → seeded-hunt adapter (`0 lab research hunt --invariant`): derive the
 // subsystem scope from the seed diff, build-or-load its invariant model, and
 // format the model + deterministic violation hypotheses as a finder-prompt
 // block appended to the hunt brief.
-export {
-  buildInvariantHuntContext,
-} from "./stages/invariant-hunt-context.js";
-export type {
-  CallEdge,
-} from "./stages/graph-slice.js";
-export {
-  buildGraphSliceHuntContext,
-} from "./stages/graph-slice-hunt-context.js";
 // kernelCTF-reachability gate for hunt candidate selection (path-based; see
 // services/orchestrator/src/kernelctf-config.ts for the CONFIG-symbol ground truth).
-export {
-  applyReachabilityGate,
-} from "./stages/hunt-reachability.js";
 // Surface-desirability score for the generic fresh-surface hunt: prioritize
 // hard-to-fuzz stateful parsers of untrusted input that are NOT recently swept
 // (where source review beats fuzzing). Opt-in; default OFF = size-only ranking.
-export {
-  applySurfaceRanking,
-} from "./stages/surface-desirability.js";
 // Threat-model planner stage — pre-candidate-selection trust-boundary lanes.
-export { runThreatModelPlanner, parseThreatLaneJson, allocateCandidatesAcrossLanes, matchesLane } from "./stages/threat-lanes.js";
-export type { ThreatLane } from "./stages/threat-lanes.js";
 export {
   extractSpecInvariants,
   runSpecdriftPlan,
   runSpecdriftScan,
 } from "./specdrift/index.js";
-export type {
-  HuntCandidate,
-  HuntBrief,
-  HuntVerifier,
-  HuntScanOptions,
-  HuntScanResult,
-  HuntFindingRecord,
-  FinderLens,
-  VerifyLens,
-} from "./stages/hunt-scan.js";
-export type {
-  CraftPocEvaluator,
-  CraftScanOptions,
-  CraftScanResult,
-} from "./stages/craft-scan.js";
-export type {
-  CraftEvidenceRecord,
-} from "./stages/craft-evidence-ledger.js";
 
 // Unified pipeline: prepare + static analysis
-export {
-  prepare,
-} from "./prepare.js";
 export {
   expandHomePath,
   isExistingLocalTargetPath,
@@ -411,12 +203,6 @@ export {
 
 
 // Unified pipeline
-export {
-  runPipeline,
-} from "./unified-pipeline.js";
-export type {
-  PipelineOptions,
-} from "./unified-pipeline.js";
 export {
   listProjectReviewChecks,
   updateProjectReviewChecks,
@@ -496,11 +282,6 @@ export type {
 } from "./agent/index.js";
 
 // Strategy racing (best-of-N)
-export {
-  raceStrategies,
-  DEFAULT_STRATEGIES,
-} from "./racing.js";
-export type { AttackStrategy, RaceConfig, RaceResult, StrategyResult } from "./racing.js";
 
 // Per-host rate limiter (#214)
 export {
@@ -540,68 +321,30 @@ export type {
 // Structured verification pipeline — `verify()` is the unified entrypoint;
 // the trio (runStructuredVerify / runSelfConsistencyVerify) remain as the
 // single-pass + self-consistency implementations it delegates to.
-export {
-  verify,
-  runStructuredVerify,
-  runSelfConsistencyVerify,
-  tallyConsensus,
-} from "./triage/structured-verify.js";
 // Unified verify funnel — one verdict contract + one disclosure predicate.
-export { isDisclosureWorthy, evidenceKindForFinding } from "./triage/verify-verdict.js";
-export type {
-  VerifyOutcome,
-  VerifyEvidenceKind,
-} from "./triage/verify-verdict.js";
 // #659 / #1278 — the pov_oracle bucketing (which categories delegate to the
 // out-of-band OAST-callback oracle). Consumed by `0 scan verify` to decide when
 // a finding's PoV provenance is an OAST callback.
-export { oracleForCategory } from "./triage/pov-gate.js";
-export { parseImpactAssessment } from "./triage/impact-assessment.js";
 
-export type {
-  ReachabilityTier,
-} from "./triage/auto-triage.js";
 
 // Triage memories (Semgrep-style persistent FP learning)
-export { inferPackage } from "./triage/package.js";
 
-export type {
-  NoveltyResult,
-} from "./triage/publishability-sources.js";
 
 // PoV (Proof-of-Vulnerability) gate
-export {
-  generatePov,
-  judgePovEvidence,
-  isReproducedMemCorruption,
-  memCorruptionVerdict,
-} from "./triage/pov-gate.js";
 
 // (shared memsafety-types are re-exported above, beside the Track B fuzz-loop exports)
 
 // Handcrafted feature extractor (45-element vector for triage classifiers)
-export { extractFeatures, FEATURE_NAMES } from "./triage/feature-extractor.js";
 
 // Per-finding triage provenance — which FP-moat layers actually ran, derived
 // from the recorded `layerVerdicts` rather than the current env. See
 // `triage/provenance.ts` for why that distinction is load-bearing.
-export {
-  summarizeTriageProvenance,
-  formatTriageProvenance,
-  UNINSTRUMENTED_LAYERS,
-} from "./triage/provenance.js";
 
 export type {
   Remediation,
 } from "./remediation.js";
 
 // Adversarial eval runner (fast AI safety scorecard)
-export { runEval, getEvalCategories } from "./eval-runner.js";
-export type {
-  EvalScorecard,
-  EvalCategoryResult,
-  EvalVerdict,
-} from "./eval-runner.js";
 
 
 
@@ -614,124 +357,36 @@ export {
 
 
 // Kernel crash ingest (crash report → Finding pipeline)
-export {
-  ingestArtifactsFromDirectory,
-  ingestArtifactsFromFile,
-  reviewKernelCrashSubsystems,
-} from "./ingest/index.js";
 
 // Kernel advisory variant hunting (foxguard SARIF → 0 findings)
-export {
-  runKernelVariantHunt,
-} from "./kernel/index.js";
-export type {
-  KernelVariantHuntReport,
-} from "./kernel/index.js";
 
 
 // Syzbot invalid / auto-closed queue mining (LPE-hunt upgrade #0) — a net-new
 // bug-supply channel that mines syzbot's DISCARDED reports (invalid / no-repro /
 // moderation) into ranked hunt candidates. Ingestion + candidate-mapping only;
 // the dynamic repro is handed to the existing (bench-gated) kernel-vm path.
-export {
-  toHuntCandidates,
-  defaultSyzbotFetcher,
-  mineSyzbotQueue,
-  generateSyzChoiceWeights,
-  syzChoiceWeightsFromPlan,
-} from "./kernel/index.js";
 
 // Weaponization pipeline — engine bricks (ADR-055 Phase 1). Escalation ladder,
 // primitive strategy library + C templates, deterministic success oracle,
 // kernel-VM harness, and the control-demo probe that backs `attemptControlDemo`.
 // P2 (0cloud dispatch) / P3 (autonomy) build on this surface.
-export {
-  ratchet,
-  adjudicate,
-  emitWeaponizationC,
-  getStrategy,
-  runWeaponization,
-  kernelVmArtifactsReady,
-  bootedCacheKey,
-  makeKernelVmProbe,
-  runKernelExploitChain,
-} from "./kernel/index.js";
-export {
-  selectSprayPlans,
-  introspectExploitConfig,
-} from "./kernel/exploit/index.js";
 // Autonomous LLM-composed weaponization climb (feat/autonomous-climb-loop).
-export {
-  autonomousClimb,
-} from "./kernel/exploit/index.js";
-export type {
-  AutonomousClimbBug,
-} from "./kernel/exploit/index.js";
 
 // kernelCTF patch-gap 1day monitor (upstream-fixed CVE feed → target-tree
 // presence check → kernelCTF reachability gate → ranked candidates). See
 // 0/packages/engine/src/kernel/patch-gap.ts.
-export {
-  loadVulnsFeedFromDir,
-} from "./kernel/index.js";
-export { scanForPatchGapCandidates } from "./kernel/index.js";
-export type {
-  PatchGapCandidate,
-} from "./kernel/index.js";
-export type {
-  EscalationRung,
-  ExploitTemplateParams,
-  KernelVmRunner,
-  StrategyAttempt,
-  ChainRunStep,
-  KernelExploitContext,
-} from "./kernel/index.js";
 
 // Bug-to-primitive classifier (the input to the weaponization harness).
-export {
-  classifyKernelPrimitive,
-  classifyPrimitiveFromDmesg,
-  describeKernelPrimitive,
-} from "./triage/kernel-primitive.js";
-export type {
-  KernelPrimitive,
-  ControlDemoStep,
-} from "./triage/kernel-primitive.js";
 
 // Execution-verified exploitability-upgrade oracle — the PROVE stage (#1119).
-export {
-  makeExploitabilityGate,
-} from "./triage/exploitability-upgrade.js";
 // Per-finding PROVE stage — the adapter that makes the kernel-VM exploitability
 // oracle reachable as `runHuntScan`'s `opts.exploitability` (see the module
 // header for why the gate must be built per finding, not once per hunt).
-export {
-  makeHuntProveStage,
-} from "./triage/hunt-prove-stage.js";
 
-export type {
-  ImpactCeiling,
-} from "./triage/escalation-gate.js";
 
 
 
 // Kernel crash verification oracle
-export {
-  verifyKernelCrash,
-  verifyStandaloneKernelReproducer,
-} from "./triage/kernel-oracle.js";
-export type {
-  KernelOracleResult,
-  ReproducerResult,
-} from "./triage/kernel-oracle.js";
-export {
-  prepareKernelVmArtifacts,
-  writeProofFileReadOnly,
-  defaultDmesgOutPath,
-} from "./triage/kernel-vm-runner.js";
-export type {
-  KernelVmArtifacts,
-} from "./triage/kernel-vm-runner.js";
 
 
 
@@ -739,24 +394,11 @@ export type {
 // static `hypothesis: true, confidence: 0.4` kernel-review Finding and drives
 // a constrained reproducer-generation loop until the Tier 1 oracle confirms
 // (or the attempt/wall-clock budget is exhausted).
-export {
-  verifyStaticKernelFinding,
-  applyVerificationToFinding,
-  defaultKernelVerifyRunner,
-} from "./verify/index.js";
-export type {
-  KernelVerifyOracleResult,
-} from "./verify/index.js";
 
 // Autonomous CVE PoC adaptation (issue #272 v0 part 2). The scraper that
 // produces `CveArtifacts` lives on a sibling branch and is wired in at
 // merge time via the typed `CveArtifactProvider` seam.
-export {
-  adaptAndVerify,
-} from "./cve/index.js";
 export type {
-  AdaptationResult,
-  AdaptationStatus,
   CveArtifactProvider,
   CveArtifacts,
 } from "./cve/index.js";
@@ -865,14 +507,6 @@ export type {
 // both pass.
 export { parseVerifySpec, inlineVerifySpec, verificationLine, isVerified, gateDone, claimsFixed, runVerifier, OciRunner, HostRunner, snapshotWorktree, snapshotHead, isGitRepo, isPinnedImage } from "./verifier/index.js";
 export type { VerifySpec, VerifierResult, ContainerRunner } from "./verifier/index.js";
-export { runSourceFix, verifySourceFixCandidate, applySourceFixCandidate, planSourceFixPublication, publishSourceFixDraftPR } from "./fix/index.js";
-export { resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs } from "./fix/index.js";
-export type {
-  SourceFixPublicationPlan,
-  SourceFixResult,
-  SourceFixStatus,
-  SourceFixTestResult,
-} from "./fix/index.js";
 
 // Deterministic replay runner. Consumes a finding's `pocSteps`, sequentially
 // executes them through local, SmolVM, Docker, or QEMU isolation, and emits a canonical
@@ -883,25 +517,6 @@ export type {
 // Names that would collide with existing exports (StepResult,
 // DEFAULT_STEP_TIMEOUT_MS) are re-exported under prefixed aliases so
 // callers can pick a side without ambiguity.
-export {
-  runDeterministicReplay,
-  LocalShellRunner,
-  SmolvmRunner,
-  createSmolvmPocTargetRunner,
-  runSmolvmPocSteps,
-  DockerRunner,
-  QemuRunner,
-  assertionFromStepExpect,
-  evaluateAssertion,
-} from "./verify/index.js";
-export {
-  createReproductionBundle,
-  runReproductionBundle,
-} from "./verify/reproduction-bundle.js";
-export type {
-  BundlePlan,
-  ReproductionBundleResult,
-} from "./verify/reproduction-bundle.js";
 // in the cli package; this surface is the programmatic entry point.
 export {
   loadH1Credentials,
@@ -941,55 +556,10 @@ export type {
 } from "./cve/index.js";
 
 // Disclosure bundle assembly (finding → GHSA-ready advisory markdown)
-export {
-  suggestCwesForCategory,
-  suggestCvss,
-  renderAdvisoryMarkdown,
-  EmptyPocError,
-  redactSensitiveHeaders,
-  renderExploitScreenshot,
-  isFreezeAvailable,
-  verifyAgainstRef,
-  detectVersionRange,
-  extractSiblingFix,
-  executePocSteps,
-  setRuntimeDeps,
-  MAX_CAPTURE_BYTES,
-  decideFilingState,
-  assembleBundleIndex,
-  formatDroppedReason,
-  droppedFilename,
-  dropSlug,
-} from "./disclose/index.js";
-export type {
-  AdvisoryContext,
-  AdvisoryScreenshot,
-  PatchStatus,
-  ReverifyResult,
-  VersionRangeResult,
-  PocExecutionTarget,
-  PocExecutionReport,
-  PocStepResult,
-  PocOverallVerdict,
-  BundleEntry,
-} from "./disclose/index.js";
 
 // #928 — disclosure-process tracking (status state machine + timeline) and the
 // evidence-pack assembler (finding → vendor-notification draft). DRAFT-only,
 // never sends.
-export {
-  DISCLOSURE_STATUSES,
-  createDisclosureRecord,
-  transition,
-  assembleEvidencePack,
-  renderVendorNotificationMarkdown,
-  UnreproducedFindingError,
-} from "./disclose/index.js";
-export type {
-  DisclosureStatus,
-  DisclosureRecord,
-  EvidencePackOptions,
-} from "./disclose/index.js";
 
 // PR-shaped finding output (0#377). `emitFindingsAsPRs` turns reproduced
 // findings into one GitHub PR each (repro + suggested patch from a fix-template
@@ -1002,10 +572,6 @@ export type {
   EvidenceArtifact,
 } from "./emit/index.js";
 
-// ── Scan-level pass@k bench harness (0#556) ──
-// Turns the per-finding verify oracles into a scan-level scorecard
-// (success rate, FP rate vs known-negatives, cost-per-success) + CI gate.
-export * from "./bench/index.js";
 
 // ── Interactive operator console: unified conversational front-end that drives
 // the full tool registry through the real ToolExecutor + LlmApiRuntime. ──
@@ -1058,7 +624,6 @@ export {
 
 // Target-neutral research control plane. Existing engines remain native and
 // opt in through adapters; the common runner owns stage order and evidence.
-export * from "./research/index.js";
 // JS-driven endpoint + secret discovery (0#927) — scope-gated,
 // deny-by-default; mines a site's JS bundles for endpoints + redacted secrets.
 export {
@@ -1104,34 +669,10 @@ export type {
 export * from "./attack/index.js";
 
 // Local, redacted reproducibility manifests for verified findings.
-export {
-  assembleReproducibilityManifest,
-  renderReproducibilityManifest,
-  UnverifiedFindingError,
-  IncompleteEvidenceError,
-} from "./disclose/reproducibility-manifest.js";
 
-// Improvement-plane promotion policy. This evaluates sealed benchmark
-// receipts and appends tamper-evident decision records; it never executes or
-// deploys a candidate into an active engagement worker.
-export {
-  DEFAULT_IMPROVEMENT_PROMOTION_POLICY,
-  appendImprovementLedgerEntry,
-  evaluateImprovementPromotion,
-  verifyImprovementLedger,
-} from "./bench/improvement-promotion.js";
-export type {
-  ImprovementCandidate,
-  ImprovementLedgerEntry,
-  ImprovementPromotionDecision,
-} from "./bench/improvement-promotion.js";
 
 // Isolated, evaluated self-rewriting candidates and pinned future workers.
-export * from "./improvement/index.js";
 
-// Self-securing software lifecycle: prepare → investigate → behavioral repair
-// → independent verification → patch/PR delivery, with persisted resume state.
-export { runSecureProject } from "./secure/project.js";
 export type {
   SecureEvent,
   SecureProjectResult,
@@ -1156,25 +697,13 @@ export type {
 export * from "./workflow-runner.js";
 export * from "./workflow-service.js";
 export * from "./engine-service.js";
-export {
-  executeAssessment,
-  executeAssessmentRun,
-} from "./assessment.js";
 export { budgetNativeRuntime } from "./scan-plan.js";
-export * from "./learning-service.js";
 export * from "./notes/index.js";
 
 export * from "./report-export.js";
 
 
-export {
-  qualifyTaskRouting,
-  parseRoutingQualificationPlan,
-  taskRoutingFixtureRuntime,
-  recommendQualifiedRouting,
-} from "./bench/task-routing.js";
 
-export { createLocalOllamaRoutingRuntime } from "./bench/local-ollama-routing.js";
 export { listBrowserViews, subscribeBrowserView } from "./agent/browser-live.js";
 
 export { sanitizedEnv } from "./agent/sanitized-env.js";
@@ -1196,3 +725,5 @@ export {
 export type { ConsoleRuntime, RuntimeKind } from "./runtime/index.js";
 export { RECOMMENDED_MODEL_ROLES, recommendModels } from "./runtime/llm-api/recommended-models.js";
 export type { RecommendedPick, RecommendedRole, RecommendedRoleSpec } from "./runtime/llm-api/recommended-models.js";
+
+

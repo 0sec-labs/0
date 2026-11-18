@@ -17,10 +17,6 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "POST", path: "remote-sessions", engine: true, why: "provider-session transport" },
   { method: "PATCH", path: "remote-sessions/s1/configuration", engine: true, why: "provider-session transport" },
   { method: "POST", path: "provider-relays", engine: true, why: "relay transport is engine-only" },
-  { method: "POST", path: "workflows", engine: true, why: "session-scoped workflow launch" },
-  { method: "POST", path: "workflows/w1/cancel", engine: true, why: "cancel job" },
-  { method: "POST", path: "workflow-definitions/d1/run", engine: true, why: "run an existing operator-approved definition" },
-  { method: "POST", path: "workflow-executions/e1/cancel", engine: true, why: "cancel execution" },
   { method: "POST", path: "project/directories", engine: true, why: "read-only directory listing" },
   // Browser-only: credentials and connections
   { method: "POST", path: "connections", engine: false, owner: true, why: "configure/connect rewrites provider credentials and base URLs" },
@@ -53,9 +49,6 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "PATCH", path: "workflow-definitions/d1", engine: false, why: "edits automation" },
   { method: "DELETE", path: "workflow-definitions/d1", engine: false, why: "deletes automation" },
   { method: "POST", path: "workflow-definitions/d1/rollback", engine: false, why: "changes automation" },
-  { method: "POST", path: "workflow-triggers", engine: false, why: "schedules launch runs" },
-  { method: "PATCH", path: "workflow-triggers/t1", engine: false, why: "schedules launch runs" },
-  { method: "DELETE", path: "workflow-triggers/t1", engine: false, why: "schedules" },
   { method: "POST", path: "sentinels", engine: false, why: "Agent mutation" },
   { method: "PATCH", path: "sentinels/s1", engine: false, why: "Agent mutation" },
   { method: "DELETE", path: "sentinels/s1", engine: false, why: "Agent mutation" },
@@ -63,14 +56,10 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "POST", path: "sentinels/s1/resume", engine: false, why: "Agent mutation" },
   { method: "POST", path: "sentinels/s1/triggers", engine: false, why: "Agent triggers launch runs" },
   { method: "PUT", path: "sentinels/s1/files/notes.md", engine: false, why: "Agent instructions" },
-  { method: "POST", path: "fixes/prepare", engine: false, why: "source fix" },
-  { method: "POST", path: "fixes/apply", engine: false, why: "modifies source" },
-  { method: "POST", path: "fixes/publish", engine: false, why: "publishes" },
   { method: "POST", path: "checks", engine: false, why: "project review check policy" },
   { method: "POST", path: "project/choose-directory", engine: false, owner: true, why: "native picker shows a window on the host" },
   { method: "POST", path: "project/open-privacy-settings", engine: false, owner: true, why: "opens macOS System Settings on the host" },
   { method: "POST", path: "feedback", engine: false, why: "external submission" },
-  { method: "POST", path: "learning/import", engine: false, why: "imports learning data" },
   { method: "POST", path: "some-future-route", engine: false, why: "unclassified mutating routes default to browser-only" },
 ];
 
@@ -94,14 +83,14 @@ describe("privileged operator routes", () => {
   });
   it("fails when a handler adds a top-level mutating route segment that is not classified", () => {
     const known = new Set(TABLE.map(row => row.path.split("/")[0]!));
-    const sources = ["dashboard-api.ts", "workflows.ts", "workflow-triggers.ts", "sentinels.ts", "operator-services.ts", "connection-meta.ts", "self-edit-routes.ts", "learning.ts"];
+    const sources = ["dashboard-api.ts", "workflows.ts", "sentinels.ts", "operator-services.ts", "connection-meta.ts", "self-edit-routes.ts"];
     const found = new Set<string>();
     for (const file of sources) {
       const text = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
       for (const match of text.matchAll(/(?:PREFIX \+ "|"\/api\/console\/|\bpath === "|\bpath\.startsWith\("|route === ")([a-z][a-z-]+)/g)) found.add(match[1]!);
       for (const match of text.matchAll(/\/\^\(?((?:[a-z]+-?[a-z]*)(?:\|[a-z-]+)*)/g)) for (const name of match[1]!.split("|")) if (/^[a-z-]{4,}$/.test(name)) found.add(name);
     }
-    const READ_ONLY_OR_SUBROUTE = new Set(["search", "execution", "github", "providers", "models", "doctor", "tools", "workflow-tool-catalog", "sentinel-presets", "saved", "start", "stop", "diff", "gates", "apply", "status", "preset", "learning"]);
+    const READ_ONLY_OR_SUBROUTE = new Set(["search", "execution", "github", "providers", "models", "doctor", "tools", "workflow-executions", "sentinel-presets", "saved", "start", "stop", "diff", "gates", "apply", "status", "preset", "learning"]);
     const unclassified = [...found].filter(name => !known.has(name) && !READ_ONLY_OR_SUBROUTE.has(name) && ["sessions", "saved", "settings"].indexOf(name) < 0);
     // Heuristic guard: new top-level segments must be added to TABLE (or listed as read-only above) deliberately.
     expect(unclassified.filter(name => /^(?:workflow|sentinel|plugin|connection|mcp|fix|check|project|feedback|learning|self|service|remote|provider|setting|session)/.test(name))).toEqual([]);
@@ -123,17 +112,11 @@ describe("privileged operator routes", () => {
 const API_TABLE: Array<{ method: string; path: string; engine: boolean; why: string }> = [
   { method: "POST", path: "/api/workflow-engine/call", engine: true, why: "remote workflow runtime / MCP engine operations" },
   { method: "POST", path: "/api/webhooks/github", engine: false, why: "anonymous HMAC-signed GitHub webhook (ANONYMOUS_API_EXEMPTIONS); the engine bearer is never a credential here" },
-  { method: "POST", path: "/api/control/launch-run", engine: true, why: "equivalent to session create + start_assessment" },
-  { method: "POST", path: "/api/scans/s1/resume", engine: true, why: "equivalent to resume_scan" },
   { method: "POST", path: "/api/finding-family/fp1/triage", engine: true, why: "remote artifacts triage" },
   { method: "POST", path: "/api/finding-family/fp1/workflow", engine: true, why: "remote artifacts workflow state" },
   { method: "POST", path: "/api/findings/f1/impact-assessment", engine: true, why: "remote artifacts impact note" },
   { method: "DELETE", path: "/api/findings/f1/impact-assessment", engine: true, why: "remote artifacts impact note" },
   { method: "POST", path: "/api/control/reset-database", engine: false, why: "wipes the database" },
-  { method: "POST", path: "/api/control/recover-stale-workers", engine: false, why: "process control" },
-  { method: "POST", path: "/api/control/prune-stopped-workers", engine: false, why: "deletes worker rows" },
-  { method: "POST", path: "/api/control/start-daemon", engine: false, why: "spawns a process" },
-  { method: "POST", path: "/api/control/stop-daemon", engine: false, why: "kills processes" },
   { method: "POST", path: "/api/control/repair-worker", engine: false, why: "ssh reconnect/redeploy" },
   { method: "POST", path: "/api/workers/deploy", engine: false, why: "ssh/lima deployment executes remote commands" },
   { method: "POST", path: "/api/workers/b1/stop", engine: false, why: "stops a managed worker" },

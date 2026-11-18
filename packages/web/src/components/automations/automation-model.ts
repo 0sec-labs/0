@@ -85,7 +85,7 @@ export type AutomationRow = {
   lastRunAt?: string; lastStatus?: string; nextFireAt?: string; updatedAt: string;
 };
 
-export function automationRows(definitions: readonly SecurityWorkflow[], schedules: readonly ScheduleSummary[], executions: readonly ExecutionSummary[]): AutomationRow[] {
+export function automationRows(definitions: readonly SecurityWorkflow[], schedules: readonly ScheduleSummary[], executions: readonly ExecutionSummary[] = []): AutomationRow[] {
   const latest = new Map<string, ExecutionSummary>();
   for (const execution of executions) {
     const current = latest.get(execution.workflowId);

@@ -37,7 +37,6 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "panel.toggle", action: "Toggle right panel", group: "Panel", scope: "mission", when: "In a thread", bindings: [mod("b", true)], handler: "panel.toggle-panel" },
   panelView("findings", "Open Findings", "f"),
   panelView("evidence", "Open Evidence", "e"),
-  panelView("fixes", "Open Fixes", "g"),
   panelView("browser", "Open Browser", "l"),
   panelView("visuals", "Open Visuals", "v"),
   { id: "composer.send", action: "Send message", group: "Editor", scope: "composer", when: "Composer focused", bindings: [{ key: "Enter" }], handler: "composer.native" },

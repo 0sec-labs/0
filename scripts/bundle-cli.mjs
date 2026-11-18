@@ -143,36 +143,6 @@ if (rendererInputs.length) throw new Error(`Terminal renderer code entered the p
 cpSync("packages/engine/src/templates/attacks", `${outdir}/attacks`, { recursive: true });
 cpSync("packages/web/dist", `${outdir}/dashboard`, { recursive: true });
 
-// Bench corpora: packages/engine/src/bench/paths.ts resolves these via
-// `new URL("./<file>", import.meta.url)`. The package build co-locates them
-// (`cp src/bench/*.json dist/bench/`), but esbuild splits that module into
-// `dist/chunks/`, so the JSON must sit next to the chunk too — otherwise
-// `0 lab improve bench run` (the nightly regression gate) fails with
-// `ENOENT dist/chunks/corpus-v1.json`. Keep in sync with the files paths.ts reads.
-for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
-  const source = `packages/engine/src/bench/${benchFile}`;
-  if (existsSync(source)) {
-    copyFileSync(source, `${outdir}/chunks/${benchFile}`);
-  }
-}
-
-// Archetype/lens registries: packages/engine/src/stages/appsec-catalog.ts (and the
-// kernel/freebsd/chromium archetype-catalog loaders) resolve their bundled JSON
-// via `new URL("./data/<file>.json", import.meta.url)`. The core package build
-// co-locates them (`cp src/stages/data/*.json dist/stages/data/`), but esbuild
-// splits those modules into `dist/chunks/`, so `import.meta.url` points at the
-// chunk and the loader reads `dist/chunks/data/<file>.json`. The appsec loader
-// runs at MODULE-EVAL (deep-review's `defaultFinderLenses` const → every command
-// incl. `0 --help`), so a missing copy is a hard boot crash, not a lazy
-// failure — mirror the bench-corpus copy above into the chunk-relative `data/`
-// dir. Keep in sync with the files those loaders read (whole *.json glob, same
-// as the core build's copy step).
-const stagesDataSrc = "packages/engine/src/stages/data";
-mkdirSync(`${outdir}/chunks/data`, { recursive: true });
-for (const dataFile of readdirSync(stagesDataSrc).filter((f) => f.endsWith(".json"))) {
-  copyFileSync(`${stagesDataSrc}/${dataFile}`, `${outdir}/chunks/data/${dataFile}`);
-}
-
 // JIT methodology skills: packages/engine/src/agent/skills/index.ts walks its own
 // module directory (`new URL(".", import.meta.url)`) for *.yaml and validates
 // each as a skill. esbuild lands that loader in `dist/chunks/`, so the walk

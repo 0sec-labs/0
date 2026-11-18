@@ -15,7 +15,6 @@ import {
   matchesFindingSearch, matchesPreset, resolveDrop, STATUS_LABEL, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
   type DisplayOptions, type FindingFilters, type FindingPreset, type FindingStatus, type FindingsView,
 } from "@/components/findings/findings-model";
-import { useFindingFixPrs } from "@/components/findings/use-finding-fixes";
 import { useFindingMutations } from "@/components/findings/use-finding-mutations";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { cn } from "@/lib/utils";
@@ -60,7 +59,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
 function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardResponse; fingerprint: string }) {
   const mutations = useFindingMutations();
   const group = dashboard.groups.find(item => item.fingerprint === fingerprint) ?? null;
-  const fixPrs = useFindingFixPrs(group ? [group.latest.scanId] : []);
   const missions = useMemo(() => missionLabels(dashboard.scans), [dashboard.scans]);
   const root = useRef<HTMLDivElement>(null);
   const height = useFillHeight(root);
@@ -72,7 +70,6 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
           fingerprint={fingerprint}
           group={group}
           variant="page"
-          fixPrUrl={group ? fixPrs.get(group.latest.id) : undefined}
           missionName={group ? missions.get(missionKey(group)) : undefined}
           mutations={mutations}
         />
@@ -107,24 +104,17 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const missionNames = useMemo(() => missionLabels(dashboard.scans), [dashboard.scans]);
   const activeGroup = useMemo(() => groups.find(group => group.fingerprint === activeFingerprint) ?? null, [groups, activeFingerprint]);
 
-  // PR links live on mission workflows: load them for everything only when something needs them.
-  const needsAllFixes = preset === "fix-ready" || filters.hasFixPr;
-  const fixScanIds = useMemo(() => needsAllFixes ? groups.map(group => group.latest.scanId) : activeGroup ? [activeGroup.latest.scanId] : [], [needsAllFixes, groups, activeGroup]);
-  const fixPrs = useFindingFixPrs(fixScanIds);
-  const context = useMemo(() => ({ fixPrs }), [fixPrs]);
-
   const searchExtra = useCallback((group: FindingGroup) => { const priority = getFindingPriority(group.latest); return `${priority.label} ${priority.rationale}`; }, []);
   const base = useMemo(
-    () => groups.filter(group => matchesFindingSearch(group, deferredSearch, deferredSearch.trim() ? searchExtra(group) : "") && matchesFilters(group, filters, context)),
-    [groups, deferredSearch, filters, context, searchExtra],
+    () => groups.filter(group => matchesFindingSearch(group, deferredSearch, deferredSearch.trim() ? searchExtra(group) : "") && matchesFilters(group, filters)),
+    [groups, deferredSearch, filters, searchExtra],
   );
   const presetCounts = useMemo(() => ({
     all: base.length,
-    review: base.filter(group => matchesPreset(group, "review", context)).length,
-    "fix-ready": base.filter(group => matchesPreset(group, "fix-ready", context)).length,
-    closed: base.filter(group => matchesPreset(group, "closed", context)).length,
-  }), [base, context]);
-  const visible = useMemo(() => base.filter(group => matchesPreset(group, preset, context)), [base, preset, context]);
+    review: base.filter(group => matchesPreset(group, "review")).length,
+    closed: base.filter(group => matchesPreset(group, "closed")).length,
+  }), [base]);
+  const visible = useMemo(() => base.filter(group => matchesPreset(group, preset)), [base, preset]);
 
   const sections = useMemo(() => buildSections(visible, display, missionNames), [visible, display, missionNames]);
   const rows = useMemo(() => flattenSections(sections, collapsed), [sections, collapsed]);
@@ -223,8 +213,8 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
 
   const index = activeFingerprint ? navigable.indexOf(activeFingerprint) : -1;
   const panelWidth = liveWidth ?? view.panelWidth;
-  const hasFilters = search.trim().length > 0 || filters.severity.length + filters.status.length + filters.category.length + filters.mission.length > 0 || filters.hasFixPr || preset !== "all";
-  const clearAll = () => { setSearch(""); patchView({ preset: "all", filters: { ...filters, severity: [], status: [], category: [], mission: [], hasFixPr: false } }); };
+  const hasFilters = search.trim().length > 0 || filters.severity.length + filters.status.length + filters.category.length + filters.mission.length > 0 || preset !== "all";
+  const clearAll = () => { setSearch(""); patchView({ preset: "all", filters: { ...filters, severity: [], status: [], category: [], mission: [] } }); };
 
   const desktop = useMediaQuery("(min-width: 1024px)");
   // Below lg the panel is a full-height sheet outside the masked scroll area, so its header is never clipped under the app header.
@@ -240,7 +230,6 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
               fingerprint={activeFingerprint}
               group={activeGroup}
               variant="panel"
-              fixPrUrl={activeGroup ? fixPrs.get(activeGroup.latest.id) : undefined}
               missionName={activeGroup ? missionNames.get(missionKey(activeGroup)) : undefined}
               mutations={mutations}
               onClose={closePanel}
@@ -288,7 +277,6 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
               cursorFingerprint={cursor}
               selected={selected}
               pendingFingerprint={mutations.workflow.isPending ? mutations.workflow.variables?.fingerprint ?? null : null}
-              fixPrs={fixPrs}
               onOpen={fp => openFinding(fp)}
               onToggleSelect={toggleSelect}
               onMove={moveStatus}
@@ -299,7 +287,6 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
               activeFingerprint={activeFingerprint}
               cursorFingerprint={cursor}
               selected={selected}
-              fixPrs={fixPrs}
               onOpen={fp => openFinding(fp)}
               onToggleSelect={toggleSelect}
               onToggleSection={toggleSection}

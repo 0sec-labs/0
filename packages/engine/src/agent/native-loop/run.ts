@@ -1,6 +1,5 @@
 import { nativeToolBatches } from "../native-tool-batches.js";
 import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../../runtime/request-admission.js";
-import { verifyOracleByCategory } from "../../triage/oracles.js";
 import { assertWorkspaceIdentity } from "../workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../../workflow-execution-policy.js";
 import { createCostBudgetWarnings } from "../cost-budget-warning.js";
@@ -41,7 +40,6 @@ import { createThreadGuard, memoryContext, memoryDisabledByEnv, openMemory, runM
 import { toolCallPreview } from "../tool-preview.js";
 import { newCorrelationId, buildToolCallLogEntry, buildToolCallsPayload, type ToolCallLogEntry } from "../action-log.js";
 import { registerSignalCleanup } from "../signal-cleanup.js";
-import { validateFindingInline, buildInlineValidationNote, shouldValidateInline } from "../inline-validation.js";
 import type { Finding } from "../../shared/index.js";
 import { externalMemoryPath, shouldHarvestLoot, summarizeReasoning, isTransientLlmError, isContextWindowError, NATIVE_REQUEST_PREFLIGHT_BYTES, isInformativeDoneText, resolveDoneSummary, compactMessagesForRequestPreflight, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT, isRecoverableOutputCap, toolFailureText } from "./helpers.js";
 import { type NativeAgentLoopOptions, type NativeAgentState } from "./types.js";
@@ -131,7 +129,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     onFindingSaved,
     onEvent,
     getPendingUserMessages,
-    inlineValidationOracle,
   } = opts;
 
   if (config.maxTurns !== undefined && (!Number.isSafeInteger(config.maxTurns) || config.maxTurns <= 0)) {
@@ -497,7 +494,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     estimatedCostUsd: 0,
     costCeilingExceeded: false,
     killSwitchTriggered: false,
-    inlineValidations: [],
   };
   // Restored conversation history is context, not a new completion observation.
   let latestAssistantText = "";
@@ -878,7 +874,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   } : undefined;
 
   async function publishSavedFinding(
-    call: ToolCall, toolResult: ToolResult, inlineValidationNotes: string[],
+    call: ToolCall, toolResult: ToolResult,
   ): Promise<void> {
       if (call.name === "save_finding" && toolResult.success) {
         const f = toolResult.output as Record<string, unknown> | undefined;
@@ -981,64 +977,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             } catch {
               /* findings tail is best-effort, never blocks the loop */
             }
-          }
-        }
-        if (
-          features.inlineValidation &&
-          saved &&
-          shouldValidateInline(saved)
-        ) {
-          const inlineStartedAt = Date.now();
-          const outcome = await validateFindingInline(saved, config.target, {
-            oracle: inlineValidationOracle ?? ((finding, target) => verifyOracleByCategory(finding, target, {
-              fetch: (url, init) => executor.fetchOracleRequest(url, init),
-              verifyAccessControl: (finding, target) => executor.verifyAccessControlFinding(finding, target),
-            })),
-          });
-          const contribution = currentRunContribution();
-          if (contribution && Object.values(contribution.receipt.capture).every(Boolean) && contribution.client.permission(contribution.receipt)) {
-            const verification = outcome.inconclusive ? "inconclusive" : outcome.confirmed ? "reproduced" : "not_reproduced";
-            const previous = contribution.manifest.verification;
-            try {
-              contribution.recordSignal("verification", {
-                adjudicator: "inline-category-oracle", evidenceRef: `finding:${outcome.findingId}`,
-                source: "inline_validation", outcome, durationMs: Date.now() - inlineStartedAt,
-              }, { verification: previous === "not_run" || previous === verification ? verification : "inconclusive" });
-            } catch { /* Capture failure never changes the real oracle verdict. */ }
-          }
-          // Stamp the verdict on the finding so EGATS scoreEvidence and the
-          // batch oracle/PoV gate can read it (skip the redundant re-run).
-          saved.inlineValidation = {
-            confirmed: outcome.confirmed,
-            inconclusive: outcome.inconclusive,
-            reason: outcome.reason,
-            evidence: outcome.evidence || undefined,
-            confidence: outcome.confidence,
-          };
-          state.inlineValidations.push(outcome);
-          inlineValidationNotes.push(buildInlineValidationNote(outcome));
-
-          const inlinePayload = {
-            turn: state.turnCount,
-            findingId: outcome.findingId,
-            category: outcome.category,
-            severity: outcome.severity,
-            confirmed: outcome.confirmed,
-            inconclusive: outcome.inconclusive,
-            reason: outcome.reason,
-            durationMs: Date.now() - inlineStartedAt,
-          };
-          onEvent?.("inline_validation", inlinePayload);
-          eventBus.emit("inline_validation", inlinePayload);
-          if (db) {
-            db.logEvent({
-              scanId: config.scanId,
-              stage: config.role,
-              eventType: "inline_validation",
-              agentRole: config.role,
-              payload: inlinePayload,
-              timestamp: Date.now(),
-            });
           }
         }
       }
@@ -1677,7 +1615,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Inline-validation context notes accumulated this turn (#554). Appended as
     // text blocks to the tool-results user message below so the agent sees the
     // confirmed/unconfirmed verdict on its NEXT turn.
-    const inlineValidationNotes: string[] = [];
 
     // Only independent local reads overlap. Stateful tools remain ordered barriers,
     // and driver authority is checked serially. Receipts retain model call order.
@@ -1835,7 +1772,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // stamped back onto the call args (LLM self-report clamped UP to a
         // PoC-status floor — see agent/finding-confidence.ts), not the raw
         // LLM-reported number.
-        await publishSavedFinding(call, toolResult, inlineValidationNotes);
+        await publishSavedFinding(call, toolResult);
 
         // Check if agent called done
         if (block.name === "done" && toolResult.success) {
@@ -1883,9 +1820,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Inline-validation notes (#554): append as text blocks to the SAME
     // tool-results user message so the verdict reaches the agent next turn
     // without creating an invalid two-user-messages-in-a-row sequence.
-    for (const note of inlineValidationNotes) {
-      toolResultBlocks.push({ type: "text", text: note });
-    }
 
     // JIT rule injection: push any atomic rules this turn's actions matched into
     // the SAME tool-results message so they reach the agent next turn. Fired once

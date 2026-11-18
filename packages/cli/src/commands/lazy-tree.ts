@@ -16,32 +16,7 @@ import { addCommandStubs } from "../program.js";
 
 type Build = (scratch: Command) => Promise<void>;
 
-const SCAN_DESCRIPTION = "Assess a target: live web/MCP, source repository, package, deep review, or repair loop";
-
 const SECTIONS: Readonly<Record<string, Build>> = {
-  async scan(root) {
-    const [scan, review, audit, deepReview, secure, campaign, fix, verify, deps, agentAssure, evalCommand, disclose] = await Promise.all([
-      import("./scan.js"), import("./review.js"), import("./audit.js"), import("./deep-review.js"), import("./secure.js"), import("./campaign.js"),
-      import("./fix.js"), import("./verify.js"), import("./deps.js"), import("./agent-assure.js"), import("./eval.js"), import("./disclose.js"),
-    ]);
-    root.command("scan").description(SCAN_DESCRIPTION);
-    nest(root, "scan", [
-      (parent) => scan.registerScanCommand(parent, "web"),
-      (parent) => review.registerReviewCommand(parent, "source"),
-      (parent) => audit.registerAuditCommand(parent, "package"),
-      (parent) => deepReview.registerDeepReviewCommand(parent, "deep"),
-      (parent) => secure.registerSecureCommand(parent, "repair"),
-      (parent) => campaign.registerCampaignCommand(parent, {}, "campaign"),
-    ]);
-    fix.registerFixCommand(root);
-    verify.registerVerifyCommand(root);
-    deps.registerDepsCommand(root);
-    agentAssure.registerAgentAssureCommand(root);
-    evalCommand.registerEvalCommand(root);
-    disclose.registerDiscloseCommand(root);
-    adoptCommands(root, "scan");
-  },
-
   async findings(root) {
     const [reports, findings, triage, exportCommand, keys] = await Promise.all([
       import("./reports.js"), import("./findings.js"), import("./triage.js"), import("./findings-export.js"), import("./findings-keys.js"),
@@ -54,7 +29,7 @@ const SECTIONS: Readonly<Record<string, Build>> = {
 
   async automation(root) {
     const [workflow, manage] = await Promise.all([import("./workflow.js"), import("./automation-manage.js")]);
-    workflow.registerWorkflowCommand(root); // also registers `threads` and `runs`; only `automation` is kept
+    workflow.registerWorkflowCommand(root); // also registers `threads`; only `automation` is kept
     nest(root, "automation", [(parent) => manage.registerAutomationManageCommands(parent)]);
   },
 
@@ -69,35 +44,10 @@ const SECTIONS: Readonly<Record<string, Build>> = {
   },
 
   async lab(root) {
-    const [research, hunt, recencyHunt, assumptionHunt, memsafety, lensSynth, specdrift, protocolCheck, npmDiscovery, jsRecon, xnuFuzz, kernel, cve, intel, recon, binary, ingest, exploit, identity, adgraph, entragraph, cloud, h1, bench, routing, evolve, learning, consoleCommand, mcpServer, workflow, history, replay, resume, timeline, orchestrate] = await Promise.all([
-      import("./research.js"),
-      import("./hunt.js"), import("./recency-hunt.js"), import("./assumption-hunt.js"), import("./memsafety.js"), import("./lens-synth.js"), import("./specdrift.js"),
-      import("./protocol-check.js"), import("./npm-discovery.js"), import("./js-recon.js"), import("./xnu-fuzz.js"), import("./kernel.js"), import("./cve.js"), import("./intel.js"),
-      import("./recon.js"), import("./binary.js"), import("./ingest.js"), import("./exploit.js"), import("./identity.js"), import("./adgraph.js"), import("./entragraph.js"),
-      import("./cloud.js"), import("./h1.js"), import("./bench.js"), import("./routing.js"), import("./evolve.js"), import("./learning.js"),
-      import("./console.js"), import("./mcp-server.js"), import("./workflow.js"), import("./history.js"), import("./replay.js"), import("./resume.js"), import("./timeline.js"), import("./orchestrate.js"),
-    ]);
-    research.registerResearchCommand(root);
-    nest(root, "research", [
-      hunt.registerHuntCommand, recencyHunt.registerRecencyHuntCommand, assumptionHunt.registerAssumptionHuntCommand,
-      memsafety.registerMemsafetyCommand, lensSynth.registerLensSynthCommand, specdrift.registerSpecdriftCommand,
-      protocolCheck.registerProtocolCheckCommand, npmDiscovery.registerNpmDiscoveryCommand, jsRecon.registerJsReconCommand,
-      xnuFuzz.registerXnuFuzzCommand, kernel.registerKernelCommand, cve.registerCveCommand, intel.registerIntelCommand,
-      recon.registerReconCommand, binary.registerBinaryCommand, ingest.registerIngestCommand,
-      exploit.registerExploitCommand, identity.registerIdentityCommand, adgraph.registerAdGraphCommand,
-      entragraph.registerEntraGraphCommand, cloud.registerCloudCommand, h1.registerH1Command,
-    ]);
-    root.command("lab", { hidden: true }).description("Developer commands: research, improve, console, mcp-server, runs");
-    root.command("improve").description("Benchmark, evolve and qualify 0's own detection and routing");
-    nest(root, "improve", [bench.registerBenchCommand, routing.registerRoutingCommand, evolve.registerEvolveCommand, learning.registerLearningCommand]);
+    const [consoleCommand, mcpServer] = await Promise.all([import("./console.js"), import("./mcp-server.js")]);
+    root.command("lab", { hidden: true }).description("Developer commands: console, mcp-server");
     consoleCommand.registerConsoleCommand(root);
     mcpServer.registerMcpServerCommand(root);
-    workflow.registerWorkflowCommand(root); // also registers `automation` and `threads`; only `runs` is adopted
-    nest(root, "runs", [
-      history.registerHistoryCommand, replay.registerReplayCommand,
-      (parent) => resume.registerResumeCommand(parent, "relaunch"),
-      timeline.registerTimelineCommand, orchestrate.registerOrchestrateCommand,
-    ]);
     adoptCommands(root, "lab");
   },
 
@@ -114,11 +64,10 @@ const SECTIONS: Readonly<Record<string, Build>> = {
   },
 
   async doctor(root) {
-    const [upgrade, doctor, workbench, checks] = await Promise.all([import("./upgrade.js"), import("./doctor.js"), import("./workbench.js"), import("./checks.js")]);
+    const [upgrade, doctor, workbench] = await Promise.all([import("./upgrade.js"), import("./doctor.js"), import("./workbench.js")]);
     doctor.registerDoctorCommand(root);
     upgrade.registerUpgradeCommand(root);
     workbench.registerWorkbenchCommand(root);
-    checks.registerReviewChecksCommand(root);
     adoptCommands(root, "doctor");
   },
 

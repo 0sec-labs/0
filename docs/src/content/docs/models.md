@@ -19,7 +19,7 @@ Export a provider key, then run any command:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 -p "Review ./your-repo for injection bugs"
 ```
 
 | Provider | Environment |
@@ -57,10 +57,10 @@ Use an exact model ID your account supports:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL=<model-id> \
-  0 scan ./authorized-repo --runtime api
+  0 -p "Review ./authorized-repo"
 ```
 
-Agent workflows need a model that supports tool calling.
+Agents need a model that supports tool calling.
 
 <span id="multi-model-role-routing"></span>
 ## Role models
@@ -72,8 +72,6 @@ In the browser, open **Models → Advanced**:
 - **Use one model for everything** sends every role to the main model.
 - **Pick models per task automatically** lets 0 choose among models your connection can reach.
 - Each role has its own model select. **Auto** follows the main model or the automatic choice.
-
-On `0 scan <url>`, use `--task-model <role=model>` (repeatable) for `discovery`, `attack`, `verify` and `report`, or `--single-model` to use one model throughout.
 
 Role models stay on the parent's connection. Child agents use the same provider, endpoint and credentials, and do not inherit a failover chain. Choose models that same account serves. Connecting a second provider does not make roles cross accounts. Role changes apply after the current step finishes. Role routing is not failover and does not add an independent verification stage on its own.
 
@@ -100,11 +98,11 @@ For OpenCode Go, use its published base URL, such as `https://opencode.ai/infere
 
 ### Ollama
 
-The direct `--runtime ollama` runtime was removed in 0.35. Ollama serves an OpenAI-compatible endpoint, so use it through the API runtime:
+Ollama serves an OpenAI-compatible endpoint, so connect it as a custom provider:
 
 ```bash
 OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
-  0 scan ./authorized-repo --runtime api --model gemma4:27b
+  0 -p "Review ./authorized-repo" --model gemma4:27b
 ```
 
 Pull a model that supports tool calling first. A remote Ollama server receives your source context.
@@ -137,7 +135,7 @@ export AZURE_OPENAI_API_KEY="your-azure-key"
 export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
 export AZURE_OPENAI_WIRE_API="responses"
 env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL="your-deployment-id" \
-  0 scan ./authorized-repo --runtime api --cost-ceiling 5
+  0 -p "Review ./authorized-repo"
 ```
 
 | Setting | Resolution |
@@ -156,9 +154,9 @@ Together model IDs look like other providers' IDs (`Qwen/...`, `deepseek-ai/...`
 
 ```bash
 env ZERO_SELECTED_PROVIDER=together ZERO_MODEL=openai/gpt-oss-120b \
-  0 scan ./authorized-repo --runtime api
+  0 -p "Review ./authorized-repo"
 # or, with no provider pin:
-0 scan ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
+0 -p "Review ./authorized-repo" --model together/openai/gpt-oss-120b
 ```
 
 The `together/` prefix is removed once before the request. The default model is `openai/gpt-oss-120b`. The picker lists chat models with published prices; set `TOGETHER_MODEL_LIST=all` to list every chat model your key can see. Unlisted IDs, including dedicated endpoints, still work with `--model`.
@@ -204,7 +202,7 @@ A rejected or unreachable provider is never picked as the default model for new 
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan https://example.com --scope ./scope.json --runtime api
+  0 -p "Review https://example.com" --scope ./scope.json
 ```
 
 Pin when you need a predictable bill, especially with Azure deployment names. `ZERO_FORCE_PROVIDER` is a benchmark override; setting it to a different value than `ZERO_SELECTED_PROVIDER` is an error.
@@ -252,7 +250,7 @@ An explicit `--api-key` without a pin picks by shape: `sk-or-` selects OpenRoute
 
 ```bash
 env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0 scan ./authorized-repo --runtime api
+  0 -p "Review ./authorized-repo"
 ```
 
 Each entry is `<provider>:<model>`, comma-separated, tried in order. Entries without credentials (or, for Azure, without an endpoint) are skipped. Failover changes who receives your context and who bills you. A cyber access program request disables failover.
@@ -267,43 +265,14 @@ Each entry is `<provider>:<model>`, comma-separated, tried in order. Entries wit
 
 If a provider misbehaves under `auto`, set `ZERO_RUNTIME=legacy` and report it.
 
-## CLI runtimes
-
-`--runtime` chooses how a scan reaches a model. The default is `auto`.
-
-| Runtime | Uses |
-| --- | --- |
-| `api` | Direct HTTP calls with the provider rules above. |
-| `claude` | The installed, signed-in Claude Code CLI. |
-| `codex` | Source reviews keep 0's own tool boundary. Live scans use the ChatGPT Codex provider directly. |
-
-```bash
-0 scan https://api.example.com --scope ./scope.json --runtime claude
-0 scan ./my-repo --runtime codex
-```
-
-Use `--runtime api` when you want the provider rules on this page instead of `auto`. External CLIs make their own network calls, which 0 does not control.
-
 <span id="cyber-access-programs-and-daybreak"></span>
 ## Cyber access programs
 
 OpenAI's Daybreak programs need an explicit request. A model name alone does not select one.
 
 - **Browser**: use the **Daybreak** control beside the model settings. **Automatic** clears the request.
-- **CLI**: `0 scan <path>` and `0 scan <url>` accept `--cyber-access-program standard|daybreak_blue|daybreak_red`. It requires `--runtime api` and `--provider openai` or `--provider chatgpt-codex`.
 
-```bash
-# OpenAI API project with approved access:
-env OPENAI_WIRE_API=responses \
-  0 scan ./authorized-repo --runtime api --provider openai \
-  --model <approved-model> --cyber-access-program daybreak_blue
-
-# Existing ChatGPT/Codex sign-in:
-0 scan ./authorized-repo --runtime api --provider chatgpt-codex \
-  --model <model> --cyber-access-program daybreak_blue
-```
-
-The flag requests access; it does not grant it. Reports keep the requested program separate from what the provider confirmed. Program-bound calls never fall back to another provider. Do not pass `--api-key` with ChatGPT sign-in.
+The control requests access; it does not grant it. Reports keep the requested program separate from what the provider confirmed. Program-bound calls never fall back to another provider. Do not pass `--api-key` with ChatGPT sign-in.
 
 <span id="data-residency"></span>
 ## Keep model traffic in one region
@@ -312,7 +281,6 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 
 - Setting a provider's variables alone does not guarantee all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
 - Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
-- The `claude` and `codex` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
 
 ## Manage connections from a shell
 

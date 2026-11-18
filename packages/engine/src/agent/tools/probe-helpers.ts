@@ -2,7 +2,14 @@
 // Extracted verbatim from ../tools.ts; the public API is re-exported there.
 import { readFileSync } from "node:fs";
 import { compareRoles } from "../../shared/index.js";
-import { hasKnownMarkerText } from "../../disclose/known-marker.js";
+/** TODO, FIXME, XXX and HACK markers, or "known issue" / "documented limitation" phrasing. */
+const SOURCE_MARKER_RE = /\b(TODO|FIXME|XXX|HACK)\b(?:[(:]\s*(.*?)\s*[):])?|(\bknown[ -](?:limitation|issue)s?\b|\bdocumented[ -]limitation\b)/gi;
+function hasKnownMarkerText(source: string): boolean {
+  SOURCE_MARKER_RE.lastIndex = 0;
+  const matched = SOURCE_MARKER_RE.test(source);
+  SOURCE_MARKER_RE.lastIndex = 0;
+  return matched;
+}
 
 // ── Access-control probe helpers (0#564) ──
 

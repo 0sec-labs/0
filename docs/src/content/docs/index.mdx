@@ -29,8 +29,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   <TabItem label="Docker">
     ```bash
     docker run --rm -e OPENAI_API_KEY \
-      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest \
-      scan source /work/source --runtime api --depth quick --cost-ceiling 2
+      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest --help
     ```
 
     The image runs CLI commands, not the browser app. Mount your code and pass your model key. See [Server mode and Docker](/server-mode/).
@@ -69,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh
 
 Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings in `~/.0` are kept. `0 config doctor` prints this hint when it detects an npm install.
 
-## Run your first scan
+## Start your first thread
 
 <Steps>
 
@@ -79,14 +78,14 @@ Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings 
 
 3. **Start a thread.** Press **New thread**, pick a folder and describe the job, for example "Review this folder for injection bugs and verify what you find". See [Threads](/threads/).
 
-4. **Review findings.** Open **Findings**. Each finding links to its evidence. Reproduce it and check a patch with [Findings](/findings/#verify-and-fix).
+4. **Review findings.** Open **Findings**. Each finding links to its evidence. See [Findings](/findings/) for how a finding is marked verified.
 
 </Steps>
 
 The **Finish setting up** card in the sidebar tracks steps 2 and 3.
 
 :::caution
-Only scan systems you own or are authorized to test. See [Scope](/configuration/#scope).
+Only point 0 at systems you own or are authorized to test. See [Scope](/configuration/#scope).
 :::
 
 ## The words 0 uses
@@ -102,97 +101,19 @@ Only scan systems you own or are authorized to test. See [Scope](/configuration/
 | **Extension** | An installable git folder, pinned to a commit, that can bundle skills, scripts, MCP servers and a connection. See [Extensions](/extensions/). |
 | **Finding** | A security issue with evidence. One without reproduced evidence is a lead. See [Findings](/findings/). |
 
-Commands, flags and API routes keep some older internal names (`/chats/<id>`, `--chat`, `0 lab runs`).
+Commands, flags and API routes keep some older internal names (`/chats/<id>`, `--chat`).
 
-## Scan from the terminal
+## Use it from the terminal
 
-You need a connected model for everything except dependency audits. `--cost-ceiling` is a soft cap on estimated model spend in US dollars (see [Costs and budgets](/configuration/#costs-and-budgets)).
+Everything the console does is also a command. You need a connected model (`0 models connect`).
 
 ```bash
 export OPENAI_API_KEY=...
-0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 threads send new "Review ./your-repo for injection bugs"
+0 findings list
 ```
 
-`0 scan <target>` picks the module from the target:
-
-| Target | Command |
-| --- | --- |
-| Local repository or Git URL | `0 scan ./my-app` |
-| Only what changed in a branch | `0 scan . --diff-base origin/main --changed-only --format sarif` |
-| Published package | `0 scan npm:express`, `pypi:`, `cargo:` or `oci:` prefixes |
-| Your project's dependencies | `0 scan . --module deps`, then `--module deps-fix --yes` to apply the package manager's fixes |
-| Live web app, API or MCP endpoint | `0 scan https://staging.example.com --scope ./scope.json` |
-| Several candidate files, with verify lenses | `0 scan ./my-app --module deep` |
-| Find, reproduce, fix and verify | `0 scan ./my-app --module repair --test-command "npm test"` |
-
-Bare package names are rejected as ambiguous. Run `0 scan --help` for every option.
-
-- **Source and package scans** run a static pass (FoxGuard, or Semgrep with `ZERO_STATIC=semgrep`) and then model review agents. They can install dependencies and run tools, so review untrusted code on a disposable computer. `--format` accepts `terminal`, `json`, `md`, `html`, `sarif` and `pdf`.
-- **Dependency audits** need no model. 0 detects `pnpm`, `npm`, `cargo` or `pypi` from the lockfile and runs that tool's audit (`cargo audit` and `pip-audit` must be installed; `pip-audit` audits the active environment, not the lockfile). Exit `0` is clean, `1` means vulnerable dependencies, `2` means the audit tool failed.
-- **Live targets** need a scope file. `--api-spec ./openapi.yaml` seeds endpoints, `--auth ./auth.json` takes a `bearer`, `cookie`, `basic` or `header` credential (use a file so the secret stays out of shell history), `--repo ./src` adds the source behind the URL, and `--identities` plus `--access-control-fixtures` test access control across 2 to 16 users. Traffic controls are `--rate-limit`, `--engagement-profile conservative` and `--no-waf-evasion`.
-- **Results** land in `~/.0/runs/<scan-id>/state.db` with `report.json` beside it. Read them in **Findings** or with `0 findings`.
-
-Exit codes for `scan source`, `scan package` and `scan web`: `0` completed with no high or critical finding, `1` at least one, `2` error, `3` no model was available so only static results exist (source and package), `4` stopped at the cost ceiling with partial findings kept. Exit `3` and `4` are not clean results. A clean run does not show a target is secure.
-
-## CI
-
-Run 0 on your own runner with your own model key. You own the runner, credentials, cost and report handling.
-
-```yaml
-name: 0 security gate
-on:
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  scan:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: 0sec-labs/0security@main # Pin a reviewed full commit SHA.
-        with:
-          version: v0.38.0 # Pin the CLI release you reviewed.
-          path: .
-          runtime: api
-          cost-ceiling: '5'
-          severity-threshold: high
-          threshold: '0'
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      - if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: 0-security-report
-          path: 0-report/
-          retention-days: 14
-```
-
-The action installs a checksum-verified Linux release (or uses `cli-path`), runs the scan and enforces the gate. It supports Linux runners only. `main` follows development, so use a full commit SHA in any privileged pipeline, and never use `pull_request_target` to check out and run fork code with secrets.
-
-| Input | Default | Meaning |
-| --- | --- | --- |
-| `mode` | `review` | `review` (like `0 scan <path>`), `audit` (a package, needs `package`) or `scan` (a live target, needs `target` and `scope`). |
-| `path` | `.` | Source path for `review`. |
-| `scan-mode` | `probe` | `probe`, `deep`, `mcp` or `web`, for `scan`. |
-| `depth` | `quick` | `quick`, `default` or `deep`. |
-| `runtime` | `api` | `api`, `claude`, `codex` or `auto`. Pass credentials as step `env`. |
-| `cost-ceiling` | `5` | Positive USD model budget. In-flight usage can overshoot. |
-| `format` | `json` | Primary report, `json` or `sarif`. Both are written. |
-| `severity-threshold`, `threshold` | `high`, `0` | The gate trips when more than `threshold` findings are at or above the severity. `none` turns the findings gate off. |
-| `diff-base` | none | A fetched Git base revision. Reviews only the diff; empty diffs are skipped. |
-| `static-only` | `false` | Skip AI analysis on purpose. |
-| `report-dir` | `0-report` | Output directory. |
-| `share-report` | `true` | Also write `report.share.json`, a share-safe copy (see [Findings](/findings/#export-and-share)). |
-| `cli-path`, `version` | none, `latest` | Use an existing executable, or install this release tag. Pin it. |
-
-Outputs include `report-file`, `total-findings`, `qualifying-findings`, `should-fail`, `execution-successful`, `gate-message`, `skipped` and `comment-body`. The step fails when the gate trips, when the report is missing, invalid or incomplete, or when the CLI exits nonzero; a partial report is kept but never passes. CLI exit `3` means the AI layer was needed but could not run, so set `static-only: true` if that is what you want. The action never posts comments, opens fixes or uploads SARIF itself.
-
-To review pull requests, set `diff-base: ${{ github.event.pull_request.base.sha }}` on a `pull_request` workflow with `fetch-depth: 0`, skip fork pull requests (they get no secrets), and upload `0-report/report.sarif` with `github/codeql-action/upload-sarif` from a separate job that holds no model credentials. `0sec-labs/0security/suggest` can post exact replacements for changed lines as one review with inline suggestions, using only the built-in `GITHUB_TOKEN` (inputs `report`, `github-token`, `max-comments`, `dry-run`). An [Agent](/agents/#github-pull-request-trigger) can also review pull requests without a workflow.
-
-Other runners work too. The `ghcr.io/0sec-labs/0security` image has the CLI and the tools (see [Server mode and Docker](/server-mode/)); the installer works on any Linux runner (`curl -fsSL .../install.sh | bash`, then `echo "$HOME/.0/bin" >> "$GITHUB_PATH"`); and in GitLab, Jenkins and others, run `0 scan . --runtime api --cost-ceiling 5 --format json > report.json` and gate on the findings, because direct CLI commands do not apply the action's severity gate. To read a CI report in the browser app, stop any engine using the database and run `0 findings list --import ./0-report/report.json --metadata ./0-report/run.json --db-path <db>`. Imported findings are marked **discovered** and **unverified**.
+`0 findings list --format sarif` or `--format json` exports findings, and `0 findings list --import ./report.json --db-path <db>` loads a report into the app; imported findings are marked **discovered** and **unverified**. See the [CLI reference](/commands/) for every command.
 
 ## Troubleshooting
 
@@ -203,12 +124,10 @@ Start with `0 config doctor`. It checks the runtime, your model provider and the
 - **API provider `missing` or `bad`.** No usable model credential was found. Connect one in **Settings → Models** or export a key. `configured` means a credential was found, not that it works; the first model request tests access and quota. See [Models](/models/).
 - **A `0 ...` variable will not export.** Some shells reject names that start with a digit. Use `env ZERO_...=... 0 ...`.
 - **Cost ceiling cannot be enforced.** A model with no known price counts as unknown, not zero, so a ceiling cannot bound it. Also set a time limit.
-- **A scan times out.** `scan web --timeout` sets the request timeout (default `30000` ms) and, without a confirmed plan, the scan deadline.
 - **Target is out of scope.** See [Scope](/configuration/#diagnose-a-scope-refusal).
 - **`database is locked`.** Two processes write the same SQLite file. Stop the other one. Do not delete a live database. `0 config doctor --fix` moves a damaged file aside and creates a fresh one; it does not recover rows, so back up first.
 - **The app does not open.** Use `0 --no-open` and open the printed URL. On macOS, the first access to Desktop, Documents or Downloads makes macOS ask for permission; if you declined, enable the app that runs 0 under **System Settings → Privacy & Security → Files & Folders**.
 - **Docker prints help and exits.** The image runs `0 --help` by default and mounts nothing. Pass your folder, key and a command (see [Server mode and Docker](/server-mode/)).
-- **Report has a warnings section.** Some work was degraded or incomplete. Zero findings after provider or tool failures is not a clean result.
 
 Still stuck? Run `0 config doctor` and [open an issue](https://github.com/0sec-labs/0security/issues) with its output, the command and the error, without keys, tokens or target data. For a vulnerability in 0 itself, follow [SECURITY.md](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).
 
@@ -216,7 +135,7 @@ Still stuck? Run `0 config doctor` and [open an issue](https://github.com/0sec-l
 
 <CardGrid>
   <LinkCard title="Threads" description="Run a job in the browser app or headless." href="/threads/" />
-  <LinkCard title="Findings" description="Triage, reproduce, fix and export." href="/findings/" />
+  <LinkCard title="Findings" description="Review, verify and export." href="/findings/" />
   <LinkCard title="Agents" description="Standing jobs on a schedule or pull request." href="/agents/" />
   <LinkCard title="Extensions" description="Skills, MCP servers and connections." href="/extensions/" />
   <LinkCard title="Server mode and Docker" description="Run 0 for a team on a server." href="/server-mode/" />

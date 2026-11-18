@@ -7,7 +7,8 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { StringDecoder } from "node:string_decoder";
 import { isPublicRepositoryAddress } from "../agent/repository-acquisition.js";
-import type { EvolutionExecution } from "../improvement/types.js";
+/** What a program run inside the workbench produced. */
+export interface EvolutionExecution { exitCode: number | null; stdout: string; stderr: string; durationMs: number; timedOut: boolean; [key: string]: unknown }
 import type { InteractiveExecutionChannel } from "./interactive.js";
 import { resolveSmolvmImage } from "./smolvm.js";
 import { runSmolvmDarwinProgram, type SmolvmDarwinOwnership } from "./smolvm-darwin.js";

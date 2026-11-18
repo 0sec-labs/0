@@ -63,7 +63,7 @@ describe("help snapshot", () => {
 
   it("loading only the invoked command leaves every other name known and gives the same help", async () => {
     const real = eagerProgram();
-    for (const [argv, path] of [[["doctor", "--help"], ["doctor"]], [["help", "scan"], ["scan"]], [["threads", "list"], ["threads"]], [["lab", "runs"], ["lab"]]] as const) {
+    for (const [argv, path] of [[["doctor", "--help"], ["doctor"]], [["help", "findings"], ["findings"]], [["threads", "list"], ["threads"]], [["lab", "console"], ["lab"]]] as const) {
       const program = createRootProgram();
       await registerLazyCommandTree(program, argv);
       expect(program.commands.map((c) => c.name()).sort()).toEqual(real.commands.map((c) => c.name()).sort());

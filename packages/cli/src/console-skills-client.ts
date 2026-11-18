@@ -11,7 +11,6 @@ import { findLiveLocalEngine } from "./local-engine.js";
 import { SkillsStore, SkillsError } from "./web/skills.js";
 import { SkillsCatalogService, handleSkillsCatalogRequest } from "./web/skills-catalog.js";
 import { WebOperatorServices } from "./web/operator-services.js";
-import { WebLearningService } from "./web/learning.js";
 import { handleMemoryRequest } from "./web/memory-api.js";
 
 export interface ConsoleReply { status: number; data: unknown }
@@ -52,7 +51,7 @@ async function attached(host: { url: string; token: string; engineId: string }, 
 function embedded(options: ConsoleOptions): ConsoleClient {
   const stateDir = options.homeDir ? homeStateDir(options.homeDir) : homeStateDir();
   let skills: SkillsStore | undefined; let catalog: SkillsCatalogService | undefined;
-  let operator: WebOperatorServices | undefined; let learning: WebLearningService | undefined; let definitions: { close(): void } | undefined;
+  let operator: WebOperatorServices | undefined;
   const skillStore = () => skills ??= new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir });
   const skillRoutes = (method: string, path: string, body: unknown): ConsoleReply | null => {
     const match = /^\/api\/skills(?:\/(.*))?$/.exec(path); if (!match) return null;
@@ -83,13 +82,6 @@ function embedded(options: ConsoleOptions): ConsoleClient {
           if (result) return result;
         }
         const memory = handleMemoryRequest(pathname, method, body, url.searchParams); if (memory) return memory;
-        if (pathname === "/api/console/learning" || pathname.startsWith("/api/console/learning/")) {
-          if (!learning) {
-            const { SecurityWorkflowStore } = await import("@0/engine/storage");
-            const store = new SecurityWorkflowStore(options.dbPath); definitions = store; learning = new WebLearningService(store);
-          }
-          const result = await learning.handle(pathname, method, body, url.searchParams); if (result) return result;
-        }
         operator ??= new WebOperatorServices({});
         const result = await operator.handle(pathname, method, body, url.searchParams); if (result) return result;
         return { status: 404, data: { error: "Route not found." } };
@@ -99,7 +91,7 @@ function embedded(options: ConsoleOptions): ConsoleClient {
         throw error;
       }
     },
-    async dispose() { operator?.dispose(); await learning?.dispose(); definitions?.close(); },
+    async dispose() { operator?.dispose(); },
   };
 }
 

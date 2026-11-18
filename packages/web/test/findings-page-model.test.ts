@@ -12,7 +12,6 @@ const group = (id: string, options: Options = {}): FindingGroup => ({
   latest: { id: `id-${id}`, scanId: options.scan ?? "scan-a", title: options.title ?? `Title ${id}`, description: "", severity: options.severity ?? "medium", category: options.category ?? "xss", status: options.recorded ?? "discovered", triageStatus: options.triage ?? "new", timestamp: options.ts ?? 100, evidenceRequest: "", evidenceResponse: "" },
   workflow: { status: options.status ?? "backlog", phase: "backlog", reviewGate: options.gate ?? "none", updatedAt: options.updatedAt ?? null, consensus: "pending" } as FindingGroup["workflow"],
 });
-const context = { fixPrs: new Map([["id-a", "https://github.com/o/r/pull/7"]]) };
 
 describe("finding codes", () => {
   it("derives F-<first 6 alphanumerics, upper-cased> and tolerates odd fingerprints", () => {
@@ -33,32 +32,28 @@ describe("status mapping", () => {
   it("treats accepted risk as reviewed but not closed: its own Accepted state", () => {
     const accepted = group("a", { status: "human_review", gate: "human_review", triage: "accepted" });
     expect(findingStatus(accepted)).toBe("accepted");
-    expect(matchesPreset(accepted, "review", context)).toBe(false);
-    expect(matchesPreset(accepted, "closed", context)).toBe(false);
+    expect(matchesPreset(accepted, "review")).toBe(false);
+    expect(matchesPreset(accepted, "closed")).toBe(false);
     expect(findingStatus(group("a", { status: "done", triage: "accepted" }))).toBe("done");
     expect(findingStatus(group("a", { status: "backlog", triage: "new" }))).toBe("backlog");
   });
   it("evaluates presets", () => {
-    expect(matchesPreset(group("a", { gate: "human_review", status: "human_review" }), "review", context)).toBe(true);
-    expect(matchesPreset(group("a", { status: "blocked" }), "review", context)).toBe(true);
-    expect(matchesPreset(group("a", { status: "done", gate: "human_review" }), "review", context)).toBe(false);
-    expect(matchesPreset(group("a"), "fix-ready", context)).toBe(true);
-    expect(matchesPreset(group("b"), "fix-ready", context)).toBe(false);
-    expect(matchesPreset(group("a", { status: "done" }), "fix-ready", context)).toBe(false);
-    expect(matchesPreset(group("c", { triage: "suppressed" }), "closed", context)).toBe(true);
-    expect(matchesPreset(group("c"), "all", context)).toBe(true);
+    expect(matchesPreset(group("a", { gate: "human_review", status: "human_review" }), "review")).toBe(true);
+    expect(matchesPreset(group("a", { status: "blocked" }), "review")).toBe(true);
+    expect(matchesPreset(group("a", { status: "done", gate: "human_review" }), "review")).toBe(false);
+    expect(matchesPreset(group("c", { triage: "suppressed" }), "closed")).toBe(true);
+    expect(matchesPreset(group("c"), "all")).toBe(true);
   });
 });
 
 describe("filters and search", () => {
   const groups = [group("a", { severity: "critical", category: "sqli" }), group("b", { severity: "low", category: "xss", scan: "scan-b" })];
   it("matches all or any active filter and passes everything when none are set", () => {
-    expect(groups.filter(item => matchesFilters(item, EMPTY_FILTERS, context))).toHaveLength(2);
+    expect(groups.filter(item => matchesFilters(item, EMPTY_FILTERS))).toHaveLength(2);
     const both = { ...EMPTY_FILTERS, severity: ["critical" as const], category: ["xss"] };
-    expect(groups.filter(item => matchesFilters(item, both, context))).toHaveLength(0);
-    expect(groups.filter(item => matchesFilters(item, { ...both, match: "any" }, context))).toHaveLength(2);
-    expect(groups.filter(item => matchesFilters(item, { ...EMPTY_FILTERS, hasFixPr: true }, context)).map(item => item.latest.id)).toEqual(["id-a"]);
-    expect(groups.filter(item => matchesFilters(item, { ...EMPTY_FILTERS, mission: ["scan-b"] }, context)).map(item => item.latest.id)).toEqual(["id-b"]);
+    expect(groups.filter(item => matchesFilters(item, both))).toHaveLength(0);
+    expect(groups.filter(item => matchesFilters(item, { ...both, match: "any" }))).toHaveLength(2);
+    expect(groups.filter(item => matchesFilters(item, { ...EMPTY_FILTERS, mission: ["scan-b"] })).map(item => item.latest.id)).toEqual(["id-b"]);
     expect(activeFilterCount(both)).toBe(2);
   });
   it("searches title, code and fingerprint", () => {
@@ -142,10 +137,10 @@ describe("windowing", () => {
 
 describe("persisted view and activity", () => {
   it("falls back for junk and clamps the panel width", () => {
-    const view = mergeView({ display: { layout: "grid", groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any", hasFixPr: true }, collapsed: { done: false, x: "y" }, panelWidth: 99999 }) as FindingsView;
+    const view = mergeView({ display: { layout: "grid", groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any" }, collapsed: { done: false, x: "y" }, panelWidth: 99999 }) as FindingsView;
     expect(view.display).toEqual({ layout: "list", groupBy: "category", orderBy: "severity", direction: "desc" });
     expect(view.preset).toBe("all");
-    expect(view.filters).toMatchObject({ severity: ["high"], status: ["done"], match: "any", hasFixPr: true });
+    expect(view.filters).toMatchObject({ severity: ["high"], status: ["done"], match: "any" });
     expect(view.collapsed).toEqual({ done: false });
     expect(view.panelWidth).toBe(760);
     expect(mergeView(null).panelWidth).toBe(520);

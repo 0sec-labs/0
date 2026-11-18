@@ -1,7 +1,6 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { MessageSquarePlus } from "lucide-react";
-import { CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest } from "@/ui/icons/capy";
+import { CapyArrowUpRightIcon as ExternalLink } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { backendRouteHref } from "../../chat-host";
 import { panelViewEntity, type PanelViewComponent } from "../types";
@@ -9,16 +8,15 @@ import { buildEvidence } from "./evidence-model";
 import { EvidenceCard } from "./evidence";
 import { useFindingActions } from "./finding-actions";
 import { SeverityDot } from "./findings";
-import { fixPrByFindingId, normalizeSeverity, prLabel, SEVERITY_LABELS, consensusLabel, statusLabel } from "./findings-model";
+import { normalizeSeverity, SEVERITY_LABELS, consensusLabel, statusLabel } from "./findings-model";
 import { useChatFindings } from "./use-chat-findings";
 
 /** `finding:<fingerprint>` tab: a compact version of the finding page, from the dashboard record only. */
 export const FindingDetailView: PanelViewComponent = ({ viewId, snapshot, sessionId, backendId, busy }) => {
   const fingerprint = panelViewEntity(viewId);
   const { findings, loading } = useChatFindings(sessionId, snapshot?.session.savedId);
-  const { onAddFinding, fixes } = useFindingActions();
+  const { onAddFinding } = useFindingActions();
   const group = findings.find(item => item.fingerprint === fingerprint);
-  const pr = useMemo(() => group ? fixPrByFindingId(fixes).get(group.latest.id) : undefined, [fixes, group]);
   if (!group) return <p role="status" className="px-4 py-10 text-center text-xs text-muted-foreground">{loading ? "Loading…" : "This finding is no longer linked to this chat."}</p>;
   const { latest, workflow } = group;
   const severity = normalizeSeverity(latest.severity);
@@ -37,7 +35,6 @@ export const FindingDetailView: PanelViewComponent = ({ viewId, snapshot, sessio
       <div className="flex flex-wrap items-center gap-1 pt-1">
         <Button variant="ghost" size="sm" render={<Link to={backendRouteHref(backendId, `/findings/${encodeURIComponent(group.fingerprint)}`)} />}><ExternalLink className="size-3.5" />Open page</Button>
         {onAddFinding && <Button variant="ghost" size="sm" disabled={busy} onClick={() => onAddFinding(latest)}><MessageSquarePlus className="size-3.5" />Add to chat</Button>}
-        {pr && <Button variant="ghost" size="sm" render={<a href={pr} target="_blank" rel="noreferrer" />}><GitPullRequest className="size-3.5" />{prLabel(pr)}</Button>}
       </div>
     </header>
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border-[0.5px] border-border-1 bg-card p-3 text-xs">

@@ -89,11 +89,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     cli: "findings list --format",
     destination: "/findings",
   }),
-  cmd("fix", "Findings", "Write and test a fix; you approve any pull request", {
-    cli: "scan fix",
-    destination: "/fix",
-    usage: "/fix [finding-id] | /fix publish <finding-id> | /fix cancel",
-  }),
 
   // Agents, automation, computers
   cmd("agents list", "Agents", "Browse your agents", {

@@ -58,24 +58,20 @@ export function findingStatus(group: FindingGroup): FindingStatus {
 
 /* ---------- presets ---------- */
 
-export type FindingPreset = "all" | "review" | "fix-ready" | "closed";
+export type FindingPreset = "all" | "review" | "closed";
 export const PRESETS: readonly { value: FindingPreset; label: string }[] = [
   { value: "all", label: "All" },
   { value: "review", label: "Needs review" },
-  { value: "fix-ready", label: "Fix ready" },
   { value: "closed", label: "Closed" },
 ];
 
-export type FindingContext = { fixPrs: ReadonlyMap<string, string> };
-
-export function matchesPreset(group: FindingGroup, preset: FindingPreset, context: FindingContext): boolean {
+export function matchesPreset(group: FindingGroup, preset: FindingPreset): boolean {
   const status = findingStatus(group);
   switch (preset) {
     case "review": {
       const gate = group.workflow?.reviewGate;
       return !isClosedStatus(status) && status !== "accepted" && ((gate !== undefined && gate !== "none") || status === "blocked");
     }
-    case "fix-ready": return !isClosedStatus(status) && context.fixPrs.has(group.latest.id);
     case "closed": return isClosedStatus(status);
     default: return true;
   }
@@ -101,25 +97,23 @@ export type FindingFilters = {
   status: FindingStatus[];
   category: string[];
   mission: string[];
-  hasFixPr: boolean;
   match: "all" | "any";
 };
-export const EMPTY_FILTERS: FindingFilters = { severity: [], status: [], category: [], mission: [], hasFixPr: false, match: "all" };
+export const EMPTY_FILTERS: FindingFilters = { severity: [], status: [], category: [], mission: [], match: "all" };
 
 export const missionKey = (group: FindingGroup) => group.latest.scanId;
 
 export function activeFilterCount(filters: FindingFilters): number {
-  return Number(filters.severity.length > 0) + Number(filters.status.length > 0) + Number(filters.category.length > 0) + Number(filters.mission.length > 0) + Number(filters.hasFixPr);
+  return Number(filters.severity.length > 0) + Number(filters.status.length > 0) + Number(filters.category.length > 0) + Number(filters.mission.length > 0);
 }
 
 /** Each active filter is one predicate; `match` decides whether all or any must hold. No filters passes everything. */
-export function matchesFilters(group: FindingGroup, filters: FindingFilters, context: FindingContext): boolean {
+export function matchesFilters(group: FindingGroup, filters: FindingFilters): boolean {
   const checks: boolean[] = [];
   if (filters.severity.length) checks.push(filters.severity.includes(normalizeSeverity(group.latest.severity)));
   if (filters.status.length) checks.push(filters.status.includes(findingStatus(group)));
   if (filters.category.length) checks.push(filters.category.includes(group.latest.category));
   if (filters.mission.length) checks.push(filters.mission.includes(missionKey(group)));
-  if (filters.hasFixPr) checks.push(context.fixPrs.has(group.latest.id));
   if (!checks.length) return true;
   return filters.match === "any" ? checks.some(Boolean) : checks.every(Boolean);
 }
@@ -380,7 +374,6 @@ export function mergeView(stored: unknown): FindingsView {
       status: strings(filters.status).filter((status): status is FindingStatus => (STATUS_ORDER as readonly string[]).includes(status)),
       category: strings(filters.category),
       mission: strings(filters.mission),
-      hasFixPr: filters.hasFixPr === true,
       match: pick(filters.match, ["all", "any"], "all"),
     },
     collapsed,

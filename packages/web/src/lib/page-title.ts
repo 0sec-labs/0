@@ -8,7 +8,7 @@ const TITLES: Array<[RegExp, string]> = [
   [/^\/agents(?:\/|$)/, "Agents"],
   [/^\/skills(?:\/|$)/, "Skills"],
   [/^\/extensions(?:\/|$)/, "Extensions"],
-  [/^\/(?:settings|project|fix)(?:\/|$)/, "Settings"],
+  [/^\/(?:settings|project)(?:\/|$)/, "Settings"],
   [/^\/(?:connections|models)(?:\/|$)/, "Models"],
   [/^\/doctor(?:\/|$)/, "Diagnostics"],
   [/^\/tools(?:\/|$)/, "Tools"],

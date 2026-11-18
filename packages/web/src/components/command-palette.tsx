@@ -5,7 +5,7 @@ import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { SkillMarkIcon } from "@/components/skills/cells";
-import { CapyAgentIcon, CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
+import { CapyAgentIcon, CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { openWhatsNew } from "@/lib/whats-new";
@@ -198,7 +198,6 @@ export function CommandPalette({
         ["doctor", "Diagnostics", "Check that everything works", []],
         ["tools", "Tools", "What 0 can use", []],
         ["project", "Folder", "Folder and scope", []],
-        ["fix", "Fix", "Review and apply a code fix", []],
       ].map(([route, label, meta, extra]): PaletteAction => ({
         id: `control-${route}`, group: "Pages", href: `/${route}`, label: label as string, meta: meta as string, icon: CapySlidersIcon,
         keywords: [route as string, label as string, ...(extra as string[])],
@@ -210,7 +209,6 @@ export function CommandPalette({
     ];
 
     base.push({ id: "whats-new", group: "Actions", label: "What's new", meta: `Release notes · ${LATEST_RELEASE.version}`, icon: CapySparkleFourIcon, keywords: ["whats new release notes changelog version updates"], run: () => openWhatsNew() });
-    base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: v("Analyze a source repository · edit the plan in {a mission}"), icon: CapyRepositoriesIcon, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
       base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => openNewAgent() });

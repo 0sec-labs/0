@@ -3,11 +3,9 @@ import { renderTable } from "./console-support.js";
 import type { Command } from "commander";
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
-import { SecurityWorkflowBindingsSchema, type SecurityWorkflowExecution } from "@0/engine/shared";
-import { SecurityWorkflowStore } from "@0/engine/storage";
+import { SecurityWorkflowBindingsSchema } from "@0/engine/shared";
 
 export interface WorkflowCliRuntime {
-  resumeScan?(request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }): unknown | Promise<unknown>;
   attachSession?(id: string): unknown | Promise<unknown>;
   listSessions?(): unknown | Promise<unknown>;
   createSession?(config?: Record<string, unknown>): unknown | Promise<unknown>;
@@ -24,14 +22,7 @@ export interface WorkflowCliRuntime {
   listTemplates(): unknown | Promise<unknown>;
   getTemplate(id: string): unknown | Promise<unknown>;
   listWorkflows(): unknown | Promise<unknown>;
-  listRuns?(): unknown | Promise<unknown>;
-  listWork?(): unknown | Promise<unknown>;
-  getWork?(id: string): unknown | Promise<unknown>;
   getWorkflow(id: string): unknown | Promise<unknown>;
-  startRun(input: { sessionId?: string; templateId?: string; workflowId?: string; revision?: number; target: string; model?: string; timeCapMs?: number; costCapUsd?: number; inputs?: Record<string, unknown>; allowApply?: boolean }): SecurityWorkflowExecution | Promise<SecurityWorkflowExecution>;
-  getRun(id: string): SecurityWorkflowExecution | null | Promise<SecurityWorkflowExecution | null>;
-  getRunResults(id: string, page?: { cursor?: number; limit?: number }): unknown | Promise<unknown>;
-  cancelRun(id: string): unknown | Promise<unknown>;
   dispose(): void | Promise<void>;
 }
 interface WorkflowOptions { chat?: string; engineUrl?: string; engineTokenEnv?: string; engine?: string; enginesConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
@@ -132,68 +123,6 @@ async function readWorkflowInputs(path: string): Promise<Record<string, unknown>
     return SecurityWorkflowBindingsSchema.parse(inputs);
   } finally { await file.close(); }
 }
-export async function runWorkflowCommand(id: string | undefined, options: WorkflowOptions, deps: WorkflowCommandDeps = defaults): Promise<void> {
-  await withRuntime(options, deps, async runtime => {
-    if (Boolean(id) === Boolean(options.template)) throw new Error("Select exactly one saved automation ID or --template ID.");
-    const revision = positive(options.revision, "Revision", true);
-    let target = options.target;
-    if (!target && id) {
-      const definition = await runtime.getWorkflow(id) as { target?: string } | null;
-      target = definition?.target;
-    }
-    if (!target?.trim()) throw new Error("Supply --target or a saved automation with a default target.");
-    const inputs = options.inputs ? await readWorkflowInputs(options.inputs) : undefined;
-    let runId: string | undefined;
-    let cancellationRequested = false;
-    const cancel = () => {
-      cancellationRequested = true;
-      if (runId) void Promise.resolve(runtime.cancelRun(runId)).catch(error => deps.err(String(error)));
-    };
-    process.once("SIGINT", cancel);
-    process.once("SIGTERM", cancel);
-    try {
-      const execution = await runtime.startRun({ ...(options.chat ? { sessionId: options.chat } : {}), templateId: options.template, workflowId: id, revision, target, model: options.model, timeCapMs: positive(options.timeCap, "Time cap", true), costCapUsd: positive(options.costCap, "Cost cap"), ...(inputs ? { inputs } : {}), ...(options.allowApply ? { allowApply: true } : {}) });
-      runId = execution.id;
-      if (cancellationRequested) await runtime.cancelRun(runId);
-      let current = execution;
-      while (current.status === "queued" || current.status === "running") {
-        await deps.sleep();
-        const next = await runtime.getRun(execution.id);
-        if (!next) throw new Error(`Run ${execution.id} disappeared from history.`);
-        current = next;
-      }
-      const results = await allRunResults(runtime, execution.id);
-      output(deps, { run: current, results }, options.format);
-      if (current.status !== "completed") process.exitCode = current.status === "cancelled" ? 130 : 2;
-    } finally {
-      process.removeListener("SIGINT", cancel);
-      process.removeListener("SIGTERM", cancel);
-    }
-  });
-}
-/** Foreground output and retained inspection include every result page. */
-async function allRunResults(runtime: WorkflowCliRuntime, id: string): Promise<unknown> {
-  const first = await runtime.getRunResults(id);
-  if (!first || typeof first !== "object") return first;
-  const result = { ...first } as Record<string, unknown>;
-  const findings = Array.isArray(result.findings) ? [...result.findings] : [];
-  let cursor = result.nextCursor;
-  let previous = 0;
-  while (cursor !== undefined && cursor !== null) {
-    if (typeof cursor !== "number" || !Number.isSafeInteger(cursor) || cursor <= previous) throw new Error("Invalid result pagination cursor.");
-    const page = await runtime.getRunResults(id, { cursor, limit: 100 }) as Record<string, unknown>;
-    if (!page || !Array.isArray(page.findings)) throw new Error("Invalid result page.");
-    findings.push(...page.findings);
-    previous = cursor;
-    cursor = page.nextCursor;
-  }
-  if (Array.isArray(result.findings)) {
-    result.findings = findings;
-    result.nextCursor = null;
-    if (result.report && typeof result.report === "object") result.report = { ...result.report, findings };
-  }
-  return result;
-}
 function inspectOptions(command: Command, extra: { chat?: string; requiredChat?: boolean } = {}): Command {
   command.option("--engine-url <url>", "Attach directly to a running trusted engine").option("--engine-token-env <name>", "Environment variable holding the attached engine token");
   engineOptions(command, { engine: "Use a registered remote engine; targets and inputs are interpreted there" });
@@ -201,7 +130,7 @@ function inspectOptions(command: Command, extra: { chat?: string; requiredChat?:
   return command.option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
-  const workflow = program.command("automation").alias("automations").description("Discover templates, inspect saved automations, and run an automation");
+  const workflow = program.command("automation").alias("automations").description("Discover templates and inspect saved automations");
   inspectOptions(workflow.command("list").description("List saved automations and available templates").option("--templates", "List only templates"))
     .action(async (options: WorkflowOptions) => withRuntime(options, deps, async runtime => output(deps, options.templates ? await runtime.listTemplates() : { workflows: await runtime.listWorkflows(), templates: await runtime.listTemplates() }, options.format)));
   inspectOptions(workflow.command("show [id]").description("Show a saved automation or template").option("--template <id>", "Show a template definition"))
@@ -211,14 +140,6 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (!value) throw new Error("Automation or template not found.");
       output(deps, value, options.format);
     }));
-  inspectOptions(workflow.command("run [id]").description("Run a saved automation or template in the foreground; Ctrl-C cancels it")
-    .option("--template <id>", "Execute a template without saving a copy").option("--revision <revision>", "Require this automation or template revision")
-    .option("--target <target>", "Bind the authorized target").option("--workspace <path>", "Workspace for local execution")
-    .option("--scope <path>", "Scope JSON file").option("--model <model>", "Configured 0 assessment model")
-    .option("--inputs <path>", "Automation artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit)")
-    .option("--allow-apply", "Explicitly authorize supported patch application steps for this engine and run")
-    .option("--time-cap <ms>", "Automation-wide time cap in milliseconds").option("--cost-cap <usd>", "Automation-wide cost ceiling in USD"), { chat: "Attach the run to an existing thread on the selected engine" })
-    .action(async (id: string | undefined, options: WorkflowOptions) => runWorkflowCommand(id, options, deps));
   const sessions = program.command("threads").description("Inspect and control threads on the selected engine");
   const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "forceStopSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
     await withRuntime(options, deps, async runtime => {
@@ -271,67 +192,4 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (!runtime.resolveDecision) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.resolveDecision(id, decisionId, await readWorkflowInputs(options.response)), options.format);
     }, true));
-  const runs = program.command("runs").description("Inspect security work and automation run history");
-  inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine thread")
-    .option("--branch-from-entry <index>", "Nonnegative retained history entry index")
-    .option("--time-cap <ms>", "Resume time ceiling in milliseconds")
-    .option("--cost-cap <usd>", "Resume cost ceiling in USD"), { chat: "Existing engine thread", requiredChat: true })
-    .action(async (scanId: string, options: WorkflowOptions & { chat: string; branchFromEntry?: string }) => withRuntime(options, deps, async runtime => {
-      if (!runtime.resumeScan) throw new Error("The selected engine does not support persisted scan resume.");
-      const branchFromEntry = options.branchFromEntry === undefined ? undefined : Number(options.branchFromEntry);
-      if (branchFromEntry !== undefined && (!Number.isSafeInteger(branchFromEntry) || branchFromEntry < 0)) throw new Error("Branch entry must be a nonnegative integer.");
-      output(deps, await runtime.resumeScan({ sessionId: options.chat, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
-    }));
-  inspectOptions(runs.command("list").description("List retained automation runs; --all includes standalone scans").option("--all", "List unified work records with automation, scan and thread references"))
-    .action(async (options: WorkflowOptions & { all?: boolean }) => {
-      if (options.all) {
-        await withRuntime(options, deps, async runtime => {
-          if (!runtime.listWork) throw new Error("The selected engine does not support unified work history.");
-          output(deps, await runtime.listWork(), options.format);
-        });
-        return;
-      }
-      if (options.engine || options.enginesConfig || options.engineUrl || options.engineTokenEnv) {
-        await withRuntime(options, deps, async runtime => {
-          if (!runtime.listRuns) throw new Error("The selected engine does not support run listing.");
-          output(deps, await runtime.listRuns(), options.format);
-        });
-        return;
-      }
-      let store: SecurityWorkflowStore | undefined;
-      try { store = new SecurityWorkflowStore(options.dbPath); output(deps, store.listExecutions(), options.format); }
-      catch (error) { deps.err(error instanceof Error ? error.message : String(error)); process.exitCode = 2; }
-      finally { store?.close(); }
-    });
-  inspectOptions(runs.command("show <id>").description("Show a retained run and its results"))
-    .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
-      if (id.startsWith("workflow:") || id.startsWith("scan:")) {
-        if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");
-        const work = await runtime.getWork(id);
-        if (!work) throw new Error("Work record not found.");
-        const nativeId = (work as { native?: { workflowExecutionId?: string } }).native?.workflowExecutionId;
-        if (id.startsWith("workflow:")) {
-          if (!nativeId) throw new Error("Automation run not found.");
-          const run = await runtime.getRun(nativeId);
-          if (!run) throw new Error("Run not found.");
-          output(deps, { run, results: await allRunResults(runtime, nativeId), work }, options.format);
-        } else output(deps, work, options.format);
-        return;
-      }
-      const run = await runtime.getRun(id);
-      if (!run) throw new Error("Run not found.");
-      output(deps, { run, results: await allRunResults(runtime, id) }, options.format);
-    }));
-  inspectOptions(runs.command("cancel <id>").description("Cancel an owned run; foreground runs use Ctrl-C, other engines use their lifecycle API"))
-    .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
-      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose automation cancellation. Cancel active work through its owning thread or scan process.");
-      let runId = id;
-      if (id.startsWith("workflow:")) {
-        if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");
-        const work = await runtime.getWork(id) as { native?: { workflowExecutionId?: string } } | null;
-        if (!work?.native?.workflowExecutionId) throw new Error("Automation run not found.");
-        runId = work.native.workflowExecutionId;
-      }
-      output(deps, await runtime.cancelRun(runId), options.format);
-    }));
 }

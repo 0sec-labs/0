@@ -86,7 +86,7 @@ Servers you added before this version (`~/.0/mcp-servers.json`) are imported onc
 
 ### Let a coding agent use 0
 
-An agent with shell access can run 0 directly, with absolute paths and `--format json`; no adapter is needed. Check the exit status and the saved report, not the last line of stdout, and use [Findings](/findings/#verify-and-fix) before calling a finding exploitable. `0 --no-open --ready-json` starts the app and prints its URL. 0 uses its own model connection; a coding-agent subscription is not a credential for 0.
+An agent with shell access can run 0 directly, with absolute paths and `--format json`; no adapter is needed. Check the exit status and the saved report, not the last line of stdout, and use [Findings](/findings/#verified-and-not-verified) before calling a finding exploitable. `0 --no-open --ready-json` starts the app and prints its URL. 0 uses its own model connection; a coding-agent subscription is not a credential for 0.
 
 `0 lab mcp-server` (a hidden developer command) speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio, so a client that launches local stdio servers can start 0's automations:
 
@@ -103,7 +103,7 @@ An agent with shell access can run 0 directly, with absolute paths and `--format
 
 stdout carries protocol frames only; logs go to stderr. Active runs the client owns are cancelled on disconnect.
 
-- `--automations` exposes templates, saved automations, runs, sessions and scan resume (`list_templates`, `save_workflow`, `start_run`, `get_run_results`, `cancel_run` and related tools). Without it, the server exposes live target tools such as `http_request` and `crawl` and needs `--target` and `--scan-id`. `--tools a,b,c` selects exactly those tools.
+- `--automations` exposes the managed automation tools. Without it, the server exposes live target tools such as `http_request` and `crawl` and needs `--target`. `--tools a,b,c` selects exactly those tools.
 - `--workspace` authorizes local source targets inside that root. Live targets need `--scope` and the enabled `scope` extension. Neither authorizes the other.
 - Applying a patch needs both the host flag `--allow-apply` and `allowApply: true` in the request. Proposing and applying are separate.
 - To use a running computer instead of an embedded one, pass `--engine-url` and `--engine-token-env`, or `--engine <id>` for a registered computer (see [Computers](/computers/)). The computer then supplies its own workspace, scope and model.

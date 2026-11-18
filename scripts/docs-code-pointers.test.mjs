@@ -29,8 +29,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * place the docs are allowed to name something that isn't there.
  */
 const ALLOWED_MISSING = new Set([
-  // Filename pattern for a results file produced per-run, not committed.
-  "packages/bench/results/foxguard-ablation-YYYY-MM-DD.json",
   // agent-techniques.md is an explicit proposal doc: "Create ...", "New file
   // ...", "Not impl". The path is the proposed destination, not a claim.
   "packages/engine/src/agent/patterns-db.ts",

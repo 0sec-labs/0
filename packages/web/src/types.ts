@@ -196,20 +196,6 @@ export type FindingFamilyResponse = {
   artifacts: ArtifactSummary[];
 };
 
-export type ScanEventsResponse = {
-  scan: ScanRecord;
-  events: Array<{
-    id: string;
-    scanId: string;
-    stage: string;
-    eventType: string;
-    findingId?: string | null;
-    agentRole?: string | null;
-    payload: Record<string, unknown> | null;
-    timestamp: number;
-  }>;
-};
-
 export type RecentEventsResponse = {
   events: Array<{
     id: string;

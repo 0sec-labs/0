@@ -72,6 +72,6 @@ describe("design guards", () => {
     const paths = [...inside.matchAll(/<Route path="(\/[^"]+)"/g)].map(match => match[1]!);
     expect(paths.length).toBeGreaterThan(8);
     for (const path of paths) expect(nav, path).toContain(`path: "${path}"`);
-    for (const name of ["connections", "models", "settings", "doctor", "tools", "project", "fix"]) expect(nav).toContain(`path: "/${name}"`);
+    for (const name of ["connections", "models", "settings", "doctor", "tools", "project"]) expect(nav).toContain(`path: "/${name}"`);
   });
 });

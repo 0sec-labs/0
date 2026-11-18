@@ -68,20 +68,17 @@ test("public source export contains build inputs and excludes private material",
       "CHANGELOG.md",
       "AGENTS.md",
       "CLAUDE.md",
-      "packages/engine/src/bench/corpus-v1.json",
       "docs/src",
       "docs/design",
       "docs/paper",
       "release-staging",
       "research",
-      "packages/bench/results",
       ".github/workflows/ci.yml",
       ".github/workflows/docker-kali-publish.yml",
       "node_modules",
       "dist",
       "packages/engine/dist",
       "packages/web/dist",
-      "packages/bench/dist",
     ]) {
       assert.equal(await exists(join(outputDir, forbidden)), false, `${forbidden} leaked`);
     }
@@ -89,12 +86,8 @@ test("public source export contains build inputs and excludes private material",
     for (const sourcePath of [
       "scripts/docker/Dockerfile",
       ".github/workflows/docker-publish.yml",
-      "packages/cli/src/commands/review.ts",
-      "packages/cli/src/commands/run.ts",
       "packages/engine/src/seed-findings.ts",
       "packages/engine/src/scope/scope-guard.ts",
-      "packages/engine/src/stages/novelty-check.ts",
-      "packages/bench/README.md",
     ]) {
       const text = await readFile(join(outputDir, sourcePath), "utf8");
       assert.doesNotMatch(text, /peaktwilight|github\.com\/0sec-labs\/0cloud/i, `${sourcePath} leaks private source references`);

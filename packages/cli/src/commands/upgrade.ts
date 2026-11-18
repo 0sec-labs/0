@@ -11,7 +11,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { performAutoUpdate } from "../utils/update-check.js";
-import { scanDependencies } from "./deps.js";
 import { isNpmStyleInstall, NPM_MIGRATION_HINT } from "../utils/install-origin.js";
 
 const RELEASES_URL = "https://github.com/0sec-labs/0security/releases/latest";
@@ -19,8 +18,6 @@ const RELEASES_URL = "https://github.com/0sec-labs/0security/releases/latest";
 interface UpgradeOptions {
   version?: string;
   installDir?: string;
-  scanDependencies?: boolean;
-  fixDependencies?: boolean;
 }
 
 export function registerUpgradeCommand(program: Command): void {
@@ -29,18 +26,7 @@ export function registerUpgradeCommand(program: Command): void {
     .description("Fetch and install the latest 0 binary (re-runs install.sh)")
     .option("--version <tag>", "Pin a specific release tag (e.g. v0.10.0)")
     .option("--install-dir <path>", "Override the install directory (default: the folder of this binary, else ~/.0/bin)")
-    .option("--scan-dependencies", "Scan the current project before upgrading")
-    .option("--fix-dependencies", "Refuse upgrade when vulnerabilities are present; use `0 scan . --module deps-fix --yes` to remediate")
     .action(async (opts: UpgradeOptions) => {
-      if (opts.fixDependencies || opts.scanDependencies) {
-        const scan = await scanDependencies();
-        console.log(`  dependency scan: ${scan.findings.length} vulnerable dependencies detected`);
-        if (scan.findings.length) {
-          console.error("  upgrade stopped; review findings and run `0 scan . --module deps-fix --yes`.");
-          process.exitCode = 1;
-          return;
-        }
-      }
       if (process.platform === "win32") {
         console.log("");
         console.log(`  ${chalk.bold("0 config doctor upgrade")} doesn't support Windows yet.`);

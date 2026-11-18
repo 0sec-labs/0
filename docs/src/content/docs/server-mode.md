@@ -1,16 +1,16 @@
 ---
 title: Server mode and Docker
-description: Run one-shot scans from the 0 container image, or run the app on a server for a team (experimental, single node).
+description: Run one-shot prompts from the 0 container image, or run the app on a server for a team (experimental, single node).
 ---
 
 
 The image is Linux amd64 only. Its entry point is the `0` CLI, so arguments after the image name are `0` arguments. With no arguments it starts the web console (see [Run the app on a server](#run-the-app-on-a-server-experimental-single-node)).
 
-## One-shot scans
+## One-shot prompts
 
 ```bash
 docker run --rm -e OPENAI_API_KEY=$KEY -v "$PWD:/work" -w /work \
-  ghcr.io/0sec-labs/0security:latest scan source . --runtime api --depth quick --cost-ceiling 2
+  ghcr.io/0sec-labs/0security:latest -p "Review this folder for injection bugs"
 ```
 
 Tags:
@@ -39,7 +39,7 @@ The image is based on `ubuntu:24.04` and includes:
 | **Web pentesting** | sqlmap, nmap, nikto, gobuster, hydra, ffuf, wfuzz, whatweb, wafw00f, dirb |
 | **Active Directory** | impacket (0.13.1), certipy-ad (5.1.0), bloodhound-ce (1.9.1), ldap-utils, krb5-user |
 | **Cloud identity** | AzureHound (v3.0.0, checksum-pinned) |
-| **Source analysis** | ripgrep (for fast source-tree searches in audit/scan), jq, git |
+| **Source analysis** | ripgrep (for fast source-tree searches), jq, git |
 | **Container analysis** | skopeo |
 | **Scripting** | python3, python3-requests, python3-bs4 |
 | **Optional** | SecLists wordlists (`INSTALL_SECLISTS=1` build arg, ~1GB extra) |
@@ -47,17 +47,17 @@ The image is based on `ubuntu:24.04` and includes:
 ## Mounts and state
 
 ```bash
-# Scan a web target
+# Ask about a web target
 docker run --rm \
   -e OPENAI_API_KEY=$KEY \
   -v "$PWD:/work:ro" -w /work \
-  ghcr.io/0sec-labs/0security:latest scan web \
+  ghcr.io/0sec-labs/0security:latest -p "Check the login flow" \
     --target https://example.com \
     --scope /work/scope.json
 ```
 
 The container runs as the `ubuntu` user (uid 1000). Mount your working directory
-at `/work` so the container can read source and write reports. Scanning a web target needs a [scope file](/configuration/#scope). State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
+at `/work` so the container can read source and write reports. Working on a web target needs a [scope file](/configuration/#scope). State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
 
 ## Run the app on a server (experimental, single node)
 

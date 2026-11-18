@@ -39,6 +39,10 @@ on the GitHub Release tag.
 
 ### Removed
 
+- 0 is now a product for threads, Agents, Computers, Memory, Skills, Extensions and Findings, and a lot of the older security engine is gone. The scan pipelines and the `0 scan` command (including `scan fix`, `scan verify` and `scan disclose`), the kernel, identity, research, disclosure, improvement, review, verification and triage engines, the `0 lab research`, `0 lab improve` and `0 lab runs` commands, workflow graphs and steps, learning, and the benchmarks are removed. The old code is kept on the `archive/security-engine` branch.
+- `0 agents run --automation`, `--template` and the other workflow options are gone. An Agent's automation is now a saved prompt plus a trigger, and `0 agents run <id> --task <text>` sends a message into the Agent's thread. The GitHub Action no longer matches the CLI, since it ran `0 scan`.
+- The CLI now has eight visible commands: `findings`, `threads`, `agents`, `skills`, `memory`, `models`, `computers` and `config`. The `--runtime`, `--depth`, `--cost-ceiling` (on `scan`), `--module`, `--task-model` and `--single-model` flags went with `scan`. `ZERO_EMIT_RESULT_LINE`, `ZERO_KERNEL_VERIFY`, `ZERO_STATIC` and the other variables of the removed engines no longer do anything.
+- The Verified by and Not verified check on a fix stays, and `0 findings` still lists, shows, updates and exports findings.
 - The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
 - The long data-collection paragraph is gone from Settings. The two switches stay, and `ZERO_NO_TELEMETRY=1` still turns both off.
 

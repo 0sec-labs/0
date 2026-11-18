@@ -68,7 +68,7 @@ describe("focus, close, toggle, persistence", () => {
     openViewPanel(api, "overview");
     openViewPanel(api, "findings");
     expect(focusViewPanel(api, "overview")).toBe(true);
-    expect(focusViewPanel(api, "fixes")).toBe(false);
+    expect(focusViewPanel(api, "evidence")).toBe(false);
     expect(closeViewPanel(api, "overview")).toBe(false);
     expect(closeViewPanel(api, "findings")).toBe(true);
     expect(listViewPanels(api).map(panel => panel.id)).toEqual(["view:overview"]);
@@ -101,7 +101,7 @@ describe("focus, close, toggle, persistence", () => {
     expect(normalizePersistedViews({ views: ["findings"], active: "scope" })).toEqual({ views: ["findings"], active: undefined });
   });
   it("maps panel ids back to views", () => {
-    expect(viewIdOfPanel(viewPanelId("fixes"))).toBe("fixes");
+    expect(viewIdOfPanel(viewPanelId("evidence"))).toBe("evidence");
     expect(viewIdOfPanel("chat")).toBeUndefined();
     expect(viewIdOfPanel("view:bogus")).toBeUndefined();
   });

@@ -6,7 +6,6 @@ import { EvidenceView } from "./views/evidence";
 import { FindingActionsProvider, type FindingActions } from "./views/finding-actions";
 import { FindingDetailView } from "./views/finding-detail";
 import { FindingsView } from "./views/findings";
-import { FixesView } from "./views/fixes";
 import { OverviewView } from "./views/overview";
 import { VisualsView } from "./views/visuals";
 import { PreviewView } from "./views/preview";
@@ -48,7 +47,6 @@ export const panelViewComponents: PanelViewComponents = {
   findings: scoped(FindingsView),
   finding: scoped(FindingDetailView),
   evidence: scoped(EvidenceView),
-  fixes: scoped(FixesView),
   browser: scoped(BrowserView),
   visuals: scoped(VisualsView),
   preview: scoped(PreviewView),

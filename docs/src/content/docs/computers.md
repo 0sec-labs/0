@@ -3,7 +3,7 @@ title: Computers
 description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and keep work running on the machine that owns it.
 ---
 
-A computer owns threads, automation runs, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
+A computer owns threads, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
 
 ## Deploy a worker
 
@@ -98,7 +98,7 @@ Start the browser app with the registry and pick the computer in the selector:
 0 --engines-config /absolute/path/engines.json
 ```
 
-Threads, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
+Threads, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
 
 ### Local Codex model for a remote thread
 
@@ -106,27 +106,23 @@ A browser thread can run its tools on a remote computer while its model requests
 
 If this machine is not signed in to ChatGPT, creating the thread fails with a message that says so. A computer added with `--forward-provider-key` can run threads on its own `OPENAI_API_KEY` through the commands in [Continue the same work](#continue-the-same-work).
 
-Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP automations still use the server's own provider.
+Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP calls still use the server's own provider.
 
 ## Use it from the CLI and MCP
 
 The CLI and the MCP adapter select the same registered computer. They never use your laptop's provider, filesystem or database for remote targets.
 
 ```bash
-0 agents list --automation --templates --engine staging --engines-config /abs/engines.json --format json
-0 agents run --automation --template repository-review --target /srv/repos/app \
-  --engine staging --engines-config /abs/engines.json --format json
-0 lab runs list --engine staging --engines-config /abs/engines.json --format json
+0 threads list --engine staging --engines-config /abs/engines.json --format json
 0 lab mcp-server --automations --engine staging --engines-config /abs/engines.json
 ```
 
-Remote automation rejects client-side `--workspace`, `--scope`, `--db-path` and `--model`. A remote MCP adapter exposes automation tools only, not atomic live-target tools.
+Remote calls reject client-side `--workspace`, `--scope`, `--db-path` and `--model`. A remote MCP adapter exposes automation tools only.
 
 For a direct call to a computer API, use `0 api`:
 
 ```bash
 0 api                                   # engine handshake
-0 api /api/work --engine staging
 0 api <path> --method POST --data @body.json --engine-url http://127.0.0.1:48124 --engine-token-env ZERO_REMOTE_ENGINE_TOKEN
 ```
 
@@ -137,20 +133,15 @@ For a direct call to a computer API, use `0 api`:
 ```bash
 0 threads list --engine staging --format json
 0 lab console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
-0 lab runs list --all --engine staging --format json
-0 lab runs show workflow:<execution-id> --engine staging --format json
-0 lab runs cancel workflow:<execution-id> --engine staging
 ```
 
 `--chat` attaches to a live thread. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
 
-`runs list --all` and the **Runs** view share one read model over automations and standalone scans. References look like `workflow:<execution-id>` and `scan:<scan-id>`. The read-only API is `GET /api/work` and `GET /api/work/<reference>`.
+## Work lifecycle
 
-## Run lifecycle
-
-- The computer owns run state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
+- The computer owns thread state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
 - Cancel on the owning computer. Ctrl-C in the foreground CLI sends the request. Losing a proxy or disposing an MCP adapter does not.
-- An approval for one computer, thread, request or fix candidate cannot authorize another.
+- An approval for one computer, thread or request cannot authorize another.
 - Keep the computer process running. There is no crash recovery or detached executor. Stopping the computer ends its in-process work. Saved records and files survive.
 - A remote computer uses its own local or VM executors. Giving a local computer an arbitrary remote executor is not implemented.
 

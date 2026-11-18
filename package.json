@@ -49,7 +49,7 @@
     "test:public": "node scripts/run-checks.mjs public",
     "test:public:packages": "node scripts/run-checks.mjs packages",
     "test:public:scripts": "node scripts/run-checks.mjs public-scripts",
-    "test:workspace-support": "pnpm --filter @0/engine --filter @0/bench test",
+    "test:workspace-support": "pnpm --filter @0/engine test",
     "test:dashboard-browser": "node --test scripts/dashboard-browser-imports.test.mjs scripts/dashboard-finding-context.test.mjs",
     "test:team-workspace-api": "node scripts/smoke-team-workspace.mjs",
     "test:bundle-skills": "node --test scripts/bundle-skills-assets.test.mjs",
@@ -62,12 +62,7 @@
     "test:dev-engine": "node --test scripts/build-dev-engine.test.mjs scripts/dev-web.test.mjs",
     "test:public-source-export": "node --test scripts/create-public-source-export.test.mjs",
     "export:public-source": "node scripts/create-public-source-export.mjs",
-    "bench": "pnpm --filter @0/bench bench",
-    "bench:quick": "pnpm --filter @0/bench bench:quick",
-    "consolidate-xbow": "pnpm --filter @0/bench consolidate-xbow",
     "clean": "pnpm -r clean",
-    "vulnerable": "PORT=43100 pnpm --filter @0/bench vulnerable",
-    "safe": "PORT=43101 pnpm --filter @0/bench safe",
     "dev:packages": "pnpm -r --parallel dev"
   },
   "keywords": [

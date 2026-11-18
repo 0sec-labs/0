@@ -93,7 +93,6 @@ function automations(a: Args): string[] | undefined {
   if (!flagged.found) return undefined;
   const rest = flagged.rest;
   if (a[1] === "list") return isWord(rest[0]) ? ["automation", "show", ...rest] : rest.includes("--template") ? ["automation", "show", ...rest] : ["automation", "list", ...rest];
-  if (a[1] === "run") return ["automation", "run", ...rest];
   if (a[1] === "set" && isWord(rest[0])) return ["automation", ...rest];
   return undefined;
 }
@@ -257,31 +256,6 @@ function config(a: Args): string[] | undefined {
   return undefined;
 }
 
-const SCAN_MODULES = ["web", "source", "package", "deep", "repair", "campaign", "fix", "verify", "deps", "eval", "agent-assure", "disclose"];
-
-/** `scan <target> --module deep|repair|campaign|deps|deps-fix` reaches the modules that have no target-detecting form; `scan disclose --pack|--track|--review`. */
-function scan(a: Args): string[] | undefined {
-  if (isWord(a[1]) && !SCAN_MODULES.includes(a[1])) {
-    const tail = a.slice(2);
-    const module = pull(tail, "--module", true);
-    const target = a[1];
-    switch (module.value) {
-      case "deep": case "repair": return ["scan", module.value, target, ...module.rest];
-      case "campaign": return ["scan", "campaign", "--target", target, ...module.rest];
-      case "deps": return ["scan", "deps", "scan", "--cwd", target, ...module.rest];
-      case "deps-fix": return ["scan", "deps", "fix", "--cwd", target, ...module.rest];
-      default: return undefined;
-    }
-  }
-  if (a[1] !== "disclose") return undefined;
-  const tail = a.slice(2);
-  for (const [flag, sub] of [["--pack", "evidence-pack"], ["--track", "track"], ["--review", "review"]] as const) {
-    const hit = pull(tail, flag, true);
-    if (hit.found) return ["scan", "disclose", sub, ...(hit.value ? [hit.value] : []), ...hit.rest];
-  }
-  return undefined;
-}
-
 /**
  * The retired `plugin` group: verbs that still have an equivalent run it under `0 skills extensions`; the rest reach a
  * stub in commands/plugin-moved.ts that says what replaced them. `--help` is left alone so it describes the stub.
@@ -302,7 +276,7 @@ function plugin(a: Args): string[] | undefined {
   }
 }
 
-const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, models, computers, config, scan };
+const NEW_FORMS: Readonly<Record<string, (a: Args) => string[] | undefined>> = { findings, threads, agents, skills, models, computers, config };
 
 /** The implementation argv for a new-grammar invocation, or undefined when `args` is not one. */
 export function rewriteNewForms(args: Args): string[] | undefined {
@@ -330,12 +304,6 @@ export interface LegacyRow { readonly old: string; readonly use: string }
 const rows = (pairs: readonly (readonly [string, string])[]): LegacyRow[] => pairs.map(([old, use]) => ({ old, use }));
 
 export const LEGACY: readonly LegacyRow[] = rows([
-  // scan
-  ["scan web", "0 scan <target>"], ["scan source", "0 scan <target>"], ["scan package", "0 scan <target>"],
-  ["scan deep", "0 scan <target> --module deep"], ["scan repair", "0 scan <target> --module repair"], ["scan campaign", "0 scan <target> --module campaign"],
-  ["scan deps scan", "0 scan <dir> --module deps"], ["scan deps fix", "0 scan <dir> --module deps-fix"], ["scan deps", "0 scan <dir> --module deps"],
-  ["scan eval", "the benchmark plugin (removed after 0.35)"], ["scan agent-assure", "the agent-assure plugin (removed after 0.35)"],
-  ["scan disclose evidence-pack", "0 scan disclose --pack <finding.json>"], ["scan disclose track", "0 scan disclose --track <id>"], ["scan disclose review", "0 scan disclose --review <finding.json>"],
   // findings
   ["findings accept", "0 findings update <id> --status accepted"], ["findings suppress", "0 findings update <id> --status suppressed"],
   ["findings reopen", "0 findings update <id> --status open"], ["findings triage mark-fp", "0 findings update <id> --status false-positive"],
@@ -355,9 +323,9 @@ export const LEGACY: readonly LegacyRow[] = rows([
   ["agents pause", "0 agents set <id> --state paused"], ["agents resume", "0 agents set <id> --state active"], ["agents acknowledge", "0 agents set <id> --state acknowledged"],
   ["agents archive", "0 agents set <id> --state archived"], ["agents delete", "0 agents set <id> --state deleted"],
   ["agents activations", "0 agents run <id> --history"], ["agents files", "0 agents set <id> --files list|get|put|rm"], ["agents triggers", "0 agents set <id> --trigger list|add|enable|disable|check|rm"],
-  ["automation list", "0 agents list --automation"], ["automation show", "0 agents list <id> --automation"], ["automation run", "0 agents run <id> --automation"],
+  ["automation list", "0 agents list --automation"], ["automation show", "0 agents list <id> --automation"],
   ["automation create", "0 agents set --automation create"], ["automation edit", "0 agents set --automation edit <id>"], ["automation duplicate", "0 agents set --automation duplicate <id>"],
-  ["automation delete", "0 agents set --automation delete <id>"], ["automation triggers", "0 agents set --automation triggers <list|enable|disable|remove>"],
+  ["automation delete", "0 agents set --automation delete <id>"],
   ["automation versions", "git history (this command is removed after 0.35)"], ["automation rollback", "git (this command is removed after 0.35)"],
   ["automation", "0 agents list --automation"],
   // models, plugins, computers
@@ -376,7 +344,7 @@ export const LEGACY: readonly LegacyRow[] = rows([
   ["config show", "0 config get"], ["config list", "0 config get --all"], ["config reset", "0 config set --reset"], ["config export", "0 config get --export"],
   ["config import", "0 config set --from-file <file>"], ["config audit-log", "0 config get audit"], ["config team list", "0 config get team"], ["config team", "0 config set team <init|add-user>"],
   ["config db repair", "0 config doctor --fix"], ["config db", "0 config set db reset"], ["config github status", "0 config get github"], ["config github", "0 config set github <connect|repos>"],
-  ["doctor upgrade", "0 config doctor upgrade"], ["doctor workbench", "0 config doctor workbench"], ["doctor checks", "0 config doctor checks"],
+  ["doctor upgrade", "0 config doctor upgrade"], ["doctor workbench", "0 config doctor workbench"],
   ["web", "0"],
 ]);
 

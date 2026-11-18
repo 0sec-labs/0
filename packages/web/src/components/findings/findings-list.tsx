@@ -1,12 +1,12 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { Link2, MessageSquarePlus } from "lucide-react";
-import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest, CapyHashIcon as Hash, CapySwitchIcon as Repeat2 } from "@/ui/icons/capy";
+import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyArrowUpRightIcon as ExternalLink, CapyHashIcon as Hash, CapySwitchIcon as Repeat2 } from "@/ui/icons/capy";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
-import { isAcceptedFinding, prLabel } from "@/console/panel/views/findings-model";
+import { isAcceptedFinding } from "@/console/panel/views/findings-model";
 import type { FindingGroup, FindingWorkflowStatus } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
@@ -28,7 +28,6 @@ export type FindingsListProps = {
   /** Keyboard cursor; scrolled into view whenever it changes. */
   cursorFingerprint: string | null;
   selected: ReadonlySet<string>;
-  fixPrs: ReadonlyMap<string, string>;
   onOpen: (fingerprint: string) => void;
   onToggleSelect: (fingerprint: string) => void;
   onToggleSection: (key: string, collapsed: boolean) => void;
@@ -37,7 +36,7 @@ export type FindingsListProps = {
 
 
 export function FindingsList(props: FindingsListProps) {
-  const { rows, activeFingerprint, cursorFingerprint, selected, fixPrs, onOpen, onToggleSelect, onToggleSection, contextActions } = props;
+  const { rows, activeFingerprint, cursorFingerprint, selected, onOpen, onToggleSelect, onToggleSection, contextActions } = props;
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState(600);
@@ -118,7 +117,6 @@ export function FindingsList(props: FindingsListProps) {
                   cursor={cursorFingerprint === row.group.fingerprint}
                   selected={selected.has(row.group.fingerprint)}
                   anySelected={anySelected}
-                  prUrl={fixPrs.get(row.group.latest.id)}
                   onOpen={onOpen}
                   onToggleSelect={onToggleSelect}
                 />
@@ -182,12 +180,11 @@ type RowProps = {
   cursor: boolean;
   selected: boolean;
   anySelected: boolean;
-  prUrl: string | undefined;
   onOpen: (fingerprint: string) => void;
   onToggleSelect: (fingerprint: string) => void;
 };
 
-const FindingRow = memo(function FindingRow({ group, style, active, cursor, selected, anySelected, prUrl, onOpen, onToggleSelect }: RowProps) {
+const FindingRow = memo(function FindingRow({ group, style, active, cursor, selected, anySelected, onOpen, onToggleSelect }: RowProps) {
   const { latest, fingerprint } = group;
   const status = findingStatus(group);
   const closed = status === "done" || status === "cancelled";
@@ -232,9 +229,6 @@ const FindingRow = memo(function FindingRow({ group, style, active, cursor, sele
       {latest.category ? <span className="max-w-32 shrink-0 truncate rounded-md border-[0.5px] border-border-2 px-1.5 py-px text-xs text-muted-foreground-1 @max-xl/list:hidden">{latest.category}</span> : null}
       {isAcceptedFinding(group) ? <span className="shrink-0 rounded-md border-[0.5px] border-border-2 px-1.5 py-px text-xs text-muted-foreground-1">Accepted</span> : null}
       {group.count > 1 ? <span className="inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-muted-foreground-2" title={`Seen ${group.count} times`}><Repeat2 aria-hidden="true" className="size-3" />{group.count}</span> : null}
-      {prUrl ? (
-        <a href={prUrl} target="_blank" rel="noreferrer noopener" aria-label={`Fix pull request ${prLabel(prUrl)}`} title={`Fix PR ${prLabel(prUrl)}`} onClick={event => event.stopPropagation()} className="grid size-5 shrink-0 place-items-center rounded-sm text-success outline-none hover:bg-secondary focus-visible:outline-ring-inset"><GitPullRequest className="size-3.5" /></a>
-      ) : null}
       <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground-2">{age}</span>
     </div>
   );

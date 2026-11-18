@@ -63,53 +63,12 @@ Rules:
 - Project settings cannot change the profile. A change applies at the next launch.
 - `0 config doctor workbench status` is read-only and never downloads anything.
 
-## Runtime modes
-
-`--runtime` chooses the model backend for a command.
-
-| Runtime | Meaning |
-| --- | --- |
-| `auto` | Default. Picks an available runtime for the workflow. |
-| `api` | Direct HTTPS calls to a configured provider. Required for `--provider` pinning and `--cyber-access-program`. |
-| `claude` | Runs the signed-in Claude Code CLI. |
-| `codex` | Managed source review keeps the native API tool boundary. Live scans use the ChatGPT Codex provider when you are signed in. |
-
-`--model` does not select a runtime. Pass `--runtime api` to use the provider rules in [Models](/models/) instead of workflow-based selection.
-
-The `claude` and `codex` runtimes need that CLI installed and signed in (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`):
-
-```bash
-0 scan ./my-repo --runtime claude --depth deep
-```
-
-`--runtime gemini` and `--runtime ollama` were removed in 0.35. Use `--runtime api` with an OpenAI-compatible endpoint instead; see [Custom and local providers](/models/#custom-and-local-providers).
-
-## Common flags
-
-The full list is in the [CLI reference](/commands/). These change behavior most.
-
-| Flag | Values | Notes |
-| --- | --- | --- |
-| `--depth` | `quick`, `default`, `deep` | Sets the investigation budget, not a test count. See [Costs and budgets](#costs-and-budgets). |
-| `--format` | `terminal`, `json`, `md`, `html`, `sarif`, `pdf` | `html` and `pdf` are saved to a temporary file. |
-| `--diff-base <ref>` | git ref | Diff-aware source review. Add `--changed-only` to limit leads to changed files. |
-| `--cost-ceiling <usd>` | number | Stop when estimated cost passes the limit. |
-| `--verbose` | | Detailed agent output. |
-| `--timeout <ms>` | number | Per-request timeout. |
-
-```bash
-0 scan ./my-repo --diff-base origin/main --changed-only --format sarif
-```
-
-For web scans, `--mode` is `deep`, `probe`, `web`, `mcp` or `http_audit`. Targets starting with `mcp://` default to `mcp`. See [Quickstart](/#scan-from-the-terminal).
-
 ## State directory
 
 Per-user state lives in `~/.0`.
 
 | Path | Purpose |
 | --- | --- |
-| `runs/<scan-id>/state.db` | Findings and state for one run. |
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
 | `console-sessions/` | One transcript JSON per thread. |
@@ -124,7 +83,7 @@ Per-user state lives in `~/.0`.
 
 Project settings live in `<project>/.0/tui-settings.json`.
 
-Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
+Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. Moving one path does not move the others.
 
 A running console is tied to one folder and owns its database. Commands such as `0 skills list`, `0 memory list` and `0 threads list` run from another folder stop with `This console is for <folder>. Run the command there, or add --db-path <path>.`
 
@@ -162,16 +121,14 @@ Enable **Development source updates** (`allowDevSourceUpdates`) only for a sourc
 
 ## Environment variables
 
-Set them inline, for example `env ZERO_LOG_FORMAT=json 0 scan ./repo`.
+Set them inline, for example `env ZERO_LOG_FORMAT=json 0`.
 
-### Output and results
+### Output
 
 | Variable | Effect |
 | --- | --- |
 | `ZERO_LOG_FORMAT=json` | NDJSON operational records on stderr. Lifecycle and cost metadata only, no prompts, responses, tool data or finding evidence. Not uploaded. |
-| `ZERO_EMIT_RESULT_LINE=1` | Print a final `ZERO_RESULT=...` JSON line with status, exit code, finding counts and estimated cost. For wrappers and CI. |
-| `ZERO_COST_CEILING_USD` | Default for `--cost-ceiling`. |
-| `ZERO_DB_PATH`, `ZERO_RUN_DIR` | Database file and run directory. |
+| `ZERO_DB_PATH` | Database file. |
 | `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG=1` | Hide the `Provider:` startup line. |
 | `ZERO_RUNTIME_TRACE=1` | Print the runtime implementation, provider and model to stderr. |
 
@@ -203,11 +160,10 @@ These limits also exist as settings: `subagentConcurrency` (1-128, default 32), 
 
 ### Feature gates
 
-Opt-in verification and research features read `ZERO_FEATURE_*` variables:
+Opt-in verification features read `ZERO_FEATURE_*` variables:
 
 ```bash
-env ZERO_FEATURE_CONSENSUS_VERIFY=1 ZERO_FEATURE_REACHABILITY_GATE=1 ZERO_FEATURE_POV_GATE=1 \
-  0 scan https://example.com --scope ./scope.json --depth deep
+env ZERO_FEATURE_CONSENSUS_VERIFY=1 ZERO_FEATURE_REACHABILITY_GATE=1 ZERO_FEATURE_POV_GATE=1 0
 ```
 
 Other gates: `ZERO_FEATURE_MULTIMODAL` and `ZERO_FEATURE_WEB_SEARCH`. Enabling a gate does not supply its credentials or tools. Check the execution records before you accept a finding that a gate produced.
@@ -385,14 +341,13 @@ Save `scope.json` with your authorized hosts:
 }
 ```
 
-Pass it to the scan:
+Pass it to a headless prompt:
 
 ```bash
-0 scan https://app.example.com --scope ./scope.json \
-  --depth quick --cost-ceiling 2
+0 -p "Check the login flow" --target https://app.example.com --scope ./scope.json
 ```
 
-With the extension enabled explicitly, `scan` refuses HTTP, HTTPS and MCP targets without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
+With the extension enabled explicitly, a live target is refused without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
 
 With no scope set, host checks, exclusions and local filesystem boundaries have nothing to enforce. Credential protection, sandboxing and resource limits apply either way. Turning the extension off (`0 skills list scope --disable`) makes any scope you set deny commands until you turn it back on.
 
@@ -436,49 +391,33 @@ A redirect or a linked third-party host does not become in scope because the sta
 | Input | What it controls |
 | --- | --- |
 | `--scope` | Which hosts may be reached, once a scope is set. |
-| `--auth` | Credentials for the target. Not permission to test it. |
 | `--model` and your provider key | Which model does the work. |
 | `--engagement-profile conservative` | A quieter testing posture. Not a new scope. |
 | `--rate-limit` | Request pacing. |
-| `--cost-ceiling` | Estimated model spend for the run. |
 
-With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped scans. `--allow-scanners` shows them without widening the host list.
-
-<span id="requirements-differ-by-command"></span>
-#### What each command enforces
-
-| Command | With a scope set |
-| --- | --- |
-| `scan web` (HTTP, HTTPS, MCP) | Needs a matching scope file before it starts. |
-| `recon --active`, `js-recon`, `cloud`, `agent-assure` | Need `--scope`; candidates are checked before live work. |
-| `recon` without `--active` | Still does CT, DNS and HTTP lookups. `--scope` only guards active subdomain enumeration, not passive discovery or probes. |
-| `identity` | The scope must allow `graph.microsoft.com`. |
-| `adgraph`, `entragraph` | Offline analysis of exports you supply. No network. |
-| `scan source`, `fix`, `scan repair` | Local source and tool boundaries. `fix` and `scan repair` do not take `--scope`. |
+With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped engagements. `--allow-scanners` shows them without widening the host list.
 
 If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
 
 There is no access setting: a thread or Agent has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Ask before running commands](#ask-before-running-commands)).
 
-### Local workflows and strict scope mode
+### Strict scope mode
 
-Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
+Without a scope file, scope-based shell egress guards are not on. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
 
 In threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply whenever a scope is set. Private-network restrictions always apply.
 
-To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the scope extension to be on, which it is by default.
+To make unscoped work fail instead, set `ZERO_REQUIRE_SCOPE=1`. It needs the scope extension to be on, which it is by default.
 
 ### Execution boundary
 
 The default shell executor runs on your host. URL checks and scanner suppression are not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
 
-`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current computer**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
-
-Saved state is not ongoing authorization. Before you resume a run, confirm the target, scope, credentials and allowed side effects are still valid.
+Saved state is not ongoing authorization. Before you resume a thread, confirm the target, scope, credentials and allowed side effects are still valid.
 
 ### Diagnose a scope refusal
 
-1. Check that `--scope` points to the right file where 0 lab runs. A host path is not inside a container unless you mount it.
+1. Check that `--scope` points to the right file where 0 runs. A host path is not inside a container unless you mount it.
 2. Check the JSON is valid and `in_scope` and `out_of_scope` are string arrays.
 3. Compare the target hostname with each rule, including apex versus wildcard and exclusions.
 4. Check whether a redirect, API call or tool argument goes to another host.
@@ -494,8 +433,7 @@ Before you start, agree on destinations, credentials, testing windows, traffic a
 The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `--engagement-profile conservative` is quieter:
 
 ```bash
-0 scan https://app.example.com --scope ./engagement-scope.json \
-  --engagement-profile conservative
+0 lab mcp-server --scope ./engagement-scope.json --engagement-profile conservative
 ```
 
 | Behavior | Default | Conservative |
@@ -526,9 +464,9 @@ Set the same controls in the scope file. The scope file beats environment variab
 }
 ```
 
-Environment variables: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`, `ZERO_ENGAGEMENT_RATE_RPS` and `ZERO_ENGAGEMENT_JITTER_MS`. A bad profile name or value stops the scan with exit code 2.
+Environment variables: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`, `ZERO_ENGAGEMENT_RATE_RPS` and `ZERO_ENGAGEMENT_JITTER_MS`. A bad profile name or value stops the command with exit code 2.
 
-When a profile is active, the report carries an `engagementPosture` record with the posture as applied, and the run emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or extension traffic.
+When a profile is active, the session emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or extension traffic.
 
 <span id="what-0-does-not-do"></span>
 ### What scope does not cover
@@ -537,69 +475,20 @@ When a profile is active, the report carries an `engagementPosture` record with 
 - Identity collection and AD or Entra graph analysis do not exploit, spray credentials or walk the paths they report. See the CLI reference.
 - A quiet posture is not stealth.
 - A hostname in scope does not authorize persistence, implants, C2, pivoting or destructive impact.
-- A saved lead or a model's confirmation is not always a reproduced vulnerability. Check the verifier result before disclosure. See [Verify and fix](/findings/#verify-and-fix).
+- A saved lead or a model's confirmation is not always a reproduced vulnerability. Check the verifier result before disclosure. See [Verified and Not verified](/findings/#verified-and-not-verified).
 - Scope does not limit where model traffic goes. See [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
 
 ## Costs and budgets
 
-0 has three separate limits: estimated model cost, agent turns and request timeouts. Provider and infrastructure costs are yours.
-
-### Set a cost ceiling
-
-```bash
-0 scan ./authorized-repo --runtime api --cost-ceiling 5
-0 scan npm:lodash --runtime api --cost-ceiling 2
-env ZERO_COST_CEILING_USD=3 0 scan https://authorized.example --scope ./scope.json --runtime api
-```
-
-`--cost-ceiling <usd>` beats `ZERO_COST_CEILING_USD`. The value must be positive. With neither, there is no dollar limit.
-
-When the estimate passes the ceiling, 0 stops, keeps partial findings and exits with code `4`. With `ZERO_EMIT_RESULT_LINE=1` the result line carries `exit_reason: "cost_ceiling_exceeded"`. Treat a cost stop as incomplete, not as a clean result.
-
-Commands that take `--cost-ceiling`: `scan web`, `scan source`, `scan package`, `scan deep`, `scan campaign`, `scan repair`.
-
-Gotchas:
-
-- It is a soft stop on estimated usage, not an invoice cap. Calls in flight finish, so each active session can overshoot by one turn.
-- Source and package scans share one ledger across research, per-file sessions and verification. `scan deep` shares one across its planner and finders.
-- `scan repair --cost-ceiling` is not a whole-workflow cap. The repair loop checks its own ledger between findings, so the shown cost is not a reliable investigation-plus-repair total.
-- Tool services, infrastructure and other integrations are not metered by the ledger.
+0 shows estimated model cost on each thread. An Agent has no spending cap. For a single thread, `0 threads send new --cost-ceiling <usd>` stops it once its estimated spend reaches that amount. Provider and infrastructure costs are yours. Set a spending limit with your provider as a separate control.
 
 ### Turn limits
 
-A turn is one model round trip. It can hold several tool calls.
+A turn is one model round trip. It can hold several tool calls. Browser app threads have no limit per message; `0 lab console --max-tool-calls <n>` sets one. A larger limit raises the ceiling on work, not the floor.
 
-| Work | Default |
-| --- | --- |
-| Web and deep scan attack stage | 20 (`quick`), 40 (`default`), 100 (`deep`) |
-| Source and package research and verification | No limit. The agent stops when the work is done. |
-| Browser app threads | No limit per message. `0 lab console --max-tool-calls <n>` sets one. |
-
-A larger limit raises the ceiling on work, not the floor. A run that finishes early does not use the rest.
-
-To bound source and package scans, for example in CI:
-
-```bash
-env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
-  0 scan ./authorized-repo --runtime api --cost-ceiling 5
-```
-
-| Variable | Applies to |
-| --- | --- |
-| `ZERO_MAX_TURNS` | Every shared-runner session |
-| `ZERO_MAX_TURNS_AUDIT` | Package audit research (beats the global value) |
-| `ZERO_MAX_TURNS_REVIEW` | Source review research (beats the global value) |
-| `ZERO_MAX_TURNS_VERIFY` | Verification (beats the global value) |
-
-Invalid, zero or negative values are ignored. These do not limit the web attack stage. MCP, kernel and per-file hunts have their own limits.
+`ZERO_MAX_TURNS` limits every shared-runner session. `ZERO_MAX_TURNS_REVIEW` and `ZERO_MAX_TURNS_VERIFY` beat the global value for review and verification sessions. Invalid, zero or negative values are ignored.
 
 Near the end of a session the agent gets two one-time warnings, at 85% of the limit and three turns before it. `ZERO_FEATURE_BUDGET_WARNINGS=0` turns the warnings off. It does not remove the limit.
-
-### When a budget runs out
-
-0 keeps partial findings and records an incomplete session. An exhausted attack stage can still feed verification and reporting. Read the incomplete-run reason before you trust a partial report, and do not assume every saved finding was reproduced.
-
-Loops checkpoint every two turns when a database is attached. Resume does not replay requests that were in flight.
 
 ### Cost estimates
 
@@ -608,12 +497,6 @@ The estimator prices input, output, cached-input and cache-write tokens from a b
 - Gateway prices can differ from direct-provider prices, even for the same model name.
 - Subscription routes (ChatGPT Codex, coding plans) have their own allowances. Token-dollar estimates do not show remaining quota.
 - Failed or cancelled requests can use provider capacity without usage reaching the CLI. Check your provider invoice.
-
-### Choosing a depth
-
-Use `quick` for a short pass, `default` for routine work and `deep` when the target needs more. Set a dollar ceiling and a provider-side spending limit as separate controls.
-
-A repeated run can take another path and spends again. A run with no findings does not show the target is secure.
 
 ## Security model
 
@@ -648,6 +531,5 @@ Report problems through the [security policy](https://github.com/0sec-labs/0secu
 
 ## Limits
 
-- `--runtime api` is the only runtime that supports provider pinning.
-- A cost ceiling is an estimate. Calls in flight can overshoot it, and unknown model prices count as unknown, not zero.
+- Cost figures are estimates, and unknown model prices count as unknown, not zero.
 - Operational logs are written to stderr. Collect them with your runner or container logging.

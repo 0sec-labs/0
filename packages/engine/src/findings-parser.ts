@@ -3,7 +3,6 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { Finding, Severity } from "./shared/index.js";
 import { derivePocStepsFromEvidence } from "./poc-steps.js";
-import { parseSanitizerLog, renderSanitizerVerdict } from "./review/sanitizer-log.js";
 
 export interface ParseFindingsOptions {
   templatePrefix?: string;
@@ -268,8 +267,6 @@ function parseJsonOutput(output: string, prefix: string, scopePath?: string): Fi
             confidence: clampConfidence(f.confidence),
             timestamp: Date.now(),
           };
-
-          applySanitizerEvidence(finding, f.sanitizer_log ?? f.sanitizerLog);
           attachReviewAnnotation(
             finding,
             f.file,
@@ -304,21 +301,6 @@ function clampConfidence(v: unknown): number | undefined {
   if (v < 0) return 0;
   if (v > 1) return 1;
   return v;
-}
-
-function applySanitizerEvidence(finding: Finding, rawLog: unknown): void {
-  if (typeof rawLog !== "string" || rawLog.trim().length === 0) return;
-  const verdict = parseSanitizerLog(rawLog);
-  if (!verdict) return;
-
-  finding.category = verdict.category;
-  finding.status = "confirmed";
-  finding.confidence = Math.max(finding.confidence ?? 0, 0.95);
-  finding.evidence.response = rawLog.trim();
-  finding.evidence.analysis = [
-    finding.evidence.analysis,
-    `Sanitizer verdict: ${renderSanitizerVerdict(verdict)}`,
-  ].filter(Boolean).join("\n\n");
 }
 
 function extractStructuredField(content: string, field: string): string | undefined {
@@ -395,8 +377,6 @@ function parseStructuredBlocks(output: string, prefix: string, scopePath?: strin
       confidence: clampConfidence(confidence === undefined ? undefined : Number(confidence)),
       timestamp: Date.now(),
     };
-
-    applySanitizerEvidence(finding, sanitizerLog);
     attachReviewAnnotation(
       finding,
       file,

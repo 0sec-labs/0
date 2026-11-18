@@ -10,27 +10,8 @@ const RENAMED_SUBCOMMANDS: Readonly<Record<string, Readonly<Record<string, strin
 };
 
 const MOVED: Readonly<Record<string, readonly string[]>> = {
-  // → research
-  hunt: ["research", "hunt"], "recency-hunt": ["research", "recency-hunt"],
-  "assumption-hunt": ["research", "assumption-hunt"], memsafety: ["research", "memsafety"],
-  "lens-synth": ["research", "lens-synth"], specdrift: ["research", "specdrift"],
-  "protocol-check": ["research", "protocol-check"], "npm-discovery": ["research", "npm-discovery"],
-  "js-recon": ["research", "js-recon"], "xnu-fuzz": ["research", "xnu-fuzz"],
-  kernel: ["research", "kernel"], cve: ["research", "cve"], intel: ["research", "intel"],
-  recon: ["research", "recon"], binary: ["research", "binary"],
-  ingest: ["research", "ingest"], exploit: ["research", "exploit"],
-  identity: ["research", "identity"], adgraph: ["research", "adgraph"],
-  entragraph: ["research", "entragraph"], cloud: ["research", "cloud"], h1: ["research", "h1"],
-  // → scan modules
-  review: ["scan", "source"], audit: ["scan", "package"], secure: ["scan", "repair"],
-  "deep-review": ["scan", "deep"], campaign: ["scan", "campaign"],
-  // → runs
-  history: ["runs", "history"], replay: ["runs", "replay"], resume: ["runs", "relaunch"],
-  timeline: ["runs", "timeline"], orchestrate: ["runs", "orchestrate"],
-  // → findings / improve / plugin
+  // → findings / plugin
   triage: ["findings", "triage"],
-  bench: ["improve", "bench"], "routing-qualify": ["improve", "routing-qualify"],
-  evolve: ["improve", "evolve"], learning: ["improve", "learning"],
   hackstore: ["plugin"],
   // → automation / chats
   workflow: ["automation"], sessions: ["threads"],
@@ -44,15 +25,14 @@ const SILENT = new Set(["chats", "missions", "sentinels"]);
 /**
  * Top-level commands that now live under another group (mirrors NEW_HOME in
  * commands/tree.ts, which a test keeps in sync). The old name still works,
- * silently, with identical arguments and behaviour: `0 scan fix .` runs `0 scan fix .`.
+ * silently, with identical arguments and behaviour: `0 console` runs `0 lab console`.
  */
 const NEW_HOME: Readonly<Record<string, string>> = {
-  fix: "scan", verify: "scan", deps: "scan", eval: "scan", "agent-assure": "scan", disclose: "scan",
   reports: "findings",
   connections: "models", usage: "models",
   "audit-log": "config", team: "config", db: "config", github: "config",
-  upgrade: "doctor", workbench: "doctor", checks: "doctor",
-  research: "lab", improve: "lab", console: "lab", "mcp-server": "lab", runs: "lab",
+  upgrade: "doctor", workbench: "doctor",
+  console: "lab", "mcp-server": "lab",
 };
 
 /** Put a path under its new group when its first word moved. */

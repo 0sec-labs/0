@@ -23,7 +23,6 @@ export function checkNoNpmPublish(root) {
   if (existsSync(wfDir)) {
     for (const f of readdirSync(wfDir)) if (/\.ya?ml$/.test(f)) targets.push(join(".github/workflows", f));
   }
-  if (existsSync(join(root, "action.yml"))) targets.push("action.yml");
   for (const rel of targets) {
     const text = readFileSync(join(root, rel), "utf8");
     text.split("\n").forEach((line, i) => {
