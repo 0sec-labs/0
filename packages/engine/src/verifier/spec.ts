@@ -133,7 +133,15 @@ export function parseVerifySpec(raw: unknown): ParseVerifyResult {
   if (raw.canary !== undefined) {
     const c = raw.canary;
     if (!isRecord(c) || typeof c.step !== "string" || !steps.some((s) => s.name === c.step)) return fail("canary.step must name a step");
-    if (typeof c.file !== "string" || !c.file || c.file.startsWith("/") || c.file.split("/").some((p) => p === ".." || p === "")) return fail("canary.file must be a relative path inside the snapshot");
+    if (
+      typeof c.file !== "string" ||
+      !c.file ||
+      c.file.includes("\0") ||
+      c.file.includes("\\") ||
+      c.file.startsWith("/") ||
+      /^[A-Za-z]:/.test(c.file) ||
+      c.file.split("/").some((p) => p === "." || p === ".." || p === "")
+    ) return fail("canary.file must be a relative path inside the snapshot");
     if (typeof c.content !== "string" || !c.content || c.content.length > 8192) return fail("canary.content must be the marker text to plant");
     if (c.expect !== undefined) { const err = validRegex(c.expect, "canary.expect"); if (err) return fail(err); }
     canary = { step: c.step, file: c.file, content: c.content, ...(typeof c.expect === "string" ? { expect: c.expect } : {}) };

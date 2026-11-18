@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { gateDone, verificationLine } from "./gate.js";
 import type { ContainerRunner, StepOutcome, StepRequest } from "./port.js";
-import { runVerifier } from "./runner.js";
+import { plantCanary, runVerifier } from "./runner.js";
 import { parseVerifySpec, type VerifySpec } from "./spec.js";
 
 const IMAGE = `example/tool@sha256:${"a".repeat(64)}`;
@@ -163,5 +163,61 @@ describe("baseline improves", () => {
     expect(await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(2, 2) })).toMatchObject({ status: "fail", reason: "no-improvement" });
     expect((await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(2, 1) })).status).toBe("pass");
     expect((await runVerifier({ spec: s, afterDir: after, beforeDir: before, runner: run(0, 0) })).status).toBe("pass");
+  });
+});
+
+describe("canary path & symlink safety", () => {
+  it("rejects backslashes, drive prefixes, dot segments, and NUL in canary.file", () => {
+    for (const bad of ["../escape.yml", "..\\escape.yml", "sub\\file.yml", "./file.yml", "/abs.yml", "C:drive.yml", "a\0b.yml", "a//b.yml"]) {
+      expect(parseVerifySpec({ command: "x", image: IMAGE, canary: { step: "verify", file: bad, content: "m" } }).ok, bad).toBe(false);
+    }
+  });
+
+  it("refuses to plant a canary through a directory symlink or junction pointing outside the snapshot", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "verifier-outside-"));
+    dirs.push(outside);
+    const victimFile = join(outside, "__canary.yml");
+    writeFileSync(victimFile, "original-host-content");
+
+    const scratch = mkdtempSync(join(tmpdir(), "verifier-scratch-"));
+    dirs.push(scratch);
+    mkdirSync(join(scratch, ".github"), { recursive: true });
+    symlinkSync(outside, join(scratch, ".github", "workflows"), process.platform === "win32" ? "junction" : "dir");
+
+    expect(plantCanary(scratch, ".github/workflows/__canary.yml", "OVERWRITTEN")).toBe(false);
+    expect(readFileSync(victimFile, "utf8")).toBe("original-host-content");
+
+    // End-to-end through runVerifier when the OS permits copying symlinks in cpSync.
+    let canCopySymlink = true;
+    const after = mkdtempSync(join(tmpdir(), "verifier-symlink-repo-"));
+    dirs.push(after);
+    try {
+      mkdirSync(join(after, ".github"), { recursive: true });
+      symlinkSync(outside, join(after, ".github", "workflows"), "dir");
+    } catch {
+      canCopySymlink = false;
+    }
+    if (canCopySymlink) {
+      const s = spec({ canary: { step: "verify", file: ".github/workflows/__canary.yml", content: "OVERWRITTEN" } });
+      const runner = new FakeRunner(() => ({ exitCode: 1, output: "flagged" }));
+      const res = await runVerifier({ spec: s, afterDir: after, runner });
+      expect(res).toMatchObject({ status: "error", reason: "unsafe-canary-path" });
+      expect(readFileSync(victimFile, "utf8")).toBe("original-host-content");
+      expect(runner.calls).toHaveLength(0);
+      expect(gateDone({ declared: true, claim: "Fixed.", result: res }).allowed).toBe(false);
+    }
+  });
+
+  it("refuses to plant a canary when a parent segment in the snapshot is a regular file", async () => {
+    const after = mkdtempSync(join(tmpdir(), "verifier-file-parent-"));
+    dirs.push(after);
+    writeFileSync(join(after, ".github"), "not a directory");
+
+    const s = spec({ canary: { step: "verify", file: ".github/workflows/__canary.yml", content: "marker" } });
+    const runner = new FakeRunner(() => ({ exitCode: 1, output: "flagged" }));
+    const res = await runVerifier({ spec: s, afterDir: after, runner });
+
+    expect(res).toMatchObject({ status: "error", reason: "unsafe-canary-path" });
+    expect(runner.calls).toHaveLength(0);
   });
 });
