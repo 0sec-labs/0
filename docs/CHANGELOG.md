@@ -12,18 +12,35 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
-### Removed
+## [0.39.0] - 2026-11-18
 
-- The scan pipelines and `0 scan`, the kernel, identity, research, disclosure, improvement, review, verification and triage engines, `lab`, workflow graphs and steps, learning, todos and plans, scope, budgets, the MCP server mode, the benchmarks and the GitHub Action. The old code is kept on the `archive/security-engine` branch.
-- The legacy command names. `--runtime`, `--depth`, `--module`, `--task-model`, `--single-model` and the `ZERO_*` variables of the removed engines no longer do anything.
-- The daily spending and turn caps of Sentinels.
+This release is a large simplification: Agents become Sentinels, the model gets eight tools, and the scan engines, scope and budgets are gone.
+
+### Added
+
+- `0 computers remove <id>` takes a remote computer out of the list from the terminal. Files on the computer stay.
 
 ### Changed
 
-- A Sentinel's tabbed dialog is now a side pane on its thread (status, triggers, instructions, memory) and a small Profile dialog; four presets that needed web probing or scans are gone.
-- The model has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. The other tools are gone; use the shell or an extension.
-- Agents are now Sentinels (`0 sentinels`, `/sentinels`). A Sentinel is one thread that keeps going: schedules and pull request triggers send their work into it. A Sentinel's automation is a saved prompt plus a trigger.
-- The CLI has eight visible commands: `findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers` and `config`. `0 computers remove <id>` is new.
+- Agents are now Sentinels: `0 sentinels` and `/sentinels`. A Sentinel is one thread that keeps going, with its own prompt, triggers and memory file. Its page has a side pane for status, triggers, instructions and memory, and a small Profile dialog.
+- Creating a Sentinel is one small dialog. Six starting points remain: PR security reviewer, dependency watcher, secrets hunter, fix engineer, incident triage and release gate.
+- The model has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. A turn ends when the model replies without a tool call.
+- Your message appears the moment you send it, including follow-ups and queued messages.
+- The default accent is neutral again; blue is an option in Appearance.
+- The CLI is `findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers` and `config`, plus `0 -p`, `0 -c` and `0 --resume`.
+
+### Removed
+
+- The scan pipelines and `0 scan`, the kernel, triage, disclosure, research, review and replay engines, benchmarks and the GitHub Action.
+- The workflow graph and steps, learning, scope, daily budgets, todos and plan, the MCP server mode, and the legacy command names.
+
+### Fixed
+
+- Untrusted automated and peer turns can no longer write live notes to Memory. (@Adityakk9031)
+- A verifier canary can no longer be planted through a symlink out of the snapshot. (@Adityakk9031)
+- A Sentinel's tripped circuit breaker keeps its state across late turn results. (@hopstreax)
+- MCP tool revalidation no longer races on repeated tool-list changes. (@hopstreax)
+- Memory notes no longer duplicate after an edit. (@hopstreax)
 
 ## [0.38.0] - 2026-11-16
 

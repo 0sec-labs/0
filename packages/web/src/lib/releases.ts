@@ -8,6 +8,17 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.39.0",
+    date: "2026-11-18",
+    title: "Sentinels and a smaller 0",
+    summary: "Agents are now Sentinels with a side pane and a Profile dialog, the model has eight tools, and the scan engines, scope and budgets are gone.",
+    highlights: [
+      { icon: "ListChecks", title: "Sentinels", text: "One thread that keeps going, with its own prompt, triggers and memory. Its page has a side pane for status, triggers, instructions and memory, and a small Profile dialog." },
+      { icon: "Wrench", title: "Eight tools", text: "A shell, file edit, findings, skills, memory, web search and sub-agents. Everything else is the shell and the 0 command line." },
+      { icon: "Palette", title: "A smaller product", text: "The scan engines, scope, budgets and the legacy command names are removed. The commands are findings, threads, sentinels, skills, memory, models, computers and config." },
+    ],
+  },
+  {
     version: "0.38.0",
     date: "2026-11-16",
     title: "One Memory, one Appearance",
