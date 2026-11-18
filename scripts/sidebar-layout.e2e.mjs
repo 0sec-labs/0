@@ -48,7 +48,7 @@ try {
       const group = document.querySelector('[aria-label="Sidebar list"]');
       const box = element => { const r = element?.getBoundingClientRect(); return r ? { x: Math.round(r.x * 2) / 2, y: Math.round((r.y + r.height / 2) * 2) / 2, w: Math.round(r.width * 2) / 2, h: Math.round(r.height * 2) / 2 } : null; };
       const row = group?.parentElement;
-      return { toggle: box(group), buttons: [...row.querySelectorAll('button')].map(b => box(b)), title: box(row.querySelector('h2')), height: box(row).h };
+      return { toggle: box(group), buttons: [...row.querySelectorAll('button')].map(b => box(b)), title: box(row), height: box(row).h };
     });
     const toggle = page.locator('[aria-label="Sidebar list"]');
     await toggle.waitFor({ timeout: 15000 });
@@ -60,12 +60,12 @@ try {
     await wait(300);
     const inThreads = await header();
     assert.deepEqual(inThreads, inAgents, `header layout must not change between modes (${agents.length} agents)`);
-    // Five equal 28px icon buttons with 4px gaps, vertically centred on the title, and no box around the toggle.
+    // Five equal 28px icon buttons with 4px gaps, vertically centred in the header row (which has no visible title: the active icon says which list it is), and no box around the toggle. The two list icons sit left, the other three right.
     assert.equal(inThreads.buttons.length, 5, 'agents, threads, search, plus, options');
     for (const [index, button] of inThreads.buttons.entries()) {
       assert.equal(button.w, 28); assert.equal(button.h, 28);
-      assert.equal(button.y, inThreads.title.y, 'buttons are centred on the title');
-      if (index) assert.equal(button.x - (inThreads.buttons[index - 1].x + 28), 4, 'gap between header buttons is 4px');
+      assert.equal(button.y, inThreads.title.y, 'buttons are centred in the header row');
+      if (index && index !== 2) assert.equal(button.x - (inThreads.buttons[index - 1].x + 28), 4, 'gap between header buttons is 4px');
     }
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[aria-label="Sidebar list"]')).backgroundColor), 'rgba(0, 0, 0, 0)', 'the toggle has no filled box');
     const rows = await page.evaluate(() => [...document.querySelectorAll('#navigation-chat-history [data-sidebar-row]')].map(row => {
