@@ -10,13 +10,13 @@ An Agent is a persistent agent with a name, a standing job, a scope, files and a
 1. Run `0` and click **+** next to **Agents** in the sidebar. The Agents page, the command palette and the **Create an agent** chip on the home screen open the same dialog.
 2. Optionally pick a **Start from** preset. It fills the name, avatar and instructions; **Blank** is the default. Click the avatar to change its glyph or colour.
 3. Type a name, then check the **Folder** it works on, the **Computer** it runs on and its **Model** (the current default unless you pick one).
-4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, last 7 days, notes and files, activity), Automations and Settings.
+4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, last 7 days, memory and files, activity), Automations and Settings.
 
 Creating an agent never turns a schedule on. A preset only suggests automations; none exists until you add it on the Automations tab, and a schedule starts only after you review and turn it on. Production targets stay off.
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Agent has a scope, a model, skills and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Agent has a scope, a model, skills, instructions (`AGENTS.md`) and its own memory (`NOTES.md`), plus `handoffs/` and `reports/` folders.
 
 ## One thread that never ends
 
@@ -28,7 +28,7 @@ The Agent's page is its real conversation, the same transcript and composer ever
 - **Needs you.** The sidebar row shows the Agent's last message and a glyph only when it is working, waiting on you or failed. A row that needs you says so in place of its age.
 - **Older threads.** Work from before this change, or with `ZERO_AGENTS_PERSISTENT_THREAD=0` set, ran in a thread of its own. Those stay as ordinary threads and are listed under Activity in Overview with an **Open** link.
 
-Every wake-up message carries the Agent's charter, scope and skills again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
+Every wake-up message carries the Agent's instructions, scope and skills again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
 
 ## Presets
 
