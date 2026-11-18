@@ -91,7 +91,8 @@ export class HostConsoleProcess {
     this.#input = this.#child.stdio[3] as Writable;
     this.#input.on("error", () => { /* Exit handler settles requests; no uncaught EPIPE. */ });
     // Dedicated fd 3/4 carry control. Tool/provider stdout can never be a frame.
-    this.#child.stdout?.resume(); this.#child.stderr?.resume();
+    // A data listener (not a bare resume) so Bun on Linux drains and then closes both pipes; the stop check waits for that close.
+    this.#child.stdout?.on("data", () => {}); this.#child.stderr?.on("data", () => {});
     const reader = new HostConsoleFrameReader();
     const output = this.#child.stdio[4] as Readable;
     output.setEncoding("utf8");
