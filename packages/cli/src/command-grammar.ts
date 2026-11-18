@@ -34,6 +34,7 @@ const SENTINEL_STATE: Readonly<Record<string, string>> = { active: "resume", pau
 const THREAD_FLAGS = ["events", "export", "archive", "close", "delete", "clear", "set"] as const;
 
 function findings(a: Args): string[] | undefined {
+  if (a.length === 1) return ["findings", "--help"]; // like every command group, bare `findings` shows its help
   const rest = a.slice(2);
   if (a[1] === "update" && isWord(a[2])) {
     const status = pull(rest.slice(1), "--status", true);
@@ -43,7 +44,13 @@ function findings(a: Args): string[] | undefined {
   if (a[1] === "list") {
     const imported = pull(rest, "--import", true);
     if (imported.value) return ["findings", "reports", "import", imported.value, ...imported.rest];
-    if (rest.some((x) => x === "--format" || x.startsWith("--format="))) return ["findings", "export", ...rest];
+    // `--json` is `--format json`; `--format text` is the plain list.
+    const json = pull(rest, "--json", false);
+    const format = pull(json.rest, "--format", true);
+    const wanted = format.found ? format.value : json.found ? "json" : undefined;
+    if (wanted === undefined && !format.found) return undefined;
+    if (wanted === "text") return ["findings", "list", ...format.rest];
+    return ["findings", "export", ...format.rest, ...(wanted ? ["--format", wanted] : [])];
   }
   return undefined;
 }
@@ -244,7 +251,14 @@ export function rewriteNewForms(args: Args): string[] | undefined {
   if (first === undefined || !Object.hasOwn(NEW_FORMS, first)) return undefined;
   // `--help` asks about the command as typed, except where the flag picks the command: `sentinels list --automation --help`, `config doctor --help`.
   if (args.includes("--help") || args.includes("-h")) {
-    if (first === "sentinels") return automations(args);
+    if (first === "sentinels") {
+      // `sentinels set <id> --trigger add --help` describes `triggers add`.
+      for (const [flag, group] of [["--trigger", "triggers"], ["--files", "files"]] as const) {
+        const at = args.indexOf(flag);
+        if (at >= 0 && isWord(args[at + 1]) && !args.includes("--automation")) return ["sentinels", group, args[at + 1]!, "--help"];
+      }
+      return automations(args);
+    }
     // `threads send new --help` describes starting a thread (its flags: --folder, --wait, --cost-ceiling), not sending to one.
     if (first === "threads" && args[1] === "send" && args[2] === "new") return threads(args);
     return first === "config" && args[1] === "doctor" ? config(args) : undefined;

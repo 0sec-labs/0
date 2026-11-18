@@ -23,7 +23,7 @@ export function runModelsDefault(model: string | undefined, options: JsonOption 
       if (options.json) return printJson(io, { preference: pref ?? null });
       return io.out(pref ? `${pref.providerId}/${pref.model}` : "No default model set.");
     }
-    if (!options.provider) throw new UsageError("Setting the default model requires --provider <id>.");
+    if (!options.provider) throw new UsageError("Say which provider serves it: 0 models set <model> --provider <id>. See `0 models list` for both.");
     const data = expectOk(await client.request("PATCH", "/api/console/models/preference", { providerId: options.provider, model }));
     if (options.json) printJson(io, { preference: data.preference });
     else io.out(`Default model: ${options.provider}/${model}`);

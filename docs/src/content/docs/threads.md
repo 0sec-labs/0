@@ -84,7 +84,7 @@ id=$(0 threads send new "Map the login flow" --folder ~/code/app)
 0 threads list "$id" --delete --yes
 ```
 
-`send new` creates the thread and runs one turn. `--wait` blocks until the turn ends, prints the reply with tokens and estimated cost, and exits 1 if the turn errored. Every `0 threads` command needs a running app; without one it prints `No console running. Start one with: 0 --headless` and exits non-zero.
+`send new` creates the thread and runs one turn. `--wait` blocks until the turn ends and prints only the reply on stdout (the thread id, tokens and cost go to stderr), and exits 1 if the turn errored. `send <id> ... --wait` and `show <id> --wait` do the same for a thread that already exists. Every `0 threads` command needs a running app; without one it prints `No console running. Start one with: 0 --headless` and exits non-zero.
 
 ## Headless
 

@@ -339,11 +339,12 @@ export function registerConfigCommand(program: Command): void {
     });
 
   config
-    .command("get <key>")
-    .description("Print the effective value of one setting")
+    .command("get [key]")
+    .description("Print the effective value of one setting, or every setting with no key")
     .option("--json", "Print JSON with the source layer")
-    .action((key: string, opts: { json?: boolean }) => {
-      runConfigGet(key, { json: opts.json });
+    .action((key: string | undefined, opts: { json?: boolean }) => {
+      if (key === undefined) runConfigShow({ json: opts.json });
+      else runConfigGet(key, { json: opts.json });
     });
 
   config

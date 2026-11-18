@@ -295,7 +295,8 @@ export function registerFindingsCommand(program: Command): void {
     .description("Show detailed information about a finding")
     .argument("<id>", "Finding ID (full or prefix)")
     .option("--db-path <path>", "Path to SQLite database")
-    .action(async (id: string, opts: { dbPath?: string }, command: Command) => {
+    .option("--json", "Print JSON")
+    .action(async (id: string, opts: { dbPath?: string; json?: boolean }, command: Command) => {
       const { db, dbPath: selectedDbPath } = await openDatabaseHolding(id, resolveDbPath(opts, command));
 
       try {
@@ -307,6 +308,10 @@ export function registerFindingsCommand(program: Command): void {
 
         const related = finding.fingerprint ? db.getRelatedFindings(finding.fingerprint) as FindingRow[] : [finding];
 
+        if (opts.json) {
+          console.log(JSON.stringify({ ...finding, related: related.map((row) => ({ id: row.id, scanId: row.scanId, status: row.status, triage: row.triageStatus ?? "new" })) }, null, 2));
+          return;
+        }
         console.log("");
         console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(" finding detail"));
         console.log("");

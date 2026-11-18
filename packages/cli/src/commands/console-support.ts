@@ -1,6 +1,7 @@
 // Shared plumbing for the commands that mirror the web console (config, connections, models,
 // github, usage, audit-log). One runner: open the console transport, run the command, map the
 // outcome to an exit code (0 ok, 1 failure, 2 usage) and print text or --json. Never calls process.exit.
+import { readableError } from "./error-text.js";
 import { openConsoleClient, type ConsoleClient, type ConsoleResult } from "../console-attach-client.js";
 
 export interface ConsoleCommandDeps {
@@ -44,7 +45,7 @@ export async function runConsoleCommand(options: JsonOption, deps: ConsoleComman
     await fn(client, io);
     io.exit(0);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Command failed.";
+    const message = readableError(error instanceof Error ? error.message : "Command failed.");
     io.err(options.json ? JSON.stringify({ error: message }) : `error: ${message}`);
     io.exit(error instanceof UsageError ? 2 : 1);
   } finally {
@@ -64,7 +65,7 @@ export function renderTable(headers: string[], rows: string[][]): string {
 }
 
 export async function readSecret(options: { keyEnv?: string; stdin?: boolean }, deps: ConsoleCommandDeps, label: string): Promise<string> {
-  if (Boolean(options.keyEnv) === Boolean(options.stdin)) throw new UsageError(`Provide the ${label} with exactly one of --key-env <VAR> or --stdin.`);
+  if (Boolean(options.keyEnv) === Boolean(options.stdin)) throw new UsageError(`Provide the ${label} with exactly one of --key-env <VAR> or --stdin, for example: 0 models connect anthropic --key-env ANTHROPIC_API_KEY`);
   let value: string | undefined;
   if (options.keyEnv) {
     value = (deps.env ?? process.env)[options.keyEnv];

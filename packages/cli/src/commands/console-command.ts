@@ -1,4 +1,5 @@
 import { open } from "node:fs/promises";
+import { readableError } from "./error-text.js";
 import { constants } from "node:fs";
 import type { Command } from "commander";
 import { ConsoleRequestError, openConsoleClient, type ConsoleClient, type ConsoleClientOptions } from "../console-embed-client.js";
@@ -51,7 +52,7 @@ export async function withConsole<T>(flags: ConsoleFlags, deps: ConsoleCommandDe
     const value = await action(client);
     deps.out(flags.json ? JSON.stringify(value, null, 2) : render(value));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = readableError(error instanceof Error ? error.message : String(error));
     deps.err(flags.json ? JSON.stringify({ error: message }) : message);
     process.exitCode = error instanceof UsageError ? 2 : 1;
   } finally {

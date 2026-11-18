@@ -58,7 +58,7 @@ describe("0 findings export", () => {
   });
   it("reports usage errors with exit 2 and missing findings with exit 1", async () => {
     const h = exportDeps();
-    await runFindingsExport([], { format: "json", dbPath, severity: "low" }, h.deps); expect(process.exitCode).toBe(1); // nothing matches the filter
+    await runFindingsExport([], { format: "json", dbPath, severity: "low" }, h.deps); expect(process.exitCode).toBe(0); // nothing matches the filter: an empty list, not an error
     process.exitCode = 0;
     process.exitCode = 0; await runFindingsExport(["ab"], { format: "json", dbPath }, h.deps); expect(process.exitCode).toBe(2); // ambiguous prefix
     process.exitCode = 0; await runFindingsExport(["zzz"], { format: "json", dbPath }, h.deps); expect(process.exitCode).toBe(1);

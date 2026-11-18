@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { readableError } from "./error-text.js";
 import chalk from "chalk";
 import { openConsole, type ConsoleClient, type ConsoleDependencies, type ConsoleOptions, type ConsoleReply } from "../console-skills-client.js";
 
@@ -51,7 +52,7 @@ export async function runConsole(io: CommandIo, options: OutputOptions, fn: (cli
     client = await (io.open ?? ((consoleOpts: ConsoleOptions) => openConsole(consoleOpts, io.consoleDeps)))({ ...(options.dbPath ? { dbPath: options.dbPath } : {}) });
     await fn(client);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = readableError(error instanceof Error ? error.message : String(error));
     io.err(options.json ? JSON.stringify({ error: message }) : message);
     io.setExitCode(error instanceof UsageError ? EXIT_USAGE : EXIT_FAILURE);
   } finally { await client?.dispose().catch(() => {}); }

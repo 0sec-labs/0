@@ -68,7 +68,7 @@ export function registerWorkerCommand(program: Command): void {
   enginesConfigOption(deploy, "Engine registry path");
 
   worker
-    .command("repair <backend-id>")
+    .command("repair <id>")
     .alias("reconnect")
     .description("Reconnect a managed remote computer's tunnel and start its retained engine when needed")
     .action(async (backendId: string) => {
@@ -76,14 +76,14 @@ export function registerWorkerCommand(program: Command): void {
     });
 
   worker
-    .command("stop <backend-id>")
+    .command("stop <id>")
     .description("Stop a managed remote computer and its owned tunnel; retain remote files and registration")
     .action(async (backendId: string) => {
       process.stdout.write(JSON.stringify(await stopWorker(backendId)) + "\n");
     });
 
   const remove = worker
-    .command("remove <backend-id>")
+    .command("remove <id>")
     .description("Remove a remote computer from this machine: closes the tunnel and forgets its saved connection (files on the remote computer stay)")
     .action((backendId: string, opts: { enginesConfig?: string }) => {
       try {

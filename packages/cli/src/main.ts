@@ -29,6 +29,7 @@ import { commandPathsOf, setCrashCommandPaths } from "./crash-capture.js";
 import { surfaceFromArgv } from "./surface.js";
 import { createRootProgram } from "./program.js";
 import { registerLazyCommandTree } from "./commands/lazy-tree.js";
+import { applyErrorPolicy } from "./commands/layout.js";
 import { getReleaseChannel } from "./state/runtime.js";
 import { maybePrintTelemetryNotice } from "./telemetry-notice.js";
 
@@ -126,6 +127,7 @@ async function buildProgram(args: readonly string[]): Promise<Command> {
     }
   });
   await registerLazyCommandTree(program, args);
+  applyErrorPolicy(program);
   setCrashCommandPaths(commandPathsOf(program));
   return program;
 }

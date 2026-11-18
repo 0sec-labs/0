@@ -4,19 +4,30 @@ Usage: 0 [options] [command]
 Security sentinels for your repositories. Run 0 to open the console.
 
 Options:
-  -h, --help          display help for command
+  -h, --help            display help for command
+  -p, --print <prompt>  Run one prompt headless: only the answer goes to stdout
+  -c, --continue        With -p: continue the most recent thread
+  -r, --resume <id>     With -p: continue a saved thread
 
 Work:
-  findings [options]  Browse findings and change their status
-  threads             Start, follow and stop threads
-  sentinels           Sentinels and their automations: list, run, change
+  findings [options]    Browse findings and change their status
+  threads               Start, follow and stop threads
+  sentinels             Create, run and change Sentinels
 
 Setup:
-  skills              Skills and extensions: list, add
-  memory              What 0 remembers across threads
-  models              Models and provider connections
-  computers           Remote computers that run 0
-  config              Settings, API keys, team and setup checks (config doctor)
+  skills                Skills and extensions: list, add
+  memory                What 0 remembers across threads
+  models                Models and provider connections
+  computers             Remote computers that run 0
+  config                Settings, API keys, team and setup checks (config doctor)
+
+Run `0 <command>` to list its subcommands; `0 <command> <subcommand> --help` for flags.
+
+Examples:
+  0 -p "Review ./app for injection bugs"
+  0 threads start "Map the login flow" --wait
+  0 findings list --severity high --format json
+  0 sentinels list --presets
 
 ### 0 api (hidden)
 Usage: 0 api [options] [path]
@@ -112,7 +123,7 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
+  --db-path <path>           Control database of the local engine
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
@@ -139,7 +150,7 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
+  --db-path <path>           Control database of the local engine
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
@@ -165,7 +176,7 @@ Commands:
   list [options]        List registered remote computers
   add|deploy [options]  Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH
                         host) and register it
-  stop <backend-id>     Stop a managed remote computer and its owned tunnel; retain remote files and
+  stop <id>             Stop a managed remote computer and its owned tunnel; retain remote files and
                         registration
   help [command]        display help for command
 
@@ -203,12 +214,12 @@ Usage: 0 computers list [options]
 List registered remote computers
 
 Options:
-  --json                   Print JSON
   --engines-config <path>  Engine registry path
+  --format <format>        Output: text or json (choices: "text", "json")
   -h, --help               display help for command
 
 ### 0 computers remove (hidden)
-Usage: 0 computers remove [options] <backend-id>
+Usage: 0 computers remove [options] <id>
 
 Remove a remote computer from this machine: closes the tunnel and forgets its saved connection
 (files on the remote computer stay)
@@ -218,7 +229,7 @@ Options:
   -h, --help               display help for command
 
 ### 0 computers repair (hidden)
-Usage: 0 computers repair|reconnect [options] <backend-id>
+Usage: 0 computers repair|reconnect [options] <id>
 
 Reconnect a managed remote computer's tunnel and start its retained engine when needed
 
@@ -226,7 +237,7 @@ Options:
   -h, --help  display help for command
 
 ### 0 computers stop
-Usage: 0 computers stop [options] <backend-id>
+Usage: 0 computers stop [options] <id>
 
 Stop a managed remote computer and its owned tunnel; retain remote files and registration
 
@@ -242,7 +253,8 @@ Options:
   -h, --help                    display help for command
 
 Commands:
-  get [options] <key>           Print the effective value of one setting
+  get [options] [key]           Print the effective value of one setting, or every setting with no
+                                key
   set [options] <key> <value>   Change one setting (global by default, --project for this folder)
   doctor [options] [checks...]  Check this machine and the engine, then suggest the next command
   help [command]                display help for command
@@ -253,11 +265,11 @@ Usage: 0 config audit-log [options]
 Show the local log of privileged actions (connections, settings, extensions)
 
 Options:
-  --q <text>     Only events whose action, subject or actor contains this text
-  --limit <n>    Maximum events to show
-  --before <id>  Only events older than this id (pagination)
-  --json         Print JSON
-  -h, --help     display help for command
+  --q <text>         Only events whose action, subject or actor contains this text
+  --limit <n>        Maximum events to show
+  --before <id>      Only events older than this id (pagination)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config db (hidden)
 Usage: 0 config db [options] [command]
@@ -295,8 +307,9 @@ Usage: 0 config doctor [options] [checks...]
 Check this machine and the engine, then suggest the next command
 
 Options:
-  --fix       Repair the local database
-  -h, --help  display help for command
+  --fix              Repair the local database
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config export (hidden)
 Usage: 0 config export [options] [file]
@@ -308,13 +321,13 @@ Options:
   -h, --help  display help for command
 
 ### 0 config get
-Usage: 0 config get [options] <key>
+Usage: 0 config get [options] [key]
 
-Print the effective value of one setting
+Print the effective value of one setting, or every setting with no key
 
 Options:
-  --json      Print JSON with the source layer
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config github (hidden)
 Usage: 0 config github [options] [command]
@@ -333,10 +346,10 @@ Usage: 0 config github connect [options]
 Sign in with a personal access token (from an env var or stdin)
 
 Options:
-  --key-env <VAR>  Read the token from this environment variable
-  --stdin          Read the token from stdin
-  --json           Print JSON
-  -h, --help       display help for command
+  --key-env <VAR>    Read the token from this environment variable
+  --stdin            Read the token from stdin
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config github repos (hidden)
 Usage: 0 config github repos [options]
@@ -344,10 +357,10 @@ Usage: 0 config github repos [options]
 List repositories the signed-in account can reach
 
 Options:
-  --search <text>  Only names containing this text
-  --refresh        Bypass the five-minute cache
-  --json           Print JSON
-  -h, --help       display help for command
+  --search <text>    Only names containing this text
+  --refresh          Bypass the five-minute cache
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config github status (hidden)
 Usage: 0 config github status [options]
@@ -355,8 +368,8 @@ Usage: 0 config github status [options]
 Show whether GitHub is signed in
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config import (hidden)
 Usage: 0 config import [options] <file>
@@ -375,8 +388,8 @@ Usage: 0 config list [options]
 Alias of show
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config reset (hidden)
 Usage: 0 config reset [options] [keys...]
@@ -384,9 +397,9 @@ Usage: 0 config reset [options] [keys...]
 Reset settings to defaults (all engine settings when no key is given)
 
 Options:
-  --yes       Confirm the reset
-  --json      Print JSON
-  -h, --help  display help for command
+  --yes              Confirm the reset
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config set
 Usage: 0 config set [options] <key> <value>
@@ -394,10 +407,10 @@ Usage: 0 config set [options] <key> <value>
 Change one setting (global by default, --project for this folder)
 
 Options:
-  --project   Write the override for this folder
-  --yes       Confirm a security-sensitive setting
-  --json      Print JSON
-  -h, --help  display help for command
+  --project          Write the override for this folder
+  --yes              Confirm a security-sensitive setting
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config show (hidden)
 Usage: 0 config show [options]
@@ -405,8 +418,8 @@ Usage: 0 config show [options]
 Show the effective config with the source layer (default/global/project) per key
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 config team (hidden)
 Usage: 0 config team [options] [command]
@@ -459,6 +472,7 @@ Check local runtime prerequisites and suggest the next command
 
 Options:
   --discard-reports  Delete crash reports waiting for review on this computer
+  --json             Print JSON
   -h, --help         display help for command
 
 Commands:
@@ -592,6 +606,7 @@ Commands:
   list [options]         List findings from the database
   show [options] <id>    Show detailed information about a finding
   update [options] <id>  Change a finding's status
+  help [command]         display help for command
 
 ### 0 findings accept (hidden)
 Usage: 0 findings accept [options] <id>
@@ -612,7 +627,6 @@ Usage: 0 findings export [options] [ids...]
 Export findings, a whole scan or, with no IDs, every finding as json, md, sarif, html or pdf
 
 Options:
-  --scan <id>            Export every finding of this scan instead of selected IDs
   --format <format>      json, md, sarif, html or pdf (default: "json")
   -o, --output <file>    Write to a file instead of stdout
   --severity <severity>  With no IDs: only this severity
@@ -642,7 +656,7 @@ Create a read-only API access key; the secret is printed once
 Options:
   --expires-in <days>  Days until the key expires (default 90)
   --db-path <path>     Path to SQLite database
-  --json               Print JSON
+  --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
 
 ### 0 findings keys list (hidden)
@@ -651,9 +665,9 @@ Usage: 0 findings keys list [options]
 List API access keys (secrets are never shown)
 
 Options:
-  --db-path <path>  Path to SQLite database
-  --json            Print JSON
-  -h, --help        display help for command
+  --db-path <path>   Path to SQLite database
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 findings keys revoke (hidden)
 Usage: 0 findings keys revoke [options] <id>
@@ -661,10 +675,10 @@ Usage: 0 findings keys revoke [options] <id>
 Revoke an API access key
 
 Options:
-  --yes             Confirm the revocation
-  --db-path <path>  Path to SQLite database
-  --json            Print JSON
-  -h, --help        display help for command
+  --yes              Confirm the revocation
+  --db-path <path>   Path to SQLite database
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 findings list
 Usage: 0 findings list [options]
@@ -674,7 +688,6 @@ List findings from the database
 Options:
   --all                  Show raw finding rows instead of grouped fingerprints
   --db-path <path>       Path to SQLite database
-  --scan <scanId>        Filter by scan ID
   --severity <severity>  Filter by severity: critical, high, medium, low, info
   --category <category>  Filter by attack category
   --status <status>      Filter by status: discovered, verified, confirmed, scored, reported, fixed,
@@ -738,11 +751,12 @@ Usage: 0 findings show [options] <id>
 Show detailed information about a finding
 
 Arguments:
-  id                Finding ID (full or prefix)
+  id                 Finding ID (full or prefix)
 
 Options:
-  --db-path <path>  Path to SQLite database
-  -h, --help        display help for command
+  --db-path <path>   Path to SQLite database
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 findings suppress (hidden)
 Usage: 0 findings suppress [options] <id>
@@ -860,12 +874,12 @@ Usage: 0 memory add [options] <text>
 Remember a note
 
 Options:
-  --folder <path>   Folder the note is about (default: this folder)
-  --global          Remember it everywhere
-  --kind <kind>     One of fix-decision, convention, command, avoid
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --folder <path>    Folder the note is about (default: this folder)
+  --global           Remember it everywhere
+  --kind <kind>      One of fix-decision, convention, command, avoid
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory clear (hidden)
 Usage: 0 memory clear [options]
@@ -873,11 +887,11 @@ Usage: 0 memory clear [options]
 Forget every note, or every note for one folder
 
 Options:
-  --folder <path>   Only this folder
-  --yes             Confirm
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --folder <path>    Only this folder
+  --yes              Confirm
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory disable (hidden)
 Usage: 0 memory disable [options]
@@ -885,9 +899,9 @@ Usage: 0 memory disable [options]
 Stop using notes in new threads (they stay on disk)
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory enable (hidden)
 Usage: 0 memory enable [options]
@@ -895,9 +909,9 @@ Usage: 0 memory enable [options]
 Use notes in new threads again
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory export (hidden)
 Usage: 0 memory export [options]
@@ -910,8 +924,8 @@ Options:
   --to <file>          Add accepted notes to this markdown file (for example AGENTS.md) as a section
                        you review and commit
   --markdown           Print the markdown section instead of JSON
-  --json               Print machine-readable JSON
   --db-path <path>     Engine database to import older memories from
+  --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
 
 ### 0 memory import (hidden)
@@ -920,9 +934,9 @@ Usage: 0 memory import [options] <file>
 Add the notes from an export file
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory list
 Usage: 0 memory list [options]
@@ -930,12 +944,12 @@ Usage: 0 memory list [options]
 List notes, and say which ones do not fit what the model is shown
 
 Options:
-  --folder <path>   Only notes for this folder
-  --global          Only global notes
-  --search <text>   Only notes containing this text
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --folder <path>    Only notes for this folder
+  --global           Only global notes
+  --search <text>    Only notes containing this text
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory proposed (hidden)
 Usage: 0 memory proposed [options] [command]
@@ -955,10 +969,10 @@ Usage: 0 memory proposed accept [options] <id>
 Accept a proposed note so it is used in new threads
 
 Options:
-  --text <text>     Correct the wording while accepting
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --text <text>      Correct the wording while accepting
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory proposed list (hidden)
 Usage: 0 memory proposed list [options]
@@ -966,9 +980,9 @@ Usage: 0 memory proposed list [options]
 List proposed notes
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory proposed reject (hidden)
 Usage: 0 memory proposed reject [options] <id>
@@ -976,9 +990,9 @@ Usage: 0 memory proposed reject [options] <id>
 Discard a proposed note
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 memory remove
 Usage: 0 memory remove [options] <id>
@@ -986,9 +1000,9 @@ Usage: 0 memory remove [options] <id>
 Forget a note
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Engine database to import older memories from
-  -h, --help        display help for command
+  --db-path <path>   Engine database to import older memories from
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models
 Usage: 0 models [options] [command]
@@ -1010,10 +1024,12 @@ Usage: 0 models connect [options] [provider]
 Add, list, test or remove a provider connection
 
 Options:
-  --list      List connections
-  --test      Test a connection
-  --remove    Remove a connection
-  -h, --help  display help for command
+  --key-env <VAR>  Add: read the API key from this environment variable
+  --stdin          Add: read the API key from stdin
+  --list           List connections (the default with no provider)
+  --test           Test a connection
+  --remove         Remove a connection (with --yes)
+  -h, --help       display help for command
 
 ### 0 models connections (hidden)
 Usage: 0 models connections [options] [command]
@@ -1037,7 +1053,7 @@ Options:
   --account-id <id>  Name this saved account
   --base-url <url>   Custom API endpoint
   --model <model>    Deployment model, where required
-  --json             Print JSON
+  --format <format>  Output: text or json (choices: "text", "json")
   -h, --help         display help for command
 
 ### 0 models connections list (hidden)
@@ -1046,8 +1062,8 @@ Usage: 0 models connections list [options]
 List providers and their connection status
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models connections remove (hidden)
 Usage: 0 models connections remove [options] <provider>
@@ -1055,10 +1071,10 @@ Usage: 0 models connections remove [options] <provider>
 Remove a provider's saved credentials
 
 Options:
-  --account <id>  Remove only this saved account
-  --yes           Confirm the removal
-  --json          Print JSON
-  -h, --help      display help for command
+  --account <id>     Remove only this saved account
+  --yes              Confirm the removal
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models connections test (hidden)
 Usage: 0 models connections test [options] <provider>
@@ -1066,8 +1082,8 @@ Usage: 0 models connections test [options] <provider>
 Check that a connected provider answers and lists models
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models default (hidden)
 Usage: 0 models default [options] [model]
@@ -1075,9 +1091,9 @@ Usage: 0 models default [options] [model]
 Show the default model, or set it (requires --provider)
 
 Options:
-  --provider <id>  Provider that serves the model
-  --json           Print JSON
-  -h, --help       display help for command
+  --provider <id>    Provider that serves the model
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models list
 Usage: 0 models list [options]
@@ -1085,9 +1101,9 @@ Usage: 0 models list [options]
 List models offered by connected providers
 
 Options:
-  --provider <id>  Only this provider
-  --json           Print JSON
-  -h, --help       display help for command
+  --provider <id>    Only this provider
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models recommended (hidden)
 Usage: 0 models recommended [options]
@@ -1095,8 +1111,8 @@ Usage: 0 models recommended [options]
 Show the recommended model per role from your connected providers
 
 Options:
-  --json      Print JSON
-  -h, --help  display help for command
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 models set
 Usage: 0 models set [options] [model]
@@ -1114,13 +1130,13 @@ Show spend and tokens of the open threads, by model or by thread
 
 Options:
   --by <model|thread>  Group by model (default) or list each thread
-  --json               Print JSON
+  --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
 
 ### 0 sentinels
 Usage: 0 sentinels [options] [command]
 
-Sentinels and their automations: list, run, change
+Create, run and change Sentinels
 
 Options:
   -h, --help          display help for command
@@ -1128,7 +1144,8 @@ Options:
 Commands:
   list [options]      List Sentinels
   run [options] <id>  Run a Sentinel now; starts a thread (needs a running engine)
-  set [options] <id>  Change a Sentinel's settings
+  set [options] <id>  Create a Sentinel (--create), or change one: name, purpose, state, triggers,
+                      files
   help [command]      display help for command
 
 ### 0 sentinels acknowledge (hidden)
@@ -1137,9 +1154,9 @@ Usage: 0 sentinels acknowledge [options] <id>
 Mark changed model or tools as reviewed
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels activations (hidden)
 Usage: 0 sentinels activations [options] <id>
@@ -1147,10 +1164,10 @@ Usage: 0 sentinels activations [options] <id>
 List a Sentinel's recent runs
 
 Options:
-  --limit <n>       Maximum rows (1-200) (default: "50")
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --limit <n>        Maximum rows (1-200) (default: "50")
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels archive (hidden)
 Usage: 0 sentinels archive [options] <id>
@@ -1158,9 +1175,9 @@ Usage: 0 sentinels archive [options] <id>
 Archive a Sentinel; its history stays
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels create (hidden)
 Usage: 0 sentinels create [options]
@@ -1168,23 +1185,23 @@ Usage: 0 sentinels create [options]
 Create a Sentinel from a preset or a JSON definition
 
 Options:
-  --preset <id>     Start from a preset (see `0 sentinels list --presets`)
-  --name <name>     Name
-  --file <path>     Sentinel JSON object (overrides preset fields)
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --preset <id>      Start from a preset (see `0 sentinels list --presets`)
+  --name <name>      Name
+  --file <path>      Sentinel JSON object (overrides preset fields)
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels delete (hidden)
 Usage: 0 sentinels delete [options] <id>
 
-Delete a Sentinel; its automations are detached, not deleted
+Delete a Sentinel; what it owns is detached, not deleted
 
 Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --yes              Confirm deletion
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels files (hidden)
 Usage: 0 sentinels files [options] [command]
@@ -1203,9 +1220,9 @@ Usage: 0 sentinels files get [options] <id> <path>
 Print a file's content
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels files list (hidden)
 Usage: 0 sentinels files list [options] <id>
@@ -1213,9 +1230,9 @@ Usage: 0 sentinels files list [options] <id>
 List files
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels files put (hidden)
 Usage: 0 sentinels files put [options] <id> <path>
@@ -1223,11 +1240,11 @@ Usage: 0 sentinels files put [options] <id> <path>
 Create or replace a file from --file or --content
 
 Options:
-  --file <path>     Read content from a local text file
-  --content <text>  Inline content
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --file <path>      Read content from a local text file
+  --content <text>   Inline content
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels files rm (hidden)
 Usage: 0 sentinels files rm [options] <id> <path>
@@ -1235,10 +1252,10 @@ Usage: 0 sentinels files rm [options] <id> <path>
 Delete a file
 
 Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --yes              Confirm deletion
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels list
 Usage: 0 sentinels list [options]
@@ -1247,8 +1264,8 @@ List Sentinels
 
 Options:
   --status <status>  Only active, paused, archived
-  --json             Print machine-readable JSON
   --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
   -h, --help         display help for command
 
 ### 0 sentinels pause (hidden)
@@ -1257,9 +1274,9 @@ Usage: 0 sentinels pause [options] <id>
 Pause a Sentinel
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels presets (hidden)
 Usage: 0 sentinels presets [options]
@@ -1267,9 +1284,9 @@ Usage: 0 sentinels presets [options]
 List Sentinel presets
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels resume (hidden)
 Usage: 0 sentinels resume [options] <id>
@@ -1277,10 +1294,10 @@ Usage: 0 sentinels resume [options] <id>
 Resume a paused Sentinel
 
 Options:
-  --acknowledge     Also acknowledge review of changed model or tools
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --acknowledge      Also acknowledge review of changed model or tools
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels run
 Usage: 0 sentinels run [options] <id>
@@ -1288,26 +1305,26 @@ Usage: 0 sentinels run [options] <id>
 Run a Sentinel now; starts a thread (needs a running engine)
 
 Options:
-  --task <text>     Task for this run
-  --yes             Confirm that this run is authorized
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --task <text>      Task for this run
+  --yes              Confirm that this run is authorized
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels set
 Usage: 0 sentinels set [options] <id>
 
-Change a Sentinel's settings
+Create a Sentinel (--create), or change one: name, purpose, state, triggers, files
 
 Options:
-  --name <name>     Name
-  --mission <text>  One-line purpose
-  --file <path>     Patch JSON object
-  --version <n>     Reviewed version (default: the current one)
-  --state <state>   active, paused, acknowledged, archived or deleted
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --name <name>      Name
+  --purpose <text>   One-line purpose
+  --file <path>      Patch JSON object
+  --version <n>      Reviewed version (default: the current one)
+  --state <state>    active, paused, acknowledged, archived or deleted
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels show (hidden)
 Usage: 0 sentinels show [options] <id>
@@ -1315,9 +1332,9 @@ Usage: 0 sentinels show [options] <id>
 Show a Sentinel (full or prefix ID)
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels triggers (hidden)
 Usage: 0 sentinels triggers [options] [command]
@@ -1333,23 +1350,29 @@ Commands:
 ### 0 sentinels triggers add (hidden)
 Usage: 0 sentinels triggers add [options] <id>
 
-Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes
+Add a schedule, manual or github-pr trigger; it stays disabled unless --enable --yes
 
 Options:
-  --automation <id>       Owned automation to start
-  --kind <kind>           schedule | manual | github-pr
-  --file <path>           Trigger JSON object with schedule or github settings
-  --enable                Enable immediately
-  --yes                   Confirm that an enabled trigger was reviewed
-  --repo <owner/name>     github-pr: repository to watch
-  --base-branch <branch>  github-pr: only pull requests into this branch
-  --comment               github-pr: comment on each pull request with one short summary, edited in
-                          place on later pushes (default: off)
-  --include-forks         github-pr: also review pull requests from forks, marked untrusted
-                          (default: skipped)
-  --json                  Print machine-readable JSON
-  --db-path <path>        Control database (default: the user database)
-  -h, --help              display help for command
+  --automation <id>        What the trigger starts (default: the only one this Sentinel owns)
+  --kind <kind>            schedule | manual | github-pr
+  --file <path>            Trigger JSON object with schedule or github settings
+  --enable                 Enable immediately
+  --yes                    Confirm that an enabled trigger was reviewed
+  --frequency <frequency>  schedule: minutes, hourly, daily, weekdays, weekly, cron
+  --every <minutes>        schedule, minutes: interval (5 or more)
+  --at <HH:MM>             schedule, daily, weekdays, weekly: local time
+  --weekday <day>          schedule, weekly: sun, mon, ... or 0-6
+  --cron <expression>      schedule, cron: five fields
+  --timezone <zone>        schedule: IANA timezone (default UTC)
+  --repo <owner/name>      github-pr: repository to watch
+  --base-branch <branch>   github-pr: only pull requests into this branch
+  --comment                github-pr: comment on each pull request with one short summary, edited in
+                           place on later pushes (default: off)
+  --include-forks          github-pr: also review pull requests from forks, marked untrusted
+                           (default: skipped)
+  --db-path <path>         Control database (default: the user database)
+  --format <format>        Output: text or json (choices: "text", "json")
+  -h, --help               display help for command
 
 ### 0 sentinels triggers check (hidden)
 Usage: 0 sentinels triggers check [options] <id> <trigger-id>
@@ -1357,9 +1380,9 @@ Usage: 0 sentinels triggers check [options] <id> <trigger-id>
 Poll a pull request trigger now instead of waiting for its next poll
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels triggers disable (hidden)
 Usage: 0 sentinels triggers disable [options] <id> <trigger-id>
@@ -1367,9 +1390,9 @@ Usage: 0 sentinels triggers disable [options] <id> <trigger-id>
 Pause a trigger
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels triggers enable (hidden)
 Usage: 0 sentinels triggers enable [options] <id> <trigger-id>
@@ -1377,10 +1400,10 @@ Usage: 0 sentinels triggers enable [options] <id> <trigger-id>
 Enable a trigger after reviewing it
 
 Options:
-  --yes             Confirm that this trigger was reviewed
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --yes              Confirm that this trigger was reviewed
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels triggers list (hidden)
 Usage: 0 sentinels triggers list [options] <id>
@@ -1388,9 +1411,9 @@ Usage: 0 sentinels triggers list [options] <id>
 List triggers
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels triggers rm (hidden)
 Usage: 0 sentinels triggers rm [options] <id> <trigger-id>
@@ -1398,10 +1421,10 @@ Usage: 0 sentinels triggers rm [options] <id> <trigger-id>
 Delete a trigger
 
 Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --yes              Confirm deletion
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels webhook (hidden)
 Usage: 0 sentinels webhook [options] [command]
@@ -1431,10 +1454,10 @@ Usage: 0 sentinels webhook secret rotate [options]
 Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
 
 Options:
-  --yes             Confirm; update the secret on GitHub afterwards
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --yes              Confirm; update the secret on GitHub afterwards
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 sentinels webhook status (hidden)
 Usage: 0 sentinels webhook status [options]
@@ -1442,9 +1465,9 @@ Usage: 0 sentinels webhook status [options]
 Show whether the webhook is set up and the last deliveries
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
+  --db-path <path>   Control database (default: the user database)
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills
 Usage: 0 skills [options] [command]
@@ -1468,13 +1491,13 @@ Add a skill (instructions) or an extension (a connection, MCP server or rules):
 <url|owner/repo|folder>@<full sha>, a catalog id or owner/repo/path; shows one prompt first
 
 Options:
-  --preview         Only show the review
-  --yes             Install the reviewed commit
-  --enable          Extensions: also enable it
-  --project <dir>   Extensions: with --enable, enable for this folder only
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --preview          Only show the review
+  --yes              Install the reviewed commit
+  --enable           Extensions: also enable it
+  --project <dir>    Extensions: with --enable, enable for this folder only
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills catalog (hidden)
 Usage: 0 skills catalog [options]
@@ -1482,10 +1505,10 @@ Usage: 0 skills catalog [options]
 Browse the skills catalog
 
 Options:
-  --search <text>   Filter by name, publisher or summary
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --search <text>    Filter by name, publisher or summary
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills copy (hidden)
 Usage: 0 skills copy [options] <id>
@@ -1493,10 +1516,10 @@ Usage: 0 skills copy [options] <id>
 Save a workspace copy of a skill under a new name
 
 Options:
-  --name <name>     Name for the copy (lowercase letters, digits, hyphens)
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --name <name>      Name for the copy (lowercase letters, digits, hyphens)
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills delete (hidden)
 Usage: 0 skills delete [options] <id>
@@ -1504,10 +1527,10 @@ Usage: 0 skills delete [options] <id>
 Delete a skill from the workspace library
 
 Options:
-  --yes             Confirm the deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --yes              Confirm the deletion
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills edit (hidden)
 Usage: 0 skills edit [options] <id>
@@ -1515,10 +1538,10 @@ Usage: 0 skills edit [options] <id>
 Replace a skill's SKILL.md with the contents of --file
 
 Options:
-  --file <path>     SKILL.md with the new content
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --file <path>      SKILL.md with the new content
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills export (hidden)
 Usage: 0 skills export [options] <id>
@@ -1527,8 +1550,8 @@ Export a skill as a bundle
 
 Options:
   -o, --output <file>  Write the bundle to a file instead of stdout
-  --json               Print machine-readable JSON
   --db-path <path>     Use this engine database instead of the default
+  --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
 
 ### 0 skills extensions (hidden)
@@ -1550,13 +1573,13 @@ Add an extension (a connection, MCP server or rules): <url|owner/repo|folder>@<f
 skills add`
 
 Options:
-  --preview         Only show the install prompt
-  --yes             Install the exact revision shown
-  --enable          Also enable it
-  --project <dir>   With --enable: enable for this folder only
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --preview          Only show the install prompt
+  --yes              Install the exact revision shown
+  --enable           Also enable it
+  --project <dir>    With --enable: enable for this folder only
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions disable (hidden)
 Usage: 0 skills extensions disable [options] <name>
@@ -1564,11 +1587,11 @@ Usage: 0 skills extensions disable [options] <name>
 Disable globally, or for one folder with --project
 
 Options:
-  --project <dir>   Disable for this folder only
-  --yes             Confirm disabling a built-in
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --project <dir>    Disable for this folder only
+  --yes              Confirm disabling a built-in
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions enable (hidden)
 Usage: 0 skills extensions enable [options] <name>
@@ -1576,11 +1599,11 @@ Usage: 0 skills extensions enable [options] <name>
 Enable globally, or for one folder with --project
 
 Options:
-  --project <dir>   Enable for this folder only
-  --yes             Approve an unapproved revision (for example an imported one)
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --project <dir>    Enable for this folder only
+  --yes              Approve an unapproved revision (for example an imported one)
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions import (hidden)
 Usage: 0 skills extensions import [options]
@@ -1589,10 +1612,10 @@ Import earlier plugins, MCP servers and skills (runs once automatically); shows 
 migrated
 
 Options:
-  --force           Run the importer again
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --force            Run the importer again
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions info (hidden)
 Usage: 0 skills extensions info [options] <name>
@@ -1600,9 +1623,9 @@ Usage: 0 skills extensions info [options] <name>
 Show the install prompt for an installed extension
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions list (hidden)
 Usage: 0 skills extensions list [options]
@@ -1610,10 +1633,10 @@ Usage: 0 skills extensions list [options]
 List installed extensions and built-ins
 
 Options:
-  --project <dir>   Show enablement for this project
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --project <dir>    Show enablement for this project
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions mcp (hidden)
 Usage: 0 skills extensions mcp [options] <name> [command...]
@@ -1627,8 +1650,8 @@ Options:
   --yes              Install the exact revision shown
   --enable           Also enable it
   --project <dir>    With --enable, enable for this folder only
-  --json             Print machine-readable JSON
   --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
   -h, --help         display help for command
 
 ### 0 skills extensions remove (hidden)
@@ -1637,10 +1660,10 @@ Usage: 0 skills extensions remove [options] <name>
 Remove an installed extension and its stored revisions
 
 Options:
-  --yes             Confirm the removal
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --yes              Confirm the removal
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills extensions update (hidden)
 Usage: 0 skills extensions update [options] <name>
@@ -1648,11 +1671,11 @@ Usage: 0 skills extensions update [options] <name>
 Show the diff and install prompt for a newer revision; --yes --to <sha> approves it
 
 Options:
-  --to <sha>        Full commit SHA to update to (default: the remote HEAD)
-  --yes             Approve the revision given by --to
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --to <sha>         Full commit SHA to update to (default: the remote HEAD)
+  --yes              Approve the revision given by --to
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills import (hidden)
 Usage: 0 skills import [options] <bundle>
@@ -1660,9 +1683,9 @@ Usage: 0 skills import [options] <bundle>
 Import a skill bundle (.skill.json) or a folder with SKILL.md
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills link (hidden)
 Usage: 0 skills link [options] <folder>
@@ -1670,9 +1693,9 @@ Usage: 0 skills link [options] <folder>
 Link a folder of skills; they stay where they are
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills list
 Usage: 0 skills list [options]
@@ -1680,9 +1703,9 @@ Usage: 0 skills list [options]
 List installed skills and linked folders
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills new (hidden)
 Usage: 0 skills new [options] <file>
@@ -1690,9 +1713,9 @@ Usage: 0 skills new [options] <file>
 Create a skill from a SKILL.md file
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills remove (hidden)
 Usage: 0 skills remove [options] <name>
@@ -1700,10 +1723,10 @@ Usage: 0 skills remove [options] <name>
 Remove a skill that was added from GitHub or the catalog
 
 Options:
-  --yes             Confirm the removal
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --yes              Confirm the removal
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills show (hidden)
 Usage: 0 skills show [options] <id-or-name>
@@ -1711,9 +1734,9 @@ Usage: 0 skills show [options] <id-or-name>
 Show a skill's SKILL.md and files
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 skills unlink (hidden)
 Usage: 0 skills unlink [options] <id>
@@ -1721,9 +1744,9 @@ Usage: 0 skills unlink [options] <id>
 Unlink a folder by its link id (see `0 skills list --json`)
 
 Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Use this engine database instead of the default
-  -h, --help        display help for command
+  --db-path <path>   Use this engine database instead of the default
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
 
 ### 0 threads
 Usage: 0 threads [options] [command]
@@ -1735,6 +1758,7 @@ Options:
 
 Commands:
   list [options]              List live engine threads
+  show [options] <id>         Read a thread: its status, last reply, usage and cost
   send [options] <id> <text>  Send a message to a live thread
   start [options] <prompt>    Create a thread, send the first prompt and print its ID
   stop [options] <id>         Cancel a thread's active work
@@ -1752,7 +1776,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads cancel (hidden)
@@ -1766,8 +1790,8 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads clear (hidden)
@@ -1782,7 +1806,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads close (hidden)
@@ -1796,7 +1820,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads continue (hidden)
@@ -1805,13 +1829,16 @@ Usage: 0 threads continue [options] <id> [text]
 Continue a live thread
 
 Options:
+  --wait                     Wait for the answer; stdout is the reply only (thread id and usage go
+                             to stderr)
+  --timeout <seconds>        Maximum seconds to wait with --wait (default: "600")
   --engine-url <url>         Attach directly to a running trusted engine
   --engine-token-env <name>  Environment variable holding the attached engine token
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads create (hidden)
@@ -1826,7 +1853,7 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
+  --db-path <path>           Control database of the local engine
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
@@ -1842,7 +1869,7 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
+  --db-path <path>           Control database of the local engine
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
@@ -1859,7 +1886,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads events (hidden)
@@ -1874,7 +1901,7 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
+  --db-path <path>           Control database of the local engine
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
@@ -1906,8 +1933,8 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads list
@@ -1922,8 +1949,8 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads rename (hidden)
@@ -1938,7 +1965,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads resume (hidden)
@@ -1952,8 +1979,8 @@ Options:
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads retry (hidden)
@@ -1967,7 +1994,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads send
@@ -1976,13 +2003,16 @@ Usage: 0 threads send [options] <id> <text>
 Send a message to a live thread
 
 Options:
+  --wait                     Wait for the answer; stdout is the reply only (thread id and usage go
+                             to stderr)
+  --timeout <seconds>        Maximum seconds to wait with --wait (default: "600")
   --engine-url <url>         Attach directly to a running trusted engine
   --engine-token-env <name>  Environment variable holding the attached engine token
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads set (hidden)
@@ -1999,23 +2029,25 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
-### 0 threads show (hidden)
+### 0 threads show
 Usage: 0 threads show [options] <id>
 
-Read a live thread, including its usage and cost, without recreating it
+Read a thread: its status, last reply, usage and cost
 
 Options:
-  --json                     Print JSON (the default)
+  --wait                     Wait for the answer; stdout is the reply only (thread id and usage go
+                             to stderr)
+  --timeout <seconds>        Maximum seconds to wait with --wait (default: "600")
   --engine-url <url>         Attach directly to a running trusted engine
   --engine-token-env <name>  Environment variable holding the attached engine token
   --engine <id>              Use a registered remote engine; targets and inputs are interpreted
                              there
   --engines-config <path>    Operator engine connection registry JSON file
-  --db-path <path>           Control database with saved automations and run history
-  --format <format>          Output format: json or text (default: "json")
+  --db-path <path>           Control database of the local engine
+  --format <format>          Output format: json or text (default: "text")
   -h, --help                 display help for command
 
 ### 0 threads start
@@ -2030,7 +2062,8 @@ Options:
   --skill <id>               Built-in skill to follow; if it declares a check, the harness runs it
                              and the thread cannot claim Verified without it
   --title <title>            Thread title
-  --wait                     Wait for the turn to finish and print the reply
+  --wait                     Wait for the answer; stdout is the reply only (thread id and usage go
+                             to stderr)
   --cost-ceiling <usd>       Stop the thread when its estimated spend reaches this many USD
   --timeout <seconds>        Maximum seconds to wait with --wait (default: "600")
   --engine-url <url>         Attach directly to a running trusted engine
@@ -2038,7 +2071,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 threads stop
@@ -2053,7 +2086,7 @@ Options:
   --computer <id>            Use a registered remote computer
   --computers-config <path>  Operator computer connection registry JSON file
   --db-path <path>           Control database of the local engine to attach to
-  --json                     Print the engine response as JSON
+  --format <format>          Output: text or json (choices: "text", "json")
   -h, --help                 display help for command
 
 ### 0 web (hidden)

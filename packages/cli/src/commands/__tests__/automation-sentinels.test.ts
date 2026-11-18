@@ -205,3 +205,35 @@ describe("pull request trigger options", () => {
     expect(posts).toHaveLength(2);
   });
 });
+
+describe("schedule trigger options", () => {
+  function scheduleHarness(automationIds: string[]) {
+    const posts: Array<Record<string, any>> = [];
+    const client: ConsoleClient = {
+      mode: "embedded", dispose: async () => {},
+      request: async (method, path, body) => {
+        if (method === "GET" && path === "/api/console/sentinels") return { sentinels: [{ id: "s1", name: "S", status: "active", version: 1, automationIds }] };
+        if (method === "POST") { posts.push(body as Record<string, any>); return { trigger: { id: "t1", automationId: "a1", kind: "schedule", enabled: false, version: 1, nextFireAt: null } }; }
+        return {};
+      },
+    };
+    return { posts, run: harness(async () => client).run };
+  }
+  it("builds the schedule from flags and defaults to the only automation the Sentinel owns", async () => {
+    const { posts, run } = scheduleHarness(["a1"]);
+    await run("sentinels", "triggers", "add", "s1", "--frequency", "weekly", "--at", "09:30", "--weekday", "mon", "--timezone", "Europe/Zurich", "--json");
+    expect(posts[0]).toMatchObject({ automationId: "a1", kind: "schedule", schedule: { frequency: "weekly", time: "09:30", weekday: 1, timezone: "Europe/Zurich" }, enabled: false });
+    await run("sentinels", "triggers", "add", "s1", "--every", "15", "--json");
+    expect(posts[1]!.schedule).toEqual({ frequency: "minutes", every: 15 });
+    await run("sentinels", "triggers", "add", "s1", "--cron", "0 9 * * 1-5", "--json");
+    expect(posts[2]!.schedule).toEqual({ frequency: "cron", cron: "0 9 * * 1-5" });
+  });
+  it("says what is missing: how often, and what the trigger starts", async () => {
+    const none = scheduleHarness([]);
+    expect((await none.run("sentinels", "triggers", "add", "s1", "--kind", "schedule", "--timezone", "UTC")).err).toMatch(/--frequency/);
+    expect((await none.run("sentinels", "triggers", "add", "s1", "--frequency", "daily", "--at", "09:00")).err).toMatch(/owns nothing yet/);
+    const many = scheduleHarness(["a1", "a2"]);
+    expect((await many.run("sentinels", "triggers", "add", "s1", "--frequency", "daily", "--at", "09:00")).err).toMatch(/--automation <id>: a1, a2/);
+    expect(none.posts.length + many.posts.length).toBe(0);
+  });
+});

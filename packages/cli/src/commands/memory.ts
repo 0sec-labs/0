@@ -54,7 +54,7 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
 
   common(memory.command("remove <id>").description("Forget a note"))
     .action((id: string, options: Common) => run(options, store => {
-      if (!store.remove(id)) throw new Error(`No note ${id}.`);
+      if (!store.remove(id)) throw new Error(`No note ${id}. See \`0 memory list\`.`);
       emit(io, options, { removed: id }, () => `Forgot ${id}.`);
     }));
 

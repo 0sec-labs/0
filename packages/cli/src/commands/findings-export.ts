@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { osecDB, resolveOsecRunStorage } from "@0/engine/storage";
 import { findingDatabasePaths } from "../finding-focus.js";
-import { mergeFindingSnapshots, retainedFindingSnapshot, retainedScanSnapshot } from "../web/report-artifacts.js";
+import { emptyFindingSnapshot, mergeFindingSnapshots, retainedFindingSnapshot, retainedScanSnapshot } from "../web/report-artifacts.js";
 import { finishWithError, UsageError } from "./output.js";
 
 export interface FindingsExportDeps {
@@ -54,8 +54,8 @@ export async function runFindingsExport(ids: string[], options: ExportOptions, d
       }
       if (unresolved.size) throw new Error(`Finding '${[...unresolved][0]}' not found.`);
       // No IDs: every finding in the database (`0 findings list --format sarif`).
-      if (!snapshots.length) throw new Error("No findings to export.");
-      report = snapshots.length === 1 ? snapshots[0]! : mergeFindingSnapshots(snapshots);
+      if (!snapshots.length && ids.length) throw new Error("No findings to export.");
+      report = !snapshots.length ? emptyFindingSnapshot() : snapshots.length === 1 ? snapshots[0]! : mergeFindingSnapshots(snapshots);
     }
     const artifact = await exportReport(report, format, options.scan ? `0-scan-${options.scan}` : "0-findings");
     if (options.output) {

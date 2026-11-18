@@ -16,6 +16,14 @@ on the GitHub Release tag.
 
 - Sub-agents, Sentinel runs and every thread now get the same tools with a shell; one bad skill file no longer breaks `load_skill`; helpers can work in one folder together; a Sentinel run now tells its thread the charter.
 
+### Changed
+
+- `0 -p` prints only the answer on stdout; the tool trace and token count go to stderr on a terminal. `--folder` sets the folder, `-c` and `-r` work after `-p` too, and a failed turn exits 1.
+- `threads list` and `threads show` print text by default (`--format json` for JSON); `threads show <id>` is listed, and `show`, `send` and `continue` take `--wait`, which prints only the reply.
+- Every command that had `--json` also takes `--format text|json`, and the reverse. Usage errors exit 2 and name the command to run; a command with no subcommand prints its help.
+- `sentinels set <id> --trigger add` takes `--frequency`, `--every`, `--at`, `--weekday`, `--cron` and `--timezone`, and starts the Sentinel's only automation by default. `--mission` is now `--purpose`.
+- `findings list --format json` with no findings prints an empty report instead of failing. `config doctor --json` exists, and doctor says when no model is connected.
+
 ## [0.39.0] - 2026-11-18
 
 This release is a large simplification: Agents become Sentinels, the model gets eight tools, and the scan engines, scope and budgets are gone.

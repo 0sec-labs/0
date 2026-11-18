@@ -22,7 +22,7 @@ export interface TopLevelCommand {
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   findings: "Browse findings and change their status",
   threads: "Start, follow and stop threads",
-  sentinels: "Sentinels and their automations: list, run, change",
+  sentinels: "Create, run and change Sentinels",
   skills: "Skills and extensions: list, add",
   memory: "What 0 remembers across threads",
   models: "Models and provider connections",
@@ -33,7 +33,7 @@ export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
 /** The only subcommands `--help` shows for each visible command. Everything else stays registered but hidden (see command-grammar.ts). */
 export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
   findings: ["list", "show", "update"],
-  threads: ["list", "send", "start", "stop"],
+  threads: ["list", "show", "send", "start", "stop"],
   sentinels: ["list", "run", "set"],
   skills: ["list", "add"],
   memory: ["list", "add", "remove"],

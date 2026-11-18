@@ -3,6 +3,7 @@ import { Option, type Command } from "commander";
 import { givenAccessOption, noteIgnoredAccessFlags } from "../ignored-access-flags.js";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import { finishWithError, renderTable, UsageError } from "./output.js";
+import { asJson, finishedThread, lastAssistantText, printWaited, sessionLine, type Json } from "./thread-output.js";
 
 export interface MissionsDeps {
   open(options: ConsoleTransportOptions): Promise<ConsoleClient>;
@@ -31,8 +32,6 @@ function autonomyFlag(flags: { approvals?: string }, json?: boolean): void {
   noteIgnoredAccessFlags(givenAccessOption(flags as Record<string, unknown>), { json });
 }
 const EFFORTS = ["minimal", "low", "medium", "high", "xhigh"];
-type Json = Record<string, unknown>;
-const asJson = (value: unknown): Json => (value && typeof value === "object" ? value as Json : {});
 
 function missionId(id: string): string {
   if (!/^[A-Za-z0-9_.:-]{1,256}$/.test(id) || id === "." || id === "..") throw new UsageError("Thread ID may contain letters, digits and _ . : - only.");
@@ -45,20 +44,6 @@ function choice(value: string | undefined, allowed: string[], flag: string): str
 function requireYes(options: Options, what: string): void {
   if (!options.yes) throw new UsageError(`${what} is destructive. Re-run with --yes to confirm.`);
 }
-function summarize(session: Json): string {
-  return [session.id, session.status, session.title ? `"${String(session.title)}"` : undefined, session.workspacePath].filter(Boolean).join("  ");
-}
-function lastAssistantText(snapshot: Json): string | undefined {
-  const messages = Array.isArray(snapshot.messages) ? snapshot.messages as Json[] : [];
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index]!;
-    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
-    const text = (message.content as Json[]).filter(block => block.type === "text").map(block => String(block.text)).join("\n").trim();
-    if (text) return text;
-  }
-  return undefined;
-}
-
 export function registerMissionsCommand(program: Command, deps: MissionsDeps = defaults): void {
   const threads = program.commands.find(command => command.name() === "threads") ?? program.command("threads").description("Inspect and control threads on the selected engine");
   const transport = (command: Command) => consoleTransportOptions(command).option("--json", "Print the engine response as JSON");
@@ -78,13 +63,13 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
       finally { client?.dispose(); }
     });
   const print = (options: Options, value: unknown, text: string) => deps.out(options.json ? JSON.stringify(value, null, 2) : text);
-  const sessionPrint = (options: Options, value: unknown) => print(options, value, summarize(asJson(asJson(value).session)));
+  const sessionPrint = (options: Options, value: unknown) => print(options, value, sessionLine(asJson(asJson(value).session)));
 
   action(transport(threads.command("start <prompt>").description("Create a thread, send the first prompt and print its ID")
     .option("--model <model>", "Model for this thread").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
     .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp()).addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--yolo").hideHelp()).addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).option("--folder <path>", "Folder the thread works in")
     .option("--skill <id>", "Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it")
-    .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
+    .option("--title <title>", "Thread title").option("--wait", "Wait for the answer; stdout is the reply only (thread id and usage go to stderr)")
     .option("--cost-ceiling <usd>", "Stop the thread when its estimated spend reaches this many USD")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
@@ -109,19 +94,11 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
         const snapshot = asJson(asJson(await client.request("GET", `/api/console/sessions/${missionId(id)}`)).snapshot);
         const session = asJson(snapshot.session);
         const reply = lastAssistantText(snapshot);
-        const outcome = asJson(snapshot.lastOutcome);
         const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (reply !== undefined || snapshot.lastOutcome != null));
         if (finished) {
-          const usage = asJson(snapshot.usage);
-          const failed = session.status === "failed" || session.lastTurnFailed === true || session.costCeilingExceeded === true || Boolean(outcome.error);
-          const error = session.costCeilingExceeded ? `Stopped at the $${String(session.costCeilingUsd)} cost ceiling.` : typeof outcome.error === "string" ? outcome.error : undefined;
-          const cost = typeof usage.costUsd === "number" ? `$${usage.costUsd.toFixed(4)}${usage.costUnavailable ? "+ (some pricing unknown)" : ""}` : "unknown";
-          const verification = outcome.verification === undefined ? undefined : asJson(outcome.verification);
-          const verifiedLine = typeof verification?.line === "string" ? verification.line : undefined;
-          if (verification?.claimBlocked === true) process.exitCode = 1;
-          print(options, { session, usage, ...(reply ? { reply } : {}), ...(verification ? { verification } : {}), ...(error ? { error } : {}) },
-            `${summarize(session)}${reply ? `\n\n${reply}` : ""}${verifiedLine ? `\n\n${verifiedLine}` : ""}${error ? `\n\nError: ${error}` : ""}\n\nUsage: ${String(usage.inputTokens ?? 0)} input tokens, ${String(usage.outputTokens ?? 0)} output tokens, cost ${cost}`);
-          if (failed) process.exitCode = 1;
+          const done = finishedThread(snapshot);
+          if (done.claimBlocked || done.failed) process.exitCode = 1;
+          printWaited(deps, options.json, done);
           return;
         }
         if (Date.now() > deadline) throw new Error(`Timed out after ${flags.timeout}s; thread ${id} is still ${String(session.status)}.`);

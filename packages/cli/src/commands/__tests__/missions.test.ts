@@ -80,7 +80,8 @@ describe("0 threads (console actions)", () => {
     });
     await h.run("start", "hi", "--cost-ceiling", "0.5", "--wait");
     expect(h.calls[0]).toMatchObject({ method: "POST", path: "/api/console/sessions", body: { costCeilingUsd: 0.5 } });
-    expect(h.out[0]).toContain("partial"); expect(h.out[0]).toContain("cost $0.5200"); expect(h.out[0]).toContain("$0.5 cost ceiling");
+    expect(h.out).toEqual([expect.stringContaining("partial")]); expect(h.out[0]).not.toContain("cost $");
+    expect(h.err.join("\n")).toContain("cost $0.5200"); expect(h.err.join("\n")).toContain("$0.5 cost ceiling");
     expect(process.exitCode).toBe(1);
   });
 
@@ -89,7 +90,7 @@ describe("0 threads (console actions)", () => {
       ? { snapshot: { session: { id: "m1", status: "failed" }, lastOutcome: { error: "rate limited" }, usage: { inputTokens: 1, outputTokens: 0 }, messages: [] } }
       : { session: { id: "m1", status: "working" } });
     await h.run("start", "hi", "--wait");
-    expect(h.out[0]).toContain("Error: rate limited"); expect(process.exitCode).toBe(1);
+    expect(h.err.join("\n")).toContain("Error: rate limited"); expect(h.out).toEqual([]); expect(process.exitCode).toBe(1);
     process.exitCode = 0; const bad = harness(); await bad.run("start", "hi", "--cost-ceiling", "0");
     expect(process.exitCode).toBe(2); expect(bad.opened()).toBe(0);
   });

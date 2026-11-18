@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { Option, type Command } from "commander";
-import { SENTINEL_STATUSES } from "@0/engine/shared";
+import { SENTINEL_STATUSES, SCHEDULE_FREQUENCIES } from "@0/engine/shared";
 import { givenAccessOption, noteIgnoredAccessFlags } from "../ignored-access-flags.js";
 import type { ConsoleClient } from "../console-embed-client.js";
 import { consoleDefaults, consoleFlags, enc, readJsonObject, renderFields, renderTable, requireYes, resolveId, UsageError, withConsole, type ConsoleCommandDeps, type ConsoleFlags } from "./console-command.js";
@@ -12,7 +12,7 @@ const webhookText = (view: WebhookView): string => !view.serverMode ? "Not avail
   : renderFields({ configured: view.configured ? "yes" : "no (run: 0 sentinels webhook secret rotate --yes)", "payload URL": view.payloadUrl ?? "set --public-url on the server", "content type": "application/json", events: "Pull requests", "last delivery": view.lastDeliveryAt ? `${view.lastDeliveryAt} ${view.lastResult}${view.lastReason ? ` (${view.lastReason})` : ""}` : "none yet", "old secret valid until": view.graceUntil })
     + (view.deliveries?.length ? `\n\n${renderTable(view.deliveries, [{ header: "TIME", value: d => d.at }, { header: "RESULT", value: d => d.result }, { header: "EVENT", value: d => d.event }, { header: "REASON", value: d => d.reason }])}` : "");
 
-interface Sentinel { id: string; name: string; mission?: string; status: string; version: number; attention?: { needsYou: boolean; reason?: string } }
+interface Sentinel { id: string; name: string; mission?: string; automationIds?: string[]; status: string; version: number; attention?: { needsYou: boolean; reason?: string } }
 interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
 interface SentinelFile { path: string; revision: number; content?: string; updatedAt?: string }
 
@@ -34,6 +34,18 @@ function positive(name: string, value: string | undefined): number | undefined {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw new UsageError(`${name} must be a positive number.`);
   return number;
+}
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+/** Schedule flags to the schedule object; the engine checks the combination and says what is missing. */
+function scheduleFrom(options: { frequency?: string; every?: string; at?: string; weekday?: string; cron?: string; timezone?: string }, fromFile: unknown): Record<string, unknown> {
+  const inferred = options.frequency ?? (options.cron ? "cron" : options.every ? "minutes" : options.at ? "daily" : undefined);
+  const base = fromFile && typeof fromFile === "object" ? fromFile as Record<string, unknown> : {};
+  if (!inferred && !base.frequency) throw new UsageError(`Say how often: --frequency ${SCHEDULE_FREQUENCIES.join("|")} (daily needs --at HH:MM).`);
+  oneOf("--frequency", SCHEDULE_FREQUENCIES, inferred);
+  const day = options.weekday === undefined ? undefined : WEEKDAYS.includes(options.weekday.slice(0, 3).toLowerCase()) ? WEEKDAYS.indexOf(options.weekday.slice(0, 3).toLowerCase()) : Number(options.weekday);
+  if (day !== undefined && !(Number.isInteger(day) && day >= 0 && day <= 6)) throw new UsageError("--weekday must be sun to sat, or 0 to 6.");
+  const every = positive("--every", options.every);
+  return { ...base, ...(inferred ? { frequency: inferred } : {}), ...(every !== undefined ? { every } : {}), ...(options.at ? { time: options.at } : {}), ...(day !== undefined ? { weekday: day } : {}), ...(options.cron ? { cron: options.cron } : {}), ...(options.timezone ? { timezone: options.timezone } : {}) };
 }
 const triggerTable = (rows: Trigger[]) => renderTable(rows, [
   { header: "ID", value: t => t.id }, { header: "KIND", value: t => t.kind }, { header: "AUTOMATION", value: t => t.automationId },
@@ -66,18 +78,18 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       return view(await client.request("POST", ROOT, body) as { sentinel: Sentinel });
     }, detail));
 
-  ignoredAccessOptions(consoleFlags(group.command("set <id>").description("Change a Sentinel's settings")
-    .option("--name <name>", "Name").option("--mission <text>", "One-line purpose")
+  ignoredAccessOptions(consoleFlags(group.command("set <id>").description("Create a Sentinel (--create), or change one: name, purpose, state, triggers, files")
+    .option("--name <name>", "Name").option("--purpose <text>", "One-line purpose").addOption(new Option("--mission <text>").hideHelp())
     .option("--file <path>", "Patch JSON object").option("--version <n>", "Reviewed version (default: the current one)")
     .option("--state <state>", "active, paused, acknowledged, archived or deleted")))
-    .action((id: string, options: ConsoleFlags & { state?: string; name?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
+    .action((id: string, options: ConsoleFlags & { state?: string; name?: string; purpose?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
       // A valid --state is rewritten to pause, resume, ... before parsing (command-grammar.ts); only a bad value arrives here.
       if (options.state !== undefined) throw new UsageError(`Unknown state "${options.state}". Use active, paused, acknowledged, archived or deleted.`);
       noteIgnoredAccessFlags(givenAccessOption(options as Record<string, unknown>), { json: options.json });
       const current = await sentinel(client, id);
       const patch: Record<string, unknown> = {
         ...(options.file ? await readJsonObject(options.file, "Sentinel patch") : {}),
-        ...(options.name !== undefined ? { name: options.name } : {}), ...(options.mission !== undefined ? { mission: options.mission } : {}),
+        ...(options.name !== undefined ? { name: options.name } : {}), ...((options.purpose ?? options.mission) !== undefined ? { mission: options.purpose ?? options.mission } : {}),
       };
       if (!Object.keys(patch).length) throw new UsageError("Nothing to change: pass a setting flag or --file.");
       const version = positive("--version", options.version) ?? current.version;
@@ -102,7 +114,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       const current = await sentinel(client, id);
       return view(await client.request("PATCH", `${ROOT}/${enc(current.id)}`, { status: "archived", version: current.version }) as { sentinel: Sentinel });
     }, detail));
-  consoleFlags(group.command("delete <id>").description("Delete a Sentinel; its automations are detached, not deleted").option("--yes", "Confirm deletion"))
+  consoleFlags(group.command("delete <id>").description("Delete a Sentinel; what it owns is detached, not deleted").option("--yes", "Confirm deletion"))
     .action((id: string, options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
       requireYes(options.yes, "Deleting a Sentinel cannot be undone.");
       const current = await sentinel(client, id);
@@ -115,7 +127,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       requireYes(options.yes, "Running a Sentinel starts an autonomous thread in its folder.");
       const current = await sentinel(client, id);
       return await client.request("POST", `${ROOT}/${enc(current.id)}/run`, { approval: "launch-authorized-run", version: current.version, ...(options.task ? { task: options.task } : {}) }) as { activation: { id: string; status: string; missionId?: string } };
-    }, ({ activation }) => renderFields({ activation: activation.id, status: activation.status, thread: activation.missionId }), { requireHost: "Running a Sentinel" }));
+    }, ({ activation }) => `${renderFields({ activation: activation.id, status: activation.status, thread: activation.missionId })}${activation.missionId ? `\nRead it: 0 threads show ${activation.missionId} --wait` : ""}`, { requireHost: "Running a Sentinel" }));
 
   consoleFlags(group.command("activations <id>").description("List a Sentinel's recent runs").option("--limit <n>", "Maximum rows (1-200)", "50"))
     .action((id: string, options: ConsoleFlags & { limit: string }) => withConsole(options, deps, async client => {
@@ -123,7 +135,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       const limit = Number(options.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new UsageError("--limit must be an integer from 1 to 200.");
       return ((await client.request("GET", `${ROOT}/${enc(current.id)}/activations?limit=${limit}`)) as { activations: Array<{ id: string; status: string; trigger?: { kind: string }; startedAt?: string; missionId?: string }> }).activations;
-    }, rows => renderTable(rows, [{ header: "ID", value: a => a.id }, { header: "STATUS", value: a => a.status }, { header: "TRIGGER", value: a => a.trigger?.kind }, { header: "STARTED", value: a => a.startedAt }, { header: "MISSION", value: a => a.missionId }])));
+    }, rows => renderTable(rows, [{ header: "ID", value: a => a.id }, { header: "STATUS", value: a => a.status }, { header: "TRIGGER", value: a => a.trigger?.kind }, { header: "STARTED", value: a => a.startedAt }, { header: "THREAD", value: a => a.missionId }])));
 
   const files = group.command("files").description("Read and edit a Sentinel's instructions and memory files");
   consoleFlags(files.command("list <id>").description("List files"))
@@ -157,22 +169,31 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
   const triggers = group.command("triggers").description("Control what starts a Sentinel's automations");
   consoleFlags(triggers.command("list <id>").description("List triggers"))
     .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => ((await client.request("GET", `${ROOT}/${enc((await sentinel(client, id)).id)}/triggers`)) as { triggers: Trigger[] }).triggers, triggerTable));
-  consoleFlags(triggers.command("add <id>").description("Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes")
-    .option("--automation <id>", "Owned automation to start").option("--kind <kind>", "schedule | manual | github-pr")
+  consoleFlags(triggers.command("add <id>").description("Add a schedule, manual or github-pr trigger; it stays disabled unless --enable --yes")
+    .option("--automation <id>", "What the trigger starts (default: the only one this Sentinel owns)").option("--kind <kind>", "schedule | manual | github-pr")
     .option("--file <path>", "Trigger JSON object with schedule or github settings").option("--enable", "Enable immediately").option("--yes", "Confirm that an enabled trigger was reviewed")
+    .option("--frequency <frequency>", `schedule: ${SCHEDULE_FREQUENCIES.join(", ")}`).option("--every <minutes>", "schedule, minutes: interval (5 or more)")
+    .option("--at <HH:MM>", "schedule, daily, weekdays, weekly: local time").option("--weekday <day>", "schedule, weekly: sun, mon, ... or 0-6").option("--cron <expression>", "schedule, cron: five fields").option("--timezone <zone>", "schedule: IANA timezone (default UTC)")
     .option("--repo <owner/name>", "github-pr: repository to watch").option("--base-branch <branch>", "github-pr: only pull requests into this branch")
     .option("--comment", "github-pr: comment on each pull request with one short summary, edited in place on later pushes (default: off)")
     .option("--include-forks", "github-pr: also review pull requests from forks, marked untrusted (default: skipped)"))
-    .action((id: string, options: ConsoleFlags & { automation?: string; kind?: string; file?: string; enable?: boolean; yes?: boolean; repo?: string; baseBranch?: string; comment?: boolean; includeForks?: boolean }) => withConsole(options, deps, async client => {
+    .action((id: string, options: ConsoleFlags & { automation?: string; kind?: string; file?: string; enable?: boolean; yes?: boolean; repo?: string; baseBranch?: string; comment?: boolean; includeForks?: boolean; frequency?: string; every?: string; at?: string; weekday?: string; cron?: string; timezone?: string }) => withConsole(options, deps, async client => {
       const fromFile = options.file ? await readJsonObject(options.file, "Trigger definition") : {};
       const flags = { ...(options.repo ? { repo: options.repo } : {}), ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}), ...(options.comment ? { commentOnPr: true } : {}), ...(options.includeForks ? { includeForks: true } : {}) };
-      const kind = options.kind ?? fromFile.kind;
+      const scheduled = [options.frequency, options.every, options.at, options.weekday, options.cron, options.timezone].some(value => value !== undefined);
+      const kind = options.kind ?? (scheduled ? "schedule" : undefined) ?? fromFile.kind;
+      if (scheduled && kind !== "schedule") throw new UsageError("--frequency, --every, --at, --weekday, --cron and --timezone apply to --kind schedule.");
+      const schedule = scheduled ? { schedule: scheduleFrom(options, fromFile.schedule) } : {};
       if (Object.keys(flags).length && kind !== "github-pr") throw new UsageError("--repo, --base-branch, --comment and --include-forks apply to --kind github-pr.");
       const github = Object.keys(flags).length ? { github: { ...(fromFile.github && typeof fromFile.github === "object" ? fromFile.github : {}), ...flags } } : {};
-      const body = { ...fromFile, ...github, ...(options.automation ? { automationId: options.automation } : {}), ...(options.kind ? { kind: options.kind } : {}) };
-      if (!body.automationId || !body.kind) throw new UsageError("Provide --automation and --kind (or both in --file).");
+      const owner = await sentinel(client, id);
+      const owned = owner.automationIds ?? [];
+      const automationId = options.automation ?? (typeof fromFile.automationId === "string" ? fromFile.automationId : owned.length === 1 ? owned[0] : undefined);
+      const body = { ...fromFile, ...github, ...schedule, ...(automationId ? { automationId } : {}), ...(kind ? { kind } : {}) };
+      if (!body.kind) throw new UsageError("Say what kind: --kind schedule | manual | github-pr (a schedule also needs --frequency).");
+      if (!body.automationId) throw new UsageError(owned.length ? `This Sentinel owns ${owned.length} things a trigger can start. Pick one with --automation <id>: ${owned.join(", ")}.` : "A trigger needs something to start, and this Sentinel owns nothing yet. Add it in the console (Sentinels page), then pass --automation <id>.");
       if (options.enable) requireYes(options.yes, "Enabling a trigger lets the Sentinel start runs unattended.");
-      return ((await client.request("POST", `${ROOT}/${enc((await sentinel(client, id)).id)}/triggers`, { ...body, enabled: options.enable === true, ...(options.enable ? { approval: "enable-reviewed-trigger" } : {}) })) as { trigger: Trigger }).trigger;
+      return ((await client.request("POST", `${ROOT}/${enc(owner.id)}/triggers`, { ...body, enabled: options.enable === true, ...(options.enable ? { approval: "enable-reviewed-trigger" } : {}) })) as { trigger: Trigger }).trigger;
     }, value => triggerTable([value])));
   for (const [verb, text] of [["enable", "Enable a trigger after reviewing it"], ["disable", "Pause a trigger"]] as const) {
     const command = triggers.command(`${verb} <id> <trigger-id>`).description(text);

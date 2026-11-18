@@ -9,6 +9,10 @@ function summary(findings: Finding[], totalAttacks = 0): ScanReport["summary"] {
     high: findings.filter(f => f.severity === "high").length, medium: findings.filter(f => f.severity === "medium").length,
     low: findings.filter(f => f.severity === "low").length, info: findings.filter(f => f.severity === "info").length };
 }
+/** An export with no findings in it: an empty list is a result, not an error. */
+export function emptyFindingSnapshot(): ScanReport {
+  return { target: "No findings", scanDepth: "default", startedAt: "", completedAt: "", durationMs: 0, findings: [], summary: summary([]), warnings: [] };
+}
 /** Legacy scan rows retain findings but may not retain the complete original report. */
 export function retainedScanSnapshot(scanId: string, dbPath?: string, original?: ScanReport): ScanReport {
   const db = new osecDB(dbPath);

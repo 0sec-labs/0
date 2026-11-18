@@ -1,5 +1,6 @@
 import { consoleExecutionProfile } from "../console-execution.js";
 import { stdin } from "node:process";
+import { statSync } from "node:fs";
 
 import { Option, type Command } from "commander";
 import { getSettings } from "../state/settings-store.js";
@@ -39,6 +40,8 @@ interface ConsoleOptions {
   engineUrl?: string;
   engineTokenEnv?: string;
   format?: string;
+  json?: boolean;
+  folder?: string;
   finding?: string;
   findingIntent?: string;
   dbPath?: string;
@@ -102,11 +105,21 @@ export function registerConsoleCommand(program: Command): void {
   const consoleCommand = program
     .command("console")
     .description(
-      "Run a headless chat prompt; interactive conversations use 0",
+      "Run one prompt headless and print only the answer. Exit codes: 0 answered, 1 the turn failed, 2 usage error.",
     )
+    .configureHelp({ commandUsage: () => '0 -p "<prompt>" [options]' })
+    .addHelpText("after", `
+Examples:
+  0 -p "Review ./app for injection bugs"
+  git diff | 0 -p "Review this diff"
+  0 -p "List the open findings" --format json
+  0 -c -p "Now fix the first one"
+`)
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
+    .addOption(new Option("--json").hideHelp())
+    .option("--folder <path>", "Folder to work in (default: the current folder)")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding mode: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
@@ -119,10 +132,15 @@ export function registerConsoleCommand(program: Command): void {
     .addOption(new Option("--tool-access <level>").hideHelp())
     .addOption(new Option("--yolo").hideHelp())
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
-    .option("--resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
-    .option("--continue", "With a headless prompt, continue the most recent saved console chat.")
+    .option("-r, --resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
+    .option("-c, --continue", "With a headless prompt, continue the most recent saved console chat.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
     .action(async (opts: ConsoleOptions) => {
+      if (opts.json && opts.format === "text") opts.format = "json";
+      if (opts.folder !== undefined) {
+        try { if (!statSync(opts.folder).isDirectory()) throw new Error("not a folder"); process.chdir(opts.folder); }
+        catch { console.error(`--folder ${opts.folder} is not a folder that exists.`); process.exitCode = 2; return; }
+      }
       if (!["text", "json", "ndjson"].includes(opts.format ?? "text")) {
         console.error("Format must be text, json or ndjson."); process.exitCode = 2; return;
       }
@@ -139,7 +157,8 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       if (opts.print === undefined) {
-        console.log("Interactive conversations are in the browser. Run 0 (no account required). For automation use 0 -p \"your request\".");
+        console.error("Headless use needs a prompt: 0 -p \"<prompt>\" (add -c to continue the last thread, or --resume <id>). To open the console, run 0 (no account required).");
+        process.exitCode = 2;
         return;
       }
       let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
@@ -211,7 +230,7 @@ export function registerConsoleCommand(program: Command): void {
             const matches = listSessions(undefined, { limit: 500 }).filter((s) => s.id.startsWith(idArg));
             if (matches.length === 1) stored = loadSession(matches[0].id);
             else if (matches.length > 1) {
-              console.error(chalk.red(`'${idArg}' matches ${matches.length} sessions — use a longer prefix or the full id.`));
+              console.error(chalk.red(`'${idArg}' matches ${matches.length} saved threads. Use a longer prefix or the full id.`));
               process.exitCode = 2;
               return;
             }
@@ -220,14 +239,14 @@ export function registerConsoleCommand(program: Command): void {
             stored = recent ? loadSession(recent.id) : null;
           }
           if (!stored) {
-            console.error(chalk.red(idArg ? `No console session matches '${idArg}'.` : "No saved console session to continue."));
+            console.error(chalk.red(idArg ? `No saved thread matches '${idArg}'.` : "No saved thread to continue. Start one with 0 -p \"<prompt>\"."));
             process.exitCode = 1;
             return;
           }
           resumeMessages = stored.messages;
           resumedModel = stored.model;
         } else {
-          console.error("Choose a saved session id with --resume <id>, or open saved conversations in 0.");
+          console.error("--resume needs a thread id: 0 --resume <id> -p \"<prompt>\". Run 0 to browse saved threads.");
           process.exitCode = 2;
           return;
         }
@@ -262,8 +281,10 @@ export function registerConsoleCommand(program: Command): void {
             approveTool: approvals === "ask" ? async () => false : undefined,
           }, opts.dbPath);
         } catch (err) {
-          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-          console.error(chalk.dim("The console needs an LLM provider. Set ANTHROPIC_API_KEY (or another supported provider key) and retry."));
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(chalk.red(/No provider credential found/i.test(message)
+            ? "No model is connected. Run `0 models connect` to see providers, or export ANTHROPIC_API_KEY (or another provider key)."
+            : message));
           process.exitCode = 2;
           return;
         }
@@ -275,7 +296,7 @@ export function registerConsoleCommand(program: Command): void {
             ? await runTurn(printSession, request, processPresentationOutput)
             : await runMachineTurn(printSession, request, opts.format);
           if (outcome.stopReason === "error") process.exitCode = 1;
-          if (opts.format === "text" || opts.format === undefined) process.stdout.write("\n");
+          if ((opts.format === "text" || opts.format === undefined) && outcome.stopReason !== "error") process.stdout.write("\n");
         } catch (err) {
           console.error(chalk.red(`\nturn failed: ${err instanceof Error ? err.message : String(err)}`));
           process.exitCode = 1;
@@ -289,13 +310,17 @@ export function registerConsoleCommand(program: Command): void {
   chatOption(engineOptions(consoleCommand), "Send to an existing live engine chat");
 }
 
+/**
+ * One headless turn in text mode. stdout carries only the answer, so `0 -p ... | next` and a calling
+ * model get exactly the final text. The tool trace and the token footer go to stderr, and only on a terminal.
+ */
 async function runTurn(
   session: ConsoleSession,
   text: string,
   output: ProcessPresentationOutput,
 ): Promise<ConsoleTurnOutcome> {
   let streamedAny = false;
-  output.stdout("\n" + chalk.bold.green("engine › "), "console.assistant.prefix");
+  const trace = process.stderr.isTTY === true;
 
   const outcome = await session.send(text, {
     onAssistantDelta: (chunk) => {
@@ -303,32 +328,31 @@ async function runTurn(
       output.stdout(chunk, "console.assistant.delta");
     },
     onToolStart: (call: ToolCall) => {
-      output.stdout(
-        "\n" + chalk.yellow(`  ⚙ ${call.name}`) + chalk.dim(` ${previewArgs(call.arguments)}`),
-        "console.tool.started",
-      );
+      if (trace) output.stderr(chalk.yellow(`  ⚙ ${call.name}`) + chalk.dim(` ${previewArgs(call.arguments)}`), "console.tool.started");
     },
     onToolResult: (_call: ToolCall, result: ToolResult) => {
       const mark = result.success ? chalk.green("✓") : chalk.red("✗");
-      output.stdout(chalk.dim(` → ${mark} ${previewResult(result)}`), "console.tool.completed");
+      if (trace) output.stderr(chalk.dim(` → ${mark} ${previewResult(result)}`) + "\n", "console.tool.completed");
     },
     onNotice: (msg) => {
-      output.stdout("\n" + chalk.dim(`  (${msg})`), "console.notice");
+      if (trace) output.stderr(chalk.dim(`  (${msg})`) + "\n", "console.notice");
     },
   });
 
   // If nothing streamed token-by-token (provider without delta support), print
   // the collected assistant text now.
   if (!streamedAny && outcome.assistantText) {
-    output.stdout("\n" + outcome.assistantText, "console.assistant.complete");
+    output.stdout(outcome.assistantText, "console.assistant.complete");
   }
 
-  const usage = outcome.usage;
-  const footer = `${outcome.toolCalls.length} tool call${outcome.toolCalls.length === 1 ? "" : "s"} · ${usage.inputTokens}→${usage.outputTokens} tok`;
-  output.stdout("\n" + chalk.dim(`  [${footer}]`) + "\n", "console.turn.completed");
+  if (trace) {
+    const usage = outcome.usage;
+    const footer = `${outcome.toolCalls.length} tool call${outcome.toolCalls.length === 1 ? "" : "s"} · ${usage.inputTokens}→${usage.outputTokens} tok`;
+    output.stderr(chalk.dim(`  [${footer}]`) + "\n", "console.turn.completed");
+  }
 
   if (outcome.stopReason === "error") {
-    output.stderr(chalk.red(`\nengine error: ${outcome.error ?? "unknown"}\n`), "console.turn.error");
+    output.stderr(chalk.red(`error: ${outcome.error ?? "the turn failed"}\n`), "console.turn.error");
     if (/ChatGPT.*model.*not supported/i.test(outcome.error ?? "")) {
       output.stderr(chalk.dim("Choose an available account/provider model with --model; the browser model picker lists the current account catalog. Alternatively configure a provider that supports the requested model. No replacement model was selected.\n"), "console.turn.model_unavailable");
     }

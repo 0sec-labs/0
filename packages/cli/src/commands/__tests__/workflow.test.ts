@@ -20,9 +20,11 @@ describe("workflow CLI", () => {
     process.exitCode = 0;
     await program.parseAsync(["threads", "list"], { from: "user" });
     expect(deps.createRuntime).toHaveBeenCalledWith(expect.objectContaining({ requireEngine: true }));
-    expect(JSON.parse(vi.mocked(deps.err).mock.calls[0]![0])).toEqual({ error: "No console running. Start one with: 0 --headless" });
+    expect(vi.mocked(deps.err).mock.calls[0]![0]).toBe("No console running. Start one with: 0 --headless");
     expect(vi.mocked(deps.out)).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(2); process.exitCode = 0;
+    expect(process.exitCode).toBe(1); process.exitCode = 0;
+    await program.parseAsync(["threads", "list", "--format", "json"], { from: "user" });
+    expect(JSON.parse(vi.mocked(deps.err).mock.calls[1]![0])).toEqual({ error: "No console running. Start one with: 0 --headless" });
   });
   it("renders sessions and automation definitions as readable text without changing JSON defaults", async () => {
     const { runtime, deps } = setup();
@@ -32,7 +34,7 @@ describe("workflow CLI", () => {
       await program.parseAsync([...args, "--format", "text"], { from: "user" });
     }
     const outputs = vi.mocked(deps.out).mock.calls.map(([text]) => text);
-    expect(outputs[0]).toContain("Session:\n  Id: chat-1");
+    expect(outputs[0]).toContain("chat-1  ready");
     expect(outputs[1]).toContain("Target: /repo");
     for (const text of outputs) expect(() => JSON.parse(text)).toThrow();
     const defaultsProgram = new Command(); registerWorkflowCommand(defaultsProgram, deps);
@@ -94,7 +96,7 @@ describe("explicit operator force-stop command", () => {
     runtime.forceStopSession = vi.fn(async () => ({ session: { id: "live", status: "ready" } }));
     runtime.cancelSession = vi.fn(); deps.createRemoteRuntime = vi.fn(async () => runtime);
     const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["threads", "force-stop", "live", "--engine-url", "http://127.0.0.1:48123", "--engine-token-env", "OPERATOR_TOKEN"], { from: "user" });
+    await program.parseAsync(["threads", "force-stop", "live", "--engine-url", "http://127.0.0.1:48123", "--engine-token-env", "OPERATOR_TOKEN", "--format", "json"], { from: "user" });
     expect(runtime.forceStopSession).toHaveBeenCalledExactlyOnceWith("live");
     expect(runtime.cancelSession).not.toHaveBeenCalled();
     expect(deps.createRuntime).not.toHaveBeenCalled(); expect(runtime.dispose).toHaveBeenCalledOnce();
@@ -104,8 +106,41 @@ describe("explicit operator force-stop command", () => {
     const { runtime, deps } = setup(); runtime.cancelSession = vi.fn(); deps.createRemoteRuntime = vi.fn(async () => runtime);
     const program = new Command(); registerWorkflowCommand(program, deps);
     await program.parseAsync(["threads", "force-stop", "live", "--backend", "remote"], { from: "user" });
-    expect(process.exitCode).toBe(2);
-    expect(deps.err).toHaveBeenCalledWith(JSON.stringify({ error: "The selected engine does not expose operator force stop; no work was changed." }));
+    expect(process.exitCode).toBe(1);
+    expect(deps.err).toHaveBeenCalledWith("The selected engine does not expose operator force stop; no work was changed.");
     expect(runtime.cancelSession).not.toHaveBeenCalled(); expect(runtime.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("threads read and wait", () => {
+  const snapshot = (status: string, reply?: string) => ({ session: { id: "t1", status, title: "Login flow", workspacePath: "/repo" }, usage: { inputTokens: 3, outputTokens: 2, costUsd: 0.01 }, messages: reply ? [{ role: "assistant", content: [{ type: "text", text: reply }] }] : [] });
+  it("show prints the status line, the last reply and usage by default, and JSON with --format json", async () => {
+    const { runtime, deps } = setup();
+    runtime.getSession = vi.fn(() => snapshot("ready", "The answer."));
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["threads", "show", "t1"], { from: "user" });
+    expect(vi.mocked(deps.out).mock.calls[0]![0]).toMatch(/^t1  ready  "Login flow"  \/repo\n\nThe answer\.\n\nUsage: 3 input tokens, 2 output tokens, cost \$0\.0100$/);
+    await program.parseAsync(["threads", "show", "t1", "--format", "json"], { from: "user" });
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[1]![0]).session.id).toBe("t1");
+  });
+  it("send --wait waits for the turn and prints only the reply on stdout", async () => {
+    const { runtime, deps } = setup();
+    runtime.sendMessage = vi.fn();
+    const states = [snapshot("working"), snapshot("working"), snapshot("ready", "Done.")];
+    runtime.getSession = vi.fn(() => states.shift());
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["threads", "send", "t1", "more", "--wait"], { from: "user" });
+    expect(runtime.sendMessage).toHaveBeenCalledWith("t1", "more");
+    expect(vi.mocked(deps.out).mock.calls).toEqual([["Done."]]);
+    expect(vi.mocked(deps.err).mock.calls[0]![0]).toContain("thread t1 ready");
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+  it("show --wait times out with the command that reads it later, exit 1", async () => {
+    const { runtime, deps } = setup();
+    runtime.getSession = vi.fn(() => snapshot("working"));
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["threads", "show", "t1", "--wait", "--timeout", "0.001"], { from: "user" });
+    expect(vi.mocked(deps.err).mock.calls[0]![0]).toContain("0 threads show t1");
+    expect(process.exitCode).toBe(1);
   });
 });

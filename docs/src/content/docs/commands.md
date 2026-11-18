@@ -107,9 +107,11 @@ Add a provider connection (`0 models connect <provider>`), or `--list`, `--test`
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--list` | — | List connections |
+| `--key-env <VAR>` | — | Add: read the API key from this environment variable |
+| `--stdin` | — | Add: read the API key from stdin |
+| `--list` | — | List connections (the default with no provider) |
 | `--test` | — | Test a connection |
-| `--remove` | — | Remove a connection |
+| `--remove` | — | Remove a connection (with --yes) |
 
 ### config doctor
 
@@ -126,6 +128,8 @@ Check this machine and the engine. `config doctor upgrade`, `config doctor workb
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--fix` | — | Repair the local database |
+| `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ## Interactive & setup
 
@@ -268,6 +272,7 @@ Check local runtime prerequisites and suggest the next command
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--discard-reports` | — | Delete crash reports waiting for review on this computer |
+| `--json` | — | Print JSON |
 
 Subcommands: [upgrade](#doctor-upgrade) · [workbench](#doctor-workbench).
 
@@ -292,6 +297,7 @@ Show each setting's effective value and source: default, global, or project.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config list
 
@@ -304,22 +310,24 @@ Same as `config show`. Add `--json` for each key's value and source layer.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config get
 
 Print one setting's effective value. `--json` adds the layer it comes from.
 
 ```text
-0 config get [options] <key>
+0 config get [options] [key]
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `key` | Yes |  |
+| `key` | No |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON with the source layer |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config set
 
@@ -344,6 +352,7 @@ Change one setting, with the same validation as the Settings page. It writes the
 | `--project` | — | Write the override for this folder |
 | `--yes` | — | Confirm a security-sensitive setting |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config reset
 
@@ -361,6 +370,7 @@ Reset named settings, or every engine setting when none is named, to their defau
 | --- | --- | --- |
 | `--yes` | — | Confirm the reset |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config export
 
@@ -425,6 +435,7 @@ List providers with their status and saved accounts. `*` marks the active accoun
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### models connections add
 
@@ -446,6 +457,7 @@ Verify and save an API key for a provider. Exit code 2 means no key source was g
 | `--base-url <url>` | — | Custom API endpoint |
 | `--model <model>` | — | Deployment model, where required |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### models connections test
 
@@ -462,6 +474,7 @@ Check that a connected provider answers and lists models.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### models connections remove
 
@@ -480,6 +493,7 @@ Remove a provider's saved credentials, or one saved account with `--account`. Re
 | `--account <id>` | — | Remove only this saved account |
 | `--yes` | — | Confirm the removal |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### models
 
@@ -509,6 +523,7 @@ List models offered by connected providers, with price and context size.
 | --- | --- | --- |
 | `--provider <id>` | — | Only this provider |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### models default
 
@@ -526,6 +541,7 @@ Show the default model, or set it. Setting requires `--provider`, and the provid
 | --- | --- | --- |
 | `--provider <id>` | — | Provider that serves the model |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### models recommended
 
@@ -538,6 +554,7 @@ Show the recommended model for each role, chosen from your connected providers.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### config github
 
@@ -566,6 +583,7 @@ Show whether GitHub is signed in and which scopes are missing.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config github connect
 
@@ -580,6 +598,7 @@ Sign in with a personal access token read from an environment variable or stdin.
 | `--key-env <VAR>` | — | Read the token from this environment variable |
 | `--stdin` | — | Read the token from stdin |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### config github repos
 
@@ -594,6 +613,7 @@ List repositories the signed-in account can reach (cached for five minutes).
 | `--search <text>` | — | Only names containing this text |
 | `--refresh` | — | Bypass the five-minute cache |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### models usage
 
@@ -611,6 +631,7 @@ Show spend and tokens of the open threads, by model or by thread. Open threads a
 | --- | --- | --- |
 | `--by <model\|thread>` | — | Group by model (default) or list each thread |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### config audit-log
 
@@ -630,6 +651,7 @@ Show the local log of privileged actions: connection and settings changes, exten
 | `--limit <n>` | — | Maximum events to show |
 | `--before <id>` | — | Only events older than this id (pagination) |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### doctor workbench
 
@@ -813,6 +835,8 @@ Show detailed information about a finding
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### findings accept
 
@@ -924,6 +948,7 @@ List keys with their expiry and status. Secrets are never shown.
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### findings keys create
 
@@ -946,6 +971,7 @@ Create a read-only key. Default expiry is 90 days.
 | `--expires-in <days>` | — | Days until the key expires (default 90) |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### findings keys revoke
 
@@ -968,6 +994,7 @@ Revoke a key. Requires `--yes`.
 | `--yes` | — | Confirm the revocation |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### findings triage
 
@@ -1125,6 +1152,7 @@ List the registered remote computers with their host and whether 0 deployed them
 | --- | --- | --- |
 | `--json` | — | Print JSON |
 | `--engines-config <path>` | — | Engine registry path |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### computers add
 
@@ -1167,7 +1195,7 @@ an unrelated process or an occupied engine port. If the deployment files are
 missing, deploy the worker again.
 
 ```text
-0 computers repair <backend-id>
+0 computers repair <id>
 ```
 
 The result is JSON with the backend ID, reconnection status, and whether the
@@ -1175,7 +1203,7 @@ engine was started.
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `backend-id` | Yes |  |
+| `id` | Yes |  |
 
 Aliases: `reconnect`.
 
@@ -1188,12 +1216,12 @@ remote workspace and the saved backend registration so the worker can be
 redeployed later.
 
 ```text
-0 computers stop <backend-id>
+0 computers stop <id>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `backend-id` | Yes |  |
+| `id` | Yes |  |
 
 #### computers remove
 
@@ -1201,14 +1229,14 @@ Remove a remote computer from this machine: closes the tunnel and forgets its
 saved connection. Files on the remote computer stay in place.
 
 ```text
-0 computers remove [options] <backend-id>
+0 computers remove [options] <id>
 ```
 
 Run `0 computers list` to see the IDs.
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `backend-id` | Yes |  |
+| `id` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1254,6 +1282,7 @@ List installed skills and linked folders
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills show
 
@@ -1271,6 +1300,7 @@ Show a skill's SKILL.md and files
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills new
 
@@ -1288,6 +1318,7 @@ Create a skill from a SKILL.md file
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills edit
 
@@ -1306,6 +1337,7 @@ Replace a skill's SKILL.md with the contents of --file
 | `--file <path>` **required** | — | SKILL.md with the new content |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills copy
 
@@ -1324,6 +1356,7 @@ Save a workspace copy of a skill under a new name
 | `--name <name>` **required** | — | Name for the copy (lowercase letters, digits, hyphens) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills delete
 
@@ -1342,6 +1375,7 @@ Delete a skill from the workspace library
 | `--yes` | — | Confirm the deletion |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills import
 
@@ -1359,6 +1393,7 @@ Import a skill bundle (.skill.json) or a folder with SKILL.md
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills export
 
@@ -1377,6 +1412,7 @@ Export a skill as a bundle
 | `-o, --output <file>` | — | Write the bundle to a file instead of stdout |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills link
 
@@ -1394,6 +1430,7 @@ Link a folder of skills; they stay where they are
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills unlink
 
@@ -1411,6 +1448,7 @@ Unlink a folder by its link id (see `0 skills list --json`)
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills catalog
 
@@ -1425,6 +1463,7 @@ Browse the skills catalog
 | `--search <text>` | — | Filter by name, publisher or summary |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills add
 
@@ -1446,6 +1485,7 @@ Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
 | `--project <dir>` | — | Extensions: with --enable, enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions
 
@@ -1477,6 +1517,7 @@ Install an extension: <url|owner/repo|folder>@<full sha>; same as `0 skills add`
 | `--project <dir>` | — | With --enable: enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions mcp
 
@@ -1500,6 +1541,7 @@ Add one MCP server as a local extension
 | `--project <dir>` | — | With --enable, enable for this folder only |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions list
 
@@ -1514,6 +1556,7 @@ List installed extensions and built-ins
 | `--project <dir>` | — | Show enablement for this project |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions info
 
@@ -1531,6 +1574,7 @@ Show the install prompt for an installed extension
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions enable
 
@@ -1550,6 +1594,7 @@ Enable globally, or for one project with --project
 | `--yes` | — | Approve an unapproved revision (for example an imported one) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions disable
 
@@ -1569,6 +1614,7 @@ Disable globally, or for one project with --project
 | `--yes` | — | Confirm disabling a built-in |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions remove
 
@@ -1587,6 +1633,7 @@ Remove an installed extension and its stored revisions
 | `--yes` | — | Confirm the removal |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions update
 
@@ -1606,6 +1653,7 @@ Show the diff and install prompt for a newer revision; --yes --to <sha> approves
 | `--yes` | — | Approve the revision given by --to |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills extensions import
 
@@ -1620,6 +1668,7 @@ Import earlier plugins, MCP servers and skills (runs once automatically); shows 
 | `--force` | — | Run the importer again |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### skills remove
 
@@ -1638,6 +1687,7 @@ Remove a skill that was added from GitHub or the catalog
 | `--yes` | — | Confirm the removal |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ### memory
 
@@ -1674,6 +1724,7 @@ List notes
 | `--search <text>` | — | Only notes containing this text |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory add
 
@@ -1694,6 +1745,7 @@ Remember a note
 | `--kind <kind>` | — | One of fix-decision, convention, command, avoid |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory remove
 
@@ -1711,6 +1763,7 @@ Forget a note
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory clear
 
@@ -1726,6 +1779,7 @@ Forget every note, or every note for one folder
 | `--yes` | — | Confirm |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory disable
 
@@ -1739,6 +1793,7 @@ Stop using notes in new threads (they stay on disk)
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory enable
 
@@ -1752,6 +1807,7 @@ Use notes in new threads again
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory proposed
 
@@ -1775,6 +1831,7 @@ List proposed notes
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory proposed accept
 
@@ -1793,6 +1850,7 @@ Accept a proposed note so it is used in new threads. `--text` corrects the wordi
 | `--text <text>` | — | Correct the wording while accepting |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory proposed reject
 
@@ -1810,6 +1868,7 @@ Discard a proposed note
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory export
 
@@ -1827,6 +1886,7 @@ Write notes to a file: JSON for 0 by default, or with `--to` an AGENTS.md sectio
 | `--markdown` | — | Print the markdown section instead of JSON |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### memory import
 
@@ -1844,6 +1904,7 @@ Add the notes from an export file
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ## Automations
 
@@ -1873,7 +1934,7 @@ List saved automations and templates.
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--db-path <path>` | — | Control database of the local engine |
 | `--format <format>` | `json` | Output format: json or text |
 
 #### automation show
@@ -1895,7 +1956,7 @@ Inspect one saved automation or select a template with `--template`.
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--db-path <path>` | — | Control database of the local engine |
 | `--format <format>` | `json` | Output format: json or text |
 
 #### automation create
@@ -2018,7 +2079,7 @@ Inspect and control the same live sessions used by the browser. Attach with --en
 0 threads list --engine production
 ```
 
-Subcommands: [list](#threads-list) · [send](#threads-send) · [start](#threads-start) · [stop](#threads-stop) · [show](#threads-show) · [create](#threads-create) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
+Subcommands: [list](#threads-list) · [show](#threads-show) · [send](#threads-send) · [start](#threads-start) · [stop](#threads-stop) · [create](#threads-create) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
 
 #### threads list
 
@@ -2039,8 +2100,9 @@ List live sessions, or retained snapshots with --saved. Listing does not resume 
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads show
 
@@ -2060,13 +2122,15 @@ Read an existing live session without recreating it or restoring approvals.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Print JSON (the default) |
+| `--wait` | — | Wait for the answer; stdout is the reply only (thread id and usage go to stderr) |
+| `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads create
 
@@ -2087,8 +2151,9 @@ Create a session within the engine's authorized workspace and model configuratio
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--db-path <path>` | — | Control database of the local engine |
 | `--format <format>` | `json` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads send
 
@@ -2109,12 +2174,15 @@ Send text to a live engine session. The engine runs the turn using its configure
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--wait` | — | Wait for the answer; stdout is the reply only (thread id and usage go to stderr) |
+| `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads continue
 
@@ -2135,12 +2203,15 @@ Continue the selected live session with optional text. This preserves the existi
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--wait` | — | Wait for the answer; stdout is the reply only (thread id and usage go to stderr) |
+| `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads cancel
 
@@ -2164,8 +2235,9 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads events
 
@@ -2190,8 +2262,9 @@ Read engine session events after an optional nonnegative cursor. Cursors belong 
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--db-path <path>` | — | Control database of the local engine |
 | `--format <format>` | `json` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads force-stop
 
@@ -2218,8 +2291,9 @@ Force stop is available for qualified Bun sessions on macOS/Linux; completed ext
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads resume
 
@@ -2243,8 +2317,9 @@ Restore a retained snapshot as a new session under current engine grants. Stored
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
+| `--db-path <path>` | — | Control database of the local engine |
+| `--format <format>` | `text` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads decide
 
@@ -2270,8 +2345,9 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--db-path <path>` | — | Control database of the local engine |
 | `--format <format>` | `json` | Output format: json or text |
+| `--json` | — |  |
 
 #### threads start
 
@@ -2297,7 +2373,7 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | `--folder <path>` | — | Folder the thread works in |
 | `--skill <id>` | — | Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it |
 | `--title <title>` | — | Thread title |
-| `--wait` | — | Wait for the turn to finish and print the reply |
+| `--wait` | — | Wait for the answer; stdout is the reply only (thread id and usage go to stderr) |
 | `--cost-ceiling <usd>` | — | Stop the thread when its estimated spend reaches this many USD |
 | `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
@@ -2308,6 +2384,7 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads stop
 
@@ -2336,6 +2413,7 @@ Cancel a thread's active work. `--force` force stops owned execution that did no
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads retry
 
@@ -2363,6 +2441,7 @@ Re-run the last turn of a thread.
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads set
 
@@ -2394,6 +2473,7 @@ Change a thread's model, reasoning effort, mode or folder. A computer is chosen 
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads rename
 
@@ -2423,6 +2503,7 @@ Rename a thread, or generate a new title from its conversation.
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads clear
 
@@ -2451,6 +2532,7 @@ Erase a thread's conversation but keep the thread. Requires `--yes`.
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads close
 
@@ -2478,6 +2560,7 @@ Stop and close a live thread. Its saved copy stays.
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads archive
 
@@ -2506,6 +2589,7 @@ Archive a thread, or a retained snapshot with `--saved`.
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads delete
 
@@ -2535,6 +2619,7 @@ Permanently delete a thread or, with `--saved`, a retained snapshot. Requires `-
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### threads export
 
@@ -2589,6 +2674,7 @@ List Sentinels.
 | `--status <status>` | — | Only active, paused, archived |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels show
 
@@ -2606,6 +2692,7 @@ Show a Sentinel (full or prefix ID).
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels presets
 
@@ -2619,6 +2706,7 @@ List Sentinel presets.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels create
 
@@ -2635,6 +2723,7 @@ Create a Sentinel from a preset or a JSON definition.
 | `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels set
 
@@ -2651,12 +2740,14 @@ Change a Sentinel's settings.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--name <name>` | — | Name |
-| `--mission <text>` | — | One-line purpose |
+| `--purpose <text>` | — | One-line purpose |
+| `--mission <text>` | — |  |
 | `--file <path>` | — | Patch JSON object |
 | `--version <n>` | — | Reviewed version (default: the current one) |
 | `--state <state>` | — | active, paused, acknowledged, archived or deleted |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels pause
 
@@ -2674,6 +2765,7 @@ Pause a Sentinel.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels resume
 
@@ -2692,6 +2784,7 @@ Resume a paused Sentinel.
 | `--acknowledge` | — | Also acknowledge review of changed model or tools |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels acknowledge
 
@@ -2709,6 +2802,7 @@ Mark changed model or tools as reviewed.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels archive
 
@@ -2726,6 +2820,7 @@ Archive a Sentinel; its history stays.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels delete
 
@@ -2744,6 +2839,7 @@ Delete a Sentinel; its automations are detached, not deleted.
 | `--yes` | — | Confirm deletion |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels run
 
@@ -2763,6 +2859,7 @@ Run a Sentinel now; starts a thread (needs a running engine).
 | `--yes` | — | Confirm that this run is authorized |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels activations
 
@@ -2781,6 +2878,7 @@ List a Sentinel's recent runs.
 | `--limit <n>` | `50` | Maximum rows (1-200) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 
 #### sentinels files
@@ -2809,6 +2907,7 @@ List files.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels files get
 
@@ -2827,6 +2926,7 @@ Print a file's content.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels files put
 
@@ -2847,6 +2947,7 @@ Create or replace a file from --file or --content.
 | `--content <text>` | — | Inline content |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels files rm
 
@@ -2866,6 +2967,7 @@ Delete a file.
 | `--yes` | — | Confirm deletion |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers
 
@@ -2893,6 +2995,7 @@ List triggers.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers add
 
@@ -2908,17 +3011,24 @@ Add a trigger for an automation the Sentinel owns; disabled unless --enable --ye
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--automation <id>` | — | Owned automation to start |
+| `--automation <id>` | — | What the trigger starts (default: the only one this Sentinel owns) |
 | `--kind <kind>` | — | schedule \| manual \| github-pr |
 | `--file <path>` | — | Trigger JSON object with schedule or github settings |
 | `--enable` | — | Enable immediately |
 | `--yes` | — | Confirm that an enabled trigger was reviewed |
+| `--frequency <frequency>` | — | schedule: minutes, hourly, daily, weekdays, weekly, cron |
+| `--every <minutes>` | — | schedule, minutes: interval (5 or more) |
+| `--at <HH:MM>` | — | schedule, daily, weekdays, weekly: local time |
+| `--weekday <day>` | — | schedule, weekly: sun, mon, ... or 0-6 |
+| `--cron <expression>` | — | schedule, cron: five fields |
+| `--timezone <zone>` | — | schedule: IANA timezone (default UTC) |
 | `--repo <owner/name>` | — | github-pr: repository to watch |
 | `--base-branch <branch>` | — | github-pr: only pull requests into this branch |
 | `--comment` | — | github-pr: comment on each pull request with one short summary, edited in place on later pushes (default: off) |
 | `--include-forks` | — | github-pr: also review pull requests from forks, marked untrusted (default: skipped) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers enable
 
@@ -2938,6 +3048,7 @@ Enable a trigger after reviewing it.
 | `--yes` | — | Confirm that this trigger was reviewed |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers disable
 
@@ -2956,6 +3067,7 @@ Pause a trigger.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers check
 
@@ -2974,6 +3086,7 @@ Poll a pull request trigger now instead of waiting for its next poll.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels triggers rm
 
@@ -2993,6 +3106,7 @@ Delete a trigger.
 | `--yes` | — | Confirm deletion |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels webhook
 
@@ -3016,6 +3130,7 @@ Show whether the webhook is set up and the last deliveries.
 | --- | --- | --- |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### sentinels webhook secret
 
@@ -3040,6 +3155,7 @@ Create the secret, or replace it; the old one keeps working for 5 minutes. Print
 | `--yes` | — | Confirm; update the secret on GitHub afterwards |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ## Team workspace setup
 

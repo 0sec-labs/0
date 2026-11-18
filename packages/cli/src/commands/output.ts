@@ -1,3 +1,4 @@
+import { readableError } from "./error-text.js";
 /** Shared plain-text table for `list` commands: left-aligned, two-space gutters, no colour. */
 export interface TableColumn<T> { header: string; value: (row: T) => string | number | undefined | null; max?: number }
 export function renderTable<T>(rows: readonly T[], columns: readonly TableColumn<T>[]): string {
@@ -14,7 +15,7 @@ export function renderTable<T>(rows: readonly T[], columns: readonly TableColumn
 /** A usage problem (bad flag value, missing --yes); exits 2. Everything else that fails exits 1. */
 export class UsageError extends Error {}
 export function finishWithError(error: unknown, deps: { err(text: string): void }, json: boolean | undefined): void {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = readableError(error instanceof Error ? error.message : String(error));
   deps.err(json ? JSON.stringify({ error: message }) : message);
   process.exitCode = error instanceof UsageError ? 2 : 1;
 }

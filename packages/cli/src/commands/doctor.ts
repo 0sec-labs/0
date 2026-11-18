@@ -8,7 +8,8 @@ export function registerDoctorCommand(program: Command): void {
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
     .option("--discard-reports", "Delete crash reports waiting for review on this computer")
-    .action(async (options: { discardReports?: boolean }, command: Command) => {
+    .option("--json", "Print JSON")
+    .action(async (options: { discardReports?: boolean; json?: boolean }, command: Command) => {
       if (command.args.length) throw new Error(`Unknown check "${command.args[0]}". Use upgrade, workbench or checks, or no argument for the summary.`);
       const pending = await import("../state/pending-diagnostics.js");
       if (options.discardReports) {
@@ -23,6 +24,16 @@ export function registerDoctorCommand(program: Command): void {
       const hasSupportedNode = nodeMajor >= 24;
 
       const waiting = pending.listPendingReports().length;
+      if (options.json) {
+        const problem = !hasSupportedNode ? "Upgrade to Node 24+." : apiRuntime.configured && !apiRuntime.valid ? (apiRuntime.error ?? "The configured provider is unusable.") : !hasApiKey ? "No model is connected. Run `0 models connect`." : undefined;
+        console.log(JSON.stringify({
+          version: runtime.cliVersion, channel: runtime.releaseChannel, runtime: `${runtime.engine} ${runtime.engineVersion}`, platform: runtime.platform, arch: runtime.arch,
+          node: { ok: hasSupportedNode, version: process.version },
+          model: { connected: hasApiKey, provider: hasApiKey ? apiRuntime.providerLabel : null },
+          cliProviders: availableRuntimes, crashReportsWaiting: waiting, ok: problem === undefined, ...(problem ? { next: problem } : {}),
+        }, null, 2));
+        return;
+      }
       console.log("");
       console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" doctor"));
       console.log("");
@@ -36,7 +47,7 @@ export function registerDoctorCommand(program: Command): void {
           ? `${chalk.red("bad")}  ${apiRuntime.providerLabel}`
           : `${chalk.yellow("missing")}  not configured`;
       console.log(`  API provider  ${apiStatus}`);
-      console.log(`  CLI providers ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
+      console.log(`  CLI providers  ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
       console.log("");
       if (isNpmStyleInstall()) {
         console.log(chalk.yellow(`  ${NPM_MIGRATION_HINT}`));
@@ -52,12 +63,11 @@ export function registerDoctorCommand(program: Command): void {
       } else if (apiRuntime.configured && !apiRuntime.valid && apiRuntime.error) {
         console.log(chalk.red("  API provider is configured but unusable."));
         console.log(chalk.gray(`  ${apiRuntime.error.split("\n").join("\n  ")}`));
-      } else if (hasApiKey || availableRuntimes.length > 0) {
-        console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));
-        console.log(chalk.gray("  Open the console with:"));
-        console.log(chalk.gray("    0"));
+      } else if (hasApiKey) {
+        console.log(chalk.yellow("  Ready. The first request verifies credentials."));
+        console.log(chalk.gray("  Open the console with: 0     Run one prompt with: 0 -p \"<prompt>\""));
       } else {
-        console.log(chalk.yellow("  Next step: install Claude/Codex CLI or set an API key."));
+        console.log(chalk.yellow("  No model is connected. Run `0 models connect` to see providers, then `0 models connect <provider> --key-env <VAR>`."));
       }
       console.log("");
     });

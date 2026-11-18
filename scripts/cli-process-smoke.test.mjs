@@ -67,15 +67,21 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   for (const hidden of ["web", "doctor", "automation", "api"]) assert.doesNotMatch(help.stdout, new RegExp(`^  ${hidden}\\b`, "m"), `${hidden} is not a top-level command in help`);
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);
   const noConsole = cli(["threads", "list", "--format", "json"]);
-  assert.equal(noConsole.status, 2, "threads need a running console, never an empty list");
+  assert.equal(noConsole.status, 1, "threads need a running console, never an empty list");
   assert.equal(noConsole.stdout, "");
   assert.match(JSON.parse(noConsole.stderr).error, /^No console running\. Start one with: 0 --headless/);
   assert.equal(jsonSuccess(cli(["config", "get", "--export"])).executionProfile, "local");
   const empty = cli(["findings", "list", "--format", "json"]);
-  assert.match(empty.stdout + empty.stderr, /No findings/);
+  assert.equal(empty.status, 0, "an empty export is an empty list, not a failure");
+  assert.deepEqual(JSON.parse(empty.stdout).findings, []);
+  const bare = cli(["threads"]);
+  assert.equal(bare.status, 0, "a command with no subcommand prints its help");
+  assert.match(bare.stdout, /^Commands:$/m);
+  assert.match(bare.stdout, /Examples:/);
   const ambiguous = cli(["not-a-command-or-target"]);
-  assert.equal(ambiguous.status, 1);
+  assert.equal(ambiguous.status, 2);
   assert.match(ambiguous.stderr, /unknown command/i);
+  assert.match(ambiguous.stderr, /Run `0 --help`/);
 });
 
 test("CLI reports an invalid option value without a stack trace", { timeout: 60_000 }, t => {
@@ -126,8 +132,8 @@ test("CLI starts a loopback host and controls live sessions across independent C
   const templates = jsonSuccess(cli(["sentinels", "list", "--automation", "--templates", ...attach], tokenEnv));
   assert.ok(templates.some(template => template.id === "repository-review"));
   const missing = cli(["threads", "list", "missing-session", ...attach], tokenEnv);
-  assert.equal(missing.status, 2);
-  assert.equal(typeof JSON.parse(missing.stderr).error, "string");
+  assert.equal(missing.status, 1);
+  assert.match(JSON.parse(missing.stderr).error, /^Thread not found\. List threads with `0 threads list`\.$/);
 });
 
 test("server mode refuses a busy port instead of moving to another one", async t => {

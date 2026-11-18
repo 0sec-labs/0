@@ -115,7 +115,7 @@ Everything on the Sentinels page works from `0 sentinels`. Commands attach to a 
 ```bash
 0 sentinels list --presets
 0 sentinels set --create --preset dependency-watcher --name "Nightly check"
-0 sentinels set SENTINEL_ID --mission "Watch the lockfile"
+0 sentinels set SENTINEL_ID --purpose "Watch the lockfile"
 0 sentinels set SENTINEL_ID --files put reports/notes.md --file ./notes.md
 0 sentinels set SENTINEL_ID --state active --acknowledge
 0 sentinels run SENTINEL_ID --task "Re-test the login flow" --yes

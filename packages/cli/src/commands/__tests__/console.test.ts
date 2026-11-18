@@ -61,11 +61,12 @@ describe("console launch authorization", () => {
   }
 
   it("directs interactive console users to the account-free browser", async () => {
-    const notice = vi.spyOn(console, "log").mockImplementation(() => {});
+    const notice = vi.spyOn(console, "error").mockImplementation(() => {});
     await launch();
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining("Run 0 (no account required)"));
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining("To open the console, run 0 (no account required)"));
     expect(startup.showConsole).not.toHaveBeenCalled();
-    expect(process.exitCode).toBeUndefined();
+    expect(process.exitCode).toBe(2);
+    process.exitCode = undefined;
     const program = new Command();
     registerConsoleCommand(program);
     await program.parseAsync(["console"], { from: "user" });
@@ -124,6 +125,8 @@ describe("headless console completion status", () => {
     } else {
       expect(startup.stderr).not.toHaveBeenCalled();
       expect(startup.stdout).toHaveBeenCalledWith(expect.stringContaining("Completed evidence-backed answer."), "console.assistant.complete");
+      // stdout is the answer and nothing else: no prefix, no footer.
+      expect(startup.stdout.mock.calls.map(([text]) => text).join("")).toBe("Completed evidence-backed answer.");
     }
   });
 });
