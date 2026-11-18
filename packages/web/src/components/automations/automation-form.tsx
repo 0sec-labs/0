@@ -16,8 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { SettingsCard, SettingsCardRow } from "../../ui/components/settings-card";
-import { AutomationActiveSwitch } from "@/components/workflow-automation-control";
-import { WorkflowTriggers } from "@/components/workflow-triggers";
 import { FormSection } from "./automation-ui";
 import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, validateAutomationDraft } from "./automation-model";
 import { errorText } from "@/lib/api-error";
@@ -36,7 +34,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, me
   const [target, setTarget] = useState(kept?.target ?? workflow.target);
   const [instructions, setInstructions] = useState(kept?.instructions ?? workflow.instructions);
   const [saveError, setSaveError] = useState("");
-  const [activeHint, setActiveHint] = useState(false);
   const [runIn, setRunIn] = useState(workflow.runIn ?? "new-mission");
   const [modelValue, setModelValue] = useState(encodeAutomationModel(workflow.model));
   const [reasoning, setReasoning] = useState(workflow.model?.reasoning ?? "");
@@ -63,7 +60,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, me
       void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setSaveError(errorText(cause, "Unable to save.")));
     } catch (cause) { setSaveError(errorText(cause, "Invalid automation.")); }
   };
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
   return <div className="w-full">
     <header className="sticky top-0 z-10 -mx-1 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 bg-panel px-1 py-1">
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -84,8 +80,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, me
       <div className="space-y-2">
         <Input aria-label="Automation name" value={name} maxLength={160} required disabled={locked} placeholder="Automation name" onChange={event => setName(event.target.value)} className="h-9 text-ellipsis border-transparent bg-transparent px-0 text-xl font-medium shadow-none focus-visible:border-border-2 md:text-xl" />
         {problems.name && <p role="alert" className="text-xs text-destructive">{problems.name}</p>}
-        <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">Active<AutomationActiveSwitch workflow={workflow} disabled={locked} onNeedsSetup={() => { setActiveHint(true); jump("workflow-triggers"); }} className="flex items-center" /></label>
-        {activeHint && <p role="status" className="text-xs text-muted-foreground">Add a schedule under Triggers to turn this on.</p>}
       </div>
 
       <SettingsCard className="mx-0">
@@ -98,8 +92,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, me
           <Select aria-label="Runs in" size="sm" className="w-44 shrink-0" value={runIn} disabled={locked} onValueChange={setRunIn} options={[{ value: "new-mission", label: v("A new {mission}") }, { value: "sentinel-home", label: "Its home thread" }]} />
         </SettingsCardRow>}
       </SettingsCard>
-
-      <section id="workflow-triggers" data-workflow-section="triggers" aria-label="Triggers" className="scroll-mt-16"><WorkflowTriggers workflow={workflow} disabled={locked} /></section>
 
       <FormSection title="Instructions">
         <SettingsCard className="mx-0">

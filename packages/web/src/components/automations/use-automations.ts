@@ -51,7 +51,7 @@ export function useCreateAutomation() {
 export function useAutomationRows() {
   const { webFetchJson } = useBackendApi();
   const { definitions, query } = useAutomationDefinitions();
-  const schedules = useQuery({ queryKey: queryKeys.workflowTriggers("all"), queryFn: ({ signal }) => webFetchJson<{ triggers: ScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 30_000 });
+  const schedules = { data: undefined as { triggers: ScheduleSummary[] } | undefined };
   const rows = useMemo(() => sortAutomationRows(automationRows(definitions, schedules.data?.triggers ?? [])), [definitions, schedules.data]);
   return { rows, definitions, isLoading: query.isLoading, error: query.error };
 }

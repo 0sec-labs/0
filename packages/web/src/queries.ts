@@ -55,7 +55,6 @@ export const queryKeys = {
   skillsCatalogPreview: key("skills-catalog-preview"),
   // Automations
   workflowDefinitions: key("workflow-definitions"),
-  workflowTriggers: key("workflow-triggers"),
   workflowTriggerSessions: key("workflow-trigger-sessions"),
   // Engagements, workers and team
   engagements: key("engagements"),

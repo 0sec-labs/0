@@ -11,7 +11,7 @@ import { EmptyState, LoadingState } from "@/components/state-panel";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { toast } from "@/ui/components/toast";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
-import { displayTime } from "@/components/workflow-triggers";
+import { displayTime } from "@/lib/display-time";
 import { useAgentTurns, useSentinelAutomations, useSentinelTriggers, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
 import { NEEDS_REVIEW_COPY, draftFromSchedule, triggerRequestFromDraft, type TriggerDraft, describeTrigger, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type AgentTurn, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { addedSuggestions, sentinelHref, suggestedSchedule, type SentinelPresetAutomation } from "@/sentinels/model";
