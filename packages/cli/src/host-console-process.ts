@@ -1,6 +1,6 @@
 import { spawn, execFile, execFileSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { Readable, Writable } from "node:stream";
+import { Writable, type Readable } from "node:stream";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, type HostConsoleFrame, type HostConsoleStopResult } from "./host-console-protocol.js";
 
 interface ProcessIdentity { pid: number; parent: number; group: number; started: string; zombie: boolean }
@@ -91,8 +91,8 @@ export class HostConsoleProcess {
     this.#input = this.#child.stdio[3] as Writable;
     this.#input.on("error", () => { /* Exit handler settles requests; no uncaught EPIPE. */ });
     // Dedicated fd 3/4 carry control. Tool/provider stdout can never be a frame.
-    // A data listener (not a bare resume) so Bun on Linux drains and then closes both pipes; the stop check waits for that close.
-    this.#child.stdout?.on("data", () => {}); this.#child.stderr?.on("data", () => {});
+    // Pipe into a sink (not a bare resume or a data listener): under Bun on Linux only this drains and then closes both pipes, and the stop check waits for that close.
+    this.#child.stdout?.pipe(new Writable({ write(_chunk, _encoding, done) { done(); } })); this.#child.stderr?.pipe(new Writable({ write(_chunk, _encoding, done) { done(); } }));
     const reader = new HostConsoleFrameReader();
     const output = this.#child.stdio[4] as Readable;
     output.setEncoding("utf8");
