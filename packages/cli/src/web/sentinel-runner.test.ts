@@ -6,6 +6,7 @@ import { SecurityWorkflowStore, SentinelStore } from "@0/engine/storage";
 import { createSecurityWorkflowTemplate } from "@0/engine/shared";
 import { WebSentinelService, type SentinelActor } from "./sentinels.js";
 import { agentsPersistentThreadFromEnv, type SentinelSessionEvent } from "./sentinel-runner.js";
+import { AgentTurnDelivery } from "./agent-turns.js";
 
 const T0 = Date.parse("2026-03-02T10:00:00Z");
 const MIN = 60_000;
@@ -836,5 +837,436 @@ describe("a person in the Sentinel's thread", () => {
     f.emit("mission-1", { type: "queued", messages: [] });
     f.emit("mission-1", { type: "error", message: "The folder is gone" });
     expect(turnsOf(f, id)[0]).toMatchObject({ status: "failed", error: "The folder is gone" });
+  });
+});
+
+describe("circuit-breaker state preservation across async GitHub PR triggers and delivery", () => {
+  interface Deferred<T> { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void }
+  function deferred<T>(): Deferred<T> {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  }
+  const pr = (number: number, sha: string) => ({ number, headRefOid: sha, title: `PR ${number}`, url: `https://github.com/o/r/pull/${number}`, baseRefName: "main", headRefName: `b${number}`, isCrossRepository: false, isDraft: false, state: "OPEN" });
+
+  async function armedPrPersistent(ghRun: (args: string[]) => Promise<{ stdout: string }>) {
+    const f = fixture({ gh: { run: ghRun }, persistent: true });
+    const created = (await f.call("POST", P, { name: "Reviewer", skills: ["pr-diff-review"] })).data as { sentinel: { id: string } };
+    const id = created.sentinel.id;
+    await f.call("POST", `${P}/${id}/resume`, { acknowledge: true });
+    const automation = f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: id });
+    const trigger = await f.call("POST", `${P}/${id}/triggers`, { automationId: automation.id, kind: "github-pr", github: { repo: "o/r", baseBranch: "main", pollMs: 60_000 }, enabled: true, approval: "enable-reviewed-trigger" });
+    expect(trigger.status).toBe(201);
+    const triggerId = (trigger.data as { trigger: { id: string } }).trigger.id;
+    await f.service.tick(T0); // baseline
+    return { f, id, automation, triggerId };
+  }
+
+  it("stops launching further PRs and preserves failing state when PR #1 trips the breaker while PR #2 diff is pending", async () => {
+    let listing = [pr(1, "s1")];
+    const diffEntered = deferred<void>();
+    const diffRelease = deferred<void>();
+    const { f, id, triggerId } = await armedPrPersistent(async args => {
+      if (args[0] === "pr" && args[1] === "list") return { stdout: JSON.stringify(listing) };
+      if (args[0] === "pr" && args[1] === "diff" && args[2] === "5") {
+        diffEntered.resolve();
+        await diffRelease.promise;
+      }
+      return { stdout: "diff --git a/a b/a" };
+    });
+
+    // Two prior failures bring streak to 2.
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-2" });
+
+    // PR #4 and PR #5 arrive together; PR #4 trips breaker while PR #5 diff is suspended.
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4"), pr(5, "s5")];
+    const checkP = f.service.checkTrigger(triggerId);
+    await diffEntered.promise;
+
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-3" });
+    diffRelease.resolve();
+    expect(await checkP).toBe(true);
+
+    const trigger = f.store.getTrigger(triggerId)!;
+    expect(trigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(trigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(trigger.lastError).toContain("boom-3");
+    expect(trigger.activeClaim).toBeUndefined();
+    // PR #4 was delivered and cursor-recorded; PR #5 was never delivered and never marked seen.
+    expect(trigger.cursor?.["4"]).toBe("s4");
+    expect(trigger.cursor?.["5"]).toBeUndefined();
+    expect(f.store.listTurns(id).some(t => t.detail.event?.pr === 5)).toBe(false);
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
+  });
+
+  it.each([
+    { label: "a new PR is returned", withNewPr: true },
+    { label: "no new PR is returned", withNewPr: false },
+  ])("preserves failing state and delivers nothing when a running turn trips the breaker while gh pr list is pending ($label)", async ({ withNewPr }) => {
+    let listing = [pr(1, "s1")];
+    let holdList = false;
+    const listEntered = deferred<void>();
+    const listRelease = deferred<void>();
+    const { f, id, triggerId } = await armedPrPersistent(async args => {
+      if (args[0] === "pr" && args[1] === "list") {
+        if (holdList) {
+          holdList = false;
+          listEntered.resolve();
+          await listRelease.promise;
+        }
+        return { stdout: JSON.stringify(listing) };
+      }
+      return { stdout: "diff --git a/a b/a" };
+    });
+
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-2" });
+
+    // PR #4 is running when a webhook poll begins and blocks in gh pr list.
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4")];
+    await f.service.checkTrigger(triggerId);
+
+    if (withNewPr) listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4"), pr(5, "s5")];
+    holdList = true;
+    const webhookP = f.service.checkTrigger(triggerId);
+    await listEntered.promise;
+
+    // PR #4 fails while gh pr list is pending -> trips breaker.
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-3" });
+    listRelease.resolve();
+    expect(await webhookP).toBe(true);
+
+    const trigger = f.store.getTrigger(triggerId)!;
+    expect(trigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(trigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(trigger.lastError).toContain("err-3");
+    expect(trigger.activeClaim).toBeUndefined();
+    expect(trigger.cursor?.["5"]).toBeUndefined();
+    expect(f.store.listTurns(id).some(t => t.detail.event?.pr === 5)).toBe(false);
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
+  });
+
+  it("preserves failing state and needsYou when missions.send() rejects on the third consecutive failure (github-pr and schedule)", async () => {
+    // 1. github-pr trigger
+    let listing = [pr(1, "s1")];
+    const { f: prF, id: prId, triggerId: prTriggerId } = await armedPrPersistent(async args => (
+      args[0] === "pr" && args[1] === "list" ? { stdout: JSON.stringify(listing) } : { stdout: "diff" }
+    ));
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await prF.service.checkTrigger(prTriggerId);
+    prF.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "e1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await prF.service.checkTrigger(prTriggerId);
+    prF.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "e2" });
+
+    prF.missions.send.mockRejectedValueOnce(new Error("gateway unavailable"));
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4")];
+    await prF.service.checkTrigger(prTriggerId);
+
+    const prTrigger = prF.store.getTrigger(prTriggerId)!;
+    expect(prTrigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(prTrigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(prTrigger.lastError).toContain("gateway unavailable");
+    expect(prTrigger.cursor?.["4"]).toBeUndefined();
+    expect((await prF.view(prId)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
+
+    // 2. schedule trigger
+    const sf = fixture({ persistent: true });
+    const { id: sId, triggerId: sTriggerId } = await sf.armed();
+    for (const minute of [5, 10]) {
+      vi.setSystemTime(T0 + minute * MIN + 1_000);
+      await sf.service.tick();
+      sf.emit("mission-1", { type: "turn-complete", stopReason: "error", error: `e-${minute}` });
+    }
+    sf.missions.send.mockRejectedValueOnce(new Error("gateway unavailable"));
+    vi.setSystemTime(T0 + 15 * MIN + 1_000);
+    await sf.service.tick();
+
+    const sTrigger = sf.store.getTrigger(sTriggerId)!;
+    expect(sTrigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(sTrigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(sTrigger.lastError).toContain("gateway unavailable");
+    expect((await sf.view(sId)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
+  });
+
+  it("AgentTurnDelivery refuses delivery without reserving or sending when the trigger becomes disabled while ensureHome() is pending", async () => {
+    const f = fixture({ persistent: true });
+    const { id, automation, triggerId } = await f.armed();
+    const homeEntered = deferred<void>();
+    const homeRelease = deferred<{ id: string; replaced: false }>();
+    const delivery = new AgentTurnDelivery({
+      store: f.store,
+      missions: f.missions,
+      now: () => T0,
+      ensureHome: async () => {
+        homeEntered.resolve();
+        return homeRelease.promise;
+      },
+    });
+
+    const deliverP = delivery.deliver({
+      sentinel: f.store.get(id)!,
+      origin: "github",
+      via: "webhook",
+      trigger: { id: triggerId, kind: "github-pr" },
+      automation,
+      event: { repo: "o/r", pr: 9, headSha: "sha9" },
+      idempotencyKey: `github:${triggerId}:9:sha9`,
+    });
+    await homeEntered.promise;
+
+    // Breaker trips while ensureHome() is pending.
+    f.store.noteTurnResult(triggerId, { status: "failed", error: "e1" }, T0 + 1);
+    f.store.noteTurnResult(triggerId, { status: "failed", error: "e2" }, T0 + 2);
+    f.store.noteTurnResult(triggerId, { status: "failed", error: "e3" }, T0 + 3);
+    homeRelease.resolve({ id: "mission-1", replaced: false });
+
+    const outcome = await deliverP;
+    expect(outcome).toMatchObject({ status: "refused", kind: "inactive", reason: expect.stringContaining("Turned off after 3 failed turns in a row.") });
+    expect(f.missions.send).not.toHaveBeenCalled();
+    expect(f.store.listTurns(id)).toEqual([]);
+    delivery.dispose();
+  });
+
+  it("recovers cleanly after explicit operator re-enable: clears needsYou and delivers the previously skipped PR", async () => {
+    let listing = [pr(1, "s1")];
+    let holdPr5 = true;
+    const diffEntered = deferred<void>();
+    const diffRelease = deferred<void>();
+    const { f, id, triggerId } = await armedPrPersistent(async args => {
+      if (args[0] === "pr" && args[1] === "list") return { stdout: JSON.stringify(listing) };
+      if (args[0] === "pr" && args[1] === "diff" && args[2] === "5" && holdPr5) {
+        holdPr5 = false;
+        diffEntered.resolve();
+        await diffRelease.promise;
+      }
+      return { stdout: "diff --git a/a b/a" };
+    });
+
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-2" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4"), pr(5, "s5")];
+    const checkP = f.service.checkTrigger(triggerId);
+    await diffEntered.promise;
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-3" });
+    diffRelease.resolve();
+    expect(await checkP).toBe(true);
+
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(f.store.getTrigger(triggerId)!.cursor?.["5"]).toBeUndefined();
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true });
+
+    // Explicit operator recovery via PATCH .../triggers/:id
+    const patched = await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: true, approval: "enable-reviewed-trigger" });
+    expect(patched.status).toBe(200);
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: true, lastStatus: "scheduled", consecutiveFailures: 0 });
+    expect(f.store.getTrigger(triggerId)!.lastError).toBeUndefined();
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: false });
+
+    // Next check delivers the previously skipped PR #5 and records its cursor.
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    const pr5Turns = f.store.listTurns(id).filter(t => t.detail.event?.pr === 5);
+    expect(pr5Turns).toHaveLength(1);
+    expect(pr5Turns[0]).toMatchObject({ status: "running" });
+    expect(f.store.getTrigger(triggerId)!.cursor?.["5"]).toBe("s5");
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: true, lastStatus: "completed", consecutiveFailures: 0 });
+  });
+
+  it("withdraws a queued message and releases its idempotency key when the breaker trips while missions.send() is pending, allowing clean retry after recovery", async () => {
+    let listing = [pr(1, "s1")];
+    const { f, id, triggerId } = await armedPrPersistent(async args => (
+      args[0] === "pr" && args[1] === "list" ? { stdout: JSON.stringify(listing) } : { stdout: "diff --git a/a b/a" }
+    ));
+
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-2" });
+
+    // PR #4 starts immediately; PR #5 suspends inside missions.send() and resolves with a queuedMessageId after PR #4 trips the breaker.
+    const sendEntered = deferred<void>();
+    const sendRelease = deferred<{ queuedMessageId: string }>();
+    const baseSend = f.missions.send.getMockImplementation()!;
+    let intercepted = false;
+    f.missions.send.mockImplementation(async (missionId, text, author, mode, automated) => {
+      if (!intercepted && text.includes("o/r#5")) {
+        intercepted = true;
+        sendEntered.resolve();
+        return sendRelease.promise;
+      }
+      return baseSend(missionId, text, author, mode, automated);
+    });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4"), pr(5, "s5")];
+    const checkP = f.service.checkTrigger(triggerId);
+    await sendEntered.promise;
+
+    // Breaker trips while PR #5's missions.send() is still pending.
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-3" });
+    sendRelease.resolve({ queuedMessageId: "q5" });
+    expect(await checkP).toBe(true);
+
+    // Queued message was withdrawn, cursor did not advance for PR #5, breaker state is intact, and key was released.
+    expect(f.missions.removeQueued).toHaveBeenCalledWith("mission-1", "q5");
+    const trigger = f.store.getTrigger(triggerId)!;
+    expect(trigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(trigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(trigger.lastError).toContain("boom-3");
+    expect(trigger.activeClaim).toBeUndefined();
+    expect(trigger.cursor?.["4"]).toBe("s4");
+    expect(trigger.cursor?.["5"]).toBeUndefined();
+    const withdrawnTurn = f.store.listTurns(id).find(t => t.detail.event?.pr === 5)!;
+    expect(withdrawnTurn).toMatchObject({ status: "skipped", skippedReason: expect.stringContaining("Turned off after 3 failed turns in a row.") });
+    expect(withdrawnTurn.idempotencyKey).toBeUndefined();
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true });
+
+    // After explicit operator recovery, PR #5 is retried cleanly without duplicate active work.
+    const patched = await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: true, approval: "enable-reviewed-trigger" });
+    expect(patched.status).toBe(200);
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    const pr5ActiveTurns = f.store.listTurns(id).filter(t => t.detail.event?.pr === 5 && t.status !== "skipped");
+    expect(pr5ActiveTurns).toHaveLength(1);
+    expect(pr5ActiveTurns[0]).toMatchObject({ status: "running" });
+    expect(f.store.getTrigger(triggerId)!.cursor?.["5"]).toBe("s5");
+  });
+
+  it("preserves turn tracking, idempotency key, and breaker state when post-send withdrawal fails", async () => {
+    let listing = [pr(1, "s1")];
+    const { f, id, triggerId } = await armedPrPersistent(async args => (
+      args[0] === "pr" && args[1] === "list" ? { stdout: JSON.stringify(listing) } : { stdout: "diff --git a/a b/a" }
+    ));
+
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-2" });
+
+    const sendEntered = deferred<void>();
+    const sendRelease = deferred<{ queuedMessageId: string }>();
+    const baseSend = f.missions.send.getMockImplementation()!;
+    let intercepted = false;
+    let pr5Text = "";
+    f.missions.send.mockImplementation(async (missionId, text, author, mode, automated) => {
+      if (!intercepted && text.includes("o/r#5")) {
+        intercepted = true;
+        pr5Text = text;
+        sendEntered.resolve();
+        return sendRelease.promise;
+      }
+      return baseSend(missionId, text, author, mode, automated);
+    });
+    f.missions.removeQueued.mockImplementationOnce(() => { throw new Error("Queued message has already started or was removed."); });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4"), pr(5, "s5")];
+    const checkP = f.service.checkTrigger(triggerId);
+    await sendEntered.promise;
+
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "boom-3" });
+    sendRelease.resolve({ queuedMessageId: "q5" });
+    expect(await checkP).toBe(true);
+
+    expect(f.missions.removeQueued).toHaveBeenCalledWith("mission-1", "q5");
+    const trigger = f.store.getTrigger(triggerId)!;
+    expect(trigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(trigger.lastError).toContain("boom-3");
+    expect(trigger.cursor?.["5"]).toBeUndefined();
+
+    // Turn is NOT falsely marked skipped/cancelled; it keeps its idempotency key and records a diagnostic note.
+    const pr5Turn = f.store.listTurns(id).find(t => t.detail.event?.pr === 5)!;
+    expect(pr5Turn).toMatchObject({
+      status: "queued",
+      idempotencyKey: `github:${triggerId}:5:s5`,
+      note: expect.stringMatching(/could not be withdrawn/i),
+    });
+
+    // When the unwithdrawable queued message runs and completes, it stays matched as PR #5 (not a person's turn) and does not reset the breaker.
+    f.emit("mission-1", { type: "user", text: pr5Text });
+    expect(f.store.getTurn(pr5Turn.id)).toMatchObject({ status: "running" });
+    expect(f.store.listTurns(id).filter(t => t.origin === "user")).toHaveLength(0);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
+    expect(f.store.getTurn(pr5Turn.id)).toMatchObject({ status: "completed" });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ enabled: false, lastStatus: "failing", lastError: trigger.lastError });
+
+    // After explicit operator recovery, no duplicate active work is created for PR #5; the cursor catches up cleanly.
+    const sendsBeforeRecovery = f.missions.send.mock.calls.length;
+    const patched = await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: true, approval: "enable-reviewed-trigger" });
+    expect(patched.status).toBe(200);
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    expect(f.missions.send).toHaveBeenCalledTimes(sendsBeforeRecovery);
+    expect(f.store.listTurns(id).filter(t => t.detail.event?.pr === 5)).toHaveLength(1);
+    expect(f.store.getTrigger(triggerId)!.cursor?.["5"]).toBe("s5");
+  });
+
+  it("preserves failing state, breaker error, and needsYou when gh pr list rejects after a running turn trips the breaker", async () => {
+    let listing = [pr(1, "s1")];
+    let holdList = false;
+    const listEntered = deferred<void>();
+    const listRelease = deferred<void>();
+    const { f, id, triggerId } = await armedPrPersistent(async args => {
+      if (args[0] === "pr" && args[1] === "list") {
+        if (holdList) {
+          holdList = false;
+          listEntered.resolve();
+          await listRelease.promise;
+        }
+        return { stdout: JSON.stringify(listing) };
+      }
+      return { stdout: "diff --git a/a b/a" };
+    });
+
+    listing = [pr(1, "s1"), pr(2, "s2")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-1" });
+
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3")];
+    await f.service.checkTrigger(triggerId);
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-2" });
+
+    // PR #4 is running while a webhook check suspends in gh pr list.
+    listing = [pr(1, "s1"), pr(2, "s2"), pr(3, "s3"), pr(4, "s4")];
+    await f.service.checkTrigger(triggerId);
+
+    holdList = true;
+    const checkP = f.service.checkTrigger(triggerId);
+    await listEntered.promise;
+
+    // PR #4 fails and trips the breaker; then gh pr list rejects.
+    f.emit("mission-1", { type: "turn-complete", stopReason: "error", error: "err-3" });
+    listRelease.reject(new Error("gh auth failed"));
+    expect(await checkP).toBe(true);
+
+    const trigger = f.store.getTrigger(triggerId)!;
+    expect(trigger).toMatchObject({ enabled: false, lastStatus: "failing", consecutiveFailures: 3 });
+    expect(trigger.lastError).toContain("Turned off after 3 failed turns in a row.");
+    expect(trigger.lastError).toContain("err-3");
+    expect(trigger.lastError).not.toContain("gh auth failed");
+    expect(trigger.activeClaim).toBeUndefined();
+    expect((await f.view(id)).attention).toMatchObject({ needsYou: true, reason: expect.stringMatching(/three failed turns/) });
   });
 });

@@ -238,9 +238,13 @@ export class SentinelStore {
    * as the insert, so two firings cannot both take the last slot.
    */
   reserveTurn(input: { agentId: string; origin: Exclude<AgentTurnOrigin, "legacy" | "promote">; detail: AgentTurnOriginDetail; triggerId?: string; sessionId: string; idempotencyKey?: string; coalesce?: { pr: number }; ownerPid: number; nowIso: string },
-  ): { duplicate: AgentTurn } | { skipped: AgentTurn } | { turn: AgentTurn; superseded: AgentTurn[] } {
+  ): { refused: string } | { duplicate: AgentTurn } | { skipped: AgentTurn } | { turn: AgentTurn; superseded: AgentTurn[] } {
     return this.#db.transaction(() => {
       this.#require(input.agentId);
+      if (input.triggerId) {
+        const trigger = this.getTrigger(input.triggerId);
+        if (trigger && !trigger.enabled) return { refused: trigger.lastError ?? "Trigger is off." };
+      }
       if (input.idempotencyKey) {
         const existing = this.getTurnByKey(input.agentId, input.idempotencyKey);
         if (existing && existing.status !== "failed") return { duplicate: existing };
@@ -260,7 +264,7 @@ export class SentinelStore {
         ...(input.triggerId ? { triggerId: input.triggerId } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       })!;
       return { turn, superseded: superseded.map(old => ({ ...old, status: "skipped" as const })) };
-    })();
+    }).immediate();
   }
   /**
    * A person's message in the Sentinel's own thread, recorded as a turn that has already started. A person is never refused or queued behind a limit.
@@ -274,15 +278,17 @@ export class SentinelStore {
       })!;
     })();
   }
-  updateTurn(id: string, update: Partial<Pick<AgentTurn, "status" | "sessionId" | "costUsd" | "error" | "note" | "startedAt" | "finishedAt" | "skippedReason">>): AgentTurn {
+  updateTurn(id: string, update: Partial<Pick<AgentTurn, "status" | "sessionId" | "costUsd" | "error" | "note" | "startedAt" | "finishedAt" | "skippedReason">> & { releaseIdempotencyKey?: boolean }): AgentTurn {
     return this.#db.transaction(() => {
       const current = this.getTurn(id);
       if (!current) throw new SentinelStoreError("Turn not found.", 404);
-      const next: AgentTurn = { ...current, ...update };
-      this.#db.prepare("UPDATE agent_turns SET status = ?, session_id = ?, cost_usd = ?, error = ?, note = ?, skipped_reason = ?, started_at = ?, finished_at = ? WHERE id = ?")
-        .run(next.status, next.sessionId ?? null, next.costUsd ?? null, next.error ?? null, next.note ?? null, next.skippedReason ?? null, next.startedAt ?? null, next.finishedAt ?? null, id);
+      const { releaseIdempotencyKey, ...fields } = update;
+      const next: AgentTurn = { ...current, ...fields };
+      if (releaseIdempotencyKey) delete next.idempotencyKey;
+      this.#db.prepare("UPDATE agent_turns SET status = ?, session_id = ?, cost_usd = ?, error = ?, note = ?, skipped_reason = ?, started_at = ?, finished_at = ?, idempotency_key = ? WHERE id = ?")
+        .run(next.status, next.sessionId ?? null, next.costUsd ?? null, next.error ?? null, next.note ?? null, next.skippedReason ?? null, next.startedAt ?? null, next.finishedAt ?? null, next.idempotencyKey ?? null, id);
       return next;
-    })();
+    }).immediate();
   }
   /** Turns of the persistent-thread path that have not finished (queued or running). */
   listOpenTurns(): AgentTurn[] {
@@ -302,6 +308,12 @@ export class SentinelStore {
       const current = this.getTrigger(triggerId);
       if (!current) return null;
       const failed = result.status === "failed" && result.countsAsFailure !== false;
+      if (!current.enabled && current.lastStatus === "failing") {
+        const streak = failed ? (current.consecutiveFailures ?? 0) + 1 : current.consecutiveFailures ?? 0;
+        const next: SentinelTrigger = { ...current, consecutiveFailures: streak, updatedAt: new Date(nowMs).toISOString() };
+        this.#writeTrigger(next);
+        return { trigger: next, disabled: false };
+      }
       const streak = result.status === "completed" ? 0 : failed ? (current.consecutiveFailures ?? 0) + 1 : current.consecutiveFailures ?? 0;
       const disabled = failed && streak >= SentinelStore.TRIGGER_FAILURE_LIMIT && current.enabled;
       const next: SentinelTrigger = {
@@ -311,7 +323,7 @@ export class SentinelStore {
       };
       this.#writeTrigger(next);
       return { trigger: next, disabled };
-    })();
+    }).immediate();
   }
   getTurnByKey(agentId: string, idempotencyKey: string): AgentTurn | null {
     const found = this.#db.prepare("SELECT * FROM agent_turns WHERE agent_id = ? AND idempotency_key = ?").all(agentId, idempotencyKey)[0];
@@ -463,7 +475,7 @@ export class SentinelStore {
       };
       this.#writeTrigger(next);
       return next;
-    })();
+    }).immediate();
   }
   /** Makes an enabled, idle trigger due now ("Check now"). Returns the trigger, or null when it is off or busy. */
   requestCheck(id: string, nowMs = Date.now()): SentinelTrigger | null {
@@ -473,7 +485,7 @@ export class SentinelStore {
       const next: SentinelTrigger = { ...current, nextFireAt: new Date(nowMs).toISOString(), version: current.version + 1, updatedAt: new Date(nowMs).toISOString() };
       this.#writeTrigger(next);
       return next;
-    })();
+    }).immediate();
   }
   deleteTrigger(id: string): boolean {
     return this.#db.prepare("DELETE FROM sentinel_triggers WHERE id = ? AND active_claim IS NULL").run(id).changes > 0;
@@ -499,7 +511,7 @@ export class SentinelStore {
       const next: SentinelTrigger = { ...current, activeClaim: randomUUID(), nextFireAt, version: current.version + 1, lastStatus: "starting", lastError: undefined, updatedAt: new Date(nowMs).toISOString() };
       this.#writeTrigger(next);
       return next;
-    })();
+    }).immediate();
   }
   releaseTrigger(id: string, claim: string, update: { enabled?: boolean; lastStatus?: string; lastError?: string; lastActivationId?: string; cursor?: Record<string, string>; nextFireAt?: string | null }, nowMs = Date.now()): SentinelTrigger | null {
     return this.#db.transaction(() => {
@@ -507,10 +519,15 @@ export class SentinelStore {
       if (!current || current.activeClaim !== claim) return null;
       const { activeClaim: _claim, ...rest } = current;
       const cursor = update.cursor ? Object.fromEntries(Object.entries(update.cursor).slice(-MAX_CURSOR_ENTRIES)) : current.cursor;
-      const next: SentinelTrigger = { ...rest, ...update, ...(cursor ? { cursor } : {}), enabled: current.enabled && update.enabled !== false, version: current.version + 1, updatedAt: new Date(nowMs).toISOString() };
+      const failing = !current.enabled && current.lastStatus === "failing";
+      const next: SentinelTrigger = {
+        ...rest, ...update, ...(cursor ? { cursor } : {}),
+        ...(failing ? { lastStatus: current.lastStatus, ...(current.lastError !== undefined ? { lastError: current.lastError } : { lastError: undefined }) } : {}),
+        enabled: current.enabled && update.enabled !== false, version: current.version + 1, updatedAt: new Date(nowMs).toISOString(),
+      };
       this.#writeTrigger(next);
       return next;
-    })();
+    }).immediate();
   }
   close(): void { this.#db.close(); }
 }

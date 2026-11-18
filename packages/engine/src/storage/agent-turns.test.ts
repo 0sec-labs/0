@@ -161,6 +161,121 @@ describe("agent turn ledger", () => {
       expect(store.getTrigger(trigger.id)).toMatchObject({ enabled: true, consecutiveFailures: 0 });
       store.close();
     });
+
+    it("preserves failing status and lastError when releaseTrigger runs after the circuit breaker trips mid-claim", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const now = Date.parse("2026-03-02T10:00:00Z");
+      const trigger = store.createTrigger(agent.id, { automationId: "a1", kind: "github-pr", github: { repo: "o/r" }, enabled: true }, now);
+      const claim = store.claimTrigger(trigger.id, new Date(now + 120_000).toISOString(), now)!;
+      expect(claim.activeClaim).toBeTruthy();
+
+      store.noteTurnResult(trigger.id, { status: "failed", error: "err-1" }, now + 1);
+      store.noteTurnResult(trigger.id, { status: "failed", error: "err-2" }, now + 2);
+      const tripped = store.noteTurnResult(trigger.id, { status: "failed", error: "boom-3" }, now + 3);
+      expect(tripped).toMatchObject({ disabled: true, trigger: { enabled: false, lastStatus: "failing", consecutiveFailures: 3 } });
+      const breakerError = tripped!.trigger.lastError!;
+      expect(breakerError).toContain("Turned off after 3 failed turns in a row.");
+      expect(breakerError).toContain("boom-3");
+
+      // Stale release attempting to overwrite status, clear error, or re-enable must preserve failing state while releasing claim & saving processed cursor.
+      const released = store.releaseTrigger(trigger.id, claim.activeClaim!, { enabled: true, lastStatus: "queued", lastError: undefined, cursor: { "4": "sha4" } }, now + 4);
+      expect(released).toMatchObject({ enabled: false, lastStatus: "failing", lastError: breakerError, consecutiveFailures: 3, cursor: { "4": "sha4" } });
+      expect(released?.activeClaim).toBeUndefined();
+      // Wrong claim is still rejected.
+      expect(store.releaseTrigger(trigger.id, claim.activeClaim!, { lastStatus: "idle" }, now + 5)).toBeNull();
+      store.close();
+    });
+
+    it("keeps circuit-breaker failing state intact across later queued turn results until explicitly re-enabled", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const trigger = store.createTrigger(agent.id, { automationId: "a1", kind: "github-pr", github: { repo: "o/r" }, enabled: true });
+
+      store.noteTurnResult(trigger.id, { status: "failed", error: "e1" });
+      store.noteTurnResult(trigger.id, { status: "failed", error: "e2" });
+      const tripped = store.noteTurnResult(trigger.id, { status: "failed", error: "e3" })!;
+      const breakerError = tripped.trigger.lastError!;
+      expect(tripped).toMatchObject({ disabled: true, trigger: { enabled: false, lastStatus: "failing", consecutiveFailures: 3 } });
+
+      // A later queued turn succeeding cannot silently reset or recover the breaker.
+      const afterSuccess = store.noteTurnResult(trigger.id, { status: "completed" })!;
+      expect(afterSuccess).toMatchObject({ disabled: false, trigger: { enabled: false, lastStatus: "failing", lastError: breakerError, consecutiveFailures: 3 } });
+
+      // A later queued turn being cancelled preserves failing state and error.
+      const afterCancel = store.noteTurnResult(trigger.id, { status: "cancelled" })!;
+      expect(afterCancel).toMatchObject({ disabled: false, trigger: { enabled: false, lastStatus: "failing", lastError: breakerError, consecutiveFailures: 3 } });
+
+      // A later queued turn failing increments failure streak without overwriting failing status or breaker error.
+      const afterFail = store.noteTurnResult(trigger.id, { status: "failed", error: "e4" })!;
+      expect(afterFail).toMatchObject({ disabled: false, trigger: { enabled: false, lastStatus: "failing", lastError: breakerError, consecutiveFailures: 4 } });
+
+      // Explicit operator re-enable resets the breaker cleanly.
+      const reenabled = store.updateTrigger(trigger.id, { enabled: true });
+      expect(reenabled).toMatchObject({ enabled: true, lastStatus: "scheduled", consecutiveFailures: 0 });
+      expect(reenabled.lastError).toBeUndefined();
+      store.close();
+    });
+
+    it("refuses reserveTurn atomically when the trigger is disabled or failing without inserting rows, releasing keys, or superseding queued turns", () => {
+      const store = new SentinelStore(":memory:");
+      const agent = store.create({ name: "A" });
+      const trigger = store.createTrigger(agent.id, { automationId: "a1", kind: "github-pr", github: { repo: "o/r" }, enabled: true });
+
+      const prInput = (pr: number, sha: string) => ({
+        agentId: agent.id,
+        origin: "github" as const,
+        detail: { via: "poll", triggerId: trigger.id, event: { pr, headSha: sha } },
+        triggerId: trigger.id,
+        sessionId: "home",
+        idempotencyKey: `github:${trigger.id}:${pr}:${sha}`,
+        coalesce: { pr },
+        ownerPid: 1,
+        nowIso: new Date().toISOString(),
+      });
+
+      // Seed one queued turn (PR #1) and one failed turn (PR #2) while enabled.
+      const queuedPr1 = store.reserveTurn(prInput(1, "sha1"));
+      const failedPr2 = store.reserveTurn(prInput(2, "sha2"));
+      if (!("turn" in queuedPr1) || !("turn" in failedPr2)) throw new Error("expected turns");
+      store.updateTurn(failedPr2.turn.id, { status: "failed", error: "e1" });
+
+      // Trip the circuit breaker.
+      store.noteTurnResult(trigger.id, { status: "failed", error: "e1" });
+      store.noteTurnResult(trigger.id, { status: "failed", error: "e2" });
+      const tripped = store.noteTurnResult(trigger.id, { status: "failed", error: "boom-3" })!;
+      const breakerError = tripped.trigger.lastError!;
+      expect(tripped.disabled).toBe(true);
+
+      // Coalescing attempt for PR #1 must be refused and must NOT supersede queuedPr1.
+      expect(store.reserveTurn(prInput(1, "sha1-newer"))).toEqual({ refused: breakerError });
+      expect(store.getTurn(queuedPr1.turn.id)).toMatchObject({ status: "queued" });
+
+      // Retry attempt for failed PR #2 must be refused and must NOT release its idempotency_key.
+      expect(store.reserveTurn(prInput(2, "sha2"))).toEqual({ refused: breakerError });
+      expect(store.getTurnByKey(agent.id, `github:${trigger.id}:2:sha2`)?.id).toBe(failedPr2.turn.id);
+
+      // New PR #3 attempt must be refused with zero inserted rows.
+      expect(store.reserveTurn(prInput(3, "sha3"))).toEqual({ refused: breakerError });
+      expect(store.listTurns(agent.id)).toHaveLength(2);
+
+      // Manually paused trigger (no lastError) refuses with fallback message and zero inserted rows.
+      const paused = store.createTrigger(agent.id, { automationId: "a1", kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: false });
+      expect(store.reserveTurn({
+        agentId: agent.id, origin: "schedule", detail: { via: "schedule", triggerId: paused.id }, triggerId: paused.id,
+        sessionId: "home", idempotencyKey: `schedule:${paused.id}:1`, ownerPid: 1, nowIso: new Date().toISOString(),
+      })).toEqual({ refused: "Trigger is off." });
+      expect(store.listTurns(agent.id)).toHaveLength(2);
+
+      // Releasing a withdrawn turn's idempotency key allows re-reservation once the trigger is re-enabled.
+      const released = store.updateTurn(queuedPr1.turn.id, { status: "skipped", skippedReason: breakerError, error: breakerError, releaseIdempotencyKey: true });
+      expect(released.idempotencyKey).toBeUndefined();
+      expect(store.getTurnByKey(agent.id, `github:${trigger.id}:1:sha1`)).toBeNull();
+      store.updateTrigger(trigger.id, { enabled: true });
+      const retried = store.reserveTurn(prInput(1, "sha1"));
+      expect(retried).toHaveProperty("turn");
+      store.close();
+    });
   });
 });
 
