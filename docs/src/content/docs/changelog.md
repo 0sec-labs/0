@@ -132,7 +132,6 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 agents acknowledge` | `0 agents set <id> --state acknowledged` |
 | `0 agents archive` | `0 agents set <id> --state archived` |
 | `0 agents delete` | `0 agents set <id> --state deleted` |
-| `0 agents budget` | `0 agents set <id> --budget` |
 | `0 agents activations` | `0 agents run <id> --history` |
 | `0 agents files` | `0 agents set <id> --files list\|get\|put\|rm` |
 | `0 agents triggers` | `0 agents set <id> --trigger list\|add\|enable\|disable\|check\|rm` |

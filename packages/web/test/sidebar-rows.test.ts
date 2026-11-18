@@ -37,7 +37,7 @@ describe("agent badge and subtitle", () => {
   });
   test("subtitle falls back to the job line", () => {
     expect(agentSubtitle(agent())).toEqual({ text: "Probe the staging app", tone: "muted" });
-    expect(agentSubtitle(agent({ status: "paused", pauseReason: { kind: "budget", message: "Daily budget reached", at: "" } }))).toEqual({ text: "Daily budget reached", tone: "muted" });
+    expect(agentSubtitle(agent({ status: "paused" }))).toEqual({ text: "Paused. Triggers are off.", tone: "muted" });
     expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toEqual({ text: "Needs you", tone: "accent" });
     expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1, reason: "Approve the scan" } })).text).toBe("Approve the scan");
   });
