@@ -10,7 +10,7 @@ afterEach(async () => { await new Promise<void>(resolve => { server?.closeAllCon
 async function serve(gateway: Partial<Record<keyof ConsoleGateway, unknown>>) {
   const none = { handle: async () => null };
   server = createServer((req, res) => {
-    void handleWebConsoleApiRequest(req, res, new URL(req.url ?? "/", "http://localhost"), gateway as unknown as ConsoleGateway, none as never, none as never, none as never, {} as never, none as never)
+    void handleWebConsoleApiRequest(req, res, new URL(req.url ?? "/", "http://localhost"), gateway as unknown as ConsoleGateway, none as never, none as never, none as never, none as never)
       .then(handled => { if (!handled) { res.statusCode = 404; res.end(); } })
       .catch(() => { res.statusCode = 500; res.end(); });
   });

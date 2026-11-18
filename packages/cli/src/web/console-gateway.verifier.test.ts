@@ -76,7 +76,7 @@ describe("thread with a verifier skill", () => {
   it("rejects a skill that is unknown or declares no verifier", () => {
     const gateway = new ConsoleGateway({ homeDir: temp("0-home-"), projectPath: "/fixture", createId: () => "s-1" });
     expect(() => gateway.create({ verifySkill: "does-not-exist" })).toThrow(ConsoleGatewayError);
-    expect(() => gateway.create({ verifySkill: "scoped-fix" })).toThrow(/does not declare a verifier/);
+    expect(() => gateway.create({ verifySkill: "nextjs-appsec" })).toThrow(/does not declare a verifier/);
   });
 
   it("gives the skill instructions to the model and ends with 'Verified by' when the harness check passes", async () => {

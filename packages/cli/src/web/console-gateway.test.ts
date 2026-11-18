@@ -2467,7 +2467,7 @@ describe("ConsoleGateway automatic titles", () => {
       let status = 0; let body = "";
       const res = { writeHead: (code: number) => { status = code; }, end: (chunk: string) => { body = chunk; } };
       const none = { handle: async () => null };
-      const handled = await handleWebConsoleApiRequest(req as never, res as never, new URL(`http://local${path}`), instance, none as never, none as never, none as never, {} as never, none as never);
+      const handled = await handleWebConsoleApiRequest(req as never, res as never, new URL(`http://local${path}`), instance, none as never, none as never, none as never, none as never);
       return { handled, status, body: JSON.parse(body) as { title?: string; source?: string; session?: { titleSource?: string }; error?: string } };
     };
     const response = await call(`/api/console/sessions/${created.id}/title/regenerate`);
