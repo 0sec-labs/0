@@ -150,7 +150,6 @@ describe("the new grammar reaches the implementation commands", () => {
     ["agents set a1 --state paused", "agents pause a1"],
     ["agents set a1 --state active", "agents resume a1"],
     ["agents set a1 --state deleted --yes", "agents delete a1 --yes"],
-    ["agents set a1 --budget", "agents budget a1"],
     ["agents set a1 --trigger add --kind schedule", "agents triggers add a1 --kind schedule"],
     ["agents set a1 --trigger add --automation x1 --kind github-pr --repo o/r", "agents triggers add a1 --automation x1 --kind github-pr --repo o/r"],
     ["agents set a1 --files get notes.md", "agents files get a1 notes.md"],

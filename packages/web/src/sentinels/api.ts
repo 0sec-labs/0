@@ -5,7 +5,7 @@ import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import {
   SENTINEL_RUN_APPROVAL, SENTINEL_TRIGGER_APPROVAL, SentinelApiError,
-  type AgentTurn, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
+  type AgentTurn, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
 } from "./model";
 
 type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
@@ -50,7 +50,6 @@ export function createSentinelClient(webFetch: Fetch) {
     run: (sentinelId: string, version: number, task?: string) => call<{ missionId?: string; activation: SentinelActivation; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/run`, body("POST", { approval: SENTINEL_RUN_APPROVAL, version, ...(task?.trim() ? { task: task.trim() } : {}) })),
     activations: (sentinelId: string, signal?: AbortSignal) => call<{ activations: SentinelActivation[] }>(`sentinels/${id(sentinelId)}/activations?limit=50`, { signal }).then(data => data.activations),
     acknowledge: (sentinelId: string, version: number) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/acknowledge`, body("POST", { version })).then(data => data.sentinel),
-    budget: (sentinelId: string, signal?: AbortSignal) => call<SentinelBudgetReport>(`sentinels/${id(sentinelId)}/budget`, { signal }),
     triggers: (sentinelId: string, signal?: AbortSignal) => call<{ triggers: SentinelTrigger[] }>(`sentinels/${id(sentinelId)}/triggers`, { signal }),
     /** Creating enabled needs the review approval; the default is disabled. */
     createTrigger: (sentinelId: string, input: { automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string; pollMs?: number; commentOnPr?: boolean; includeForks?: boolean }; enabled?: boolean }) =>
@@ -102,10 +101,6 @@ export function useSentinelAutomations(sentinelId: string) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "automations", sentinelId), queryFn: ({ signal }) => client.automations(sentinelId, signal), retry: false });
 }
-export function useSentinelBudget(sentinelId: string) {
-  const { client, backendId } = useSentinelClient();
-  return useQuery({ queryKey: queryKeys.sentinels(backendId, "budget", sentinelId), queryFn: ({ signal }) => client.budget(sentinelId, signal), refetchInterval: 30_000, retry: false });
-}
 export function useSentinelTriggers(sentinelId: string) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "triggers", sentinelId), queryFn: ({ signal }) => client.triggers(sentinelId, signal), retry: false });
@@ -127,7 +122,7 @@ export function useSentinelMutations() {
     create: useMutation({ mutationFn: (input: Record<string, unknown>) => client.create(input), onSuccess: refresh }),
     update: useMutation({ mutationFn: (input: { id: string; version: number; fields: Record<string, unknown> }) => client.update(input.id, input.version, input.fields), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (input: { id: string; version: number }) => client.remove(input.id, input.version), onSuccess: (_result, input) => {
-      for (const part of ["one", "files", "file", "activations", "turns", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: queryKeys.sentinels(backendId, part, input.id) });
+      for (const part of ["one", "files", "file", "activations", "turns", "automations", "triggers"]) cache.removeQueries({ queryKey: queryKeys.sentinels(backendId, part, input.id) });
       void cache.invalidateQueries({ queryKey: queryKeys.sentinels(backendId, "list") });
     } }),
     setPaused: useMutation({ mutationFn: (input: { id: string; paused: boolean; version: number }) => client.setPaused(input.id, input.paused, input.version), onSuccess: refresh }),

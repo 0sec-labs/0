@@ -228,71 +228,27 @@ describe("review gate", () => {
   });
 });
 
-describe("budget enforcement", () => {
-  it("stops a run that exhausts the daily USD cap, pauses the Agent and raises needs-you", async () => {
+describe("cost", () => {
+  it("never stops or pauses a run because of what it has spent", async () => {
     const f = fixture();
-    const { id } = await f.armed({ budget: { dailyUsd: 1 } });
+    const { id } = await f.armed({});
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
     await f.service.tick();
-    f.costs.set("mission-2", 0.9);
-    f.emit("mission-2", { type: "usage" });
-    expect((await f.activations(id))[0]!.status).toBe("running");
-    f.costs.set("mission-2", 1.2);
+    f.costs.set("mission-2", 250);
     f.emit("mission-2", { type: "usage" });
     await vi.advanceTimersByTimeAsync(0);
-    expect(f.missions.cancel).toHaveBeenCalledWith("mission-2");
-    expect((await f.activations(id))[0]).toMatchObject({ status: "cancelled", costUsd: 1.2, error: expect.stringMatching(/Daily budget/) });
-    const sentinel = await f.view(id);
-    expect(sentinel).toMatchObject({ status: "paused", pauseReason: { kind: "budget" }, attention: { needsYou: true, reason: expect.stringMatching(/Daily budget/) } });
-    // Later occurrences do not run while paused; resuming clears the reason.
-    vi.setSystemTime(T0 + 10 * MIN + 1_000);
-    await f.service.tick();
-    expect(f.missions.create).toHaveBeenCalledTimes(2);
-    await f.call("POST", `${P}/${id}/resume`, {});
-    expect((await f.view(id)).pauseReason).toBeUndefined();
+    expect(f.missions.cancel).not.toHaveBeenCalled();
+    expect((await f.activations(id))[0]).toMatchObject({ status: "running", costUsd: 250 });
+    expect((await f.view(id)).status).toBe("active");
   });
 
-  it("pauses with a skipped record when the daily run limit or USD budget is already used", async () => {
-    const f = fixture();
-    const { id } = await f.armed({ budget: { maxRunsPerDay: 1 } });
-    vi.setSystemTime(T0 + 5 * MIN + 1_000);
-    await f.service.tick();
-    f.emit("mission-2", { type: "turn-complete", stopReason: "end_turn" });
-    vi.setSystemTime(T0 + 10 * MIN + 1_000);
-    await f.service.tick();
-    const activations = await f.activations(id);
-    expect(activations.map(activation => activation.status).sort()).toEqual(["completed", "skipped"]);
-    expect(activations.find(activation => activation.status === "skipped")!.error).toMatch(/Daily run limit/);
-    expect(await f.view(id)).toMatchObject({ status: "paused", pauseReason: { kind: "budget" } });
-    expect(f.missions.create).toHaveBeenCalledTimes(2);
-
-    vi.setSystemTime(T0);
-    const g = fixture();
-    const second = await g.armed({ budget: { dailyUsd: 2 } });
-    g.store.createActivation({ sentinelId: second.id, sentinelVersion: 1, trigger: { kind: "manual" }, status: "completed", skills: [], costUsd: 2, startedAt: new Date(T0 - MIN).toISOString(), finishedAt: new Date(T0).toISOString() });
-    vi.setSystemTime(T0 + 5 * MIN + 1_000);
-    await g.service.tick();
-    expect(g.missions.create).not.toHaveBeenCalled();
-    expect((await g.view(second.id)).pauseReason.message).toMatch(/Daily budget/);
-  });
-
-  it("applies the daily caps to manual runs without pausing", async () => {
+  it("starts as many manual runs as you ask for", async () => {
     const f = fixture();
     const created = (await f.call("POST", P, { name: "M", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
     const run = () => f.call("POST", `${P}/${created.sentinel.id}/run`, { approval: "launch-authorized-run", version: 1 });
     expect((await run()).status).toBe(202);
-    expect((await run()).status).toBe(429);
-    expect((await f.view(created.sentinel.id)).status).toBe("paused");
-    expect((await f.view(created.sentinel.id)).pauseReason).toBeUndefined();
-  });
-
-  it("lets only one of two simultaneous launches take the last slot of the daily run limit", async () => {
-    const f = fixture();
-    const created = (await f.call("POST", P, { name: "M", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
-    const run = () => f.call("POST", `${P}/${created.sentinel.id}/run`, { approval: "launch-authorized-run", version: 1 });
-    const results = await Promise.all([run(), run()]);
-    expect(results.map(result => result.status).sort()).toEqual([202, 429]);
-    expect(await f.activations(created.sentinel.id)).toHaveLength(1);
+    expect((await run()).status).toBe(202);
+    expect(await f.activations(created.sentinel.id)).toHaveLength(2);
   });
 
   it("charges a queued turn only for its own cost, not for the turn that ran before it", async () => {
@@ -778,36 +734,24 @@ describe("persistent thread delivery (flag on)", () => {
     expect(turnsOf(f, id)[1]!.status).toBe("running");
   });
 
-  it("enforces the daily budget mid-turn: pauses the Agent, cancels the turn and records the turns behind it", async () => {
+  it("keeps a turn running however much it spends and keeps the turns behind it queued", async () => {
     const f = fixture({ persistent: true });
-    const { id } = await f.armed({ budget: { dailyUsd: 1, maxRunsPerDay: 20 } });
+    const { id } = await f.armed();
     await fire(f, 5);
     f.missions.send.mockImplementationOnce(async () => ({ queuedMessageId: "q2" }));
     await fire(f, 10);
-    f.costs.set("mission-1", 1.5);
+    f.costs.set("mission-1", 500);
     f.emit("mission-1", { type: "usage" });
-    await vi.waitFor(() => expect(f.missions.cancel).toHaveBeenCalled());
-    await vi.waitFor(() => expect(turnsOf(f, id)[0]!.status).toBe("cancelled"));
-    expect(turnsOf(f, id)[1]).toMatchObject({ status: "skipped" });
-    expect((await f.view(id)).status).toBe("paused");
-    expect(f.missions.removeQueued).toHaveBeenCalledWith("mission-1", "q2");
-  });
-
-  it("refuses at the daily turn limit with a skipped record and pauses the Agent", async () => {
-    const f = fixture({ persistent: true });
-    const { id } = await f.armed({ budget: { dailyUsd: 10, maxRunsPerDay: 1 } });
-    await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
-    await fire(f, 10);
-    expect(f.missions.send).toHaveBeenCalledTimes(1);
-    expect(turnsOf(f, id)[1]).toMatchObject({ status: "skipped", skippedReason: expect.stringMatching(/Daily turn limit/) });
-    expect((await f.view(id)).status).toBe("paused");
+    expect(f.missions.cancel).not.toHaveBeenCalled();
+    expect(turnsOf(f, id)[0]).toMatchObject({ status: "running", costUsd: 500 });
+    expect((await f.view(id)).status).toBe("active");
   });
 
   it("closes turns a stopped engine left open as interrupted, and tells the Agent on its next turn", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();
     // A turn row left by an engine process that no longer exists.
-    const reserved = f.store.reserveTurn({ agentId: id, origin: "schedule", detail: { via: "schedule" }, sessionId: "mission-0", ownerPid: 2_147_483_000, nowIso: new Date(T0).toISOString() }, { sinceIso: new Date(T0 - 86_400_000).toISOString(), maxRuns: 10, dailyUsd: 10 });
+    const reserved = f.store.reserveTurn({ agentId: id, origin: "schedule", detail: { via: "schedule" }, sessionId: "mission-0", ownerPid: 2_147_483_000, nowIso: new Date(T0).toISOString() });
     if (!("turn" in reserved)) throw new Error("not reserved");
     await f.service.tick(T0 + MIN);
     expect(f.store.getTurn(reserved.turn.id)).toMatchObject({ status: "failed", error: "The engine stopped before this finished.", note: "interrupted" });
@@ -832,9 +776,9 @@ describe("a person in the Agent's thread", () => {
     } finally { if (saved === undefined) delete process.env.ZERO_AGENTS_PERSISTENT_THREAD; else process.env.ZERO_AGENTS_PERSISTENT_THREAD = saved; }
   });
 
-  it("creates the thread on demand, records each message as a turn from the person, and counts its cost but not toward the turn cap", async () => {
+  it("creates the thread on demand, records each message as a turn from the person, and records its cost", async () => {
     const f = fixture({ persistent: true });
-    const { id } = await f.armed({ budget: { dailyUsd: 5, maxRunsPerDay: 1 } });
+    const { id } = await f.armed();
     const { missionId } = await open(f, id);
     expect(missionId).toBe("mission-1");
     expect((await open(f, id)).missionId).toBe("mission-1");
@@ -846,8 +790,7 @@ describe("a person in the Agent's thread", () => {
     f.emit(missionId, { type: "usage" });
     f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
     expect(turnsOf(f, id)[0]).toMatchObject({ status: "completed", costUsd: 0.4 });
-    expect(f.store.ledger(id, new Date(T0 - 1).toISOString())).toEqual({ runs: 0, costUsd: 0.4 });
-    // The one automatic turn a day is still available, and it is not mistaken for a person's message.
+    // An automatic turn is not mistaken for a person's message.
     await fire(f, 5);
     expect(turnsOf(f, id).map(turn => turn.origin)).toEqual(["user", "schedule"]);
     f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
@@ -861,11 +804,11 @@ describe("a person in the Agent's thread", () => {
     expect(turnsOf(f, id)).toHaveLength(0);
   });
 
-  it("lets a person message a paused Agent, even over budget, and never cancels their turn", async () => {
+  it("lets a person message a paused Agent and never cancels their turn", async () => {
     const f = fixture({ persistent: true });
-    const { id } = await f.armed({ budget: { dailyUsd: 0.5, maxRunsPerDay: 10 } });
+    const { id } = await f.armed();
     const { missionId } = await open(f, id);
-    f.store.setStatus(id, "paused", undefined, { kind: "budget", message: "Daily budget ($0.5) used.", at: new Date(T0).toISOString() });
+    f.store.setStatus(id, "paused");
     f.emit(missionId, { type: "user", text: "one more thing", author: { userId: "peak", displayName: "Peak" } });
     f.costs.set(missionId, 0.9);
     f.emit(missionId, { type: "usage" });

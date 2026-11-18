@@ -86,7 +86,6 @@ agents archive
 agents delete
 agents run
 agents activations
-agents budget
 agents files
 agents files list
 agents files get

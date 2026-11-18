@@ -119,15 +119,15 @@ describe("agent API", () => {
     expect(turns[0]).toMatchObject({ origin: "user", status: "running", sessionId: "mission-2", legacyActivationId: activations[0]!.id });
   });
 
-  it("marks the activation failed when the thread cannot start, enforces the daily cap and refuses archived Agents", async () => {
+  it("marks the activation failed when the thread cannot start, lets you run again and refuses archived Agents", async () => {
     const f = fixture();
-    const { sentinel } = (await f.call("POST", P, { name: "A", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
+    const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
     f.missions.send.mockRejectedValueOnce(Object.assign(new Error("No model configured."), { statusCode: 409 }));
     const body = { approval: "launch-authorized-run", version: 1 };
     const failed = await f.call("POST", `${P}/${sentinel.id}/run`, body);
     expect(failed).toMatchObject({ status: 409, data: { error: "No model configured." } });
     expect(((await f.call("GET", `${P}/${sentinel.id}/activations`)).data as { activations: Array<{ status: string }> }).activations[0]!.status).toBe("failed");
-    expect((await f.call("POST", `${P}/${sentinel.id}/run`, body)).status).toBe(429);
+    expect((await f.call("POST", `${P}/${sentinel.id}/run`, body)).status).toBe(202);
     const archived = (await f.call("POST", P, { name: "Z", status: "archived" })).data as { sentinel: { id: string } };
     expect((await f.call("POST", `${P}/${archived.sentinel.id}/run`, body)).status).toBe(409);
   });

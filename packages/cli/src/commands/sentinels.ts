@@ -12,7 +12,7 @@ const webhookText = (view: WebhookView): string => !view.serverMode ? "Not avail
   : renderFields({ configured: view.configured ? "yes" : "no (run: 0 agents webhook secret rotate --yes)", "payload URL": view.payloadUrl ?? "set --public-url on the server", "content type": "application/json", events: "Pull requests", "last delivery": view.lastDeliveryAt ? `${view.lastDeliveryAt} ${view.lastResult}${view.lastReason ? ` (${view.lastReason})` : ""}` : "none yet", "old secret valid until": view.graceUntil })
     + (view.deliveries?.length ? `\n\n${renderTable(view.deliveries, [{ header: "TIME", value: d => d.at }, { header: "RESULT", value: d => d.result }, { header: "EVENT", value: d => d.event }, { header: "REASON", value: d => d.reason }])}` : "");
 
-interface Sentinel { id: string; name: string; mission?: string; status: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
+interface Sentinel { id: string; name: string; mission?: string; status: string; version: number; attention?: { needsYou: boolean; reason?: string } }
 interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
 interface SentinelFile { path: string; revision: number; content?: string; updatedAt?: string }
 
@@ -21,7 +21,7 @@ async function sentinel(client: ConsoleClient, reference: string): Promise<Senti
   return resolveId(all, reference, "Agent");
 }
 const view = (value: { sentinel: Sentinel }) => value.sentinel;
-const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, status: item.status, purpose: item.mission, version: item.version, "daily budget (USD)": item.budget?.dailyUsd, "max runs per day": item.budget?.maxRunsPerDay, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
+const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, status: item.status, purpose: item.mission, version: item.version, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
 const ignoredAccessOptions = (command: Command): Command => command
   .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp())
   .addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--yolo").hideHelp());
@@ -68,20 +68,16 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
 
   ignoredAccessOptions(consoleFlags(group.command("set <id>").description("Change an Agent's settings")
     .option("--name <name>", "Name").option("--mission <text>", "One-line purpose")
-    .option("--daily-usd <usd>", "Daily budget in USD").option("--max-runs <n>", "Maximum runs per day")
     .option("--file <path>", "Patch JSON object").option("--version <n>", "Reviewed version (default: the current one)")
     .option("--state <state>", "active, paused, acknowledged, archived or deleted")))
-    .action((id: string, options: ConsoleFlags & { state?: string; name?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; dailyUsd?: string; maxRuns?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
+    .action((id: string, options: ConsoleFlags & { state?: string; name?: string; mission?: string; access?: string; autonomy?: string; toolAccess?: string; file?: string; version?: string }) => withConsole(options, deps, async client => {
       // A valid --state is rewritten to pause, resume, ... before parsing (command-compat.ts); only a bad value arrives here.
       if (options.state !== undefined) throw new UsageError(`Unknown state "${options.state}". Use active, paused, acknowledged, archived or deleted.`);
       noteIgnoredAccessFlags(givenAccessOption(options as Record<string, unknown>), { json: options.json });
       const current = await sentinel(client, id);
-      const dailyUsd = positive("--daily-usd", options.dailyUsd);
-      const maxRunsPerDay = positive("--max-runs", options.maxRuns);
       const patch: Record<string, unknown> = {
         ...(options.file ? await readJsonObject(options.file, "Agent patch") : {}),
         ...(options.name !== undefined ? { name: options.name } : {}), ...(options.mission !== undefined ? { mission: options.mission } : {}),
-        ...(dailyUsd !== undefined || maxRunsPerDay !== undefined ? { budget: { ...current.budget, ...(dailyUsd !== undefined ? { dailyUsd } : {}), ...(maxRunsPerDay !== undefined ? { maxRunsPerDay } : {}) } } : {}),
       };
       if (!Object.keys(patch).length) throw new UsageError("Nothing to change: pass a setting flag or --file.");
       const version = positive("--version", options.version) ?? current.version;
@@ -116,7 +112,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
   consoleFlags(group.command("run <id>").description("Run an Agent now; starts a thread (needs a running engine)")
     .option("--task <text>", "Task for this run").option("--yes", "Confirm that this run is authorized"))
     .action((id: string, options: ConsoleFlags & { task?: string; yes?: boolean }) => withConsole(options, deps, async client => {
-      requireYes(options.yes, "Running an Agent starts an autonomous thread within its scope and budget.");
+      requireYes(options.yes, "Running an Agent starts an autonomous thread within its scope.");
       const current = await sentinel(client, id);
       return await client.request("POST", `${ROOT}/${enc(current.id)}/run`, { approval: "launch-authorized-run", version: current.version, ...(options.task ? { task: options.task } : {}) }) as { activation: { id: string; status: string; missionId?: string } };
     }, ({ activation }) => renderFields({ activation: activation.id, status: activation.status, thread: activation.missionId }), { requireHost: "Running an Agent" }));
@@ -128,12 +124,6 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new UsageError("--limit must be an integer from 1 to 200.");
       return ((await client.request("GET", `${ROOT}/${enc(current.id)}/activations?limit=${limit}`)) as { activations: Array<{ id: string; status: string; trigger?: { kind: string }; startedAt?: string; missionId?: string }> }).activations;
     }, rows => renderTable(rows, [{ header: "ID", value: a => a.id }, { header: "STATUS", value: a => a.status }, { header: "TRIGGER", value: a => a.trigger?.kind }, { header: "STARTED", value: a => a.startedAt }, { header: "MISSION", value: a => a.missionId }])));
-
-  consoleFlags(group.command("budget <id>").description("Show an Agent's budget and the last 24 hours of spend"))
-    .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => {
-      const current = await sentinel(client, id);
-      return await client.request("GET", `${ROOT}/${enc(current.id)}/budget`) as { budget: { dailyUsd: number; maxRunsPerDay: number }; usage: { costUsd?: number; runs?: number }; pauseReason: { message: string } | null };
-    }, value => renderFields({ "daily budget (USD)": value.budget.dailyUsd, "max runs per day": value.budget.maxRunsPerDay, "spent (24h, USD)": value.usage.costUsd, "runs (24h)": value.usage.runs, paused: value.pauseReason?.message })));
 
   const files = group.command("files").description("Read and edit an Agent's instructions and memory files");
   consoleFlags(files.command("list <id>").description("List files"))

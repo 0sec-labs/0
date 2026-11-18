@@ -29,13 +29,13 @@ describe("agent turn ledger", () => {
     const store = new SentinelStore(":memory:");
     const agent = store.create({ name: "A" });
     const a = store.createActivation(base(agent.id));
-    store.createActivation(base(agent.id, "schedule", { status: "skipped", error: "Daily budget used." }));
+    store.createActivation(base(agent.id, "schedule", { status: "skipped", error: "Waiting on you" }));
     store.updateActivation(a.id, { missionId: "m1", status: "completed", costUsd: 0.42, finishedAt: "2026-01-01T00:00:00.000Z", note: "n" });
     const turns = store.listTurns(agent.id);
     expect(turns).toHaveLength(store.listActivations(agent.id).length);
     expect(new Set(turns.map(turn => turn.legacyActivationId))).toEqual(new Set(store.listActivations(agent.id).map(item => item.id)));
     expect(turns.find(turn => turn.legacyActivationId === a.id)).toMatchObject({ status: "completed", sessionId: "m1", costUsd: 0.42, note: "n", finishedAt: "2026-01-01T00:00:00.000Z" });
-    expect(turns.find(turn => turn.status === "skipped")).toMatchObject({ skippedReason: "Daily budget used." });
+    expect(turns.find(turn => turn.status === "skipped")).toMatchObject({ skippedReason: "Waiting on you" });
     store.close();
   });
 
@@ -72,16 +72,6 @@ describe("agent turn ledger", () => {
     store.close();
   });
 
-  it("the ledger counts a mirrored activation once and a turn with no activation once", () => {
-    const store = new SentinelStore(":memory:");
-    const agent = store.create({ name: "A" });
-    const a = store.createActivation(base(agent.id));
-    store.updateActivation(a.id, { costUsd: 2, status: "completed" });
-    store.createActivation(base(agent.id, "schedule", { status: "skipped" }));
-    expect(store.ledger(agent.id, "2000-01-01T00:00:00.000Z")).toEqual({ runs: 1, costUsd: 2 });
-    store.close();
-  });
-
   it("deleting the Agent removes its turns and its activations", () => {
     const store = new SentinelStore(":memory:");
     const agent = store.create({ name: "A" });
@@ -104,47 +94,27 @@ describe("agent turn ledger", () => {
   });
 
   describe("trigger turn reservation", () => {
-    const caps = { sinceIso: "2000-01-01T00:00:00.000Z", maxRuns: 2, dailyUsd: 10 };
     const input = (agentId: string, extra: Record<string, unknown> = {}) => ({ agentId, origin: "schedule" as const, detail: { via: "schedule" }, triggerId: "t1", sessionId: "home", ownerPid: 1, nowIso: new Date().toISOString(), ...extra });
 
     it("a replayed cause is a no-op, but a failed delivery of it may be retried", () => {
       const store = new SentinelStore(":memory:");
       const agent = store.create({ name: "A" });
-      const first = store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps);
+      const first = store.reserveTurn(input(agent.id, { idempotencyKey: "k" }));
       if (!("turn" in first)) throw new Error("expected a turn");
-      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps)).toMatchObject({ duplicate: { id: first.turn.id } });
+      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }))).toMatchObject({ duplicate: { id: first.turn.id } });
       store.updateTurn(first.turn.id, { status: "failed" });
-      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }), caps)).toHaveProperty("turn");
-      store.close();
-    });
-
-    it("takes the caps and the insert in one transaction: the last slot goes to one of two reservations", () => {
-      const store = new SentinelStore(":memory:");
-      const agent = store.create({ name: "A" });
-      const results = [1, 2, 3].map(n => store.reserveTurn(input(agent.id, { triggerId: `t${n}` }), { ...caps, maxRuns: 2 }));
-      expect(results.filter(result => "turn" in result)).toHaveLength(2);
-      expect(results[2]).toMatchObject({ breach: "runs" });
-      store.close();
-    });
-
-    it("breaches on spend and counts turn cost in the ledger", () => {
-      const store = new SentinelStore(":memory:");
-      const agent = store.create({ name: "A" });
-      const first = store.reserveTurn(input(agent.id), caps);
-      if (!("turn" in first)) throw new Error("expected a turn");
-      store.updateTurn(first.turn.id, { status: "completed", costUsd: 10 });
-      expect(store.reserveTurn(input(agent.id, { triggerId: "t2" }), caps)).toMatchObject({ breach: "budget" });
+      expect(store.reserveTurn(input(agent.id, { idempotencyKey: "k" }))).toHaveProperty("turn");
       store.close();
     });
 
     it("skips a trigger's second queued occurrence; a running one does not block", () => {
       const store = new SentinelStore(":memory:");
       const agent = store.create({ name: "A" });
-      const first = store.reserveTurn(input(agent.id), caps);
+      const first = store.reserveTurn(input(agent.id));
       if (!("turn" in first)) throw new Error("expected a turn");
-      expect(store.reserveTurn(input(agent.id), caps)).toMatchObject({ skipped: { status: "skipped", skippedReason: "Still working on the previous one" } });
+      expect(store.reserveTurn(input(agent.id))).toMatchObject({ skipped: { status: "skipped", skippedReason: "Still working on the previous one" } });
       store.updateTurn(first.turn.id, { status: "running" });
-      expect(store.reserveTurn(input(agent.id), { ...caps, maxRuns: 10 })).toHaveProperty("turn");
+      expect(store.reserveTurn(input(agent.id))).toHaveProperty("turn");
       store.close();
     });
 
@@ -152,9 +122,9 @@ describe("agent turn ledger", () => {
       const store = new SentinelStore(":memory:");
       const agent = store.create({ name: "A" });
       const pr = (n: number, sha: string) => input(agent.id, { origin: "github", detail: { via: "poll", event: { pr: n, headSha: sha } }, coalesce: { pr: n }, idempotencyKey: `g:${n}:${sha}` });
-      const one = store.reserveTurn(pr(1, "a"), { ...caps, maxRuns: 10 });
-      const two = store.reserveTurn(pr(2, "a"), { ...caps, maxRuns: 10 });
-      const newer = store.reserveTurn(pr(1, "b"), { ...caps, maxRuns: 10 });
+      const one = store.reserveTurn(pr(1, "a"));
+      const two = store.reserveTurn(pr(2, "a"));
+      const newer = store.reserveTurn(pr(1, "b"));
       if (!("turn" in one) || !("turn" in two) || !("turn" in newer)) throw new Error("expected turns");
       expect(newer.superseded.map(turn => turn.id)).toEqual([one.turn.id]);
       expect(store.getTurn(one.turn.id)).toMatchObject({ status: "skipped", skippedReason: "Superseded by a newer commit" });

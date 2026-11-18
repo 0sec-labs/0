@@ -10,15 +10,12 @@
 export type SentinelStatus = "active" | "paused" | "archived";
 
 export interface SentinelScope { repos: string[]; targets: string[]; domains: string[]; outOfScope: string[]; production: boolean }
-export interface SentinelBudget { dailyUsd: number; maxRunsPerDay: number }
 export interface SentinelNotifications { channels: Array<"in-app" | "github" | "slack">; on: Array<"finding-high" | "needs-you" | "run-failed" | "fix-ready">; quiet: boolean }
 export interface SentinelModelChoice { providerId: string; model: string; reasoning?: string }
-export interface SentinelPauseReason { kind: "budget"; message: string; at: string }
 export interface SentinelAttention {
   needsYou: boolean;
   /** Review gate: scope, model, tools or autonomy changed since the last acknowledgement; autonomous runs are blocked. */
   needsReview: boolean;
-  /** Set when the runner paused the Sentinel (for example a budget breach). */
   reason?: string;
   pendingDecisions: number;
 }
@@ -32,14 +29,12 @@ export interface Sentinel {
   scope: SentinelScope;
   hostId?: string | null;
   model?: SentinelModelChoice | null;
-  budget: SentinelBudget;
   notifications: SentinelNotifications;
   memory: { enabled: boolean; autoLearn: boolean };
   status: SentinelStatus;
   automationIds: string[];
   homeMissionId: string | null;
   reviewedFingerprint?: string;
-  pauseReason?: SentinelPauseReason;
   owner: string;
   version: number;
   createdAt: string;
@@ -149,22 +144,12 @@ export interface SentinelTrigger {
   /** Human sentence for schedules, added by the API view. */
   summary?: string;
 }
-/** `GET sentinels/:id/budget`: the Sentinel's caps and a rolling 24-hour ledger. */
-export interface SentinelBudgetReport {
-  budget: SentinelBudget;
-  usage: { runs: number; costUsd: number };
-  windowMs: number;
-  pauseReason: SentinelPauseReason | null;
-}
-
 export const SENTINEL_LIMITS = { name: 80, mission: 160, fileBytes: 65_536 } as const;
 export const DEFAULT_FILES = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 
-/** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production, finite daily budget. */
-export const DEFAULT_BUDGET: SentinelBudget = { dailyUsd: 10, maxRunsPerDay: 20 };
-
+/** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production. */
 export interface SentinelFormState {
   name: string;
   mission: string;
@@ -172,8 +157,6 @@ export interface SentinelFormState {
   targets: string;
   outOfScope: string;
   production: boolean;
-  dailyUsd: string;
-  maxRunsPerDay: string;
 }
 
 export const parseLines = (text: string): string[] => [...new Set(text.split(/[\n,]/).map(line => line.trim()).filter(Boolean))];
@@ -183,27 +166,22 @@ export function formFromPreset(preset: SentinelPreset | undefined): SentinelForm
   return {
     name: preset?.name ?? "", mission: (preset?.job ?? "").slice(0, SENTINEL_LIMITS.mission),
     repos: "", targets: "", outOfScope: "", production: false,
-    dailyUsd: String(DEFAULT_BUDGET.dailyUsd), maxRunsPerDay: String(DEFAULT_BUDGET.maxRunsPerDay),
   };
 }
 export function formFromSentinel(sentinel: Sentinel): SentinelFormState {
   return {
     name: sentinel.name, mission: sentinel.mission,
     repos: formatLines(sentinel.scope.repos), targets: formatLines([...sentinel.scope.targets, ...sentinel.scope.domains]), outOfScope: formatLines(sentinel.scope.outOfScope), production: sentinel.scope.production,
-    dailyUsd: String(sentinel.budget.dailyUsd), maxRunsPerDay: String(sentinel.budget.maxRunsPerDay),
   };
 }
 
-export type FormFields = Pick<Sentinel, "name" | "mission" | "scope" | "budget">;
+export type FormFields = Pick<Sentinel, "name" | "mission" | "scope">;
 /** Validate the form and shape it for the API. Returns an error string for the first problem. */
 export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: FormFields } | { ok: false; error: string } {
   const name = form.name.trim();
   if (!name) return { ok: false, error: "Give it a name." };
   if (name.length > SENTINEL_LIMITS.name) return { ok: false, error: `Name must be at most ${SENTINEL_LIMITS.name} characters.` };
   if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Job must be at most ${SENTINEL_LIMITS.mission} characters.` };
-  const dailyUsd = Number(form.dailyUsd), maxRunsPerDay = Number(form.maxRunsPerDay);
-  if (!(dailyUsd > 0) || dailyUsd > 10_000) return { ok: false, error: "The daily budget must be a positive amount." };
-  if (!Number.isInteger(maxRunsPerDay) || maxRunsPerDay < 1 || maxRunsPerDay > 1000) return { ok: false, error: "Runs per day must be a whole number from 1 to 1000." };
   const lines = parseLines(form.targets);
   const isDomain = (value: string) => !/^[a-z]+:\/\//i.test(value) && !value.includes("/") && /^[*a-z0-9.-]+$/i.test(value) && value.includes(".");
   return {
@@ -211,7 +189,6 @@ export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: For
     fields: {
       name, mission: form.mission.trim(),
       scope: { repos: parseLines(form.repos), targets: lines.filter(item => !isDomain(item)), domains: lines.filter(isDomain), outOfScope: parseLines(form.outOfScope), production: form.production },
-      budget: { dailyUsd, maxRunsPerDay },
     },
   };
 }
@@ -226,18 +203,6 @@ export function presentStatus(sentinel: Pick<Sentinel, "status" | "attention">):
   if (sentinel.status === "paused") return { label: "Paused", tone: "neutral", needsYou: false, needsReview };
   return { label: "Active", tone: "success", needsYou: false, needsReview };
 }
-
-const percent = (used: number, limit: number) => (limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0);
-export interface BudgetMeter { key: string; label: string; used: string; limit: string; percent: number }
-/** Rolling-24h meters from the budget endpoint. Only what the ledger reports; nothing is estimated. */
-export function budgetMeters(report: Pick<SentinelBudgetReport, "budget" | "usage">): BudgetMeter[] {
-  const { budget, usage } = report;
-  return [
-    { key: "usd", label: "Spend today", used: `$${usage.costUsd.toFixed(2)}`, limit: `$${budget.dailyUsd}`, percent: percent(usage.costUsd, budget.dailyUsd) },
-    { key: "runs", label: "Automatic turns today", used: String(usage.runs), limit: String(budget.maxRunsPerDay), percent: percent(usage.runs, budget.maxRunsPerDay) },
-  ];
-}
-export const dailyCaps = (budget: SentinelBudget): string => `$${budget.dailyUsd} and ${budget.maxRunsPerDay} automatic turns a day`;
 
 /** Review gate copy: why a Sentinel cannot run on its own and what acknowledging does. */
 export const NEEDS_REVIEW_COPY = "Its scope, model, tools or access changed. It will not run on its own until you review the change and acknowledge it.";

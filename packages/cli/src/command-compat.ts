@@ -119,8 +119,6 @@ function agents(a: Args): string[] | undefined {
     const more = tail.slice(1);
     const state = pull(more, "--state", true);
     if (state.value && AGENT_STATE[state.value]) return ["agents", AGENT_STATE[state.value]!, id, ...state.rest];
-    const budget = pull(more, "--budget", false);
-    if (budget.found) return ["agents", "budget", id, ...budget.rest];
     for (const [flag, group] of [["--trigger", "triggers"], ["--files", "files"]] as const) {
       const sub = pull(more, flag, true);
       if (sub.value) {
@@ -355,7 +353,7 @@ export const LEGACY: readonly LegacyRow[] = rows([
   // agents and automations
   ["agents show", "0 agents list <id>"], ["agents presets", "0 agents list --presets"], ["agents create", "0 agents set --create"],
   ["agents pause", "0 agents set <id> --state paused"], ["agents resume", "0 agents set <id> --state active"], ["agents acknowledge", "0 agents set <id> --state acknowledged"],
-  ["agents archive", "0 agents set <id> --state archived"], ["agents delete", "0 agents set <id> --state deleted"], ["agents budget", "0 agents set <id> --budget"],
+  ["agents archive", "0 agents set <id> --state archived"], ["agents delete", "0 agents set <id> --state deleted"],
   ["agents activations", "0 agents run <id> --history"], ["agents files", "0 agents set <id> --files list|get|put|rm"], ["agents triggers", "0 agents set <id> --trigger list|add|enable|disable|check|rm"],
   ["automation list", "0 agents list --automation"], ["automation show", "0 agents list <id> --automation"], ["automation run", "0 agents run <id> --automation"],
   ["automation create", "0 agents set --automation create"], ["automation edit", "0 agents set --automation edit <id>"], ["automation duplicate", "0 agents set --automation duplicate <id>"],

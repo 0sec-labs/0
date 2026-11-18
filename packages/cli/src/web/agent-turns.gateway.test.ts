@@ -42,7 +42,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
     const store = new SentinelStore(dbPath);
     const workflows = new SecurityWorkflowStore(dbPath);
     const agent = store.create({ name: "Guard", instructions: "Review dependencies.", scope: { targets: ["https://staging.example.com"], outOfScope: ["https://staging.example.com/admin"] } });
-    store.setStatus(agent.id, "active", undefined, undefined, true);
+    store.setStatus(agent.id, "active", undefined, true);
     const automation = workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: agent.id });
     const trigger = store.createTrigger(agent.id, { automationId: automation.id, kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: false });
     const delivery = new AgentTurnDelivery({
@@ -57,7 +57,6 @@ describe("agent turns through a real gateway with compaction forced", () => {
         removeQueued: (id, messageId) => gateway.removeQueued(id, messageId),
       },
       ensureHome: async sentinel => { if (sentinel.homeMissionId) return { id: sentinel.homeMissionId, replaced: false }; const created = gateway.create({ title: `Agent: ${sentinel.name}` }); store.setHomeMission(sentinel.id, created.id); return { id: created.id, replaced: false }; },
-      pauseForBudget: () => undefined,
     });
     const request = (key: string, at: string) => ({ sentinel: store.get(agent.id)!, origin: "schedule" as const, via: "schedule", trigger: { id: trigger.id, kind: "schedule" as const }, automation, idempotencyKey: key, scheduledFor: at });
     const settled = (turnId: string) => vi.waitFor(() => expect(store.getTurn(turnId)?.status).toBe("completed"), { timeout: 10_000 });

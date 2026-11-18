@@ -8,7 +8,6 @@ import { SentinelRunError, SentinelRunner, type SentinelActor, type SentinelGhCl
 
 const PREFIX = "/api/console/";
 const idSchema = z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9_.:-]+$/);
-const DAY_MS = 86_400_000;
 
 export type { SentinelActor, SentinelMissionRuntime, SentinelGhClient } from "./sentinel-runner.js";
 class SentinelRequestError extends Error {
@@ -90,8 +89,8 @@ export class WebSentinelService {
     for (const id of missions) { try { pending += this.#missions.pendingDecisions(id); } catch { /* A closed mission has nothing pending. */ } }
     const needsReview = sentinelNeedsReview(sentinel);
     const failing = this.#store.listTriggers(sentinel.id).some(trigger => trigger.lastStatus === "failing");
-    const reason = sentinel.pauseReason?.message ?? (needsReview ? "Scope, model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
-    return { needsYou: pending > 0 || Boolean(sentinel.pauseReason) || needsReview || failing, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
+    const reason = (needsReview ? "Scope, model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
+    return { needsYou: pending > 0 || needsReview || failing, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
   #view(sentinel: Sentinel) {
     const thread = this.#runner.threadInfo(sentinel);
@@ -149,17 +148,12 @@ export class WebSentinelService {
       this.#requireWriter(actor);
       const body = parse(z.object({ version: z.number().int().positive().optional(), acknowledge: z.boolean().optional() }).strict(), bodyOf(input));
       if (rest === "pause" && body.acknowledge) throw new SentinelRequestError("Acknowledge applies to resume.", 400);
-      return { status: 200, data: { sentinel: this.#view(this.#store.setStatus(id, rest === "pause" ? "paused" : "active", body.version, undefined, body.acknowledge === true)) } };
+      return { status: 200, data: { sentinel: this.#view(this.#store.setStatus(id, rest === "pause" ? "paused" : "active", body.version, body.acknowledge === true)) } };
     }
     if (rest === "acknowledge" && method === "POST") {
       this.#requireWriter(actor);
       const { version } = parse(z.object({ version: z.number().int().positive().optional() }).strict(), bodyOf(input));
       return { status: 200, data: { sentinel: this.#view(this.#store.acknowledge(id, version)) } };
-    }
-    if (rest === "budget" && method === "GET") {
-      const sentinel = this.#requireSentinel(id);
-      const now = this.#now();
-      return { status: 200, data: { budget: sentinel.budget, usage: this.#store.ledger(id, new Date(now - DAY_MS).toISOString()), windowMs: DAY_MS, pauseReason: sentinel.pauseReason ?? null } };
     }
     if (rest === "triggers" || rest.startsWith("triggers/")) return await this.#triggers(id, rest === "triggers" ? "" : rest.slice("triggers/".length), method, input, actor);
     if (rest === "thread" && method === "POST") {

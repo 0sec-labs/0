@@ -2,6 +2,8 @@
 
 Status: approved direction. Phases 0 to 3 are shipped. Phases 4 to 6 below are the plan. Line references come from an audit of `903e5b9e` and must be re-verified on the branch you implement from.
 
+> **Budgets removed (2026-11-17).** The owner decided an Agent has no daily spend or turn cap. Everything below that mentions the daily budget, the turn cap, over-budget pauses, the over-budget notice or the budget card describes what shipped in Phases 2 and 3 and no longer applies. The thread's total cost stays visible; nothing is enforced.
+
 ## Status
 
 | Phase | State |

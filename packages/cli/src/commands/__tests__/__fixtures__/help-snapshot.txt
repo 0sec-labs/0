@@ -65,16 +65,6 @@ Options:
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
 
-### 0 agents budget (hidden)
-Usage: 0 agents budget [options] <id>
-
-Show an Agent's budget and the last 24 hours of spend
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
 ### 0 agents create (hidden)
 Usage: 0 agents create [options]
 
@@ -213,16 +203,14 @@ Usage: 0 agents set [options] <id>
 Change an Agent's settings
 
 Options:
-  --name <name>      Name
-  --mission <text>   One-line purpose
-  --daily-usd <usd>  Daily budget in USD
-  --max-runs <n>     Maximum runs per day
-  --file <path>      Patch JSON object
-  --version <n>      Reviewed version (default: the current one)
-  --state <state>    active, paused, acknowledged, archived or deleted
-  --json             Print machine-readable JSON
-  --db-path <path>   Control database (default: the user database)
-  -h, --help         display help for command
+  --name <name>     Name
+  --mission <text>  One-line purpose
+  --file <path>     Patch JSON object
+  --version <n>     Reviewed version (default: the current one)
+  --state <state>   active, paused, acknowledged, archived or deleted
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
 ### 0 agents show (hidden)
 Usage: 0 agents show [options] <id>

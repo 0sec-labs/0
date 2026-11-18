@@ -83,23 +83,7 @@ describe("Sentinel review gate, ledger and ownership", () => {
     const remodeled = store.update(s.id, { version: swapped.version, model: { providerId: "openai", model: "x" } });
     expect(sentinelNeedsReview(remodeled)).toBe(true);
     // Resuming with acknowledge also lifts it.
-    expect(sentinelNeedsReview(store.setStatus(s.id, "active", remodeled.version, undefined, true))).toBe(false);
-    store.close();
-  });
-
-  it("sums a rolling ledger (skipped runs do not count) and records pause reasons", () => {
-    const store = new SentinelStore(":memory:");
-    const s = store.create({ name: "A" });
-    const base = { sentinelId: s.id, sentinelVersion: 1, trigger: { kind: "schedule" as const }, skills: [] };
-    store.createActivation({ ...base, status: "completed", costUsd: 1.5, startedAt: "2026-03-02T08:00:00.000Z", finishedAt: "2026-03-02T08:10:00.000Z" });
-    store.createActivation({ ...base, status: "running", costUsd: 0.5, startedAt: "2026-03-02T09:50:00.000Z" });
-    store.createActivation({ ...base, status: "skipped", costUsd: 9, startedAt: "2026-03-02T09:00:00.000Z" });
-    store.createActivation({ ...base, status: "completed", costUsd: 7, startedAt: "2026-03-01T00:00:00.000Z", finishedAt: "2026-03-01T01:00:00.000Z" });
-    expect(store.ledger(s.id, "2026-03-01T10:00:00.000Z")).toEqual({ runs: 2, costUsd: 2 });
-    const paused = store.setStatus(s.id, "paused", undefined, { kind: "budget", message: "Daily budget used.", at: "2026-03-02T10:00:00.000Z" });
-    expect(paused.pauseReason?.message).toBe("Daily budget used.");
-    expect(store.update(s.id, { version: paused.version, mission: "m" }).pauseReason).toBeDefined();
-    expect(store.setStatus(s.id, "active").pauseReason).toBeUndefined();
+    expect(sentinelNeedsReview(store.setStatus(s.id, "active", remodeled.version, true))).toBe(false);
     store.close();
   });
 
@@ -124,21 +108,22 @@ describe("Sentinel review gate, ledger and ownership", () => {
 });
 
 describe("Legacy Sentinel rows", () => {
-  it("reduces old budgets and hides removed trigger kinds without deleting them", () => {
+  it("drops old budgets and pause reasons and hides removed trigger kinds without deleting them", () => {
     const path = open();
     const first = new SentinelStore(path);
     const s = first.create({ name: "Old" });
     const trigger = first.createTrigger(s.id, { automationId: "wf1", kind: "schedule", schedule: { frequency: "daily", time: "09:00" }, enabled: true }, NOW);
     first.close();
     const raw = createShimmedDatabase(path);
-    const legacy = { ...s, budget: { perRunUsd: 2, dailyUsd: 7, perRunTimeCapMs: 900_000, dailyTimeCapMs: 7_200_000, maxRunsPerDay: 5 } };
+    const legacy = { ...s, budget: { perRunUsd: 2, dailyUsd: 7, perRunTimeCapMs: 900_000, dailyTimeCapMs: 7_200_000, maxRunsPerDay: 5 }, pauseReason: { kind: "budget", message: "Daily budget used.", at: "2026-03-02T10:00:00.000Z" } };
     raw.prepare("UPDATE sentinels SET sentinel_json = ? WHERE id = ?").run(JSON.stringify(legacy), s.id);
     raw.prepare("INSERT INTO sentinel_triggers (id, sentinel_id, automation_id, kind, enabled, next_fire_at, active_claim, trigger_json) VALUES (?, ?, ?, ?, 1, ?, NULL, ?)")
       .run("legacy-push", s.id, "wf1", "github-push", "2026-03-02T09:00:00.000Z", JSON.stringify({ ...trigger, id: "legacy-push", kind: "github-push" }));
     raw.close();
     const store = new SentinelStore(path);
-    expect(store.get(s.id)?.budget).toEqual({ dailyUsd: 7, maxRunsPerDay: 5 });
-    expect(store.update(s.id, { version: s.version, mission: "m" }).budget).toEqual({ dailyUsd: 7, maxRunsPerDay: 5 });
+    expect(store.get(s.id)).not.toHaveProperty("budget");
+    expect(store.get(s.id)).not.toHaveProperty("pauseReason");
+    expect(store.update(s.id, { version: s.version, mission: "m" })).not.toHaveProperty("budget");
     expect(store.listTriggers(s.id).map(item => item.kind)).toEqual(["schedule"]);
     expect(store.listDueTriggers(NOW + 86_400_000 * 2).map(item => item.id)).toEqual([trigger.id]);
     store.close();

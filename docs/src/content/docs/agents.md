@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: Standing jobs with a scope, a daily budget and a review gate, plus the saved automations they run and the GitHub pull request trigger.
+description: Standing jobs with a scope and a review gate, plus the saved automations they run and the GitHub pull request trigger.
 ---
 
 An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a workflow template plus a trigger: a saved list of steps that runs against a target and keeps its results. An Agent owns automations.
@@ -10,13 +10,13 @@ An Agent is a persistent agent with a name, a standing job, a scope, files and a
 1. Run `0` and click **+** next to **Agents** in the sidebar. The Agents page, the command palette and the **Create an agent** chip on the home screen open the same dialog.
 2. Optionally pick a **Start from** preset. It fills the name, avatar and instructions; **Blank** is the default. Click the avatar to change its glyph or colour.
 3. Type a name, then check the **Folder** it works on, the **Computer** it runs on and its **Model** (the current default unless you pick one).
-4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, budget, last 7 days, notes and files, activity), Automations and Settings.
+4. Click **Create agent**. The agent is **active** and you land in its own thread: tell it what to do in the composer, or open **View agent** for Overview (status, last 7 days, notes and files, activity), Automations and Settings.
 
 Creating an agent never turns a schedule on. A preset only suggests automations; none exists until you add it on the Automations tab, and a schedule starts only after you review and turn it on. Production targets stay off.
 
 Agents run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Agent has a scope, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Agent has a scope, a model, skills and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
 ## One thread that never ends
 
@@ -24,11 +24,11 @@ The Agent's page is its real conversation, the same transcript and composer ever
 
 - **Your messages.** Type in the composer and the message goes into the thread. If the Agent is in the middle of a turn, yours waits its turn rather than stopping it. Each message is recorded as one of the Agent's turns and counts toward its spend, but never toward its turn limit.
 - **Wake-ups.** When a schedule or a pull request trigger fires, the work arrives in the same thread as a quiet centered line, such as *Schedule · Woke on schedule, worked for 54s*. Click it to see what arrived and how it ended. A red x marks a turn that failed. The chip names the cause: Schedule, GitHub or You.
-- **Pause and Resume.** Pause turns the triggers off. The thread still answers you, even when the day's budget is used; the page shows a one-time notice that your messages still count toward spend.
+- **Pause and Resume.** Pause turns the triggers off. The thread still answers you.
 - **Needs you.** The sidebar row shows the Agent's last message and a glyph only when it is working, waiting on you or failed. A row that needs you says so in place of its age.
 - **Older threads.** Work from before this change, or with `ZERO_AGENTS_PERSISTENT_THREAD=0` set, ran in a thread of its own. Those stay as ordinary threads and are listed under Activity in Overview with an **Open** link.
 
-Every wake-up message carries the Agent's charter, scope, skills and remaining budget again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
+Every wake-up message carries the Agent's charter, scope and skills again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
 
 ## Presets
 
@@ -49,14 +49,14 @@ A preset fills in the job, skills and instructions. A new Agent starts with prod
 
 ## Limits and scope
 
-There is one mode: an Agent has shell access, like a thread. There is no access setting to choose. What limits an Agent is its scope, its budget, the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
+There is one mode: an Agent has shell access, like a thread. There is no access setting to choose. What limits an Agent is its scope, the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
 
 - **Ask before running commands.** One global setting (**Settings → Helpers**), off by default; see [Configuration](/configuration/#ask-before-running-commands). When on, an Agent needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations.
 - **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on. See [Scope](/configuration/#scope).
 
-## Budget
+## Cost
 
-Each Agent has one daily cap: 10 USD per rolling 24 hours and 20 automatic turns per day by default. Both are editable. The turn limit counts wake-ups only; your own messages are never refused. At the cap the Agent stops the running wake-up, pauses its triggers and marks itself as needing you; your messages still go through. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**. Older per-run cost and time caps load normally and are ignored.
+An Agent has no spending cap. Its thread shows what it has cost so far, like any thread, and nothing stops or pauses it because of cost. Older records that carry a daily cap load normally and the cap is ignored.
 
 ## Triggers
 
@@ -122,7 +122,7 @@ Everything on the Agents page works from `0 agents`. Commands attach to a runnin
 ```bash
 0 agents list --presets
 0 agents set --create --preset pen-tester --name "Nightly probe"
-0 agents set AGENT_ID --daily-usd 5
+0 agents set AGENT_ID --mission "Watch the lockfile"
 0 agents set AGENT_ID --files put reports/scope.md --file ./scope.md
 0 agents set AGENT_ID --state active --acknowledge
 0 agents run AGENT_ID --task "Re-test the login flow" --yes
