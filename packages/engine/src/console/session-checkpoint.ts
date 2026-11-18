@@ -25,6 +25,7 @@ export const consoleSessionCheckpointSchema = z.object({
   workspaceRoot: absolutePath,
   role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
   messages: z.array(messageSchema),
+  tainted: z.boolean().optional(),
   // Any value an older release stored (standard, copilot, recon, read-only, ...) loads as the one mode; new checkpoints write the constant "changes" so older readers still accept them.
   autonomyMode: z.string().optional(),
   webSearchEnabled: z.boolean().optional(),

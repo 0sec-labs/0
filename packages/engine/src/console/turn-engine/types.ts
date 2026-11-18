@@ -242,6 +242,13 @@ export interface ConsoleSendOptions {
    * authorization state is untouched.
    */
   signal?: AbortSignal;
+  /**
+   * Marks a turn triggered by automated or external/peer input (Sentinel PRs,
+   * schedules, webhooks, worker completions). Untrusted turns immediately taint
+   * the thread's Memory guard so model writes become review proposals and
+   * never auto-commit `remember ...` shortcuts from prompt text.
+   */
+  untrusted?: boolean;
 }
 
 export interface ConsoleSessionConfig {
@@ -266,6 +273,8 @@ export interface ConsoleSessionConfig {
    * the session starts with empty history (unchanged behaviour).
    */
   initialMessages?: NativeMessage[];
+  /** Restore tainted Memory guard state even when prior untrusted turns ran no tools. */
+  initialTainted?: boolean;
   /**
    * Role whose tool set the console exposes. Defaults to `"audit"`, which maps
    * to the full "everything" registry (web search, source, patch, shell,
