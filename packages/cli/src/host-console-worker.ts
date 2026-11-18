@@ -140,7 +140,7 @@ export async function runHostConsoleWorker(): Promise<void> {
             if (!["onAssistantDelta", "onReasoningDelta", "onRetry"].includes(name)) snapshot();
           }]));
           try {
-            const pending = session!.send(frame.text as string, render, { signal: turn!.signal, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"], generateTitle: frame.generateTitle === true });
+            const pending = session!.send(frame.text as string, render, { signal: turn!.signal, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"], generateTitle: frame.generateTitle === true, ...(frame.untrusted === true ? { untrusted: true } : {}) });
             snapshot(); value = await pending;
           } finally { active = false; turn = undefined; }
           break;

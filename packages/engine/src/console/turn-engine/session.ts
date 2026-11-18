@@ -206,8 +206,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     try { return memoryStore ??= openMemory(); } catch { return undefined; }
   };
   const memoryToolEnabled = memoryOn && (config.tools === undefined || config.tools.some(tool => tool.name === "memory"));
-  // Taint: a thread that has read outside content (tools other than known-local ones) can only propose notes. A restored thread that already ran tools counts as tainted.
-  const memoryGuard = createThreadGuard(scanId, { tainted: (cp?.messages ?? config.initialMessages ?? []).some(message => Array.isArray(message.content) && message.content.some(block => block.type === "tool_result")) });
+  // Taint: a thread that has read outside content (tools other than known-local ones) or received untrusted/automated/peer input can only propose notes.
+  const memoryGuard = createThreadGuard(scanId, {
+    tainted: config.initialTainted === true
+      || cp?.tainted === true
+      || (cp?.messages ?? config.initialMessages ?? []).some(message => Array.isArray(message.content) && message.content.some(block => block.type === "tool_result")),
+  });
   if (memoryToolEnabled) toolContext.memory = (args) => {
     const store = getMemory();
     if (!store) throw new Error("Memory is unavailable.");
@@ -756,9 +760,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         stopReason: "cancelled",
       };
     }
+    if (opts?.untrusted) memoryGuard.taint();
     const operatorMessage: NativeMessage = { role: "user", content: [{ type: "text", text: userText }, ...(opts?.images ?? []).map(image => ({ type: "image" as const, ...image }))] };
     messages.push(operatorMessage);
-    if (memoryToolEnabled) saveUserRemember(userText);
+    if (memoryToolEnabled && !opts?.untrusted) saveUserRemember(userText);
 
     // Derive/emit the session objective from the first message (no-op on later
     // turns once seeded). Synchronous + cheap for the heuristic; the optional
@@ -987,6 +992,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       const messaging = config.agentMessaging as MessagingRuntime | undefined;
       if (messaging?.projectPath && messaging.selfId) {
         const batch = renderInboundBatch(drainInbox(messaging.projectPath, messaging.selfId, messaging.homeDir));
+        if (batch.rendered.length > 0) memoryGuard.taint();
         for (const message of batch.rendered) {
           // Keep pending output separate from the immutable operator instruction
           // so maintenance can summarize it without losing that instruction.
@@ -1430,6 +1436,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         workspaceRoot,
         role,
         messages: structuredClone(messages),
+        ...(memoryGuard.tainted ? { tainted: true } : {}),
         autonomyMode: "changes",
         webSearchEnabled,
         ...(workerPolicy !== undefined ? { workerPolicy: workerPolicySchema.parse(workerPolicy) } : {}),

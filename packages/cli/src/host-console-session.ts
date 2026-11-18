@@ -225,7 +225,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       sendOptions?.signal?.addEventListener("abort", abort, { once: true });
       try {
         if (sendOptions?.signal?.aborted) throw sendOptions.signal.reason;
-        return await controller.request("send", { text, images: sendOptions?.images, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>;
+        return await controller.request("send", { text, images: sendOptions?.images, generateTitle: sendOptions?.generateTitle, ...(sendOptions?.untrusted ? { untrusted: true } : {}) }) as Awaited<ReturnType<ConsoleSession["send"]>>;
       } catch (error) {
         if (!stop || (await stop).quarantined) throw error;
         const receipt = lastUsage as ConsoleUsageReport | undefined; // Updated by incoming IPC callbacks.
