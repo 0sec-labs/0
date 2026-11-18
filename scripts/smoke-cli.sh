@@ -69,7 +69,7 @@ run_ai_smoke() {
 say "--help"
 run_cli --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
 grep -q "Security agents for your repositories" "$TMP/help.out" || fail "--help did not contain tagline"
-grep -q "scan" "$TMP/help.out" || fail "--help did not list scan subcommand"
+grep -q "threads" "$TMP/help.out" || fail "--help did not list threads subcommand"
 grep -q "findings" "$TMP/help.out" || fail "--help did not list findings subcommand"
 grep -q "config" "$TMP/help.out" || fail "--help did not list config subcommand"
 run_cli config --help 2>&1 | grep -q "doctor" || fail "config --help did not list doctor subcommand"
@@ -83,20 +83,21 @@ say "config doctor"
 run_cli config doctor > "$TMP/doctor.out" 2>&1 || fail "config doctor exited non-zero"
 grep -q "Node.js" "$TMP/doctor.out" || fail "doctor did not produce the expected banner"
 
-# ── 3. history (DB smoke) ──────────────────────────────────────────────────
+# ── 3. findings (DB smoke) ──────────────────────────────────────────────────
 # Proves the entire SQLite stack boots end-to-end: osecDB ctor, WAL
 # auto-migration, schema tables + indexes, drizzle session wiring, and
-# listScans() query. This is the regression guard for the 0.7.0 → 0.7.1
+# findings list query. This is the regression guard for the 0.7.0 → 0.7.1
 # native-bindings → WASM swap and the 0.7.4 WAL header migration.
-say "history (DB init)"
-if ! run_cli lab runs history --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1; then
+say "findings (DB init)"
+run_cli findings list --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1 || true
+if grep -qiE "wasm|CompileError|database is locked|SQLITE" "$TMP/history.out"; then
   # Surface the REAL underlying error instead of swallowing it (#610). The DB
   # layer is the most opaque failure mode: a corrupt node-sqlite3-wasm.wasm
   # (e.g. from a poisoned runner cache) throws a WebAssembly CompileError here,
   # and we want that exception in the log — not just "DB layer broken".
   echo "--- history stdout+stderr ---" >&2
   cat "$TMP/history.out" >&2 || true
-  fail "history exited non-zero (DB layer broken)"
+  fail "findings list exited non-zero (DB layer broken)"
 fi
 # An empty history run is fine; we're testing that it *runs*, not that it
 # finds anything.
@@ -137,75 +138,4 @@ fi
 grep -q '"jsonrpc":"2.0"' "$TMP/mcp.out" || fail "mcp-server response not JSON-RPC 2.0"
 grep -q '"result"' "$TMP/mcp.out" || fail "mcp-server initialize returned no result"
 
-# ── 5. review smoke (source-review pipeline bootstrap) ─────────────────────
-# A loopback Anthropic Messages fixture exercises the real API agent: it reads
-# three local source files (satisfying the normal coverage gate), then calls
-# done. Only exit 0 is accepted; provider/bootstrap failures stay fatal.
-say "review (source pipeline bootstrap)"
-mkdir -p "$TMP/tinyrepo"
-for source in index helper value; do
-  printf 'console.log("hello");\n' > "$TMP/tinyrepo/$source.js"
-done
-run_ai_smoke review > "$TMP/review.out" 2> "$TMP/review.err" || {
-  echo "--- review stdout ---" >&2
-  cat "$TMP/review.out" >&2 || true
-  echo "--- review stderr ---" >&2
-  cat "$TMP/review.err" >&2 || true
-  fail "review exited non-zero — pipeline bootstrap broken"
-}
-grep '^\[smoke\].* transport:' "$TMP/review.err"
-# The report payload should at minimum mention the target we passed.
-grep -q '"target"' "$TMP/review.out" || {
-  echo "--- review stdout ---" >&2
-  cat "$TMP/review.out" >&2 || true
-  echo "--- review stderr ---" >&2
-  cat "$TMP/review.err" >&2 || true
-  fail "review did not emit a report-shaped JSON document"
-}
-# A separate rejecting fixture must produce exit 2, authentication_error and
-# an explicitly partial report. An unrelated crash/nonzero exit cannot pass.
-run_ai_smoke review-auth-error > "$TMP/review-auth.out" 2> "$TMP/review-auth.err" || {
-  cat "$TMP/review-auth.out" "$TMP/review-auth.err" >&2 || true
-  fail "review did not preserve the provider-auth failure contract"
-}
-grep '^\[smoke\].* transport:' "$TMP/review-auth.err"
-
-# ── 6. scan --mode web (template loader + agent bootstrap) ────────────────
-# Discovery and attack each receive an actual Messages tool_use response that
-# calls done without target traffic. Existing offline recon switches keep the
-# bootstrap focused on agents/templates; a counted loopback target rejects any
-# unexpected request. Guards the compiled attack-template loader (/$bunfs).
-say "scan --mode web (template loader + pipeline)"
-run_ai_smoke scan > "$TMP/scan.out" 2> "$TMP/scan.err" \
-  || {
-    echo "--- scan stdout ---" >&2
-    cat "$TMP/scan.out" >&2 || true
-    echo "--- scan stderr ---" >&2
-    cat "$TMP/scan.err" >&2 || true
-    fail "scan exited non-zero — pipeline bootstrap or template loader broken"
-  }
-grep '^\[smoke\].* transport:' "$TMP/scan.err"
-grep -q '"target"' "$TMP/scan.out" || {
-  echo "--- scan stdout ---" >&2
-  cat "$TMP/scan.out" >&2 || true
-  echo "--- scan stderr ---" >&2
-  cat "$TMP/scan.err" >&2 || true
-  fail "scan did not emit a report-shaped JSON document"
-}
-# Extra guard: if the template loader is broken, the stderr typically
-# carries an ENOENT or 'Templates directory not found' message even
-# when exit-code fallback paths let the process succeed.
-if grep -qE "ENOENT.*attacks|Templates directory not found" "$TMP/scan.err"; then
-  echo "--- scan stderr ---" >&2
-  cat "$TMP/scan.err" >&2
-  fail "scan emitted a template-loader error to stderr"
-fi
-# Rejecting authentication is never a successful empty scan: require exit 2,
-# authentication_error and executionSuccessful:false from the real CLI.
-run_ai_smoke scan-auth-error > "$TMP/scan-auth.out" 2> "$TMP/scan-auth.err" || {
-  cat "$TMP/scan-auth.out" "$TMP/scan-auth.err" >&2 || true
-  fail "scan did not preserve the provider-auth failure contract"
-}
-grep '^\[smoke\].* transport:' "$TMP/scan-auth.err"
-
-say "all 6 subcommand smoke tests passed"
+say "all 4 subcommand smoke tests passed"

@@ -62,27 +62,20 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   const { cli } = fixture(t);
   const help = cli(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  const visible = ["scan", "findings", "threads", "agents", "skills", "memory", "models", "computers", "config"];
+  const visible = ["findings", "threads", "agents", "skills", "memory", "models", "computers", "config"];
   for (const command of visible) assert.match(help.stdout, new RegExp(`^  ${command}\\b`, "m"), `Missing ${command} in help`);
   for (const hidden of ["lab", "web", "doctor", "plugin", "automation", "api"]) assert.doesNotMatch(help.stdout, new RegExp(`^  ${hidden}\\b`, "m"), `${hidden} is not a top-level command in help`);
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);
-  const templates = jsonSuccess(cli(["agents", "list", "--automation", "--templates", "--format", "json"]));
-  assert.ok(templates.some(template => template.id === "repository-review"));
   const noConsole = cli(["threads", "list", "--format", "json"]);
   assert.equal(noConsole.status, 2, "threads need a running console, never an empty list");
   assert.equal(noConsole.stdout, "");
   assert.match(JSON.parse(noConsole.stderr).error, /^No console running\. Start one with: 0 --headless/);
   assert.equal(jsonSuccess(cli(["config", "get", "--export"])).executionProfile, "local");
-  const history = cli(["lab", "runs", "history"]);
-  assert.equal(history.status, 0, history.stderr);
-  assert.match(history.stdout, /No scan history found/);
-  const bad = cli(["agents", "list", "missing-workflow", "--automation", "--format", "json"]);
-  assert.equal(bad.status, 2);
-  assert.equal(bad.stdout, "");
-  assert.equal(typeof JSON.parse(bad.stderr).error, "string");
+  const empty = cli(["findings", "list", "--format", "json"]);
+  assert.match(empty.stdout + empty.stderr, /No findings/);
   const ambiguous = cli(["not-a-command-or-target"]);
-  assert.equal(ambiguous.status, 2);
-  assert.match(ambiguous.stderr, /explicit URL, path/);
+  assert.equal(ambiguous.status, 1);
+  assert.match(ambiguous.stderr, /unknown command/i);
 });
 
 test("CLI reports an invalid option value without a stack trace", { timeout: 60_000 }, t => {

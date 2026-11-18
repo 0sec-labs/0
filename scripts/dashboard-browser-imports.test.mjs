@@ -14,12 +14,9 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
   await build({
     absWorkingDir: repoRoot,
     entryPoints: [
-      "packages/web/src/components/access-milestone.tsx",
       "packages/web/src/components/automations/automation-editor.tsx",
       "packages/web/src/pages/skills-page.tsx",
       "packages/web/src/console/team-collaboration.tsx",
-      "packages/web/src/components/workflow-definition-editor.tsx",
-      "packages/web/src/components/workflow-phase-editor.tsx",
       "packages/web/src/lib/team-client.ts",
     ],
     outdir: "/tmp/0-dashboard-boundary-test",
@@ -142,29 +139,6 @@ test("authenticated team SSE frames reconnect safely and stop on abort", async (
     const alreadyAborted = new AbortController(); alreadyAborted.abort();
     await client.subscribeOverview(() => assert.fail("late update"), { signal: alreadyAborted.signal });
     assert.equal(calls.length, 4);
-  } finally { await rm(temporary, { recursive: true, force: true }); }
-});
-
-test("workflow draft bases retain their version when peers edit and advance only submitted saves", async () => {
-  const dashboard = resolve(repoRoot, "packages/web");
-  const temporary = await mkdtemp(resolve(dashboard, ".workflow-draft-test-"));
-  try {
-    const output = resolve(temporary, "fixture.mjs");
-    await build({ entryPoints: [resolve(dashboard, "src/components/workflow-definition-editor.tsx")], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", alias: { "@": resolve(dashboard, "src") }, logLevel: "silent" });
-    const { workflowDraftHasConflict, advanceWorkflowDraftBase } = await import(pathToFileURL(output).href);
-    const base = { id: "workflow", revision: 3, name: "Original", instructions: "Original scope", target: "./repo", createdAt: "2026-10-08T00:00:00.000Z", updatedAt: "2026-10-08T00:00:00.000Z", nodes: [{ id: "review", type: "audit", label: "Review", enabled: true }], edges: [] };
-    const peer = { ...base, revision: 4, name: "Peer name" };
-    assert.equal(workflowDraftHasConflict(base, peer), true);
-    assert.equal(base.revision, 3, "the held draft is not rebased merely because a newer peer revision arrives");
-    const submitted = { ...base, instructions: "My retained draft" };
-    const advanced = advanceWorkflowDraftBase(base, submitted);
-    assert.equal(advanced.revision, 4);
-    assert.equal(advanced.name, "Original", "a submitted draft does not silently merge peer properties");
-    assert.equal(advanced.instructions, "My retained draft");
-    assert.equal(workflowDraftHasConflict(advanced, { ...peer, revision: 5 }), true, "a second peer save remains a conflict after our own save");
-    assert.throws(() => advanceWorkflowDraftBase(base, { ...submitted, revision: 4 }), /draft revision/);
-    advanced.nodes[0].label = "Changed after save";
-    assert.equal(base.nodes[0].label, "Review");
   } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 
