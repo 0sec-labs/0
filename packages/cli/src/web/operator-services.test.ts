@@ -156,9 +156,9 @@ describe("web model connection inspection", () => {
     const selection = savedWebRuntimeSelection({ reasoningEffort: "max" }, describeWebConsoleRuntime(runtime));
     expect(selection.reasoningEffort).toBe(model === "gpt-6.1-sol" ? "high" : undefined);
     if (model === "gpt-4o") expect(Object.hasOwn(selection, "reasoningEffort")).toBe(false);
-    const stored: StoredSession = { id: "console-effort", savedAt: 1000, target: "", model, mode: "standard", cwd: "/fixture", messageCount: 0, preview: "", messages: [],
+    const stored: StoredSession = { id: "console-effort", savedAt: 1000, model, mode: "standard", cwd: "/fixture", messageCount: 0, preview: "", messages: [],
       consoleState: { version: 1, title: "Effort test", objective: "", usage: { inputTokens: 0, outputTokens: 0 },
-        configuration: { target: "", role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
+        configuration: { role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
     expect(saveSession(stored, testHome)).toBe(true);
     expect(loadSession(stored.id, testHome)?.consoleState?.configuration?.runtime).toEqual(selection);
   });
@@ -532,7 +532,7 @@ describe("explicit cyber program selection", () => {
     expect(info.accessProgram?.confirmed).toBeUndefined();
     const selection = savedWebRuntimeSelection({}, info);
     expect(selection.cyberAccessProgram).toBe("daybreak_blue");
-    const stored: StoredSession = { id: "cyber-program", savedAt: 1, cwd: testHome, messageCount: 0, preview: "Program", messages: [], consoleState: { version: 1, title: "Program", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, configuration: { target: "", role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
+    const stored: StoredSession = { id: "cyber-program", savedAt: 1, cwd: testHome, messageCount: 0, preview: "Program", messages: [], consoleState: { version: 1, title: "Program", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, configuration: { role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
     expect(saveSession(stored, testHome)).toBe(true);
     expect(loadSession(stored.id, testHome)?.consoleState?.configuration?.runtime.cyberAccessProgram).toBe("daybreak_blue");
     await applyWebConsoleRuntimeSelection(runtime, { reasoningEffort: "high" });

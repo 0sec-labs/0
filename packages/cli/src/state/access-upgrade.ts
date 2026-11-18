@@ -4,7 +4,7 @@ import { homeStateDir } from "@0/engine/shared";
 
 /**
  * One-time upgrade note for the move to one mode. Threads and Sentinels always have shell access;
- * limits are scope, budget and the sandbox. The first start after upgrade records how many
+ * limits are the budget and the sandbox. The first start after upgrade records how many
  * Sentinels and threads already existed (one audit entry) and shows ONE dismissible notice next
  * to the setting. Nothing stored is rewritten here.
  */

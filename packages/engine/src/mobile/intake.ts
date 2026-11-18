@@ -1,7 +1,6 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { isIP } from "node:net";
 import { basename, extname, join } from "node:path";
-import { ScopePolicy } from "../scope/scope.js";
 
 export type MobilePlatform = "android" | "ios" | "unknown";
 
@@ -11,10 +10,6 @@ export interface MobileEndpointIndicator {
   sources: string[];
   priority: "high" | "medium" | "low";
   tags: string[];
-  scope?: {
-    allowed: boolean;
-    reason: string;
-  };
 }
 
 export interface MobileRiskIndicator {
@@ -62,7 +57,6 @@ export interface MobileStaticIntakeReport {
 }
 
 export interface MobileStaticIntakeOptions {
-  scope?: ScopePolicy;
   maxFileBytes?: number;
 }
 
@@ -134,7 +128,7 @@ export function runMobileStaticIntake(
   const platform = detectPlatform(targetPath, files);
   const android = platform === "android" ? extractAndroidMetadata(files) : undefined;
   const ios = platform === "ios" ? extractIosMetadata(files) : undefined;
-  const endpoints = sortEndpointIndicators(extractEndpointIndicators(files, opts.scope));
+  const endpoints = sortEndpointIndicators(extractEndpointIndicators(files));
   const backendCandidates = selectBackendCandidates(endpoints);
   const risks = extractRiskIndicators({ android, ios, endpoints });
 
@@ -255,19 +249,19 @@ function extractIosMetadata(files: SourceFile[]): IosMetadata {
   };
 }
 
-function extractEndpointIndicators(files: SourceFile[], scope?: ScopePolicy): MobileEndpointIndicator[] {
+function extractEndpointIndicators(files: SourceFile[]): MobileEndpointIndicator[] {
   const byValue = new Map<string, MobileEndpointIndicator>();
   for (const file of files) {
     for (const url of extractUrls(file.content)) {
-      upsertIndicator(byValue, url, "url", file.path, scope);
+      upsertIndicator(byValue, url, "url", file.path);
       try {
-        upsertIndicator(byValue, new URL(url).hostname.toLowerCase(), "host", file.path, scope);
+        upsertIndicator(byValue, new URL(url).hostname.toLowerCase(), "host", file.path);
       } catch {
         // extractUrls already validates the URL shape well enough for candidates.
       }
     }
     for (const host of extractHosts(file.content)) {
-      upsertIndicator(byValue, host, "host", file.path, scope);
+      upsertIndicator(byValue, host, "host", file.path);
     }
   }
   return Array.from(byValue.values());
@@ -278,7 +272,6 @@ function upsertIndicator(
   value: string,
   kind: "url" | "host",
   source: string,
-  scope?: ScopePolicy,
 ): void {
   const key = `${kind}:${value}`;
   const existing = byValue.get(key);
@@ -286,20 +279,16 @@ function upsertIndicator(
     if (!existing.sources.includes(source)) existing.sources.push(source);
     return;
   }
-  const scopeTarget = kind === "url" ? value : `https://${value}/`;
-  const scopeVerdict = scope?.match(scopeTarget);
   byValue.set(key, {
     value,
     kind,
     sources: [source],
-    priority: priorityForEndpoint(value, kind, scopeVerdict?.allowed),
+    priority: priorityForEndpoint(value, kind),
     tags: tagsForEndpoint(value, kind),
-    scope: scopeVerdict,
   });
 }
 
-function priorityForEndpoint(value: string, kind: "url" | "host", inScope?: boolean): "high" | "medium" | "low" {
-  if (inScope) return "high";
+function priorityForEndpoint(value: string, kind: "url" | "host"): "high" | "medium" | "low" {
   if (kind === "url" && value.startsWith("http://")) return "medium";
   if (isLikelyThirdPartyHost(kind === "url" ? safeHost(value) : value)) return "low";
   return "medium";

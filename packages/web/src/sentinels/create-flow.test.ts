@@ -17,7 +17,7 @@ describe("create sentinel API call", () => {
     expect(path).toBe("/api/console/sentinels");
     expect(init.method).toBe("POST");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ name: "Pen Tester", status: "active", preset: "pen-tester", scope: { repos: ["/work/app"] } });
+    expect(body).toMatchObject({ name: "Pen Tester", status: "active", preset: "pen-tester", folder: "/work/app" });
     expect(Object.keys(body).filter(key => /automation|trigger|schedule/i.test(key))).toEqual([]);
     expect(result.sentinel.id).toBe("a1");
   });

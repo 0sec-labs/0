@@ -1,15 +1,6 @@
-/**
- * Scoped-path resolution shared by the extracted tool handlers (0#1284).
- *
- * Pulled out of agent/tools.ts verbatim so per-domain handler modules (starting
- * with intel.ts) can enforce the same scope-escape guard as the still-in-class
- * handlers without importing back into the executor (which would be circular).
- * Behavior is identical to the original private `resolveScopedPath` helper.
- */
+/** Folder-confined path resolution shared by the file tools and the repair path. */
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { isScopeEnforcementEnabled } from "../../scope/activation.js";
-import { getLocalSourceBoundary } from "../../scope/local-source-boundary.js";
 
 function pathEntryExists(path: string): boolean {
   try {
@@ -39,8 +30,8 @@ function canonicalizePath(path: string): string {
   return resolve(realpathSync(existingPath), ...missingSegments);
 }
 
-export function isScopedPath(scopePath: string, inputPath: string): boolean {
-  const root = realpathSync(scopePath);
+export function isInFolder(folder: string, inputPath: string): boolean {
+  const root = realpathSync(folder);
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);
@@ -57,18 +48,11 @@ export function isScopedPath(scopePath: string, inputPath: string): boolean {
   return candidate === root || candidate.startsWith(prefix);
 }
 
-export function resolveScopedPath(scopePath: string | undefined, inputPath: string): string {
-  const boundary = getLocalSourceBoundary();
-  if (boundary) {
-    const base = scopePath ? realpathSync(scopePath) : process.cwd();
-    const candidate = isAbsolute(inputPath) ? resolve(inputPath) : resolve(base, inputPath);
-    if (!isScopedPath(boundary, candidate)) throw new Error(`Path escapes the approved source folder: ${inputPath}`);
+export function resolveFolderPath(folder: string | undefined, inputPath: string): string {
+  if (!folder || !isInFolder(folder, inputPath)) {
+    throw new Error(`Path escapes the folder: ${inputPath}`);
   }
-  if (isScopeEnforcementEnabled() && (!scopePath || !isScopedPath(scopePath, inputPath))) {
-    throw new Error(`Path escapes the allowed scope: ${inputPath}`);
-  }
-
-  const root = scopePath ? realpathSync(scopePath) : process.cwd();
+  const root = realpathSync(folder);
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);

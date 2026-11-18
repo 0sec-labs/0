@@ -6,7 +6,7 @@
  * injected id factory (deterministic requestId), the handler awaiting the
  * injected `askOperator` gate and returning the answer as a NORMAL tool result,
  * the no-gate-wired graceful path, verbatim free-text delivery, and that the tool authorizes NOTHING: it is read-only
- * (no per-action approval prompt) and mutates no scope/gate state.
+ * (no per-action approval prompt) and mutates no gate state.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -266,16 +266,9 @@ describe("ask_operator handler", () => {
 // ---------------------------------------------------------------------------
 
 describe("ask_operator authorizes nothing", () => {
-  it("does not mutate scope / autonomy / gate state on the context", async () => {
-    const scopeSentinel = { marker: "scope" } as unknown as ToolContext["scope"];
-    let escalateCalled = false;
+  it("does not mutate autonomy / gate state on the context", async () => {
     const ctx = baseCtx({
-      scope: scopeSentinel,
       autonomyMode: "standard",
-      escalateScopedAudit: async () => {
-        escalateCalled = true;
-        return true;
-      },
       askOperator: async (req) => ({
         requestId: req.requestId,
         answers: [{ header: "Pick a target", selectedLabels: ["api.example.com"] }],
@@ -285,9 +278,7 @@ describe("ask_operator authorizes nothing", () => {
     await exec.execute({ name: "ask_operator", arguments: validArgs() });
 
     // Nothing the tool touched changed any authorization surface.
-    expect(ctx.scope).toBe(scopeSentinel);
     expect(ctx.autonomyMode).toBe("standard");
-    expect(escalateCalled).toBe(false); // never consulted the approval/escalation gate
   });
 
   it("is read-only in the console: standard mode never prompts approveTool", async () => {
@@ -338,9 +329,6 @@ describe("ask_operator authorizes nothing", () => {
     expect(approvePrompts).toBe(0);
     expect(asked).toBe(1);
     expect(outcome.toolCalls[0].result.success).toBe(true);
-
-    // No authority was granted as a side effect.
-    expect(session.scope).toBeUndefined();
   });
 });
 

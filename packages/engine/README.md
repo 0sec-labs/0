@@ -21,7 +21,7 @@ is named `@0/cli`; it registers the `0` command.
 | <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/code.png" alt=""> Scanning and review | `src/stages/`, `src/review/`, `src/triage/` |
 | <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/verified.png" alt=""> Evidence and verification | `src/verify/`, `src/bench/` |
 | <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/beaker.png" alt=""> Plugins and self-extension | `src/plugins/` |
-| Scope and coordination | `src/scope/`, `src/events/`, `src/hub/` |
+| Coordination | `src/events/`, `src/hub/` |
 
 The package is ESM. Its build generates the skill manifest, compiles TypeScript
 and copies runtime assets into `dist/`. The main entry point is `src/index.ts`;
@@ -36,7 +36,6 @@ Selected exports from `src/index.ts`:
 | `scan`, `agenticScan` | Target scanning |
 | `packageAudit` | Package auditing |
 | `createRuntime` | Runtime construction |
-| `loadScope`, `matchUrl`, `ScopePolicy` | Scope ingestion and matching |
 | `runAnalysisAgent` | Agent execution |
 
 Use the [quick start](https://github.com/0sec-labs/0security#quick-start) to run an
@@ -50,16 +49,16 @@ Feature flags are declared in `src/agent/features.ts`. Each flag maps to a
 also accepts a `--features` flag that sets those env vars automatically:
 
 ```bash
-0 scan --target https://app.example.test --scope ./scope.json --features web_search
+0 scan --target https://app.example.test --features web_search
 env ZERO_FEATURE_POV_GATE=0 \
-  0 scan --target https://app.example.test --scope ./scope.json --features fp-moat
+  0 scan --target https://app.example.test --features fp-moat
 ```
 
 Use the exact environment-variable suffix from `src/agent/features.ts`, not a
 guessed camelCase property name. The current feature properties are getters:
 they re-read the environment when accessed. Explicit `0` or `false` disables a
 flag; an unset flag uses its declared default (or a recognized preset).
-Enabling a flag does not bypass tool availability, scope, engagement policy or
+Enabling a flag does not bypass tool availability or
 workflow-specific prerequisites.
 
 Named presets (e.g. `fp-moat`) are defined in `src/agent/feature-presets.ts`.

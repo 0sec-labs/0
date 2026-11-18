@@ -15,11 +15,11 @@ import { blockedAtThreadStart, folderChecks } from "./workspace-folder-check.js"
 import { resolveWorkspaceInput, verifyWorkspaceReadable, isUsableWorkspace, WorkspaceInputError } from "./workspace-input.js";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
-  type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
+  features, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, eventBus, isDangerousLocalRoot, peekInbox, sendOperatorMessage,
+  type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig,
   type ContainerRunner, type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
-  type McpToolHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall, type ToolResult,
+  type McpToolHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ToolCall, type ToolResult,
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
@@ -60,7 +60,7 @@ export class ConsoleGatewayError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); this.name = "ConsoleGatewayError"; }
 }
 
-export type ConsoleGatewaySessionFactoryInput = Omit<ConsoleSessionConfig, "db" | "runtime"> & { runtime?: NativeRuntime; scanId: string; target: string; role: DesktopConsoleRole; autonomyMode: DesktopConsoleAutonomyMode };
+export type ConsoleGatewaySessionFactoryInput = Omit<ConsoleSessionConfig, "db" | "runtime"> & { runtime?: NativeRuntime; scanId: string; role: DesktopConsoleRole; autonomyMode: DesktopConsoleAutonomyMode };
 interface ConsoleWorkflowLifecycleAdapter {
   invoke(sessionId: string, name: string, args: Record<string, unknown>, capabilities?: { allowApply?: boolean }): unknown | Promise<unknown>;
 }
@@ -97,33 +97,13 @@ export interface ConsoleGatewayOptions {
   skillDiscoveryOptions?: (workspaceRoot: string) => AgentSkillDiscoveryOptions;
   skillAuthoring?: (author: ConsoleMessageAuthor | undefined, workspaceRoot: string) => NonNullable<ConsoleSessionConfig["skillAuthoring"]>;
 }
-export interface ConsoleExecutionContext {
-  runtime: NativeRuntime;
-  model: string;
-  providerId: string;
-  agentModels: Record<string, string>;
-  singleModel: boolean;
-  autoRoute: boolean;
-  target: string;
-  scope?: ScopePolicy;
-  scopeEnforcement: ConsoleSession["scopeEnforcement"];
-  localScopePath?: string;
-  status: DesktopConsoleSessionStatus;
-  role: DesktopConsoleRole;
-  autonomyMode: DesktopConsoleAutonomyMode;
-  settings: TuiSettings;
-  dbPath?: string;
-  /** Server-only, current denial memory; never restored from saved messages. */
-  authorization: Pick<ConsoleSessionCheckpoint, "deniedHosts" | "deniedLocalPaths"> & { scopedAuditGrants: string[]; scopedAuditDenials: string[] };
-}
-
 type PendingDecision = { modeBasedToolApproval?: boolean; signal?: AbortSignal; decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
-  id: string; createdAt: string; updatedAt: string; /** ms of the last real message/turn event; restoring or saving never advances it. */ activityAt: number; role: DesktopConsoleRole; target: string;
+  id: string; createdAt: string; updatedAt: string; /** ms of the last real message/turn event; restoring or saving never advances it. */ activityAt: number; role: DesktopConsoleRole;
   workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled: boolean;
   autonomyRevision?: number; autonomyConfirmedRevision?: number;
-  autonomyMode: DesktopConsoleAutonomyMode; title: string; titleSource: ConversationTitleSource; titleInFlight?: boolean; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
+  autonomyMode: DesktopConsoleAutonomyMode; title: string; titleSource: ConversationTitleSource; titleInFlight?: boolean; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
   /** Built-in skill whose declared verifier gates this thread's "fixed" claims. */
@@ -206,32 +186,6 @@ function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
   }
   return result;
 }
-function scopePolicy(value: unknown): ScopePolicy | undefined {
-  if (value === null) return undefined;
-  const raw = object(value, "Scope");
-  allowedKeys(raw, ["in_scope", "out_of_scope", "attribution"]);
-  const scope: ScopeJson = {};
-  for (const key of ["in_scope", "out_of_scope"] as const) if (raw[key] !== undefined) {
-    const rules = raw[key];
-    if (!Array.isArray(rules) || rules.length > 1_000) throw new ConsoleGatewayError("Scope rules must be an array of at most 1,000 strings.", 400);
-    scope[key] = rules.map((value) => text(value, "Scope rule", 4_096));
-  }
-  if (raw.attribution !== undefined) {
-    const attribution = object(raw.attribution, "Attribution");
-    allowedKeys(attribution, ["headers", "user_agent_token"]);
-    scope.attribution = {};
-    if (attribution.user_agent_token !== undefined) scope.attribution.user_agent_token = text(attribution.user_agent_token, "Attribution token", 1_024);
-    if (attribution.headers !== undefined) {
-      const headers = object(attribution.headers, "Attribution headers");
-      if (Object.keys(headers).length > 32) throw new ConsoleGatewayError("Too many attribution headers.", 400);
-      scope.attribution.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => {
-        if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key) || typeof value !== "string" || /[\r\n]/.test(value)) throw new ConsoleGatewayError("Invalid attribution header.", 400);
-        return [key, text(value, "Header", 4_096)];
-      }));
-    }
-  }
-  try { return ScopePolicy.fromJson(scope); } catch (error) { throw new ConsoleGatewayError(errorMessage(error), 400); }
-}
 function workerPolicy(value: unknown): ConsoleWorkerPolicy {
   const parsed = z.object({
     allowedTools: z.array(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)).max(512).refine(names => new Set(names).size === names.length).optional(),
@@ -253,16 +207,14 @@ function intersectWorkerPolicy(stored: ConsoleWorkerPolicy | undefined, requeste
 }
 function configuration(value: unknown): ConsoleSessionConfiguration {
   const raw = object(value, "Configuration");
-  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource", "webSearchEnabled", "workerPolicy"]);
+  allowedKeys(raw, ["title", "autonomyMode", "runtime", "workspacePath", "modelSource", "webSearchEnabled", "workerPolicy"]);
   const result: ConsoleSessionConfiguration = {};
   if (raw.workerPolicy !== undefined) result.workerPolicy = workerPolicy(raw.workerPolicy);
   if (raw.webSearchEnabled !== undefined) result.webSearchEnabled = z.boolean().parse(raw.webSearchEnabled);
   if (raw.modelSource !== undefined) result.modelSource = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
   if (raw.workspacePath !== undefined) result.workspacePath = text(raw.workspacePath, "Workspace folder", MAX_TARGET_LENGTH);
   if (raw.title !== undefined) result.title = text(raw.title, "Title", 200);
-  if (raw.target !== undefined) result.target = text(raw.target, "Target", MAX_TARGET_LENGTH, true);
   if (raw.autonomyMode !== undefined) result.autonomyMode = mode(raw.autonomyMode);
-  if (raw.scope !== undefined) result.scope = scopePolicy(raw.scope)?.raw ?? null;
   if (raw.runtime !== undefined) result.runtime = runtimeSelection(raw.runtime);
   return result;
 }
@@ -339,19 +291,6 @@ function validOperatorAnswer(request: OperatorQuestionRequest, response: Desktop
     if (!labels.length && !answer.customText?.trim()) return null;
   }
   return { requestId: request.requestId, answers: response.answers };
-}
-function buildScopeResolution(request: ConsoleScopeRequest): { target: string; scope: ScopePolicy } | null {
-  const raw = request.currentScope?.raw ?? {};
-  const inScope = new Set(raw.in_scope ?? []);
-  let target = request.target;
-  for (const requestedUrl of request.requestedUrls) {
-    try { const url = new URL(requestedUrl); inScope.add(url.hostname); target ||= url.origin; } catch { return null; }
-  }
-  const scope = ScopePolicy.fromJson({ ...raw, in_scope: [...inScope] });
-  if (request.requestedUrls.some((url) => !scope.match(url).allowed)) return null;
-  // Unresolved shell destinations authorize this exact call, not an invented host.
-  if (!request.requestedUrls.length && !request.unresolvedTargets?.length) return null;
-  return { target, scope };
 }
 function publicExport(messages: readonly unknown[]): ConsolePublicExport {
   const exported = exportChatConversation(messages);
@@ -434,7 +373,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId", "costCeilingUsd", "verifySkill"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["role", "autonomyMode", "title", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId", "costCeilingUsd", "verifySkill"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated thread ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -492,13 +431,13 @@ export class ConsoleGateway {
       ...(skillAllowList ? { skillAllowList } : {}),
       ...(parentSessionId ? { parentSessionId } : {}),
       ...(skillId ? { skillId } : {}),
-      id, createdAt: now, updatedAt: now, activityAt: Date.parse(now), target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
+      id, createdAt: now, updatedAt: now, activityAt: Date.parse(now),
       webSearchEnabled: raw.webSearchEnabled === undefined ? features.webSearch : z.boolean().parse(raw.webSearchEnabled),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
       titleSource: raw.title === undefined ? "default" : inferTitleSource(text(raw.title, "Title", 200)),
       workerPolicy: raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy),
-      scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
+      selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
       abort: null, turn: null, turnOwner: null, initialMessages: [], userAttributions: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
       queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, objective: "", todos: null,
@@ -539,9 +478,8 @@ export class ConsoleGateway {
       pendingDecisions: [...managed.pending.values()].map((pending) => structuredClone(pending.decision)),
       ...windowMeta,
       execution: structuredClone(managed.execution), workers: (summaryWorkers ? [...managed.workers.values()].map(summarizeConsoleWorker) : this.workers(id)) as ConsoleWorker[], queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
-      scope: structuredClone(session?.scope?.raw ?? managed.scope?.raw ?? null), scopeEnforcement: { ...(session?.scopeEnforcement ?? getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) },
       workspacePath: managed.workspacePath ?? this.#projectPath,
-      ...(session?.localScopePath ? { localScopePath: session.localScopePath } : {}), usage: { ...managed.usage },
+      usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       ...(managed.info?.contextWindowTokens != null ? { contextWindowTokens: managed.info.contextWindowTokens } : {}),
       lastOutcome: structuredClone(managed.lastOutcome), compaction: structuredClone(managed.compaction),
@@ -677,7 +615,6 @@ export class ConsoleGateway {
         await initialization?.catch(() => undefined);
         await turn;
         managed.initialMessages = structuredClone(session.messages);
-        managed.target = session.target; managed.scope = session.scope;
         for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) {
           worker.status = "stopped"; worker.summary = "Owned execution process was force-stopped.";
           this.#denyDecisions(managed, worker.id);
@@ -804,7 +741,7 @@ export class ConsoleGateway {
     if (input.title !== undefined) { managed.title = input.title; managed.titleSource = inferTitleSource(input.title); }
     const execution = { ...input }; delete execution.title;
     // Mode-only changes are acknowledged during a turn in either transport.
-    // Scope/runtime/workspace changes retain their existing safe-boundary rules.
+    // Runtime/workspace changes retain their existing safe-boundary rules.
     const autonomyOnly = Object.keys(execution).every(key => key === "autonomyMode");
     const stagedRestrictions = managed.pendingConfiguration && Object.keys(managed.pendingConfiguration).some(key => key !== "autonomyMode");
     if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
@@ -860,8 +797,6 @@ export class ConsoleGateway {
   }
   async setRuntime(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { runtime: value }); }
   async setAutonomy(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { autonomyMode: value }); }
-  async setTarget(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { target: value }); }
-  async setScope(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { scope: value }); }
   save(id: string): ConsoleSavedSession {
     const managed = this.#require(id); if (!this.#save(managed)) throw new ConsoleGatewayError("The private transcript could not be saved.", 500);
     return this.loadSaved(managed.savedId ?? managed.id).meta;
@@ -940,13 +875,11 @@ export class ConsoleGateway {
     if (this.#deleting.has(id)) throw new ConsoleGatewayError("This thread is being deleted.", 409);
     const live = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     const stored = live ? undefined : this.#stored(id);
-    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
+    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "webSearchEnabled", "workerPolicy"]);
     if (raw.title !== undefined) text(raw.title, "Title", 200);
-    if (raw.target !== undefined) text(raw.target, "Target", MAX_TARGET_LENGTH, true);
     if (raw.role !== undefined) role(raw.role);
     if (raw.autonomyMode !== undefined) mode(raw.autonomyMode);
     if (raw.runtime !== undefined) runtimeSelection(raw.runtime);
-    if (raw.scope !== undefined) scopePolicy(raw.scope);
     const requestedPolicy = raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy);
     const existing = live;
     if (existing) {
@@ -958,7 +891,7 @@ export class ConsoleGateway {
     if (!stored) throw new ConsoleGatewayError("Saved transcript was not found.", 404);
     const initialMessages = this.#nativeSavedMessages(stored.messages);
     // Restore validated working context, never infer permissions from transcript text.
-    // Scope grants, approvals and executable worker handles belong to the old engine.
+    // Approvals and executable worker handles belong to the old engine.
     const configuration = stored.consoleState?.configuration;
     const { connectionIdentity: savedConnectionIdentity, ...savedConfigured } = configuration?.runtime ?? {};
     // An empty draft never keeps a model binding across a restart: the catalog may have changed since it was saved, and the
@@ -970,7 +903,6 @@ export class ConsoleGateway {
     const restoredRuntime = { ...savedRuntime, ...overrides };
     const defaults = {
       autonomyMode: "changes",
-      target: configuration?.target ?? stored.target ?? "",
       ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
@@ -1079,81 +1011,6 @@ export class ConsoleGateway {
     if (existing) return existing.id;
     return (await this.resume(id)).id;
   }
-  async getExecutionContext(id: string): Promise<ConsoleExecutionContext> {
-    const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This automation has not been qualified inside the SmolVM controller. Use the isolated thread; direct engine execution is refused.", 409);
-    if (managed.pendingConfiguration || managed.queued.length) throw new ConsoleGatewayError("Apply staged configuration and send or remove queued messages before starting an automation.", 409);
-    for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Drain owned agents before starting an automation with a stable authorization snapshot.", 409);
-    const session = await this.#ensureSession(managed); const runtime = managed.runtime;
-    this.#assertIdle(managed);
-    if (!runtime?.forkForSubagent) throw new ConsoleGatewayError("The selected runtime cannot safely fork an independent automation account.", 409);
-    const checkpoint = session.exportCheckpoint();
-    const epoch = managed.executionEpoch;
-    const info = describeWebConsoleRuntime(runtime); const fork = await runtime.forkForSubagent(900_000);
-    this.#assertIdle(managed);
-    if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner thread changed while preparing this automation. Retry with the current configuration.", 409);
-    return { runtime: fork, model: info.model, providerId: info.providerId, agentModels: { ...info.agentModels }, singleModel: info.singleModel, autoRoute: info.autoRoute, target: session.target, scope: session.scope ? ScopePolicy.fromJson(structuredClone(session.scope.raw)) : undefined, scopeEnforcement: getScopeEnforcementState(this.#projectPath, this.#options.homeDir), localScopePath: session.localScopePath, status: managed.status, role: managed.role, autonomyMode: "changes", settings: { ...getSettings() }, dbPath: this.#options.dbPath,
-      authorization: { deniedHosts: [...checkpoint.deniedHosts], deniedLocalPaths: [...checkpoint.deniedLocalPaths], scopedAuditGrants: [...checkpoint.executor.scopedAuditGrants], scopedAuditDenials: [...checkpoint.executor.scopedAuditDenials] },
-    };
-  }
-  async authorizeWorkflowTarget(id: string, value: { target: string; kind: string }, signal?: AbortSignal, ownerId?: string, options: { interactive?: boolean } = {}): Promise<ConsoleExecutionContext> {
-    const managed = this.#requireOpen(id); const raw = object(value, "Workflow target"); allowedKeys(raw, ["target", "kind"]);
-    const target = text(raw.target, "Workflow target", MAX_TARGET_LENGTH); const kind = text(raw.kind, "Workflow kind", 32);
-    if (!["web", "source", "package"].includes(kind)) throw new ConsoleGatewayError("Unsupported automation target kind.", 400);
-    const context = await this.getExecutionContext(id);
-    if (signal?.aborted) throw new ConsoleGatewayError("Automation was canceled.", 409);
-    const epoch = managed.executionEpoch;
-    const verifyOwner = () => {
-      this.#requireOpen(id);
-      if (signal?.aborted || managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The automation owner changed or was canceled while awaiting approval. Retry after the thread reaches its safe boundary.", 409);
-    };
-    if (!context.scopeEnforcement.enabled) return { ...context, target };
-    const call: ToolCall = { name: "launch_run", arguments: { target, kind } };
-    const remoteGit = /^git@([^:]+):(.+)$/.exec(target);
-    if ((context.role === "audit" || context.role === "review") && context.localScopePath && !(context.autonomyMode === "changes" && getSettings().approvals !== "ask") && (kind !== "source" || remoteGit || /^[a-z][a-z0-9+.-]*:\/\//i.test(target))) {
-      if (context.authorization.scopedAuditDenials.includes("launch_run")) throw new ConsoleGatewayError("This automation action was previously declined by the source-audit gate.", 403);
-      if (!context.authorization.scopedAuditGrants.includes("launch_run")) {
-        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
-        const response = await this.#requestDecision(managed, { kind: "audit-escalation", title: "Authorize a non-source automation", detail: "The current audit/review scope is restricted to its local source subtree. This permits only this automation; other authorization controls remain in force.", reason: "A web/package or remote-source automation falls outside the scoped source-audit capability allow-list.", call: this.#withCallId(call) }, ownerId ?? "workflow", signal);
-        verifyOwner();
-        if (!response.approve) throw new ConsoleGatewayError("Source-audit automation escalation was declined.", 403);
-      }
-    }
-    if (kind === "source" && !remoteGit && !/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
-      let canonical: string;
-      try { canonical = realpathSync(resolve(this.#projectPath, target)); } catch { throw new ConsoleGatewayError("Source target is not an existing local path.", 400); }
-      if (!statSync(canonical).isDirectory() || isDangerousLocalRoot(canonical)) throw new ConsoleGatewayError("A source automation requires a non-root folder, not the filesystem or home root.", 403);
-      if (context.authorization.deniedLocalPaths.some((denied) => { const path = relative(denied, canonical); return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path); })) throw new ConsoleGatewayError("This source directory is covered by an earlier declined local-scope decision.", 403);
-      const current = context.localScopePath;
-      const rel = current ? relative(current, canonical) : "..";
-      if (!current || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize automation directory", detail: "Authorize this canonical directory subtree for this automation only; this does not change the thread's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
-        if (!response.approve) throw new ConsoleGatewayError("Automation directory authorization was declined.", 403);
-        verifyOwner();
-      }
-      return { ...context, target: canonical, localScopePath: current && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel) ? current : canonical };
-    }
-    let url: URL | undefined;
-    try { url = new URL(remoteGit ? `https://${remoteGit[1]}/${remoteGit[2]}` : target); } catch { /* Package ecosystem selectors are not URLs. */ }
-    if (url && (url.protocol === "https:" || url.protocol === "http:")) {
-      if (context.authorization.deniedHosts.includes(normalizeScopeHostname(url.hostname))) throw new ConsoleGatewayError("This network host was declined earlier in the owner thread.", 403);
-      if (context.scope?.match(url.href).allowed) return { ...context, target };
-      const request: ConsoleScopeRequest = { call, target: context.target, currentScope: context.scope, requestedUrls: [url.href] };
-      const resolution = buildScopeResolution(request);
-      if (!resolution) throw new ConsoleGatewayError("The automation target is explicitly excluded by the current scope.", 403);
-      if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
-      const response = await this.#requestDecision(managed, { kind: "scope", title: "Authorize automation target", detail: "Authorize this network target for this automation only; existing exclusions still apply.", call: this.#withCallId(call), requestedUrls: [url.href], currentScope: context.scope?.raw ?? null }, ownerId ?? "workflow", signal);
-      if (!response.approve) throw new ConsoleGatewayError("Automation target authorization was declined.", 403);
-      verifyOwner();
-      return { ...context, target, scope: resolution.scope };
-    }
-    if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
-    const response = await this.#requestDecision(managed, { kind: "tool", title: "Authorize package automation", detail: "Authorize resolution and analysis of this package ecosystem selector. This does not grant arbitrary network or filesystem access.", call: this.#withCallId(call), reason: "Package selectors do not identify a network engine until the current resolver resolves them." }, ownerId ?? "workflow", signal);
-    if (!response.approve) throw new ConsoleGatewayError("Package automation authorization was declined.", 403);
-    verifyOwner();
-    return { ...context, target };
-  }
   async close(id: string): Promise<void> {
     const managed = this.#require(id); if (managed.status === "closed") return;
     for (const request of managed.workflowRequests.values()) if (request.status !== "launched") { request.abort.abort(); request.status = "cancelled"; }
@@ -1242,12 +1099,12 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy),
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             ...callbacks,
@@ -1260,7 +1117,7 @@ export class ConsoleGateway {
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy),
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
             workspaceRoot: managed.workspacePath ?? this.#projectPath,
@@ -1268,10 +1125,9 @@ export class ConsoleGateway {
             agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
             ...callbacks,
           };
-          const boundary = { scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
-          const support = hostConsoleSessionSupport(localConfig, boundary);
+          const support = hostConsoleSessionSupport(localConfig);
           if (support.supported) {
-            session = createHostConsoleSession({ config: localConfig, dbPath: resolveOsecDbPath(this.#options.dbPath), ...boundary,
+            session = createHostConsoleSession({ config: localConfig, dbPath: resolveOsecDbPath(this.#options.dbPath),
               launch: hostConsoleLaunch(managed.workspacePath ?? this.#projectPath),
               onBus: (name, value) => { if (record(value) && (name === "subagent_lifecycle" || name === "subagent_progress" || name === "subagent_message")) eventBus.emit(name, value as unknown as SubagentLifecyclePayload | SubagentProgressPayload | SubagentMessagePayload); },
               onSnapshot: () => this.#emitSession(managed),
@@ -1383,23 +1239,11 @@ export class ConsoleGateway {
     };
   }
 
-  #decisionCallbacks(managed: ManagedSession): Pick<ConsoleSessionConfig, "requestScope" | "requestLocalScope" | "approveTool" | "escalateScopedAudit" | "askOperator"> {
+  #decisionCallbacks(managed: ManagedSession): Pick<ConsoleSessionConfig, "approveTool" | "askOperator"> {
     return {
-      requestScope: async (request) => {
-        const resolution = buildScopeResolution(request);
-        const response = await this.#requestDecision(managed, { kind: "scope", title: "Authorize scope expansion", detail: request.unresolvedTargets?.length ? "The destination cannot be resolved. Read the exact command; approval applies to this call, not to an invented destination." : "Authorize the requested network targets without overriding any explicit exclusions.", call: this.#withCallId(request.call), requestedUrls: [...request.requestedUrls], unresolvedTargets: request.unresolvedTargets ? [...request.unresolvedTargets] : undefined, currentScope: request.currentScope?.raw ?? null }, managed.turnOwner ?? "session", managed.abort?.signal, (response) => !response.approve || resolution !== null);
-        return response.approve ? resolution : null;
-      },
-      requestLocalScope: async (request) => {
-        // Auto means "don't ask": allow the directory, except the filesystem/home root.
-        if (executionPolicy(managed.session?.approvals ?? getSettings().approvals).autoGrantsLocalPaths && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this thread only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
-        return response.approve ? { scopePath: request.requestedPath } : null;
-      },
       approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal, undefined, call.name !== "mcp_tools_approve")).approve,
-      escalateScopedAudit: async (request) => (await this.#requestDecision(managed, { kind: "audit-escalation", title: "Lift source-audit restriction", detail: "This lifts only the source-audit tool allow-list. Scope, local-directory, credential, and per-tool rules remain in force.", reason: request.reason, call: this.#withCallId(request.call) }, managed.turnOwner ?? "session", managed.abort?.signal)).approve,
       askOperator: async (request) => {
-        const response = await this.#requestDecision(managed, { kind: "operator-question", title: "Operator input requested", detail: "Answering provides information only; it authorizes no tool or scope change.", questions: request.questions.map((question) => ({ ...question, allowCustom: question.allowCustom || !question.options?.length, options: question.options?.map((option) => ({ label: option.label, ...(option.description ? { description: option.description } : {}), ...(option.recommended ? { recommended: true } : {}) })) })) }, managed.turnOwner ?? "session", managed.abort?.signal, (response) => !response.approve || validOperatorAnswer(request, response) !== null);
+        const response = await this.#requestDecision(managed, { kind: "operator-question", title: "Operator input requested", detail: "Answering provides information only; it authorizes no tool.", questions: request.questions.map((question) => ({ ...question, allowCustom: question.allowCustom || !question.options?.length, options: question.options?.map((option) => ({ label: option.label, ...(option.description ? { description: option.description } : {}), ...(option.recommended ? { recommended: true } : {}) })) })) }, managed.turnOwner ?? "session", managed.abort?.signal, (response) => !response.approve || validOperatorAnswer(request, response) !== null);
         return validOperatorAnswer(request, response);
       },
     };
@@ -1808,7 +1652,6 @@ export class ConsoleGateway {
       if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing engine execution. Start a new thread with that connection; this thread was not changed.", 409);
       if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
       if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-      if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned agents before changing the scope target or scope.", 409);
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
         const directory = input.workspacePath;
@@ -1825,19 +1668,11 @@ export class ConsoleGateway {
         }
       }
       if (!managed.session) {
-        if (input.target !== undefined) managed.target = input.target;
-        if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
         if (input.autonomyMode) managed.autonomyMode = input.autonomyMode;
       }
       if (input.workerPolicy !== undefined) {
         managed.session?.setWorkerPolicy?.(input.workerPolicy);
         managed.workerPolicy = structuredClone(input.workerPolicy);
-      }
-      if (managed.session && (input.target !== undefined || input.scope !== undefined)) {
-        managed.session.configureEngagement({
-          ...(input.target !== undefined ? { target: input.target } : {}),
-          ...(input.scope !== undefined ? { scope: input.scope === null ? null : ScopePolicy.fromJson(input.scope) } : {}),
-        });
       }
       if ((input.modelSource || managed.modelRelayId) && (input.runtime?.cyberAccessProgram !== undefined ? input.runtime.cyberAccessProgram : managed.selection.cyberAccessProgram) != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
       if (input.modelSource && managed.runtime?.getCyberAccessProgram() !== undefined) throw new ConsoleGatewayError("Clear the direct connection’s cyber access program before attaching a model relay.", 400);
@@ -1865,8 +1700,6 @@ export class ConsoleGateway {
           managed.selection = { ...managed.selection, ...input.runtime };
         } else await this.#syncSessionRuntime(managed, { ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
       }
-      if (input.target !== undefined) managed.target = input.target;
-      if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
       if (input.webSearchEnabled !== undefined) {
         await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
         managed.webSearchEnabled = input.webSearchEnabled;
@@ -1884,7 +1717,7 @@ export class ConsoleGateway {
     // A worker may have requested Standard approval just before the policy ack.
     if (modeBasedToolApproval && this.#canApproveModeDecision(managed, ownerId, signal)) return Promise.resolve({ approve: true });
     const deferred = Promise.withResolvers<DesktopConsoleDecisionResponse>();
-    const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: "changes", scopeEnforcement: { ...(ownerId === managed.turnOwner && managed.session ? managed.session.scopeEnforcement : getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) }, ...(managed.session?.localScopePath ? { localScopePath: managed.session.localScopePath } : {}) } };
+    const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { role: managed.role, autonomyMode: "changes" } };
     const onAbort = () => { const pending = managed.pending.get(decision.id); if (!pending) return; managed.pending.delete(decision.id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: decision.id, approved: false }); this.#refreshStatus(managed); };
     managed.pending.set(decision.id, { decision, modeBasedToolApproval, signal, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
     signal?.addEventListener("abort", onAbort, { once: true }); managed.status = "waiting"; this.#emitSession(managed); this.#emit(managed, { type: "decision", decision });
@@ -2006,7 +1839,7 @@ export class ConsoleGateway {
       configuration: {
         ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}),
         ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
-        target: managed.session?.target ?? managed.target, role: managed.role,
+        role: managed.role,
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
@@ -2024,7 +1857,7 @@ export class ConsoleGateway {
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: "changes", messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
+    return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, ...(managed.info ? { model: managed.info.model } : {}), mode: "changes", messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #emitToolResult(managed: ManagedSession, call: ToolCall, result: ToolResult): void {
@@ -2033,7 +1866,7 @@ export class ConsoleGateway {
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: "changes", webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error || managed.costCeilingExceeded ? { lastTurnFailed: true } : {}), ...(managed.costCeilingUsd !== undefined ? { costCeilingUsd: managed.costCeilingUsd } : {}), ...(managed.costCeilingExceeded ? { costCeilingExceeded: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), role: managed.role, autonomyMode: "changes", webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error || managed.costCeilingExceeded ? { lastTurnFailed: true } : {}), ...(managed.costCeilingUsd !== undefined ? { costCeilingUsd: managed.costCeilingUsd } : {}), ...(managed.costCeilingExceeded ? { costCeilingExceeded: true } : {}), ...(managed.lastOutcome && turnEndingKind({ ...managed.lastOutcome, silentWork: managed.lastTurnSilentWork ?? true }) ? { lastTurnIncomplete: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

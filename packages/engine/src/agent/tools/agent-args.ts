@@ -132,17 +132,15 @@ export function buildOperatorQuestionRequest(
   return { ok: true, request: { requestId: idFactory(), questions } };
 }
 
-/** Data-only handoff ABI. Authority fields are required, never defaulted. */
+/** Data-only handoff ABI. */
 export const toolExecutorCheckpointSchema = z.object({
   credentialTarget: z.string(),
-  scopedAuditGrants: z.array(z.string()),
-  scopedAuditDenials: z.array(z.string()),
   assignedAgentNames: z.array(z.string()),
   msgDrainTurn: z.number().int().min(-1),
   msgDrainCount: z.number().int().nonnegative(),
   toolHealth: z.array(z.object({
     tool: z.string(),
-    category: z.enum(["missing-binary", "buffer-limit", "wrong-lockfile", "policy-denied", "scope-denied", "error"]),
+    category: z.enum(["missing-binary", "buffer-limit", "wrong-lockfile", "policy-denied", "error"]),
     message: z.string(), remedy: z.string().optional(),
     count: z.number().int().positive(),
     firstSeen: z.number().finite(), lastSeen: z.number().finite(),

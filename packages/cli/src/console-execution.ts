@@ -55,7 +55,7 @@ export function createIsolatedConsoleSession(
       workbench,
       selection: { provider, model, contextWindowTokens: config.contextWindowTokens, ...routing },
       provider: { ...broker.grant, request: broker.request, close: broker.close },
-      pluginHomeDir: options.homeDir, assets: options.assets ?? currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
+      assets: options.assets ?? currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
       network: workbenchNetworkEnabled(),
       onExecution: options.onExecution,
       onFindings: (findings, completion) => {
@@ -63,7 +63,7 @@ export function createIsolatedConsoleSession(
         const validated = findings.map(finding => findingSchema.parse(finding) as Finding);
         const db = new osecDB(options.dbPath);
         try {
-          if (!db.getScan(scanId)) db.createScan({ target: config.target ?? "", depth: "default", format: "terminal", runtime: "api" }, scanId);
+          if (!db.getScan(scanId)) db.createScan({ target: "", depth: "default", format: "terminal", runtime: "api" }, scanId);
           for (const finding of validated) db.saveFinding(scanId, finding);
           if (!completion?.outcome || completion.outcome.stopReason === "error") db.failScan(scanId, completion?.outcome?.error ?? "Guest turn ended before a complete outcome was saved");
           else db.completeScan(scanId, { source: "console", execution: "smolvm", stopReason: completion.outcome.stopReason });

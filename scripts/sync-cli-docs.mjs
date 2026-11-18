@@ -8,7 +8,6 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0 scan web|--require-scope", "Refuse unscoped scans while the scope extension is enabled. Ordinary live targets already require policy when it is enabled."],
   ["0 scan web|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0 scan source|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
   ["0 scan repair|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],

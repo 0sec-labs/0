@@ -79,7 +79,7 @@ interface ConnectedServer {
  * host) and torn down with `closeAll()` so no client/transport outlives the
  * session.
  */
-export interface McpToolGateFlags { networkCapable: boolean; localScope: boolean; readOnly: boolean }
+export interface McpToolGateFlags { networkCapable: boolean; readOnly: boolean }
 
 /** The lazily started servers of a host: one index entry per unloaded server, and which advertised tools are already loaded. */
 export interface McpLazyView { readonly index: readonly ToolDefinition[]; readonly loaded: ReadonlySet<string> }
@@ -115,7 +115,7 @@ export class McpHost implements McpToolHost {
     this.trustedFlags.set(name, { ...flags });
   }
   toolGateFlags(name: string): McpToolGateFlags | undefined {
-    return this.ownsTool(name) ? this.trustedFlags.get(name) ?? { networkCapable: true, localScope: false, readOnly: false } : undefined;
+    return this.ownsTool(name) ? this.trustedFlags.get(name) ?? { networkCapable: true, readOnly: false } : undefined;
   }
   private readonly servers = new Map<string, ConnectedServer>();
 

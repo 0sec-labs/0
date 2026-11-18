@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { features } from "../agent/features.js";
-import { resolveEngagementProfile } from "../scope/engagement-profile.js";
 import { envFlag, envInt, envString } from "./env.js";
 
 const ENV = (o: Record<string, string>) => o as NodeJS.ProcessEnv;
@@ -51,14 +50,5 @@ describe("legacy boolean parser equivalence", () => {
     }
     delete process.env[KEY];
     expect(features.loopDetection).toBe(true);
-  });
-
-  it("engagement WAF override matches the old case-insensitive rule", () => {
-    for (const v of inputs) {
-      if (v.trim() === "") continue; // blank env is treated as unset
-      const posture = resolveEngagementProfile({ env: ENV({ ZERO_WAF_EVASION: v }) });
-      const old = v.trim() !== "0" && v.trim().toLowerCase() !== "false";
-      expect(posture.wafEvasionLadder, JSON.stringify(v)).toBe(old);
-    }
   });
 });

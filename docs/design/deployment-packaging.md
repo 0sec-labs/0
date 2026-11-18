@@ -46,7 +46,7 @@ Exists:
 - Image `ghcr.io/0sec-labs/0security` (alias `0`), amd64 only, ENTRYPOINT `node /app/dist/0.js`, uid 1000, built by `scripts/docker/Dockerfile`, published by `.github/workflows/docker-publish.yml` (tags: SHA, `main`, `latest`; no semver, no cosign, SBOM or provenance). Docs page `/docker/` covers only one-shot `scan` runs.
 - Server: `0 web` (`packages/cli/src/commands/dashboard.ts`) with team mode, scrypt accounts and OIDC, engine bearer token, caps, Findings API.
 - Seams: only plugin registry signature verification (#363, `ZERO_REGISTRY_PUBLIC_KEY_FILE`) remains. The permission policy, identity provider, audit sink and entitlements seams (#359-#362) were reverted in favour of a gateway.
-- State under `~/.0`; `ZERO_DB_PATH`, `ZERO_RUN_DIR`, `ZERO_TEAM_CONFIG`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`, `ZERO_REQUIRE_SCOPE` exist.
+- State under `~/.0`; `ZERO_DB_PATH`, `ZERO_RUN_DIR`, `ZERO_TEAM_CONFIG`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE` exist.
 
 Missing (status after P0: items 1 to 3 and the semver part of 8 are fixed, see sections 4 and 5; items 4 to 7 remain and are documented as limits):
 1. No compose file, `helm/`, `terraform/` or systemd unit anywhere.
@@ -106,7 +106,7 @@ Assets: the control token (full local control of the console, workflows and tool
 | XSS stealing the control token | The existing CSP (script-src self plus hashes), `HttpOnly` session cookie. | Same as loopback: script in the console origin equals control. |
 | Network eavesdropping | TLS is terminated by the proxy. Plain-HTTP exposure is unsafe: the token and cookie travel in clear. A loud warning prints when the bind is non-loopback and no trusted proxy is configured. | Nothing technical stops an operator from publishing the port directly; the compose file binds it to loopback by default. |
 | Log and backup leakage | Neither token nor control token is logged; the generated access token is printed exactly once to stdout and stored 0600 (it remains in container logs: rotate by deleting the file and restarting, or set `ZERO_ACCESS_TOKEN`). Audit rows hold actions, outcomes and client address only. | `credentials.json` is plaintext (gap 6). Prefer environment keys on servers. |
-| Compromised container | uid 1000, no extra capabilities requested, `no-new-privileges`, no Docker socket. Scan tooling runs locally inside the container. | A model-directed tool runs with the console's privileges inside the container; set `ZERO_REQUIRE_SCOPE=1` and egress rules on the host. |
+| Compromised container | uid 1000, no extra capabilities requested, `no-new-privileges`, no Docker socket. Scan tooling runs locally inside the container. | A model-directed tool runs with the console's privileges inside the container; set egress rules on the host. |
 
 Out of scope and not supported: multiple replicas, shared volumes, HA, shared sandboxes across customers, SAML or SCIM (enterprise plugin), rate limiting of the authenticated API.
 
@@ -149,7 +149,7 @@ Enterprise on-prem and vendor-managed single-tenant deployments use a private en
 ## 9. Risks
 
 - Legal and abuse: hosting offensive tooling for strangers carries abuse and liability risk. Contract customers only, with an acceptable-use clause, written authorisation of targets, named contacts and a termination right. No self-serve signup.
-- Scope enforcement: `ZERO_REQUIRE_SCOPE=1` and server-side admission caps by default in every packaged form; egress rules enforced by the platform, not only the app.
+- Server-side admission caps by default in every packaged form; egress rules enforced by the platform, not only the app.
 - Audit: customers and the vendor both need a tamper-evident record of scans. Landed sink seam first; ship logs by default, signed export via plugin later.
 - Data: vulnerability data is sensitive. Encrypted volumes, per-customer keys, no shared storage, a documented deletion path.
 - Support cost (PostHog lesson): keep the public matrix at one image and one compose file; delete anything the CI does not cover.

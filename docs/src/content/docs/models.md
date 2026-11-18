@@ -202,7 +202,7 @@ A rejected or unreachable provider is never picked as the default model for new 
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 -p "Review https://example.com" --scope ./scope.json
+  0 -p "Review https://example.com"
 ```
 
 Pin when you need a predictable bill, especially with Azure deployment names. `ZERO_FORCE_PROVIDER` is a benchmark override; setting it to a different value than `ZERO_SELECTED_PROVIDER` is an error.
@@ -303,4 +303,4 @@ Keys saved under **Providers** on the Models page are stored in plaintext at `~/
 
 - Billing, model access and rate limits belong to your provider account.
 - Shown prices are estimates. Unknown prices are unknown, not zero, so a cost ceiling cannot bound that model. See [Costs and budgets](/configuration/#costs-and-budgets).
-- A model connection does not authorize a target. See [Scope and authorization](/configuration/#scope).
+- A model connection does not authorize a target.

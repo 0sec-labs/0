@@ -190,7 +190,7 @@ export const features = {
   // ── Phase-2 offensive-engine feature flags (dev-live-engine-recovery) ──
   // Each gates a tool that RUNS/BUILDS untrusted code or WEAPONIZES. They are
   // deny-by-default and mirror `cloudSurface` exactly: the env flag is only one
-  // of two layers — the tool is ALSO engagement-scope gated in getToolsForRole,
+  // of two layers — the tool is ALSO gated in getToolsForRole,
   // and the highest-risk ones add their own runtime precondition (kernel-VM
   // artifacts present). Getters so the CLI `--features` flag (set AFTER this
   // module loads) is honored at dispatch time.
@@ -200,7 +200,7 @@ export const features = {
    * a fuzz harness), executing attacker-adjacent build scripts and native
    * fuzz targets. Default OFF; opt in via ZERO_FEATURE_MEMSAFETY=1. Building
    * and running an untrusted tree is code execution, so it is deny-by-default
-   * behind this flag AND an engagement scope.
+   * behind this flag.
    */
   get memsafetyFuzz(): boolean {
     return env("ZERO_FEATURE_MEMSAFETY", false);
@@ -210,7 +210,7 @@ export const features = {
    * `npm_dynamic_discovery` — installs and RUNS untrusted npm packages under
    * instrumentation to observe malicious install/runtime behaviour. Executing
    * arbitrary package code is the whole point, so it is deny-by-default behind
-   * this flag AND an engagement scope. Opt in via ZERO_FEATURE_NPM_DISCOVERY=1.
+   * this flag. Opt in via ZERO_FEATURE_NPM_DISCOVERY=1.
    */
   get npmDynamicDiscovery(): boolean {
     return env("ZERO_FEATURE_NPM_DISCOVERY", false);
@@ -220,7 +220,7 @@ export const features = {
    * `weaponize_kernel` — the kernel-exploit weaponization ladder. It only ever
    * runs inside a DISPOSABLE kernel VM and requires kernel-VM artifacts to be
    * present. Highest-caution capability: deny-by-default behind this flag AND
-   * an engagement scope AND a runtime artifact-presence check (the handler
+   * a runtime artifact-presence check (the handler
    * refuses when the kernel-VM assets are absent). Opt in via
    * ZERO_FEATURE_KERNEL_WEAPONIZE=1.
    */
@@ -231,7 +231,7 @@ export const features = {
   /**
    * `cve_adapt` — adapts a public CVE PoC to the target and RUNS it to confirm
    * exploitability. Running an adapted exploit is code execution against the
-   * target, so it is deny-by-default behind this flag AND an engagement scope.
+   * target, so it is deny-by-default behind this flag.
    * Opt in via ZERO_FEATURE_CVE_ADAPT=1.
    */
   get cveAdapt(): boolean {

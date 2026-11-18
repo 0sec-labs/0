@@ -122,7 +122,7 @@ do not maintain a second hand-edited copy of a template in the embedded file.
 
 ## Pull requests
 
-Describe the behavior changed, the tests run, and any scope or safety impact.
+Describe the behavior changed, the tests run, and any safety impact.
 By submitting a contribution, you agree that it is licensed under MIT OR
 Apache-2.0.
 

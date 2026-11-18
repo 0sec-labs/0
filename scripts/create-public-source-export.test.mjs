@@ -87,7 +87,7 @@ test("public source export contains build inputs and excludes private material",
       "scripts/docker/Dockerfile",
       ".github/workflows/docker-publish.yml",
       "packages/engine/src/seed-findings.ts",
-      "packages/engine/src/scope/scope-guard.ts",
+      "packages/engine/src/hooks/before-command.ts",
     ]) {
       const text = await readFile(join(outputDir, sourcePath), "utf8");
       assert.doesNotMatch(text, /peaktwilight|github\.com\/0sec-labs\/0cloud/i, `${sourcePath} leaks private source references`);

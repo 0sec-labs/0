@@ -136,11 +136,9 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
     const address = server.address();
     assert.ok(address && typeof address !== "string", "fixture did not bind a TCP port");
     const origin = `http://127.0.0.1:${address.port}`;
-    const scope = join(home, "scope.json");
-    await writeFile(scope, JSON.stringify({ in_scope: ["127.0.0.1"] }), { mode: 0o600 });
     const args = review
       ? ["scan", target, "--depth", "quick"]
-      : ["scan", `${origin}/target`, "--mode", "web", "--depth", "quick", "--scope", scope];
+      : ["scan", `${origin}/target`, "--mode", "web", "--depth", "quick"];
     args.push("--runtime", "api", "--timeout", "10000", "--format", "json", "--db-path", join(home, "smoke.db"));
     // Deliberately do not spread process.env: keys, OAuth tokens, provider pins,
     // fallbacks, proxies, NODE_OPTIONS and configuration overrides must not leak.

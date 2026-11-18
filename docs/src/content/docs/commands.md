@@ -57,7 +57,7 @@ a handler may resolve configuration or require an explicit value. Inverse
 - `0 -p "<prompt>"` runs one headless chat prompt. `0 -c` continues the last chat and `0 --resume <id>` a saved one.
 - `0 --help` lists the 8 top-level commands.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
-- Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/configuration/#scope).
+- Provider authentication, target authentication, filesystem access, and execution isolation have independent controls.
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
@@ -157,8 +157,6 @@ Guide: [Read the workflow](/threads/).
 | `--team-config <path>` | — | Enable workspace accounts, roles, and shared conversation controls |
 | `--engine-token-env <name>` | — | Environment variable holding the engine bearer credential (32–4096 characters) |
 | `--engine-workspace <path>` | — | Engine-owned authorized workspace for persistent workflow calls |
-| `--engine-scope <path>` | — | Engine-owned scope JSON for persistent live-target workflows |
-| `--engine-target <target>` | — | Restrict persistent workflow calls to this target |
 | `--engine-allow-apply` | — | Admit explicitly approved patch application in persistent workflow calls |
 | `--engine-time-cap <ms>` | — | Server workflow deadline ceiling (default 600000 ms) |
 | `--engine-cost-cap <usd>` | — | Server workflow estimated cost ceiling (default $5) |
@@ -194,7 +192,7 @@ The default method is GET. Use an explicit write method and `--data` for a
 mutation; JSON input can be inline or `@file`, with regular files and serialized
 bodies limited to 1 MB. GET and HEAD reject request bodies. Pass the name of an
 environment variable for the bearer credential, never the credential as an
-argument. Existing server authentication, scope and approval checks still apply.
+argument. Existing server authentication and approval checks still apply.
 
 Responses are JSON envelopes with `ok`, HTTP `status`, and `data`; text exports
 appear as strings. Errors produce a nonzero exit and a JSON diagnostic on stderr.
@@ -2104,7 +2102,7 @@ Read an existing live session without recreating it or restoring approvals.
 
 #### threads create
 
-Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
+Create a session within the engine's authorized workspace and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
 
 ```text
 0 threads create [options]
@@ -2337,8 +2335,6 @@ Create a thread, send the first prompt and print its ID. With `--wait`, block un
 | `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
 | `--approvals <ask\|auto>` | — | Moved to the global setting |
 | `--folder <path>` | — | Folder the thread works in |
-| `--target <target>` | — | Authorized target |
-| `--scope <path>` | — | Scope policy JSON file |
 | `--skill <id>` | — | Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it |
 | `--title <title>` | — | Thread title |
 | `--wait` | — | Wait for the turn to finish and print the reply |
@@ -2733,13 +2729,13 @@ Resume a paused Sentinel.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--acknowledge` | — | Also acknowledge review of changed scope, model or tools |
+| `--acknowledge` | — | Also acknowledge review of changed model or tools |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
 #### sentinels acknowledge
 
-Mark changed scope, model or tools as reviewed.
+Mark changed model or tools as reviewed.
 
 ```text
 0 sentinels acknowledge [options] <id>

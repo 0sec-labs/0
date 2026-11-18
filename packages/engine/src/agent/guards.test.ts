@@ -3,7 +3,6 @@ import {
   evaluateGuards,
   composeGuards,
   sanitizeReason,
-  guardNetworkRequiresScope,
   guardApprovalUnavailable,
   guardUnresolvedCapabilities,
   BUILTIN_GUARDS,
@@ -18,10 +17,8 @@ function ctx(overrides: Partial<GuardContext> = {}): GuardContext {
   return {
     toolName: "acme_probe",
     networkCapable: false,
-    localScope: false,
     readOnly: true,
     askFirst: true,
-    hasScope: true,
     approvalAvailable: true,
     capabilitiesResolved: true,
     ...overrides,
@@ -170,39 +167,6 @@ describe("guardUnresolvedCapabilities", () => {
 // any mode — see the function doc). Its BODY is unchanged, so these unit tests
 // still pin its pure behaviour for the backward-compat export; they do NOT
 // imply it is wired anywhere.
-describe("guardNetworkRequiresScope (RETIRED — pure-behaviour pin only)", () => {
-  it("denies a network-capable tool with no scope in yolo mode", () => {
-    expect(
-      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: true, hasScope: false })),
-    ).toMatch(/network-capable/i);
-  });
-  it("abstains in yolo when a scope IS configured", () => {
-    expect(
-      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: true, hasScope: true })),
-    ).toBeNull();
-  });
-  it("abstains for a non-network tool in yolo with no scope", () => {
-    expect(
-      guardNetworkRequiresScope(ctx({ askFirst: false, networkCapable: false, hasScope: false })),
-    ).toBeNull();
-  });
-  it("abstains when Ask before running commands is on (those modes are NOT hard-deny — no contradiction)", () => {
-    // The real gate only hard-denies in yolo; ask-first runs scope-on-demand
-    // or same-origin fallback. Denying here would contradict turn-engine.
-    expect(
-      guardNetworkRequiresScope(ctx({ askFirst: true, networkCapable: true, hasScope: false })),
-    ).toBeNull();
-  });
-  it("fails closed on missing flags in yolo", () => {
-    const bad = {
-      ...ctx({ askFirst: false }),
-      networkCapable: undefined,
-      hasScope: undefined,
-    } as unknown as GuardContext;
-    expect(typeof guardNetworkRequiresScope(bad)).toBe("string");
-  });
-});
-
 describe("guardApprovalUnavailable (standard approval gate, fail-closed)", () => {
   it("denies a non-read-only tool in standard when approval is unavailable", () => {
     expect(
@@ -346,7 +310,6 @@ describe("monotonicity — the central property", () => {
       123 as unknown as ToolGuard,
       // Real built-ins, so the sweep also exercises actual policy.
       guardUnresolvedCapabilities,
-      guardNetworkRequiresScope,
       guardApprovalUnavailable,
     ];
 
@@ -355,10 +318,8 @@ describe("monotonicity — the central property", () => {
     const randCtx = (): GuardContext => ({
       toolName: "t" + Math.floor(rand() * 1000),
       networkCapable: bool(),
-      localScope: bool(),
       readOnly: bool(),
       askFirst: pick(asks),
-      hasScope: bool(),
       approvalAvailable: bool(),
       capabilitiesResolved: bool(),
     });

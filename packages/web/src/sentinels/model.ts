@@ -9,12 +9,11 @@
  */
 export type SentinelStatus = "active" | "paused" | "archived";
 
-export interface SentinelScope { repos: string[]; targets: string[]; domains: string[]; outOfScope: string[]; production: boolean }
 export interface SentinelNotifications { channels: Array<"in-app" | "github" | "slack">; on: Array<"finding-high" | "needs-you" | "run-failed" | "fix-ready">; quiet: boolean }
 export interface SentinelModelChoice { providerId: string; model: string; reasoning?: string }
 export interface SentinelAttention {
   needsYou: boolean;
-  /** Review gate: scope, model, tools or autonomy changed since the last acknowledgement; autonomous runs are blocked. */
+  /** Review gate: model, tools or autonomy changed since the last acknowledgement; autonomous runs are blocked. */
   needsReview: boolean;
   reason?: string;
   pendingDecisions: number;
@@ -26,7 +25,8 @@ export interface Sentinel {
   avatar: { color: string; icon?: string; emoji?: string; initials?: string };
   role: string;
   skills: string[];
-  scope: SentinelScope;
+  /** The working directory it runs in. */
+  folder?: string | null;
   hostId?: string | null;
   model?: SentinelModelChoice | null;
   notifications: SentinelNotifications;
@@ -111,7 +111,7 @@ export interface SentinelActivation {
   skills: string[];
   costUsd?: number;
   error?: string;
-  /** One line on how a pull request run executes (sandbox or host, and its scope). */
+  /** One line on how a pull request run executes (sandbox or host). */
   note?: string;
   startedAt: string;
   finishedAt?: string;
@@ -149,14 +149,9 @@ export const DEFAULT_FILES = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 
-/** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production. */
 export interface SentinelFormState {
   name: string;
   mission: string;
-  repos: string;
-  targets: string;
-  outOfScope: string;
-  production: boolean;
 }
 
 export const parseLines = (text: string): string[] => [...new Set(text.split(/[\n,]/).map(line => line.trim()).filter(Boolean))];
@@ -165,30 +160,25 @@ export const formatLines = (items: readonly string[]): string => items.join("\n"
 export function formFromPreset(preset: SentinelPreset | undefined): SentinelFormState {
   return {
     name: preset?.name ?? "", mission: (preset?.job ?? "").slice(0, SENTINEL_LIMITS.mission),
-    repos: "", targets: "", outOfScope: "", production: false,
   };
 }
 export function formFromSentinel(sentinel: Sentinel): SentinelFormState {
   return {
     name: sentinel.name, mission: sentinel.mission,
-    repos: formatLines(sentinel.scope.repos), targets: formatLines([...sentinel.scope.targets, ...sentinel.scope.domains]), outOfScope: formatLines(sentinel.scope.outOfScope), production: sentinel.scope.production,
   };
 }
 
-export type FormFields = Pick<Sentinel, "name" | "mission" | "scope">;
+export type FormFields = Pick<Sentinel, "name" | "mission">;
 /** Validate the form and shape it for the API. Returns an error string for the first problem. */
 export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: FormFields } | { ok: false; error: string } {
   const name = form.name.trim();
   if (!name) return { ok: false, error: "Give it a name." };
   if (name.length > SENTINEL_LIMITS.name) return { ok: false, error: `Name must be at most ${SENTINEL_LIMITS.name} characters.` };
   if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Job must be at most ${SENTINEL_LIMITS.mission} characters.` };
-  const lines = parseLines(form.targets);
-  const isDomain = (value: string) => !/^[a-z]+:\/\//i.test(value) && !value.includes("/") && /^[*a-z0-9.-]+$/i.test(value) && value.includes(".");
   return {
     ok: true,
     fields: {
       name, mission: form.mission.trim(),
-      scope: { repos: parseLines(form.repos), targets: lines.filter(item => !isDomain(item)), domains: lines.filter(isDomain), outOfScope: parseLines(form.outOfScope), production: form.production },
     },
   };
 }
@@ -205,7 +195,7 @@ export function presentStatus(sentinel: Pick<Sentinel, "status" | "attention">):
 }
 
 /** Review gate copy: why a Sentinel cannot run on its own and what acknowledging does. */
-export const NEEDS_REVIEW_COPY = "Its scope, model, tools or access changed. It will not run on its own until you review the change and acknowledge it.";
+export const NEEDS_REVIEW_COPY = "Its model, tools or access changed. It will not run on its own until you review the change and acknowledge it.";
 export const triggerKindLabel = (kind: SentinelTriggerKind): string => ({ schedule: "Schedule", manual: "Manual", "github-pr": "Pull requests" })[kind];
 export function describeTrigger(trigger: Pick<SentinelTrigger, "kind" | "summary" | "github">): string {
   if (trigger.summary) return trigger.summary;

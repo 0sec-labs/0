@@ -19,7 +19,6 @@ export {
 export type { AutoTitleInput, AutoTitleResult, ConversationTitleSource } from "./auto-title.js";
 export type {
   ConsoleConversationHistory,
-  ConsoleEngagementSelection,
   ConsoleSession,
   ConsoleSourceContext,
   ConsoleSourceLesson,
@@ -28,10 +27,6 @@ export type {
   ConsoleCompactionEvent,
   ConsoleTurnOutcome,
   ConsoleStopReason,
-  ConsoleScopeRequest,
-  ConsoleScopeResolution,
-  ConsoleLocalScopeRequest,
-  ConsoleLocalScopeResolution,
   ConsoleTurnBudget,
   ConsoleUsageReport,
 } from "./turn-engine.js";

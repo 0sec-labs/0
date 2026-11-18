@@ -45,12 +45,8 @@ export class WebSentinelService {
     try {
       const agents = this.#store.list().length;
       const threads = listSessions().length;
-      if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.one-mode", subject: "access", outcome: "ok", detail: { agents, threads, note: "Threads and Sentinels now always have shell access; limits are scope, budget and the sandbox." } });
+      if (recordAccessUpgrade({ agents, threads }) && agents + threads > 0) audit({ actor: "system", action: "access.upgrade.one-mode", subject: "access", outcome: "ok", detail: { agents, threads, note: "Threads and Sentinels now always have shell access; limits are the budget and the sandbox." } });
     } catch { /* Advisory only. */ }
-  }
-  /** How many Sentinels carry a scope (targets, domains, repositories or exclusions). Feeds the Extensions page's "scope defined" signal. */
-  scopedAgents(): number {
-    try { return this.#store.list().filter(a => a.scope.targets.length + a.scope.domains.length + a.scope.repos.length + a.scope.outOfScope.length > 0).length; } catch { return 0; }
   }
   /** Webhook acceleration: the triggers a delivery for this repository and base branch may check. */
   webhookTargets(repo: string, baseBranch: string): Array<{ id: string }> { return this.#runner.pullRequestTriggers(repo, baseBranch).map(trigger => ({ id: trigger.id })); }
@@ -89,7 +85,7 @@ export class WebSentinelService {
     for (const id of missions) { try { pending += this.#missions.pendingDecisions(id); } catch { /* A closed mission has nothing pending. */ } }
     const needsReview = sentinelNeedsReview(sentinel);
     const failing = this.#store.listTriggers(sentinel.id).some(trigger => trigger.lastStatus === "failing");
-    const reason = (needsReview ? "Scope, model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
+    const reason = (needsReview ? "Model, tools or skills changed since the last review." : failing ? "A trigger was turned off after three failed turns in a row." : undefined);
     return { needsYou: pending > 0 || needsReview || failing, needsReview, pendingDecisions: pending, ...(reason ? { reason } : {}) };
   }
   #view(sentinel: Sentinel) {

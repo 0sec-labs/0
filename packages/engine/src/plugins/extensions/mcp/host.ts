@@ -36,7 +36,7 @@ export interface ExtensionMcpHostOptions {
   now?: () => Date;
 }
 
-const FLAGS: McpToolGateFlags = { networkCapable: true, localScope: false, readOnly: false };
+const FLAGS: McpToolGateFlags = { networkCapable: true, readOnly: false };
 const byName = <T extends { name: string }>(a: T, b: T): number => (a.name < b.name ? -1 : 1);
 
 export class ExtensionMcpHost implements McpToolHost {

@@ -41,7 +41,7 @@ The browser app also deploys workers from its computer selector.
 
 ## Run a computer by hand
 
-Install 0 on the server. Give it its own model connection (see [Models](/models/)) and prepare its repositories, scope and any VM or Docker prerequisites there.
+Install 0 on the server. Give it its own model connection (see [Models](/models/)) and prepare its repositories and any VM or Docker prerequisites there.
 
 Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start a computer admitted to one repository:
 
@@ -54,13 +54,12 @@ Set a secret of 32 to 4096 non-whitespace characters in an environment variable 
 | Server option | Meaning |
 | --- | --- |
 | `--engine-workspace <path>` | Authorize a source workspace on the computer. |
-| `--engine-scope <path>` | Scope JSON for live-target work. |
 | `--engine-target <target>` | Restrict automation requests to this target. |
 | `--engine-allow-apply` | Admit requests to apply an exact, approved fix candidate. |
 | `--engine-time-cap <ms>` | Limit per automation run. Default `600000`. |
 | `--engine-cost-cap <usd>` | Limit per automation run. Default `5`. |
 
-Admission options need `--engine-token-env` or `--team-config`. Clients can ask for lower limits but cannot raise these or replace the server's workspace, scope, provider or model.
+Admission options need `--engine-token-env` or `--team-config`. Clients can ask for lower limits but cannot raise these or replace the server's workspace, provider or model.
 
 Keep the listener on loopback and reach it through an SSH tunnel:
 
@@ -116,7 +115,7 @@ The CLI selects a registered computer. It never uses your laptop's provider, fil
 0 threads list --engine staging --engines-config /abs/engines.json --format json
 ```
 
-Remote calls reject client-side `--workspace`, `--scope`, `--db-path` and `--model`.
+Remote calls reject client-side `--workspace`, `--db-path` and `--model`.
 
 For a direct call to a computer API, use `0 api`:
 
@@ -134,7 +133,7 @@ For a direct call to a computer API, use `0 api`:
 0 threads send <session-id> "Summarize the retained evidence" --engine staging
 ```
 
-Sending to a thread attaches to a live one. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
+Sending to a thread attaches to a live one. It does not restore an archived one. The thread keeps its model and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
 
 ## Work lifecycle
 

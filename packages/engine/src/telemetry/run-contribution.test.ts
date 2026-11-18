@@ -7,8 +7,6 @@ import type { NativeMessage, NativeRuntime, NativeRuntimeResult } from "../runti
 import { spawnSync } from "node:child_process";
 import { createConsoleSession } from "../console/turn-engine.js";
 import { runNativeAgentLoop } from "../agent/native-loop.js";
-import { ScopePolicy } from "../scope/scope.js";
-import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
 
 const directories: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
@@ -229,24 +227,6 @@ describe("permissioned run contributions", () => {
     expect(loaded.manifest.execution).toBe("completed");
     const ordinary = createConsoleSession({ runtime: child, refineObjective: false });
     try { expect(ordinary.contribution).toBeUndefined(); } finally { await ordinary.cleanup(); }
-  });
-
-  it("binds actual native host exclusions and normalized path enforcement into scope hashes", async () => {
-    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
-    const scopes: Array<{ hash: string; scope: unknown }> = [];
-    for (const excluded of ["blocked.example", "other.example"]) {
-      const f = fixture();
-      const capture = f.client.begin(begin)!;
-      await runNativeAgentLoop({ contribution: capture, db: null,
-        config: { role: "attack", scanId: begin.runId, target: "https://owned.example", systemPrompt: "owned", tools: [], maxTurns: 1,
-          scope: new ScopePolicy({ in_scope: ["owned.example"], out_of_scope: [excluded] }),
-          enforcement: new EnforcementTracker({ pathPolicy: new PathPolicy(["/owned/"]), killAfterSec: 60 }) },
-        runtime: { type: "api", isAvailable: async () => true, executeNative: async () => ({ content: [{ type: "text", text: "done" }], stopReason: "end_turn", durationMs: 1 }) },
-      });
-      scopes.push({ hash: capture.manifest.scopeHash, scope: capture.manifest.scope });
-    }
-    expect(scopes[0]!.hash).not.toBe(scopes[1]!.hash);
-    expect(scopes[0]!.scope).toMatchObject({ policy: { out_of_scope: ["blocked.example"] }, enforcement: { pathPrefixes: ["/owned"], killAfterSec: 60 } });
   });
 
 });

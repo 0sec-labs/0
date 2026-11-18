@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { LlmApiRuntime, ScopePolicy, type NativeMessage } from "@0/engine";
+import { LlmApiRuntime, type NativeMessage } from "@0/engine";
 import { createHostConsoleSession, hostConsoleSessionSupport } from "./host-console-session.js";
 import { HostConsoleFrameReader, encodeHostConsoleFrames } from "./host-console-protocol.js";
 
@@ -60,9 +60,8 @@ if(f.op==='close'){emit({type:'result',id:f.id});process.exit(0);}
 `, { mode: 0o600 });
     const selected = runtime();
     const execute = vi.spyOn(selected, "executeNative");
-    const scope = ScopePolicy.fromJson({ in_scope: ["fixture.invalid"] });
     const initial: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: "Preserve earlier context" }] }];
-    const options = { config: { runtime: selected, scanId: "host-fixture", initialMessages: initial, scope, autonomyMode: "standard" as const, target: "https://fixture.invalid" },
+    const options = { config: { runtime: selected, scanId: "host-fixture", initialMessages: initial, autonomyMode: "standard" as const },
       executionEnvironment: { ZERO_DISABLE_HUNT_MEMORY: "1" },
       launch: { command: process.execPath, args: [script], cwd: root, env: { PATH: process.env.PATH }, graceMs: 30 } };
     const first = createHostConsoleSession(options);
@@ -77,7 +76,6 @@ if(f.op==='close'){emit({type:'result',id:f.id});process.exit(0);}
       expect(await request).toMatchObject({ stopReason: "cancelled", assistantText: "Partial response", usage: { inputTokens: 17, outputTokens: 5 }, budget: { tokensUsed: 22, iterations: 1 }, error: expect.stringContaining("unpriced") });
       expect(first.messages.slice(0, original.length)).toEqual(original);
       expect(first.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "interrupted-tool-17", is_error: true }] });
-      expect(first.scope).toBe(scope);
       const after = readFileSync(sentinel, "utf8");
       next = createHostConsoleSession({ ...options, config: { ...options.config, initialMessages: first.messages } });
       await next.ready;

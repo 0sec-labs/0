@@ -42,7 +42,6 @@ function makeSession(overrides: Partial<StoredSession> = {}): StoredSession {
   return {
     id: "console-1111",
     savedAt: 1_000,
-    target: "https://target.example",
     model: "claude-opus-4",
     mode: "guided",
     cwd: "/work/project-a",
@@ -577,7 +576,7 @@ describe("bounded console display state", () => {
     expect(metadata).not.toHaveProperty("consoleState");
     expect(metadata).not.toHaveProperty("messages");
     expect(loadSession(session.id, home)?.consoleState).toEqual(session.consoleState);
-    const invalid = { ...session, consoleState: { ...session.consoleState, scope: { in_scope: ["*"] } } } as unknown as StoredSession;
+    const invalid = { ...session, consoleState: { ...session.consoleState, bogus: { value: "*" } } } as unknown as StoredSession;
     expect(saveSession(invalid, home)).toBe(false);
     expect(loadSession(session.id, home)?.consoleState).toEqual(session.consoleState);
   });
@@ -605,7 +604,7 @@ describe("bounded console display state", () => {
     const home = makeHome(); const session = makeSession();
     expect(saveSession(session, home)).toBe(true);
     writeFileSync(join(sessionsDir(home), `${session.id}.json`), JSON.stringify({
-      ...session, consoleState: { version: 1, grantedScope: { in_scope: ["*"] }, localScopePath: "/", runtime: { apiKey: "never restore" } },
+      ...session, consoleState: { version: 1, bogus: "/", runtime: { apiKey: "never restore" } },
     }));
     expect(loadSession(session.id, home)?.messages).toEqual(session.messages);
     expect(loadSession(session.id, home)?.consoleState).toBeUndefined();

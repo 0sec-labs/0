@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { costBreakdown, newestFindings, planSummary, scopeSummary, severityCounts, statusSummary, workerCounts, workerCountsLine, contextUsage, formatCost } from "../src/console/panel/views/overview-model";
+import { costBreakdown, newestFindings, planSummary, severityCounts, statusSummary, workerCounts, workerCountsLine, contextUsage, formatCost } from "../src/console/panel/views/overview-model";
 
 const worker = (id: string, status: string, extra: object = {}) => ({ id, parentId: "p", name: `Agent ${id}`, status, task: "t", transcript: [], ...extra });
 const snap = (over: Record<string, unknown> = {}) => ({
-  session: { id: "s", status: "ready", target: "https://x.test" },
-  pendingDecisions: [], workers: [], scope: null, scopeEnforcement: { enabled: false, message: "", pluginId: "", projectPath: "" },
+  session: { id: "s", status: "ready" },
+  pendingDecisions: [], workers: [],
   usage: { inputTokens: 1000, outputTokens: 50, costUsd: 1, costKind: "estimated" }, runtime: null, queuedMessages: [], tools: [], ...over,
 }) as never;
 const group = (fingerprint: string, severity: string, timestamp: number) => ({ fingerprint, latest: { severity, timestamp, title: fingerprint } }) as never;
@@ -22,10 +22,6 @@ describe("overview model", () => {
     expect(contextUsage(snap()).percent).toBeUndefined();
     expect(formatCost(0.456)).toBe("$0.46");
     expect(formatCost(undefined)).toBeUndefined();
-  });
-  it("summarises scope", () => {
-    const summary = scopeSummary(snap({ scope: { in_scope: ["a", "b"], out_of_scope: ["c"] }, scopeEnforcement: { enabled: true, message: "m", pluginId: "", projectPath: "" } }));
-    expect(summary).toMatchObject({ inCount: 2, outCount: 1, enforcement: "enforced", enforcementMessage: "m", target: "https://x.test" });
   });
   it("counts severities and orders newest", () => {
     const groups = [group("a", "High", 1), group("b", "critical", 3), group("c", "weird", 2), group("d", "high", 4)];

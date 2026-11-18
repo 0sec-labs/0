@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { applyPatchOps, parsePatch } from "../agent/apply-patch.js";
-import { resolveScopedPath } from "../agent/tools/scope-path.js";
+import { resolveFolderPath } from "../agent/tools/folder-path.js";
 import type { NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { BehavioralProbeResult, BehavioralRepairOptions, BehavioralRepairResult, SecurePhase } from "./types.js";
 import { runSecureCommand } from "./behavioral-command.js";
@@ -21,7 +21,7 @@ const patchTool: NativeToolDef = { name: "propose_patch", description: "Submit a
 async function scopedFile(root: string, input: string): Promise<string> {
   if (!input || isAbsolute(input) || input.includes("\\") || hasUnsafeRelativeSegment(input)) throw new Error("Invalid or protected repository path");
   const canonicalRoot = await realpath(root);
-  const destination = resolveScopedPath(canonicalRoot, input);
+  const destination = resolveFolderPath(canonicalRoot, input);
   const actual = relative(canonicalRoot, destination);
   if (!actual || actual.startsWith(`..${sep}`) || hasProtectedSegment(actual, sep)) throw new Error("Protected resolved path");
   let current = canonicalRoot;
@@ -195,7 +195,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         const candidate = await clone(`candidate-${attempt}`);
         await setup(candidate);
         for (const op of ops) await scopedFile(candidate, op.path);
-        applyPatchOps(ops, (file) => resolveScopedPath(candidate, file));
+        applyPatchOps(ops, (file) => resolveFolderPath(candidate, file));
         await git(candidate, ["add", "--intent-to-add", "--", ...files]);
         const expectedDiff = await git(candidate, ["diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD"]);
         emit("test", `Running regression checks for candidate ${attempt}`);
@@ -208,7 +208,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         const verified = await clone(`verify-${attempt}`);
         await setup(verified);
         for (const op of ops) await scopedFile(verified, op.path);
-        applyPatchOps(ops, (file) => resolveScopedPath(verified, file));
+        applyPatchOps(ops, (file) => resolveFolderPath(verified, file));
         await git(verified, ["add", "--intent-to-add", "--", ...files]);
         if (options.setupCommand) await runCheck(verified, options.setupCommand, "verification-build");
         await runCheck(verified, options.testCommand, "verification-test");
@@ -218,7 +218,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         // Reapply the exact proposal in a delivery-only checkout. Build outputs never enter the patch.
         const delivery = await clone(`delivery-${attempt}`);
         for (const op of ops) await scopedFile(delivery, op.path);
-        applyPatchOps(ops, (file) => resolveScopedPath(delivery, file));
+        applyPatchOps(ops, (file) => resolveFolderPath(delivery, file));
         await git(delivery, ["add", "--", ...files]);
         const diff = await git(delivery, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "HEAD"]);
         if (diff !== expectedDiff) throw new Error("Delivery patch differs from the independently verified repair");

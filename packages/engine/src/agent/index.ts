@@ -90,7 +90,6 @@ export type {
   ToolRiskLevel,
   DestructiveCategory,
   ToolContext,
-  ScopedAuditEscalationRequest,
   OperatorQuestion,
   OperatorQuestionOption,
   OperatorQuestionRequest,

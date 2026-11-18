@@ -6,7 +6,7 @@ export function remoteBackendClientId(args: readonly string[]): string | undefin
   const engineUrls: Array<string | undefined> = [];
   const tokenEnvs: Array<string | undefined> = [];
   const selections: Array<string | undefined> = [];
-  const valueFlags = new Set(["--template", "--revision", "--target", "--workspace", "--scope", "--model", "--inputs", "--time-cap", "--cost-cap", "--db-path", "--format", "--engines-config", "--backends-config", "--tools", "--scan-id", "--timeout", "--rate-limit", "--engagement-profile", "--chat", "--session", "--config", "--response", "--after", "--branch-from-entry"]);
+  const valueFlags = new Set(["--template", "--revision", "--target", "--workspace", "--model", "--inputs", "--time-cap", "--cost-cap", "--db-path", "--format", "--engines-config", "--backends-config", "--tools", "--scan-id", "--timeout", "--rate-limit", "--engagement-profile", "--chat", "--session", "--config", "--response", "--after", "--branch-from-entry"]);
   for (let index = 1; index < args.length; index++) {
     const argument = args[index]!;
     if (argument === "--") break;

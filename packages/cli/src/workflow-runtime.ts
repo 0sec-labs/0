@@ -11,8 +11,6 @@ interface CliWorkflowRuntimeOptions {
   /** Hosted servers recover shared history once before accepting requests. */
   recoverInterrupted?: boolean;
   workspace?: string;
-  target?: string;
-  scopePath?: string;
   dbPath?: string;
   model?: string;
   timeCapMs?: number;
@@ -46,8 +44,8 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
   let engine: WorkflowEngineService;
   try {
     engine = new WorkflowEngineService({
-    token: randomBytes(32).toString("hex"), workspace, target: options.target,
-    scopePath: options.scopePath, dbPath: options.dbPath, model: options.model,
+    token: randomBytes(32).toString("hex"), workspace,
+    dbPath: options.dbPath, model: options.model,
     timeCapMs: options.timeCapMs, costCapUsd: options.costCapUsd, allowApply: options.allowApply,
     }, { gateway, workflows });
     await engine.ready;

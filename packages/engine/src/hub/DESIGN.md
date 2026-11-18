@@ -57,8 +57,7 @@ one-way, single-depth fan-out.
   (~511). A child emits `queued → running → completed|failed` (or
   `queued → failed` if startup fails). The payload carries `agent_id` (unique
   within the parent scan), `parent_scan_id`, `task`, `max_turns`, and on
-  terminal events `turns`/`findings`/`summary`/`error`, plus inherited
-  `scope_rules` when scope is active.
+  terminal events `turns`/`findings`/`summary`/`error`.
 - The bus is an **in-process EventEmitter**. Consumers (CLI TUI, cloud trace)
   filter by `parent_scan_id`. These events are **observability, not a channel** —
   they are fire-and-forget notifications a parent's UI renders; nothing routes a

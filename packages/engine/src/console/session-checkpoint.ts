@@ -3,20 +3,11 @@ import { z } from "zod";
 import { toolExecutorCheckpointSchema } from "../agent/tools.js";
 import type { ToolContext } from "../agent/types.js";
 import type { NativeMessage } from "../runtime/types.js";
-import type { ScopeJson } from "../scope/scope.js";
 import { isAbsolute } from "node:path";
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const absolutePath = z.string().refine(isAbsolute, "Expected an absolute path");
-const scopeSchema: z.ZodType<ScopeJson> = z.object({
-  in_scope: z.array(z.string()).optional(),
-  out_of_scope: z.array(z.string()).optional(),
-  attribution: z.object({
-    headers: z.record(z.string(), z.string()).optional(),
-    user_agent_token: z.string().optional(),
-  }).passthrough().optional(),
-}).passthrough();
 const messageSchema: z.ZodType<NativeMessage> = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.array(z.discriminatedUnion("type", [
@@ -38,14 +29,6 @@ export const consoleSessionCheckpointSchema = z.object({
   autonomyMode: z.string().optional(),
   webSearchEnabled: z.boolean().optional(),
   workerPolicy: workerPolicySchema.optional(),
-  target: z.string(),
-  // Null means deliberately unset. Missing authority fields are rejected, not defaulted.
-  configuredScope: scopeSchema.nullable(),
-  grantedScope: scopeSchema.nullable(),
-  localScopePath: absolutePath.nullable(),
-  deniedHosts: z.array(z.string()),
-  deniedShellPayloads: z.array(z.string()),
-  deniedLocalPaths: z.array(absolutePath),
   systemPrompt: z.string().nullable(),
   objective: z.object({ value: z.string(), refined: z.boolean() }).strict(),
   sessionData: z.object({
@@ -64,6 +47,14 @@ export const consoleSessionCheckpointSchema = z.object({
   selfExtensionSnapshot: z.unknown().optional(),
   harnessRoot: z.unknown().optional(),
   harness: z.unknown().optional(),
+  // Written by releases that had scope. Accepted so an old checkpoint still restores, and ignored.
+  target: z.unknown().optional(),
+  configuredScope: z.unknown().optional(),
+  grantedScope: z.unknown().optional(),
+  localScopePath: z.unknown().optional(),
+  deniedHosts: z.unknown().optional(),
+  deniedShellPayloads: z.unknown().optional(),
+  deniedLocalPaths: z.unknown().optional(),
 }).strict();
 
 export type ConsoleSessionCheckpoint = z.infer<typeof consoleSessionCheckpointSchema>;

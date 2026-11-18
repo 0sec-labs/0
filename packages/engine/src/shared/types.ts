@@ -266,47 +266,6 @@ export interface ScanConfig {
    */
   costCeilingUsd?: number;
   /**
-   * Path to a JSON scope file (0#215). Format: `{ "in_scope": [...],
-   * "out_of_scope": [...] }` with rules of the form `host`, `*.domain`,
-   * or `cidr/prefix`. When set, every URL the agent touches is checked
-   * against this policy and out-of-scope URLs return as
-   * `ToolResult.error`. The CLI pre-validates `--target` is in scope
-   * before the agent boots; out-of-scope target = hard exit.
-   */
-  scopeFile?: string;
-  /**
-   * Per-host token-bucket rate-limit specification (#214). Accepts a
-   * plain rps (`"5"` / `"10:25"` for rps:burst) or a comma-separated
-   * mixture of per-host overrides plus a default
-   * (`"api.example.com=5,*.example.com=3:6,2"`). When unset, scan
-   * applies a conservative 5 rps default; set to disable
-   * (semantically: `"0"` is rejected as invalid — a missing flag is
-   * the way to disable, when we add an opt-out).
-   */
-  rateLimit?: string;
-  /**
-   * Generic-scanner-traffic suppression opt-out (0#217). Default
-   * `false`. When scope is loaded the agent refuses to spawn `sqlmap`,
-   * `nikto`, `gobuster`, `dirb`, `wfuzz`, `ffuf`, and `nmap -sV` /
-   * `nmap -A`. Setting this to `true` disables that gate (use only
-   * when the engagement explicitly permits generic-scanner traffic).
-   * Has no effect unless `scopeFile` is also set.
-   */
-  allowScanners?: boolean;
-  /**
-   * Attribution headers from CLI (0#216). Each entry is `NAME=VALUE`.
-   * Lower precedence than env vars and the scope file's `attribution`
-   * block. Headers are injected ONLY on in-scope outbound traffic so
-   * attribution doesn't leak to non-engagement targets.
-   */
-  attributionHeaders?: string[];
-  /**
-   * Attribution User-Agent token from CLI (0#216). When set (and not
-   * overridden by env/scope file), the agent's User-Agent on in-scope
-   * traffic becomes `0/<ver> (engagement: <token>)`.
-   */
-  attributionUaToken?: string;
-  /**
    * Tool-call dispatch protocol for the legacy text-based agent loop
    * (0#232). `"json"` (default) keeps the `TOOL_CALL: <name> {...}`
    * format. `"xml"` switches to the `<command>` / `<flag>` / `<finding>` /
@@ -317,41 +276,6 @@ export interface ScanConfig {
    * provider-native tool_use blocks.
    */
   dispatchMode?: "json" | "xml" | "auto";
-  /**
-   * http_audit mode (FROZEN CONTRACT). Set only when `mode === "http_audit"`.
-   * The CLI parses these from the ZERO_TARGET_* env vars; the core builds
-   * an in-memory ScopePolicy (host allowlist), path-prefix allowlist,
-   * per-host RateLimiter, and a wall-clock kill switch from them, threaded
-   * down through an EnforcementTracker into every fetch chokepoint and
-   * aggregated into the report's `enforcement_summary` block.
-   *
-   * - `httpAuditAllowedHosts`: hosts the scan may touch (default = base host).
-   * - `httpAuditAllowedPaths`: path PREFIXES the scan may touch (empty = all).
-   * - `httpAuditRateLimitRps`: per-host requests-per-second cap (default 5).
-   * - `httpAuditKillAfterSec`: wall-clock budget in seconds (default 1800).
-   */
-  httpAuditAllowedHosts?: string[];
-  httpAuditAllowedPaths?: string[];
-  httpAuditRateLimitRps?: number;
-  httpAuditKillAfterSec?: number;
-  /**
-   * Engagement hardening profile (`--engagement-profile <name>`). `"standard"`
-   * (or unset) is the historical, unchanged behaviour. `"conservative"` applies
-   * a single quiet posture for authorized enterprise engagements: no
-   * password-reset burst probe, the web-recon pre-pass routed through the
-   * per-host rate limiter, no WAF-evasion ladder, full jitter on the token
-   * bucket, and a reduced default per-host rps. Lower precedence than the scope
-   * file's `engagement` block and `ZERO_ENGAGEMENT_PROFILE`. See
-   * `scope/engagement-profile.ts` in `@0/engine`.
-   */
-  engagementProfile?: string;
-  /**
-   * Standalone opt-out for the adaptive WAF-evasion ladder, independent of the
-   * engagement profile (`--no-waf-evasion` → `false`). Unset = enabled, which
-   * is the historical default. Lower precedence than the scope file's
-   * `engagement.waf_evasion` and `ZERO_WAF_EVASION`.
-   */
-  wafEvasion?: boolean;
 }
 
 // ── Attack Templates ──
@@ -1463,67 +1387,6 @@ export interface ScanReport extends ScanPlanExecution {
    * in normal scan output to avoid bloating JSON reports.
    */
   trace?: unknown[];
-  /**
-   * http_audit enforcement summary (frozen worker contract). Present ONLY
-   * when the scan ran in `mode: "http_audit"`; undefined for every other
-   * mode. Emitted verbatim as the `enforcement_summary` block in the report
-   * JSON so the cloud worker can audit scope adherence, rate-limit pacing,
-   * and the kill-switch outcome of an authed HTTP scan.
-   */
-  enforcementSummary?: EnforcementSummary;
-  /**
-   * Engagement-posture audit record. Present ONLY when an engagement hardening
-   * profile was actually applied (`--engagement-profile conservative` or an
-   * equivalent env / scope-file setting); undefined for default scans, so
-   * ordinary reports are byte-for-byte unchanged. It states which loud
-   * behaviours were suppressed and which configuration source decided each
-   * one — the evidence handed to a client alongside the findings.
-   */
-  engagementPosture?: EngagementPostureRecord;
-}
-
-/**
- * Auditable record of the engagement hardening posture a scan ran under.
- * Built by `describeEngagementPosture` in `@0/engine`
- * (`scope/engagement-profile.ts`). snake_case keys match the
- * `enforcement_summary` contract; the values are the posture as APPLIED, not
- * as requested.
- */
-export interface EngagementPostureRecord {
-  /** Resolved profile name (`standard` / `conservative`). */
-  profile: string;
-  /** ISO timestamp the posture was rendered. */
-  applied_at: string;
-  /** Whether the bounded password-reset burst probe was allowed to fire. */
-  reset_endpoint_burst_probe: "enabled" | "disabled";
-  /** How the deterministic web-recon pre-pass issued HTTP. */
-  web_recon_prepass: "direct-fetch" | "rate-limited";
-  /** Whether a blocked response escalated into the adaptive evasion ladder. */
-  waf_evasion_ladder: "enabled" | "disabled";
-  /** Token-bucket pacing shape. */
-  request_jitter: "full-jitter" | "none";
-  /** Upper bound of the per-request random delay, ms (0 when no jitter). */
-  jitter_base_ms: number;
-  /** Default per-host requests-per-second applied to the token buckets. */
-  per_host_rps: number;
-  /** Which configuration source decided each field (scope-file / env / cli / default). */
-  sources: Record<string, string>;
-}
-
-/**
- * Frozen `enforcement_summary` block emitted in http_audit reports. Mirrors
- * `EnforcementSummary` in `@0/engine` (scope/enforcement.ts); duplicated
- * here (rather than imported) so `./index.js` stays dependency-free of
- * core. snake_case keys are part of the contract — do not rename.
- */
-export interface EnforcementSummary {
-  auth_mode_used: "bearer" | "header" | "cookie" | "basic" | "none";
-  requests_in_scope: number;
-  requests_out_of_scope_blocked: number;
-  peak_rps: number;
-  rate_limited_count: number;
-  kill_switch_triggered: boolean;
-  wall_clock_sec: number;
 }
 
 export interface ReportSummary {

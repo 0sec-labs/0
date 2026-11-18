@@ -25,15 +25,15 @@ Status: approved direction. Phases 0 to 3 are shipped. Phases 4 to 6 below are t
 - The Agent view carries `thread: { status, updatedAt, lastMessage }` for the sidebar row.
 - A trigger turn that could not start is matched to its row by its queued message id. A turn that was never queued is never blamed for an error.
 
-The flag applies to schedule and GitHub pull request triggers, including the pull request comment option. A person opening or messaging the thread keeps whatever thread exists, even if it was made under an older scope or model; the next trigger turn replaces it (see gap 1) and says so.
+The flag applies to schedule and GitHub pull request triggers, including the pull request comment option. A person opening or messaging the thread keeps whatever thread exists, even if it was made under an older model; the next trigger turn replaces it (see gap 1) and says so.
 
 With the flag on, a trigger firing calls `deliverTurn` (in `packages/cli/src/web/agent-turns.ts`):
 
-- The Agent's home thread is ensured first (reused, restored after a restart, or created). No child thread is created. If the old thread cannot be restored, or was configured with an older scope, model or skills, a fresh one is created and the next turn says so.
+- The Agent's home thread is ensured first (reused, restored after a restart, or created). No child thread is created. If the old thread cannot be restored, or was configured with an older model or skills, a fresh one is created and the next turn says so.
 - The turn is reserved in one store transaction (`reserveTurn`): replayed cause (idempotency key), second queued occurrence of the same schedule (`skipped`: "Still working on the previous one"), a newer commit of a pull request that is still queued (the older one becomes `skipped`: "Superseded by a newer commit" and leaves the gateway queue), and the daily turn and spend caps.
 - A thread that has a pending decision records the turn as `skipped` ("Waiting on you") and does not queue it. A pull request is not marked as handled in that case, so it is offered again at the next poll.
 - The send is queue mode and automated, so a message that cannot start is dropped by the gateway and the next one runs. A full gateway queue is recorded as `skipped` ("The queue is full").
-- Every turn starts with a header (`[Turn from schedule "..." at ... UTC · turn <id>]`) and then a compact envelope: the charter (up to 6,000 characters), the scope, the skills allow-list and the remaining budget, followed by the trigger prompt and fenced untrusted event data. `NOTES.md` is sent when its revision changed. The envelope is sent with every turn, so a compaction cannot drop it. A test with a real gateway and a forced compaction shows that the turn after the compaction carries an edited charter and the scope.
+- Every turn starts with a header (`[Turn from schedule "..." at ... UTC · turn <id>]`) and then a compact envelope: the charter (up to 6,000 characters), the skills allow-list and the remaining budget, followed by the trigger prompt and fenced untrusted event data. `NOTES.md` is sent when its revision changed. The envelope is sent with every turn, so a compaction cannot drop it. A test with a real gateway and a forced compaction shows that the turn after the compaction carries an edited charter.
 - Cost is the thread's cost at the end of the turn minus its cost at the start of that turn. Mid-turn enforcement on usage events stays: reaching the daily cap cancels the turn, pauses the Agent and records the turns waiting behind it.
 - A turn that fails does not stall the queue. After three failed turns in a row the trigger turns itself off (`lastStatus: failing`) and the Agent shows "needs you". A person turning the trigger back on resets the count. Turns closed because the engine stopped do not count as failures, and the next turn is told that the previous one was interrupted.
 - When a person cancels a turn, the gateway pauses its queue; trigger turns waiting behind it are started again.
@@ -51,7 +51,7 @@ Remaining gaps after Phase 3 (all planned for later phases): triggers still need
 
 ### Known gaps in Phase 2 (status after Phase 3)
 
-1. The gateway pins scope, model and the skills allow-list when a thread is created and cannot change them afterwards. The runner therefore records the configuration the standing thread was created with (`homeFingerprint` on the Agent record) and never uses a thread whose configuration differs from the Agent's current scope, model or skills: it creates a fresh thread, tells the Agent so, and sends its notes again. The old thread stays as an ordinary thread. A standing thread from before the fingerprint existed is replaced once. This loses conversation continuity on every scope, model or skills edit until the gateway can reconfigure a live thread; a gateway `instructions` channel and a reconfigurable allow-list would remove the replacement.
+1. The gateway pins the model and the skills allow-list when a thread is created and cannot change them afterwards. The runner therefore records the configuration the standing thread was created with (`homeFingerprint` on the Agent record) and never uses a thread whose configuration differs from the Agent's current model or skills: it creates a fresh thread, tells the Agent so, and sends its notes again. The old thread stays as an ordinary thread. A standing thread from before the fingerprint existed is replaced once. This loses conversation continuity on every model or skills edit until the gateway can reconfigure a live thread; a gateway `instructions` channel and a reconfigurable allow-list would remove the replacement.
 2. Closed in Phase 3: the pull request comment works from the standing thread. The engine notes which findings the thread already had when the turn started and lists only the ones the turn added, so a comment never repeats earlier reviews.
 3. `messages[0]` of a thread survives compaction verbatim, so the first turn's envelope stays in context forever and can disagree with the current charter. The per-turn envelope says it overrides earlier messages; the system-prompt channel is the real fix.
 4. Closed in Phase 3: a person's message is recorded as a turn.
@@ -117,7 +117,7 @@ Every turn gets a key: schedule is `trigger id + scheduled-for time`; GitHub is 
 
 - Compaction is automatic in the gateway today. In an endless thread it will run many times, so it must only happen between turns, and before it runs the Agent gets one short turn to write durable facts to `NOTES.md` as a reviewable revision (author kind `agent`). The summary, `NOTES.md`, the charter and the last turns are the next prompt. Chat is not the system of record; files are.
 - Engine Memory (global and per-folder notes) is re-read at the start of every turn already, so a standing thread picks up Memory edits with no work.
-- The charter, scope and hard limits are a security control. They live in the first user message today, which a summary can paraphrase or drop. Required before the standing thread is the default (see Risks): (b) re-send a compact charter envelope with every trigger turn, then (a) a system-prompt `instructions` channel in the gateway. When scope or model changes, a "charter changed" turn is sent. `NOTES.md` is re-sent when its revision changed.
+- The charter and hard limits are a security control. They live in the first user message today, which a summary can paraphrase or drop. Required before the standing thread is the default (see Risks): (b) re-send a compact charter envelope with every trigger turn, then (a) a system-prompt `instructions` channel in the gateway. When the model changes, a "charter changed" turn is sent. `NOTES.md` is re-sent when its revision changed.
 - The summarised turns stay in the store and in the timeline (collapsed "N earlier turns summarised"); only the model context shrinks.
 
 ### Budgets: block trigger turns, never human messages
@@ -131,7 +131,7 @@ Every turn gets a key: schedule is `trigger id + scheduled-for time`; GitHub is 
 
 ### Circuit breaker
 
-After 3 consecutive failed trigger turns, that trigger is disabled with a visible reason (`lastStatus: failing`) and the Agent is marked "needs you". A person's messages are never blocked by the breaker. The review gate (a changed scope, model or skills must be re-confirmed) blocks trigger turns, not person turns.
+After 3 consecutive failed trigger turns, that trigger is disabled with a visible reason (`lastStatus: failing`) and the Agent is marked "needs you". A person's messages are never blocked by the breaker. The review gate (a changed model or skills must be re-confirmed) blocks trigger turns, not person turns.
 
 ### Failure and restart
 
@@ -176,14 +176,14 @@ Each phase ships alone, adds before it removes, and is one PR. Phases 0 and 1 st
 | 2 | One persistent thread as the delivery path, behind a flag | `agentsPersistentThread`, default off. Eager home thread, queue-mode send, no child thread, per-turn charter envelope, queue coalescing and `skipped` reasons, pending-decision skip, trigger status written at turn completion, `reserveTurn`, restart reconcile. Tests with a real gateway and compaction forced. |
 | 3 | Default on; UI input goes into the thread | `POST /sentinels/:id/run` becomes "send a message to the Agent's thread" with an old-shape shim for one release. The Agent page renders the real thread and stops navigating away. One-time notice (same pattern as the access upgrade notice) that scheduled work now lands in its thread. Reversal point for the decided defaults. |
 | 4 | Triggers as a property of the Agent | A trigger gets its own prompt and label; the owned automation becomes optional (the prompt wins, the workflow supplies steps). The Automations tab becomes Triggers. "Runs in" goes away. |
-| 5 | Promote and demote | `fromThread` on create, deterministic charter template, permissions summary and confirm (the thread's approvals, worker policy, scope and web search carry into unattended turns), thread header and menu entry, CLI `agents create --from-thread`, demote. Refuse threads on another Computer, threads that are already an Agent's or a child of one. |
+| 5 | Promote and demote | `fromThread` on create, deterministic charter template, permissions summary and confirm (the thread's approvals, worker policy and web search carry into unattended turns), thread header and menu entry, CLI `agents create --from-thread`, demote. Refuse threads on another Computer, threads that are already an Agent's or a child of one. |
 | 6 | Vocabulary and cleanup | Remove the Run dialog, relabel, CLI aliases kept hidden, regenerate the command reference and help snapshot, rewrite the docs page, a copy guard in the design tests, drop controls that nothing reads (`autoLearn`, notifications, `hostId` until honoured). |
 
 Later: a system-prompt `instructions` channel in the gateway, transcript segmentation if the session file grows too large, self-scheduling `wait`.
 
 ## Risks
 
-1. **Charter and scope surviving compaction.** First and highest. Scope is a security control and today it lives in a user message. Gate Phase 3 on a test with compaction forced that shows the charter is still in force, and ship the per-turn envelope in Phase 2.
+1. **Charter surviving compaction.** First and highest. The charter is a security control and today it lives in a user message. Gate Phase 3 on a test with compaction forced that shows the charter is still in force, and ship the per-turn envelope in Phase 2.
 2. **Queue stalls.** A failed start, an unanswered approval, or a cancelled turn that pauses the queue can silently stop all trigger turns. Phase 0 covers the failed start; Phase 2 covers the others.
 3. **Authority carried over by promote.** The thread's permissions become unattended permissions. Show them and require confirmation.
 4. **Cost accounting.** Queued turns, unpriced models, and the cap race. Phase 0 fixes the first and last.

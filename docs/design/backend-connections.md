@@ -116,7 +116,7 @@ it does not move an active run, reuse its approval, or reinterpret its workspace
    session and run to its chosen workspace, environment, and model connection.
 5. Qualify direct authenticated remote transport: TLS, version negotiation,
    bounded ingress, request IDs, idempotency, event cursor replay, reconnect, and
-   connection-specific approval routing. Preserve server-side scope and action
+   connection-specific approval routing. Preserve server-side action
    checks. Add a backend selector only when the underlying isolation works.
 6. Support independently deployed remote engines using their existing admitted
    local or SmolVM executors. An independently registered remote executor is a
@@ -131,7 +131,7 @@ bindings. Registration changes require editing the trusted configuration; the
 browser cannot supply an arbitrary endpoint or credential.
 
 The remote listener uses `0 web --engine-token-env NAME` with server-owned
-`--engine-workspace`, `--engine-scope`, and optional `--engine-target` admission.
+`--engine-workspace` admission.
 `--engine-allow-apply` admits explicit exact-candidate application; the request and
 live proof gates still apply. `--engine-time-cap` and `--engine-cost-cap` constrain
 caller limits (defaults ten minutes and $5). The local connection service uses
@@ -160,7 +160,7 @@ not completed or cancelled. Reconnect reads an authoritative snapshot and replay
 events after the acknowledged cursor. Cancellation targets the owning backend and
 requires acknowledgement; a stale local status does not prove that work stopped.
 
-Approval requests carry backend/session/run/request identity and a scope/operation
+Approval requests carry backend/session/run/request identity and an operation
 digest. Responses return to that exact owning connection and request. Model or
 workspace changes cannot silently transfer pending approvals. Existing target
 authorization, candidate proof, provider-usage accounting, and filesystem gates

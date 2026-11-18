@@ -1,8 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-vi.mock("../plugins/enablement.js", async (importOriginal) => ({
-  ...await importOriginal<object>(),
-  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
-}));
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import type { ToolContext, ToolResultMeta } from "./types.js";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -10,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // str_replace — exact-string file edit (Claude text_editor contract). These
-// executor-level tests pin the match/uniqueness semantics, the scope gate, and
+// executor-level tests pin the match/uniqueness semantics, the folder gate, and
 // the display-only edit-card meta.
 
 const baseCtx: ToolContext = {
@@ -157,7 +153,7 @@ describe("str_replace (executor-level integration)", () => {
     expect(readFileSync(target, "utf-8")).toBe("const a = `$&$1`;\n");
   });
 
-  it("refuses a path that escapes the scope", async () => {
+  it("refuses a path that escapes the folder", async () => {
     const outside = mkdtempSync(join(tmpdir(), "0-str-replace-out-"));
     const secret = join(outside, "secret.txt");
     writeFileSync(secret, "top secret\n");
@@ -167,14 +163,14 @@ describe("str_replace (executor-level integration)", () => {
         arguments: { path: "../".repeat(8) + join(outside, "secret.txt").replace(/^\/+/, ""), old_string: "top secret", new_string: "pwned" },
       });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/escapes the allowed scope/);
+      expect(result.error).toMatch(/escapes the folder/);
       // Absolute-path escape is refused too.
       const abs = await scopedExecutor.execute({
         name: "str_replace",
         arguments: { path: secret, old_string: "top secret", new_string: "pwned" },
       });
       expect(abs.success).toBe(false);
-      expect(abs.error).toMatch(/escapes the allowed scope/);
+      expect(abs.error).toMatch(/escapes the folder/);
       // Secret untouched.
       expect(readFileSync(secret, "utf-8")).toBe("top secret\n");
     } finally {
@@ -182,7 +178,7 @@ describe("str_replace (executor-level integration)", () => {
     }
   });
 
-  it("does not follow a symlink pointing outside the scope", async () => {
+  it("does not follow a symlink pointing outside the folder", async () => {
     const outside = mkdtempSync(join(tmpdir(), "0-str-replace-symout-"));
     const secret = join(outside, "creds.txt");
     writeFileSync(secret, "aws_key\n");
@@ -193,7 +189,7 @@ describe("str_replace (executor-level integration)", () => {
         arguments: { path: "link.txt", old_string: "aws_key", new_string: "pwned" },
       });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/escapes the allowed scope/);
+      expect(result.error).toMatch(/escapes the folder/);
       expect(readFileSync(secret, "utf-8")).toBe("aws_key\n");
     } finally {
       rmSync(outside, { recursive: true, force: true });
@@ -627,19 +623,19 @@ describe("str_replace (executor-level integration)", () => {
   });
 });
 
-describe("str_replace scope + role gating ", () => {
-  it("refuses to run without a scoped local directory", async () => {
+describe("str_replace folder + role gating ", () => {
+  it("refuses to run without a folder", async () => {
     const executor = new ToolExecutor({ ...baseCtx }, null);
     const result = await executor.execute({
       name: "str_replace",
       arguments: { path: "x.ts", old_string: "a", new_string: "b" },
     });
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/requires a scoped local directory/);
+    expect(result.error).toMatch(/requires a folder/);
   });
 
-  it("is offered to the verify role only when scoped", () => {
-    const scoped = getToolsForRole("verify", { hasScope: true }).map((t) => t.name);
+  it("is offered to the verify role only for a source audit", () => {
+    const scoped = getToolsForRole("verify", { sourceAudit: true }).map((t) => t.name);
     expect(scoped).toContain("str_replace");
 
     const unscoped = getToolsForRole("verify").map((t) => t.name);

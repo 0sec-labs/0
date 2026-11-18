@@ -55,7 +55,7 @@ Notes:
   22,561; (top-level files) 19,860; triage 19,397; runtime 13,372; identity
   10,415; shared 7,221; plugins 6,612; review 6,509; storage 6,067; disclose
   5,994; improvement 5,591; verify 5,435; console 5,145; research 4,782; bench
-  4,771; scope 3,079; intel 2,930; recon 2,483; cve 2,336; secure 2,257;
+  4,771; intel 2,930; recon 2,483; cve 2,336; secure 2,257;
   telemetry 2,216; adgraph 2,063; agentic 1,944; redteam 1,675; hub 1,460;
   protocol 1,380; events 1,342; xnu-fuzz 1,323; fix 1,040; h1 1,031;
   verification-spec 1,028; memory 1,005; emit 988; unified-pipeline 935;
@@ -142,9 +142,8 @@ Order is the step number from section 6.
 | shared | 7,221 | KEEP | 500 importers | n/a | n/a |
 | storage | 6,067 | KEEP | 71 importers; churn 25 | n/a | n/a |
 | events, config | 1,470 | KEEP | 29 and 4 importers | n/a | n/a |
-| console (headless chat engine) | 5,145 | KEEP | `hub`, `plugins`, `scope` feed it; churn 16 | n/a | n/a |
+| console (headless chat engine) | 5,145 | KEEP | `hub`, `plugins` feed it; churn 16 | n/a | n/a |
 | plugins (host) | 6,612 | KEEP (shrink) | one concept per `docs/design/plugins-one-concept.md`; becomes the loader for all section 3 plugins | Low | 5 |
-| scope | 3,079 | KEEP | 42 importers; safety rail | n/a | n/a |
 | telemetry | 2,216 | KEEP (trim) | 10 importers; run-contribution and analytics-pipeline reference `cloud` | Low | 3 |
 | diagnostics | 561 | KEEP | 10 importers (runtime, agent, console) | n/a | n/a |
 | report-formatters, templates | 1,309 | KEEP | SARIF/markdown output; `templates` used by scanner | n/a | n/a |
@@ -341,7 +340,7 @@ deleted (that file already documents the policy).
 Routes today: `/chats` (+`/:id`, `/saved/:id`), console controls (settings
 routes), `/automations`, `/agents` (+`/:id`), `/api-access`, `/team`,
 `/plugins/skills` (+catalog detail), `/plugins/explore`, `/plugins/:id`,
-`/memory`, `/scope`, `/findings` (+`/:fingerprint`), `/computers`,
+`/memory`, `/findings` (+`/:fingerprint`), `/computers`,
 `/runs/:scanId`, plus a table of legacy redirects. 17 lazily loaded pages.
 `console-page.tsx` alone is 1,836 lines.
 
@@ -354,7 +353,7 @@ Minimal set (six surfaces):
 | Agents (incl. automations, triggers) | `/automations`, workflow graph/phase/trigger editors (about 1,030 LOC in `workflow-*` and `automations` components) |
 | Skills (incl. plugins, MCP connectors) | `/plugins/explore`, `/plugins/:id`, catalog detail (about 1,110 LOC) |
 | Computers | workers page |
-| Settings (models, memory, scope, team, API access) | `/memory`, `/scope`, `/team`, `/api-access` as tabs |
+| Settings (models, memory, team, API access) | `/memory`, `/team`, `/api-access` as tabs |
 
 Delete: `explore-page`, `saved-conversation-page`, `workflow-graph`,
 `workflow-definition-editor`, `workflow-phase-editor`, `whats-new-dialog`,
@@ -393,14 +392,14 @@ CLI-web server: trim in step with the CLI collapse (about -20%).
                          0 (CLI, 9 commands)            Web (6 surfaces)
                                  \                       /
                                +-----------------------------+
-   gateway                     |  engine service / HTTP / MCP |   auth, scope, approvals
+   gateway                     |  engine service / HTTP / MCP |   auth, approvals
                                +--------------+--------------+
                                               |
               +-------------------------------+-------------------------------+
               |  core harness (about 117k LOC)                                |
               |  agent loop + native-loop + journal + tool registry           |
               |  scan stages (web, source) -> triage core -> verify -> fix    |
-              |  storage, events, memory, scope, redaction, cost, telemetry   |
+              |  storage, events, memory, redaction, cost, telemetry   |
               |  runtime: api (default) + smolvm sandbox (lazy)               |
               +--------+----------------------+-------------------+-----------+
                        |                      |                   |

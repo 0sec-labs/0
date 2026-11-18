@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { LlmApiRuntime, ScopePolicy } from "@0/engine";
+import { LlmApiRuntime } from "@0/engine";
 import { createHostConsoleSession } from "./host-console-session.js";
 const roots: string[] = [], sessions: ReturnType<typeof createHostConsoleSession>[] = [];
 const bun = Object.getOwnPropertyDescriptor(process.versions, "bun");
@@ -36,13 +36,11 @@ createReadStream(null,{fd:3}).on('data',chunk=>{pending+=chunk;let i;while((i=pe
 `);
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "fixture", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
   const identity = runtime.connectionIdentity(), callback = vi.fn(), snapshots = vi.fn();
-  const scope = ScopePolicy.fromJson({ in_scope: ["fixture.invalid"] });
-  const session = createHostConsoleSession({ config: { runtime, scanId: "review-history", workspaceRoot: root, target: "https://fixture.invalid", scope, autonomyMode: "standard", initialMessages: [{ role: "user", content: [{ type: "text", text: "Earlier context" }] }], askOperator: callback }, onSnapshot: snapshots, executionEnvironment: {},
-    scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: root, message: "Fixture scope" },
+  const session = createHostConsoleSession({ config: { runtime, scanId: "review-history", workspaceRoot: root, autonomyMode: "standard", initialMessages: [{ role: "user", content: [{ type: "text", text: "Earlier context" }] }], askOperator: callback }, onSnapshot: snapshots, executionEnvironment: {},
     launch: { command: process.execPath, args: [entry], cwd: root, env: { PATH: process.env.PATH, HOME: root }, graceMs: 250, confirmationMs: 1000 } });
-  sessions.push(session); return { session, started, runtime, identity, callback, snapshots, scope };
+  sessions.push(session); return { session, started, runtime, identity, callback, snapshots };
 }
-it.skipIf(process.platform === "win32")("keeps the last drained user/tool history without forwarding post-fence callbacks, runtime, scope or checkpoints", async () => {
+it.skipIf(process.platform === "win32")("keeps the last drained user/tool history without forwarding post-fence callbacks, runtime or checkpoints", async () => {
   const f = fixture("buffered"); await f.session.ready;
   const count = f.snapshots.mock.calls.length;
   const requested = Promise.withResolvers<void>();
@@ -58,8 +56,7 @@ it.skipIf(process.platform === "win32")("keeps the last drained user/tool histor
   expect(JSON.stringify(f.session.messages)).toContain("New in-flight user request");
   expect(f.session.messages.at(-1)).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "pending-tool", is_error: true }] });
   expect(f.snapshots).toHaveBeenCalledTimes(count); expect(f.callback).not.toHaveBeenCalled();
-  expect(f.runtime.connectionIdentity()).toBe(f.identity); expect(f.session.scope).toBe(f.scope);
-  expect(f.session.target).toBe("https://fixture.invalid"); expect(f.session.approvals).toBe("ask");
+  expect(f.runtime.connectionIdentity()).toBe(f.identity); expect(f.session.approvals).toBe("ask");
   expect(() => f.session.exportCheckpoint()).toThrow(/fenced/);
 });
 it.skipIf(process.platform === "win32")("does not undo a clear whose worker acknowledgement is still pending", async () => {
@@ -78,7 +75,6 @@ it.skipIf(process.platform === "win32")("retains the new turn after acknowledged
   expect(JSON.stringify(f.session.messages)).toContain("After acknowledged clear");
   expect(f.runtime.resolvedModel()).toBe("fixture-new-model");
   expect(f.runtime.connectionIdentity()).toBe(f.identity);
-  expect(f.session.scope).toBe(f.scope);
   expect(() => f.session.exportCheckpoint()).toThrow(/fenced/);
 });
 it.skipIf(process.platform === "win32")("never adopts drained history when resource teardown remains unconfirmed", async () => {

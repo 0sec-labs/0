@@ -2,8 +2,6 @@
  * What the Extensions page shows: one row per built-in and installed extension, with what it can do, where it came
  * from and whether it may run. A read-only view over the store and `loadable()`; it changes nothing.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { BUILTIN_EXTENSIONS } from "./core/builtins.js";
 import { canDoLines, capabilitiesOf } from "./core/capabilities.js";
 import type { ConnectorDecl } from "./core/connector.js";
@@ -34,42 +32,17 @@ export interface ExtensionOverviewRow {
   mcp: McpServerStatus[];
   note: string;
   /** Built-ins only: when the page must not offer an on/off switch. */
-  required: "always" | "scope-defined" | null;
+  required: "always" | null;
 }
 export interface ExtensionOverview {
   rows: ExtensionOverviewRow[]; importReport: ImportReport | null; error?: string;
-  /** True when a scope exists for this folder or workspace: a project scope file, a scope in settings, or an Agent or automation scope. The scope row is then "On" with no switch. */
-  scopeDefined: boolean;
-}
-
-/** What the caller knows about scopes. The engine adds the project scope file itself. */
-export interface ScopeSignals {
-  /** The folder the console serves; `scope.json` or `.0/scope.json` in it with at least one rule is a project scope. */
-  projectFolder?: string;
-  /** A scope configured in settings. */
-  settingsScope?: boolean;
-  /** Agents and automations that carry a scope. */
-  agentScopes?: number;
-}
-
-const hasRules = (value: unknown): boolean => !!value && typeof value === "object" && ["in_scope", "out_of_scope"].some(k => Array.isArray((value as Record<string, unknown>)[k]) && ((value as Record<string, unknown>)[k] as unknown[]).length > 0);
-function projectScopeFile(folder: string): boolean {
-  for (const rel of ["scope.json", join(".0", "scope.json")]) {
-    const path = join(folder, rel);
-    try { if (existsSync(path) && hasRules(JSON.parse(readFileSync(path, "utf8")))) return true; } catch { /* unreadable or malformed: not a defined scope */ }
-  }
-  return false;
-}
-export function scopeDefinedFrom(signals: ScopeSignals = {}): boolean {
-  return (signals.projectFolder !== undefined && projectScopeFile(signals.projectFolder)) || signals.settingsScope === true || (signals.agentScopes ?? 0) > 0;
 }
 
 const sourceLabel = (source: { type: "git"; url: string } | { type: "local"; path: string } | null): string | null =>
   !source ? null : source.type === "local" ? source.path : source.url.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "");
 
-export function extensionOverview(store: ExtensionStore, projectKey: string | null, mcp?: { pins: McpPinStore; observed: McpObservationLog }, scope: ScopeSignals = {}): ExtensionOverview {
-  const scopeDefined = scopeDefinedFrom(scope);
-  const state = store.read(); if (!state.ok) return { rows: [], importReport: null, error: state.error.message, scopeDefined };
+export function extensionOverview(store: ExtensionStore, projectKey: string | null, mcp?: { pins: McpPinStore; observed: McpObservationLog } ): ExtensionOverview {
+  const state = store.read(); if (!state.ok) return { rows: [], importReport: null, error: state.error.message };
   const listed = listRows(store, projectKey);
   const refused = new Map(loadable(store, projectKey).refused.map(r => [r.name, r]));
   const rows = listed.rows.map((row): ExtensionOverviewRow => {
@@ -88,5 +61,5 @@ export function extensionOverview(store: ExtensionStore, projectKey: string | nu
       note: row.kind === "built-in" ? "" : row.detail, required: builtin?.required ?? null,
     };
   });
-  return { rows, importReport: state.value.import, scopeDefined };
+  return { rows, importReport: state.value.import };
 }

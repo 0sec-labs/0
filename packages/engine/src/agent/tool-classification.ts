@@ -12,9 +12,4 @@ export const READ_ONLY_TOOLS: Readonly<Record<string, true>> = Object.freeze({
   ask_operator: true,
 });
 
-/** Handlers requiring a scoped local directory, including scoped writes. */
-export const LOCAL_SCOPE_TOOLS: Readonly<Record<string, true>> = Object.freeze({
-  str_replace: true,
-});
-
-export interface ToolGateFlags { networkCapable: boolean; localScope: boolean; readOnly: boolean }
+export interface ToolGateFlags { networkCapable: boolean; readOnly: boolean }

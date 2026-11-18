@@ -21,7 +21,7 @@ third-party systems without authorization.
 
 For execution-boundary or tool-approval reports, include the entrypoint
 (console, command, dashboard, desktop, MCP, or 0verse), autonomy mode,
-scope/exclusions, executor/runtime, and relevant feature flags. Redact tokens,
+executor/runtime, and relevant feature flags. Redact tokens,
 provider credentials, private target paths, and sensitive artifacts before
 sharing logs. A minimal synthetic reproducer is preferable to a production
 target or a live exploit.
@@ -63,7 +63,7 @@ an empty scratch home and an allow-listed environment. Guardrails:
 
 - owner-only in team mode and unavailable to engine-bearer callers;
 - a protected-path gate, evaluated by the live dashboard (not the agent) and
-  failing closed, rejects diffs touching authentication, scope, approvals,
+  failing closed, rejects diffs touching authentication, approvals,
   session and credential storage, the self-edit code itself, dependencies and
   lockfiles, build config, CI and agent instructions;
 - apply is not implemented: nothing is promoted to the running dashboard;

@@ -2,7 +2,7 @@ import { v } from "@/lib/vocabulary";
 import type { SessionRailRow } from "./session-rail-order";
 
 export function sidebarChatTitle(row: SessionRailRow): string {
-  return row.kind === "live" ? row.session.title || row.session.target || v("Untitled {mission}") : row.session.summary || row.session.target || row.session.preview || v("Past {mission}");
+  return row.kind === "live" ? row.session.title || v("Untitled {mission}") : row.session.summary || row.session.preview || v("Past {mission}");
 }
 
 type TitleSourced = { titleSource?: "default" | "auto" | "user" };

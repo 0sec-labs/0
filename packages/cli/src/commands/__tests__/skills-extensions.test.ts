@@ -46,7 +46,7 @@ describe("0 skills add / 0 skills extensions (local fixture repo, temp HOME)", (
 
     expect(await run("add", `${r.dir}@${r.shas[0]}`, "--yes", "--enable")).toContain(`Installed extension demo at ${r.shas[0]!.slice(0, 12)}`);
     expect(existsSync(join(home, ".0", "extensions", "demo", r.shas[0]!, "extension.json"))).toBe(true);
-    const list = await run("extensions", "list"); expect(list).toMatch(/demo\s+git\s+enabled/); expect(list).toMatch(/scope\s+built-in/);
+    const list = await run("extensions", "list"); expect(list).toMatch(/demo\s+git\s+enabled/); expect(list).toMatch(/github\s+built-in/);
     expect(await run("extensions", "info", "demo")).toContain("Demo extension");
 
     const diff = await run("extensions", "update", "demo", "--to", r.shas[1]!);
@@ -72,8 +72,8 @@ describe("0 skills add / 0 skills extensions (local fixture repo, temp HOME)", (
   it("refuses bad pins, built-in removal and unconfirmed built-in disable", async () => {
     const r = repo();
     expect(await run("add", `${r.dir}@${r.shas[0]!.slice(0, 7)}`, "--yes")).toContain("full 40-character"); expect(code).toBe(1);
-    await run("extensions", "remove", "scope", "--yes"); expect(code).toBe(1);
-    expect(await run("extensions", "disable", "scope")).toContain("without scope enforcement"); expect(code).toBe(2);
+    await run("extensions", "remove", "github", "--yes"); expect(code).toBe(1);
+    expect(await run("extensions", "disable", "github")).toContain("pauses pull request Sentinels"); expect(code).toBe(2);
   });
 
   it("imports an old setup once and reports what could not be migrated", async () => {
@@ -93,7 +93,7 @@ describe("approvals are the operator's", () => {
       await run("add", `${r.dir}@${r.shas[0]}`, "--yes", "--enable");
       expect(code, String(tty)).not.toBe(0); expect(err.join("\n"), String(tty)).toMatch(/run by a thread, not by you/);
       await run("add", `${r.dir}@${r.shas[0]}`); expect(code, String(tty)).toBe(2); expect(out.join("\n") + err.join("\n")).toContain("Re-run with --yes");
-      await run("extensions", "enable", "demo", "--yes"); await run("extensions", "disable", "scope", "--yes"); await run("extensions", "import", "--force"); await run("extensions", "remove", "demo", "--yes");
+      await run("extensions", "enable", "demo", "--yes"); await run("extensions", "disable", "github", "--yes"); await run("extensions", "import", "--force"); await run("extensions", "remove", "demo", "--yes");
       expect(existsSync(join(home, ".0", "extensions", "demo")), String(tty)).toBe(false);
       const state = join(home, ".0", "extensions", "state.json");
       if (existsSync(state)) { const parsed = JSON.parse(readFileSync(state, "utf8")); expect(Object.keys(parsed.extensions), String(tty)).toEqual([]); expect(parsed.builtins, String(tty)).toEqual({}); }

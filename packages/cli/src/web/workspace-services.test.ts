@@ -11,7 +11,7 @@ const temp = () => { const dir = mkdtempSync(join(tmpdir(), "zero-workspace-serv
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 const session = (id: string): StoredSession => ({
-  id, savedAt: 1_000, target: "https://target.example", model: "m", mode: "guided", cwd: "/work", messageCount: 1, preview: "hello",
+  id, savedAt: 1_000, model: "m", mode: "guided", cwd: "/work", messageCount: 1, preview: "hello",
   messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
 });
 

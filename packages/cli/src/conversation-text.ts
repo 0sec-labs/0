@@ -36,7 +36,6 @@ export function publicConversationMetadata(session: StoredSessionMeta) {
   return {
     id: session.id, savedAt: session.savedAt,
     cwd: cleanConversationText(session.cwd).slice(0, 512),
-    target: session.target ? cleanConversationText(session.target).slice(0, 256) : undefined,
     model: session.model ? cleanConversationText(session.model).slice(0, 128) : undefined,
     messageCount: session.messageCount,
     preview: cleanConversationText(session.preview),

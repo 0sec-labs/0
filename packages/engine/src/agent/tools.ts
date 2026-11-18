@@ -28,12 +28,8 @@ import { resolve, dirname } from "node:path";
 import type { Finding } from "../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext } from "./types.js";
 import type { NativeRuntime } from "../runtime/types.js";
-import { extractUrls } from "../scope/scope.js";
 import { runBeforeCommand } from "./before-command.js";
 import { hookInputForTool } from "./command-hook.js";
-import { detectScannerBinary } from "../scope/scanner-binaries.js";
-import { describeScopeGuards, scopeRequiredRefusal } from "../scope/scope-guard.js";
-import { getScopeEnforcementState, isScopeEnforcementEnabled, scopeCheckMode, withScopeEnforcement } from "../scope/activation.js";
 import { fetchScoped } from "../http.js";
 import { buildAuthHeaders } from "./prompts.js";
 import { formatTruncated } from "./output-truncation.js";
@@ -45,7 +41,6 @@ import { features as featureFlags } from "./features.js";
 import { sanitizedEnv } from "./sanitized-env.js";
 import { extractPocStepsFromProse } from "./poc-steps-from-prose.js";
 import { computeFindingConfidence } from "./finding-confidence.js";
-import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, repositoryIdentityMatchesTarget, runRepositoryAcquisition } from "./repository-acquisition.js";
 import { validateFindingDraft, type FindingDraft } from "./finding-validator.js";
 import { findMatchingFindingCandidate } from "./tools-helpers.js";
 import { resolvePacks } from "./toolset.js";
@@ -59,17 +54,15 @@ import type { ToolHealthSummary } from "./tool-health.js";
 import { AuditWorkerTree } from "./worker-tree.js";
 import { MCP_TOOL_PREFIX } from "./mcp-adapt.js";
 import { LIST_TOOLS_NAME, LOAD_TOOL_NAME, formatToolCatalog, formatLoadResult } from "./deferred-tools.js";
-import { resolveScopedPath } from "./tools/scope-path.js";
-import { getLocalSourceBoundary, withLocalSourceBoundary } from "../scope/local-source-boundary.js";
+import { resolveFolderPath } from "./tools/folder-path.js";
 import { TOOL_DEFINITIONS } from "./tools/index.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
 import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { resolveBashWallclockCeilingMs, runBashWithWallclock, buildStrReplaceMeta } from "./tools/exec-helpers.js";
-import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool, detectHttpEgressSegments, injectAuthIntoBashCommand } from "./tools/shell-commands.js";
+import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool } from "./tools/shell-commands.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 import { citedSourceHasKnownMarker } from "./tools/probe-helpers.js";
 import { mcpHostOf, deferredToolsOf, packToolsOf } from "./tools/context-hosts.js";
-import { executionPolicy } from "../shared/approvals.js";
 
 // ── Tool registry (0#611) ──
 // The per-tool ToolDefinition objects now live in per-domain modules under
@@ -94,10 +87,8 @@ export { sanitizedEnv } from "./sanitized-env.js";
 
 // ── Public API moved to ./tools/*.ts (re-exported unchanged) ──
 export { MIN_OPERATOR_QUESTIONS, MAX_OPERATOR_QUESTIONS, MIN_OPERATOR_OPTIONS, MAX_OPERATOR_OPTIONS, buildOperatorQuestionRequest, toolExecutorCheckpointSchema } from "./tools/agent-args.js";
-export { detectHttpEgressSegments, injectAuthIntoBashCommand } from "./tools/shell-commands.js";
 export { parseVerificationSpecArg, autoVerificationSpec, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 export type { OperatorQuestionBuildResult, ToolExecutorCheckpoint } from "./tools/agent-args.js";
-export type { AuthInjectResult } from "./tools/shell-commands.js";
 export { sanitizeSubagentNote, buildSendMessageTool, buildSiblingMessagingBatch, buildSubagentProgress, buildSubagentMessage } from "./tools/subagents.js";
 
 
@@ -115,19 +106,6 @@ export class ToolExecutor {
    * Populated on first loadSkill call that finds the env var.
    */
   private _cloudSkillBundle: Map<string, SkillDefinition> | null | undefined;
-
-  /**
-   * Per-session memory for the scoped-source-audit escalation gate
-   * (see `_evaluateScopedAuditGate`). Keyed by tool NAME. `_scopedAuditGrants`
-   * holds tools the operator approved this session — approved once, never
-   * re-prompted. `_scopedAuditDenials` holds tools the operator declined —
-   * denied outright on retry without re-prompting. Both mirror the
-   * denied-host / denied-path memory pattern in `console/turn-engine.ts`.
-   * In-memory only; the executor is constructed once per console session and
-   * discarded with it, so these are session-scoped and never persisted.
-   */
-  private _scopedAuditGrants: Set<string>;
-  private _scopedAuditDenials: Set<string>;
 
   private readonly _executionContext = new AsyncLocalStorage<{ correlationId?: string; signal?: AbortSignal; assertAuthority?: () => void }>();
   private get _correlationId(): string | null {
@@ -148,8 +126,6 @@ export class ToolExecutor {
    * Either way, new distinct events fan out on the event bus as `tool_health`.
    */
   private _toolHealth: ToolHealthTracker;
-
-  private readonly _localSourceBoundary = getLocalSourceBoundary();
 
   /** Search policy changes require quiescent children so their inherited policy stays consistent. */
   configureWebSearch(enabled: boolean): void {
@@ -178,7 +154,6 @@ export class ToolExecutor {
     this.ctx.scopePath = path;
     this.ctx.workspaceRoot = path;
     this._workspaceIdentity = captureWorkspaceIdentity(path);
-    this._scopedAuditGrants.clear();
   }
 
   constructor(
@@ -191,8 +166,6 @@ export class ToolExecutor {
     this.ctx = ctx;
     this.ctx.workerPolicy = this.checkedWorkerPolicy(ctx.workerPolicy);
     this._credentialTarget = initialCheckpoint?.credentialTarget ?? ctx.target;
-    this._scopedAuditGrants = new Set(initialCheckpoint?.scopedAuditGrants);
-    this._scopedAuditDenials = new Set(initialCheckpoint?.scopedAuditDenials);
     this._assignedAgentNames = new Set(initialCheckpoint?.assignedAgentNames ?? [PRIMARY_AGENT_NAME]);
     this._childRuntimeFactory = childRuntimeFactory;
     this._workspaceIdentity = ctx.workspaceIdentity ?? captureWorkspaceIdentity(ctx.scopePath);
@@ -254,8 +227,6 @@ export class ToolExecutor {
     }
     return {
       credentialTarget: this._credentialTarget,
-      scopedAuditGrants: [...this._scopedAuditGrants],
-      scopedAuditDenials: [...this._scopedAuditDenials],
       assignedAgentNames: [...this._assignedAgentNames],
       msgDrainTurn: this._msgDrainTurn,
       msgDrainCount: this._msgDrainCount,
@@ -331,9 +302,7 @@ export class ToolExecutor {
     const assertAuthority = ownAuthority && inheritedAuthority && ownAuthority !== inheritedAuthority
       ? () => { inheritedAuthority(); ownAuthority(); }
       : ownAuthority ?? inheritedAuthority;
-    const scopeEnforcement = getScopeEnforcementState(this.ctx.workspaceRoot ?? this.ctx.scopePath, undefined, !!(this.ctx.scope || this.ctx.publicNetwork?.scope || this.ctx.enforcement));
-    this.ctx.scopeEnforcement = scopeEnforcement;
-    return withLocalSourceBoundary(this._localSourceBoundary ?? getLocalSourceBoundary(), () => withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
+    return this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
@@ -345,8 +314,6 @@ export class ToolExecutor {
       }
       const safeLocal = isCheckoutReadOnlyTool(call.name);
       if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
-      const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
-      if (scopedAuditVerdict) return scopedAuditVerdict;
       signal?.throwIfAborted();
       assertAuthority?.();
 
@@ -362,90 +329,7 @@ export class ToolExecutor {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
     }
-    })));
-  }
-
-  /**
-   * Scoped-source-audit allow-list gate — autonomy-aware and escalatable.
-   *
-   * Returns `null` when `call` may proceed to dispatch, or a "denied"
-   * `ToolResult` to block it. Re-evaluated on EVERY `execute()` (it reads
-   * `this.ctx.autonomyMode` and the grant/denial sets fresh each time), so
-   * switching autonomy mid-session takes effect immediately with no executor
-   * rebuild.
-   *
-   * A scoped source audit (role audit/review with a genuinely configured,
-   * non-empty `scopePath`) processes attacker-controlled package contents, so
-   * by default only the `SCOPED_SOURCE_AUDIT_TOOLS` allow-list may run.
-   *
-   * IMPORTANT — this gate ONLY lifts that allow-list; it is NOT a master key.
-   * The console turn-engine's network scope-on-demand gate, local-filesystem
-   * scope gate, and co-pilot per-tool approval gate all run BEFORE
-   * `execute()` is reached, and each tool handler's own `scopePath`/`target`
-   * guards still apply AFTER dispatch. An auto-mode grant or an escalation approval
-   * here changes none of those.
-   */
-  private async _evaluateScopedAuditGate(call: ToolCall): Promise<ToolResult | null> {
-    // The gate applies only inside a scoped source audit: role audit/review
-    // AND a genuinely configured (non-empty) local scope. Absent either, there
-    // is no allow-list restriction to evaluate — proceed. This nonempty-scope
-    // requirement is also what stops auto mode from ever granting execution rights
-    // when no scope exists.
-    const inScopedSourceAudit =
-      !!getLocalSourceBoundary() ||
-      (
-      (this.ctx.role === "audit" || this.ctx.role === "review") &&
-      typeof this.ctx.scopePath === "string" &&
-      this.ctx.scopePath.length > 0);
-    if (!inScopedSourceAudit) return null;
-
-    // Allow-listed tools always run — they are never a candidate for
-    // escalation and never consume the escalation callback.
-    if (Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, call.name)) return null;
-
-    const denied: ToolResult = {
-      success: false,
-      output: null,
-      error: `Tool "${call.name}" is not available in a scoped source audit`,
-    };
-    // Neither autonomy nor a later escalation can widen an explicit folder's
-    // read-only investigation into shell execution or repair outside the phase.
-    if (getLocalSourceBoundary()) return denied;
-
-    // Auto or co-pilot with a configured scope: the allow-list no longer
-    // restricts execution. Neither mode has per-action prompts under the
-    // current model, so both auto-lift the scoped-audit allow-list inside the
-    // configured scope (the expansion is still surfaced via the console's
-    // scope/local-scope notify path and the per-tool gates listed above still
-    // run). It does not touch the OTHER gates listed above.
-    if (executionPolicy(this.ctx.approvals).liftsAuditAllowList) return null;
-
-    // Standard / recon: honour a decision already made this session before
-    // prompting again (mirrors the denied-host / denied-path memory pattern in
-    // console/turn-engine.ts). Recon keeps prompting here exactly like standard
-    // — the console refuses effectful recon tools upstream, so anything that
-    // reaches this gate in recon is a genuine allow-list escalation decision.
-    if (this._scopedAuditGrants.has(call.name)) return null;
-    if (this._scopedAuditDenials.has(call.name)) return denied;
-
-    // No escalation callback wired (every existing non-console caller,
-    // including the scan pipeline): behave BYTE-IDENTICALLY to the pre-autonomy
-    // hard denial. This is the default-must-not-weaken path.
-    const escalate = this.ctx.escalateScopedAudit;
-    if (!escalate) return denied;
-
-    const approved = await escalate({
-      call,
-      reason: `Tool "${call.name}" is outside the scoped source-audit allow-list`,
     });
-    if (approved) {
-      // Grant is per-tool-name, in-memory, session-scoped — never re-prompted.
-      this._scopedAuditGrants.add(call.name);
-      return null;
-    }
-    // Remember the denial so a retry of the same tool does not re-prompt.
-    this._scopedAuditDenials.add(call.name);
-    return denied;
   }
 
   /**
@@ -454,15 +338,13 @@ export class ToolExecutor {
    * delegated agent calls. Only a deny matters here; an ask is answered by the console session before dispatch.
    */
   private async _beforeCommandGate(call: ToolCall): Promise<ToolResult | null> {
-    const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
     const input = hookInputForTool(call.name, (call.arguments ?? {}) as Record<string, unknown>, {
       cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot ?? process.cwd(),
-      thread: { scope: networkScope, pathPrefixes: this.ctx.enforcement?.pathPolicy.snapshot(), canAskScope: false },
+      thread: {},
     });
     if (!input) return null;
     const outcome = await runBeforeCommand(input);
     if (outcome.decision !== "deny") return null;
-    this.ctx.enforcement?.noteOutOfScopeBlocked();
     return { success: false, output: null, error: `${call.name} refused: ${outcome.reason}` };
   }
 
@@ -587,166 +469,6 @@ export class ToolExecutor {
     if (!command) {
       return { success: false, output: null, error: "Command is required" };
     }
-    const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
-    // Fail closed before anything else (including repository acquisition): a scope is
-    // defined but the scope extension is disabled.
-    if (scopeCheckMode(networkScope !== undefined || (this.ctx.enforcement?.pathPolicy.snapshot().length ?? 0) > 0) === "deny") {
-      this.ctx.enforcement?.noteOutOfScopeBlocked();
-      return { success: false, output: null, error: `bash refused: ${getScopeEnforcementState().message}` };
-    }
-    const acquisition = parseRepositoryAcquisition(command);
-    if (this.ctx.consoleSession && acquisition && !repositoryIdentityMatchesTarget(this.ctx.target, acquisition.url)) {
-      return {
-        success: false,
-        output: null,
-        error: "Console repository acquisition refused: provide the exact HTTPS repository URL as the current target before cloning or reviewing source.",
-      };
-    }
-
-    if (executionPolicy().publicNetwork && !this.ctx.enforcement) {
-      if (acquisition && !networkScope?.match(acquisition.url).allowed) {
-        if (!repositoryAcquisitionAllowed(acquisition, networkScope)) {
-          return { success: false, output: null, error: "Repository source is explicitly excluded by the engagement scope" };
-        }
-        const ceilingMs = resolveBashWallclockCeilingMs();
-        const requested = typeof args.timeout === "number" && Number.isFinite(args.timeout) ? args.timeout : 90;
-        const timeoutMs = Math.min(ceilingMs, Math.max(1, requested) * 1000);
-        const result = await runRepositoryAcquisition(acquisition, command, timeoutMs, ceilingMs, networkScope);
-        this.persistToolArtifact("bash", {
-          command: command.slice(0, 500),
-          output: String(result.output ?? result.error ?? "").slice(0, 2_000),
-          sourceAcquisition: true,
-        });
-        return result;
-      }
-    }
-
-    // Programmatic scope pre-flight (0#215). The bash subprocess can
-    // reach out to anywhere — we don't have an egress proxy yet (issue
-    // is acknowledged in the DoD), so the best we can do is grep the
-    // command for obvious URLs and refuse if any are out of scope. This
-    // catches the common case (`curl https://evil.com/x`); a cleverer
-    // agent that hides the URL behind base64 / DNS / a temp file is NOT
-    // caught here, and that gap is documented as a follow-up.
-    // beforeCommand already ran for this call in execute() (`_beforeCommandGate`), before repository
-    // acquisition and for every executing tool, not only bash.
-    if (isScopeEnforcementEnabled() && networkScope) {
-      // Host and http_audit path checks on URLs in the command are decided once by
-      // the beforeCommand hook above (scope/before-command.ts).
-
-      // Generic-scanner-traffic suppression (0#217). When scope is
-      // loaded the engagement is presumed to be a coordinated-disclosure
-      // run, and most venue policies explicitly forbid the named
-      // generic scanners (sqlmap/nikto/gobuster/…) because they
-      // fingerprint themselves on the wire. The shell-first agent has
-      // `curl` for the actual probing it needs to do.
-      // `--allow-scanners` (threaded down as `ctx.allowScanners`)
-      // overrides this gate for engagements that explicitly permit
-      // those tools.
-      if (!this.ctx.allowScanners) {
-        const hit = detectScannerBinary(command);
-        if (hit) {
-          return {
-            success: false,
-            output: null,
-            error: `bash refused: ${hit.reason}`,
-          };
-        }
-      }
-    } else {
-      // Record disabled or unconfigured authorization honestly; resource and
-      // credential controls below are independent of scope activation.
-      const guards = describeScopeGuards(false);
-      if (guards.required) {
-        return { success: false, output: null, error: scopeRequiredRefusal("bash") };
-      }
-      const unscopedUrls = extractUrls(command);
-      const egressSegments = detectHttpEgressSegments(command);
-      if (unscopedUrls.length > 0 || egressSegments.length > 0) {
-        this.persistToolArtifact("bash", {
-          scope_guards: "inert",
-          inert_guards: guards.inertGuards,
-          unscoped_egress_urls: unscopedUrls.slice(0, 10),
-          unscoped_egress_segments: egressSegments.slice(0, 10).map((s) => s.slice(0, 120)),
-          note: guards.message,
-        });
-      }
-    }
-
-    // ── http_audit bash-egress SSRF gate (FROZEN CONTRACT) ──
-    // Close the gap where bash curl/wget/python-http bypasses the
-    // host+path allowlist that the fetch-based tools enforce.
-    // Any HTTP-egress segment MUST carry at least one explicit http(s) URL
-    // (which the scope+path block above already verified is in-scope AND
-    // in-path). An egress command with no statically-resolvable URL is
-    // refused fail-closed — its destination can't be audited, which defeats
-    // the bounded-egress guarantee of http_audit. Non-egress bash is
-    // untouched. Only active in http_audit mode (enforcement set).
-    if (isScopeEnforcementEnabled() && this.ctx.enforcement) {
-      const egressSegments = detectHttpEgressSegments(command);
-      for (const segment of egressSegments) {
-        const urlsInSegment = extractUrls(segment);
-        if (urlsInSegment.length === 0) {
-          this.ctx.enforcement.noteOutOfScopeBlocked();
-          return {
-            success: false,
-            output: null,
-            error:
-              `bash refused (http_audit): HTTP-egress command '${segment.slice(0, 80)}' has no explicit ` +
-              `in-scope http(s) URL to verify against the host+path allowlist. Pass a ` +
-              `literal in-scope URL.`,
-          };
-        }
-        // URLs present in the segment were already host+path validated in
-        // the scope block above (any out-of-scope URL would have returned).
-      }
-    }
-
-    // ── Close the bash rate-limiter bypass (0#568) ──
-    // The bash subprocess shells out to curl/wget/python-http, which bypass
-    // node's `fetch` and therefore the per-host RateLimiter (#214) that the
-    // fetch-based tools pace against. Without an egress
-    // proxy we can't throttle the subprocess socket itself, but we CAN pace +
-    // count BEFORE exec: for every explicit, in-scope http(s) URL an egress
-    // segment will hit, acquire a token from the SAME per-host bucket (so bash
-    // traffic paces identically to the fetch tools and honours any active 429
-    // cool-off) and tally it on the enforcement tracker, so bash-issued
-    // requests show up in `requests_in_scope` / peak-RPS instead of being
-    // invisible. URLs were already host+path validated above when scope is set;
-    // when scope is unset we still pace whatever explicit URLs are present.
-    if (this.ctx.rateLimiter || this.ctx.enforcement) {
-      const egressSegments = detectHttpEgressSegments(command);
-      const pacedUrls = new Set<string>();
-      for (const segment of egressSegments) {
-        for (const egressUrl of extractUrls(segment)) {
-          if (pacedUrls.has(egressUrl)) continue;
-          pacedUrls.add(egressUrl);
-          if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(egressUrl);
-          if (isScopeEnforcementEnabled()) this.ctx.enforcement?.noteInScope();
-        }
-      }
-    }
-
-    // Deterministic auth-header injection (0#282). When `authConfig`
-    // is set, rewrite curl/wget invocations whose URL is in scope and
-    // which don't already carry explicit auth, so the env-var
-    // indirection (`$AUTH_CURL_FLAG` / `$AUTH_HEADER:$AUTH_VALUE`) lands
-    // in the bash command before exec. Python `requests` invocations
-    // are refused with a hint to set the header explicitly.
-    //
-    // Only run when authConfig is set (no auth ⇒ nothing to inject) AND
-    // scope is set (no scope ⇒ can't verify in-scope ⇒ don't leak auth
-    // to potentially-non-engagement targets).
-    if (this.ctx.authConfig && this.ctx.scope) {
-      const verdict = injectAuthIntoBashCommand(command, this.ctx.scope);
-      if (verdict.kind === "refuse") {
-        return { success: false, output: null, error: `bash refused: ${verdict.reason}` };
-      }
-      if (verdict.kind === "rewrite") {
-        command = verdict.command;
-      }
-    }
-
     // Per-call requested timeout (caller arg) is clamped against the wallclock
     // ceiling. Even if the caller asks for a longer one, we never exceed the
     // ceiling — a runaway subprocess (e.g. python3 requests.post with no
@@ -1388,17 +1110,13 @@ export class ToolExecutor {
    * fragile context hunks to mismatch — matching preserves whitespace and
    * indentation, tolerates LF/CRLF for multiline blocks and, unless `replace_all` is
    * set, UNIQUELY. Refuses without a
-   * `scopePath` and resolves the path through `resolveScopedPath` so the edit
+   * `scopePath` and resolves the path through `resolveFolderPath` so the edit
    * can never escape the audit directory. Fail-soft — every error is a clear,
    * self-correctable message, never a thrown exception or a silent no-op.
    */
   private strReplace(args: Record<string, unknown>): ToolResult {
-    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
-      return {
-        success: false,
-        output: null,
-        error: "str_replace requires a scoped local directory and is not available for remote target scanning",
-      };
+    if (!this.ctx.scopePath) {
+      return { success: false, output: null, error: "str_replace requires a folder" };
     }
 
     const rawPath = args.path;
@@ -1431,7 +1149,7 @@ export class ToolExecutor {
       // An empty old_string creates a new file (or fills an empty one).
       let target: string;
       try {
-        target = resolveScopedPath(this.ctx.scopePath, rawPath);
+        target = resolveFolderPath(this.ctx.scopePath, rawPath);
       } catch (err) {
         return { success: false, output: null, error: err instanceof Error ? err.message : String(err) };
       }
@@ -1466,7 +1184,7 @@ export class ToolExecutor {
 
     let abs: string;
     try {
-      abs = resolveScopedPath(this.ctx.scopePath, rawPath);
+      abs = resolveFolderPath(this.ctx.scopePath, rawPath);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
@@ -1632,13 +1350,11 @@ export class ToolExecutor {
             const endpoint = new URL(url);
             if (endpoint.protocol !== "https:" || endpoint.hostname !== "mcp.parallel.ai" || endpoint.username || endpoint.password) throw new Error("Invalid search provider endpoint.");
             const requestSignal = init?.signal ? AbortSignal.any([signal, init.signal]) : signal;
-            if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url, 1, requestSignal);
             execution?.assertAuthority?.();
             const response = await fetchScoped(url, { ...init, signal: requestSignal, redirect: "error" }, {
               baseUrl: "https://mcp.parallel.ai", timeoutMs: 10_000,
               validateUrl: () => execution?.assertAuthority?.(),
             });
-            this.ctx.rateLimiter?.noteResponse(url, response);
             return response;
           },
         });
@@ -1656,7 +1372,6 @@ export class ToolExecutor {
       } else {
         provider = "DuckDuckGo";
         const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url, 1, signal);
         execution?.assertAuthority?.();
         const res = await fetchScoped(url, {
           headers: { "User-Agent": "0/1.0" }, signal, redirect: "follow",
@@ -1664,7 +1379,6 @@ export class ToolExecutor {
           baseUrl: "https://html.duckduckgo.com", timeoutMs: 15_000,
           validateUrl: () => execution?.assertAuthority?.(),
         });
-        this.ctx.rateLimiter?.noteResponse(url, res);
         if (!res.ok) {
           void res.body?.cancel().catch(() => {});
           return { success: false, output: null, error: `Web search unavailable. Parallel: ${primary.error} DuckDuckGo: HTTP ${res.status}.` };
@@ -2035,12 +1749,6 @@ export class ToolExecutor {
     maxTurns: number | undefined,
     requestedName?: string,
   ): SubagentLifecycleBase {
-    const scopeRulesArr: string[] | undefined = this.ctx.scope
-      ? [
-          ...(this.ctx.scope.raw.in_scope ?? []),
-          ...(this.ctx.scope.raw.out_of_scope ?? []),
-        ]
-      : undefined;
     const agent_id = `${subagentSiblingPrefix(this.ctx.scanId)}${randomUUID()}`;
     // Task labels are readable; uniqueness is independent of opaque agent ids.
     const name = assignAgentName(requestedName ?? task, this._assignedAgentNames);
@@ -2051,7 +1759,6 @@ export class ToolExecutor {
       parent_scan_id: this.ctx.scanId,
       task,
       ...(maxTurns !== undefined ? { max_turns: maxTurns } : {}),
-      ...(scopeRulesArr !== undefined ? { scope_rules: scopeRulesArr } : {}),
     };
   }
 
@@ -2099,20 +1806,11 @@ export class ToolExecutor {
 
   private subagentTools(messaging: MessagingRuntime | undefined, readOnly = this.isReadOnlyWorker()): ToolDefinition[] {
     const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
-      hasScope: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
+      sourceAudit: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
     });
-    // A console workspace is not necessarily a source-audit target. In the
-    // prompt-free modes, retain the parent's advertised capabilities instead
-    // of silently downgrading a web worker to source-only tools. An explicit
-    // read-only source boundary remains authoritative in every mode.
-    const inheritConsoleTools = this.ctx.consoleSession && this.ctx.delegationTools !== undefined &&
-      executionPolicy(this.ctx.approvals).inheritsConsoleTools;
-    const scopedSource = !!getLocalSourceBoundary() || (!inheritConsoleTools &&
-      !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review"));
     return filterWorkflowAgentTools(inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
-      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)) &&
       (!readOnly || isCheckoutReadOnlyTool(tool.name)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL));
   }
@@ -2150,7 +1848,7 @@ export class ToolExecutor {
   private subagentCompletionInstructions(tools: readonly ToolDefinition[]): string {
     const names = new Set(tools.map(tool => tool.name));
     return [
-      "Use only your provided tools within the inherited scope.",
+      "Use only your provided tools.",
       names.has("spawn_agent") ? "Delegate independent subtasks when useful." : "",
       names.has("finding") ? "Save evidence-backed findings with finding." : "",
       "Reply in prose with your result when you are finished.",
@@ -2379,11 +2077,6 @@ export class ToolExecutor {
       this.emitWorkerLifecycle({ ...base,
       status: "running" as const, });
 
-      // 0#218 review: propagate scope + auth to the spawned loop so
-      // the sub-agent's bash/http_request gates use the same policy as
-      // the parent. Without this, a parent scan locked to in-scope hosts
-      // could spawn a child that hits arbitrary URLs via bash/curl.
-      //
       // Cost ledger: pass the parent's shared ledger + ceiling + model so the
       // child charges the SAME scan-wide ledger and trips the SAME ceiling.
       // Without this, subagent spend was off-ledger and each child got the full
@@ -2415,7 +2108,6 @@ export class ToolExecutor {
           workerFindings: this._workerFindings,
           persistDelegatedFinding: this.delegatedFindingPersistence(signal),
           updateDelegatedFinding: this.delegatedFindingStatusUpdate(signal),
-          scope: this.ctx.scope,
           authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
           requirePricedUsage: this.ctx.requirePricedUsage,
@@ -2426,17 +2118,11 @@ export class ToolExecutor {
           approvals: this.ctx.approvals,
           consoleSession: this.ctx.consoleSession,
           workerPolicy,
-          publicNetwork: this.ctx.publicNetwork,
           webSearchEnabled: this.ctx.webSearchEnabled,
-        allowScanners: this.ctx.allowScanners,
-          attribution: this.ctx.attribution,
-          engagement: this.ctx.engagement,
           codebaseLearning: false,
           workspaceRoot: this.ctx.workspaceRoot,
           skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
           skillAuthoring: this.ctx.skillAuthoring,
-          enforcement: this.ctx.enforcement,
-          rateLimiter: this.ctx.rateLimiter,
           // `native-loop.ts` copies this straight onto the child's ToolContext,
           // which is where the child messaging tools read it from. Declared
           // there as `unknown`, hence the cast on the config literal below.
@@ -2586,7 +2272,6 @@ export class ToolExecutor {
         workerFindings: this._workerFindings,
         persistDelegatedFinding: this.delegatedFindingPersistence(signal),
         updateDelegatedFinding: this.delegatedFindingStatusUpdate(signal),
-        scope: this.ctx.scope,
         authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
         requirePricedUsage: this.ctx.requirePricedUsage,
@@ -2597,17 +2282,11 @@ export class ToolExecutor {
         approvals: this.ctx.approvals,
         consoleSession: this.ctx.consoleSession,
         workerPolicy,
-        publicNetwork: this.ctx.publicNetwork,
         webSearchEnabled: this.ctx.webSearchEnabled,
-        allowScanners: this.ctx.allowScanners,
-        attribution: this.ctx.attribution,
-        engagement: this.ctx.engagement,
         codebaseLearning: false,
         workspaceRoot: this.ctx.workspaceRoot,
         skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
         skillAuthoring: this.ctx.skillAuthoring,
-        enforcement: this.ctx.enforcement,
-        rateLimiter: this.ctx.rateLimiter,
         ...(childMessaging ? { agentMessaging: childMessaging } : {}),
       } as Parameters<typeof runNativeAgentLoop>[0]["config"],
       runtime: rt,
@@ -3369,8 +3048,8 @@ export class ToolExecutor {
 
 // ── Helper: get tools for a specific agent role ──
 
-export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMode?: boolean; webSearchEnabled?: boolean }): ToolDefinition[] {
-  const authorized = !isScopeEnforcementEnabled() || opts?.hasScope === true;
+export function getToolsForRole(role: string, opts?: { sourceAudit?: boolean; webMode?: boolean; webSearchEnabled?: boolean }): ToolDefinition[] {
+  const authorized = opts?.sourceAudit === true;
   const webSearchTools = (opts?.webSearchEnabled ?? featureFlags.webSearch) ? ["web_search"] : [];
   const shellTools = ["bash", ...webSearchTools, "load_skill", "finding"];
   const fileTools = ["str_replace"];
@@ -3386,8 +3065,8 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     attack: shellTools,
     verify: authorized ? [...shellTools, ...fileTools] : shellTools,
     report: ["load_skill"],
-    audit: opts?.hasScope ? scopedSourceTools : allEnabledTools,
-    review: opts?.hasScope ? scopedSourceTools : allEnabledTools,
+    audit: opts?.sourceAudit ? scopedSourceTools : allEnabledTools,
+    review: opts?.sourceAudit ? scopedSourceTools : allEnabledTools,
   };
 
   const toolNames = roleTools[role] ?? allEnabledTools;

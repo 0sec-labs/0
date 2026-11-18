@@ -49,7 +49,7 @@ a coverage catalog, not a tool allowlist or authorization grant.
 | Verification | `verify`; `finding-verification` | `verify_finding` is independently gated. CLI kernel verification is not a portable workflow executor. |
 | Research | `research`; `security-research` | Managed modes are pipeline, mobile intake, and external Linux boot-matrix import. Managed pipeline targets are authorized local source. Importing boot evidence does not execute boots. |
 | Deep source review | `deep-review`; `deep-source-review` | Provider and authorized local workspace prerequisites apply. |
-| Offensive specialist engines | No portable step/template | Variant/assumption hunt, protocol conformance, spec drift, safety evaluation, memory fuzzing, npm discovery, kernel weaponization, and CVE adaptation have native chat tools with scope, feature, and prerequisite gates. CLI tools can have different contracts. |
+| Offensive specialist engines | No portable step/template | Variant/assumption hunt, protocol conformance, spec drift, safety evaluation, memory fuzzing, npm discovery, kernel weaponization, and CVE adaptation have native chat tools with feature and prerequisite gates. CLI tools can have different contracts. |
 | Other specialist CLI contracts | No portable step/template advertised | Binary, exploit, recency hunt, lens synthesis, XNU fuzzing, disclosure, evaluation, benchmark, and ingestion commands are not made workflow-capable by sharing a model or transport. |
 | Maintenance | No workflow/tool grant | Configuration, credentials, plugin/theme management, database maintenance, upgrade, and diagnostics belong to the host control surface. |
 

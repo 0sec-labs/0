@@ -70,7 +70,7 @@ Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSe
 
 </details>
 
-Only point 0 at systems you own or are authorized to test. See [Scope](https://docs.0.security/configuration/#scope).
+Only point 0 at systems you own or are authorized to test.
 
 ## What can you do with 0?
 

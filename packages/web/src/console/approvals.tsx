@@ -29,21 +29,6 @@ const DECISION_PRESENTATION = {
     action: "Allow",
     explanation: "Allow this one tool action.",
   },
-  scope: {
-    label: "New targets",
-    action: "Allow targets",
-    explanation: v("Let 0 reach these network targets in this {mission}."),
-  },
-  "local-scope": {
-    label: "Folder access",
-    action: "Allow folder",
-    explanation: v("Let 0 access this folder and everything in it for this {mission}."),
-  },
-  "audit-escalation": {
-    label: "Beyond code review",
-    action: "Allow",
-    explanation: v("Let 0 use tools beyond reviewing your local code in this {mission}. Other limits still apply."),
-  },
   "operator-question": {
     label: "Question",
     action: "Send answers",
@@ -311,17 +296,11 @@ function DecisionDetails({ decision }: { decision: DesktopConsoleDecision }) {
       {decision.kind !== "tool" && decision.detail && <p className="whitespace-pre-wrap break-words text-foreground">{decision.detail}</p>}
       {decision.reason && <DetailBlock label="Why" value={decision.reason} />}
       {decision.call && <><DetailBlock label="Tool" value={decision.call.name} /><DetailBlock label="Input" value={decision.call.arguments} /></>}
-      {decision.requestedUrls && decision.requestedUrls.length > 0 && <DetailBlock label="Targets to allow" value={decision.requestedUrls} />}
-      {decision.unresolvedTargets && decision.unresolvedTargets.length > 0 && <DetailBlock label="Unknown destinations" value={decision.unresolvedTargets} />}
-      {decision.requestedPath && <DetailBlock label="Folder to allow" value={decision.requestedPath} />}
       {context && (
         <dl className="grid gap-1.5 sm:grid-cols-[max-content_minmax(0,1fr)]">
-          <dt className="text-muted-foreground">Target</dt><dd className="whitespace-pre-wrap break-all">{context.target}</dd>
           <dt className="text-muted-foreground">Role</dt><dd>{context.role}</dd>
         </dl>
       )}
-      {decision.currentScope !== undefined && <DetailBlock label="Allowed targets" value={decision.currentScope ?? "None set."} />}
-      {decision.currentScopePath !== undefined && <DetailBlock label="Allowed folder" value={decision.currentScopePath} />}
     </div>
   );
 }

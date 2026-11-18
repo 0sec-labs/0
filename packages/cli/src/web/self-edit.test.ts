@@ -11,7 +11,7 @@ import { handleSelfEditRequest } from "./self-edit-routes.js";
 describe("protected paths", () => {
   it("flags guard, auth, lockfile, CI and gate code", () => {
     const files = [
-      "packages/cli/src/web/team-auth.ts", "packages/engine/src/scope/scope-guard.ts", "pnpm-lock.yaml", "packages/web/package.json",
+      "packages/cli/src/web/team-auth.ts", "packages/engine/src/hooks/before-command.ts", "pnpm-lock.yaml", "packages/web/package.json",
       ".github/workflows/main.yml", "packages/cli/src/web/self-edit-gates.ts", "packages/cli/src/state/session-store.ts",
       "packages/web/src/console/approvals.tsx", "scripts/dev-web.mjs", "packages/web/vite.config.ts", "AGENTS.md", "packages/cli/src/web/../web/x.ts",
     ];

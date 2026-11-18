@@ -63,7 +63,7 @@ describe("store safety", () => {
   it("refuses every change from an agent session, and still reads", async () => {
     const { svc } = await installed(false);
     process.env["ZERO_AGENT_SESSION"] = "1";
-    for (const r of [svc.installer.enable("demo", { approve: true }), svc.installer.disable("scope", { confirm: true }), svc.installer.remove("demo")]) expect(!r.ok && r.error.code).toBe("agent_session");
+    for (const r of [svc.installer.enable("demo", { approve: true }), svc.installer.disable("github", { confirm: true }), svc.installer.remove("demo")]) expect(!r.ok && r.error.code).toBe("agent_session");
     expect(svc.list().rows.length).toBeGreaterThan(0);
   });
 

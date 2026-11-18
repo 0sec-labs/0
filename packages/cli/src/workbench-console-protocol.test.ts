@@ -30,14 +30,14 @@ describe("workbench controller boundary", () => {
     expect(() => hostWorkspacePath("/workspace/../../etc", "/operator/repo")).toThrow("Invalid");
   });
   it("maps known CLI path flags while preserving operator prose", () => {
-    expect(mapWorkbenchCliArguments(["scan", "--target=source:/operator/repo/src", "--scope", "/operator/repo/scope.json", "--print", "inspect /operator/private", "--model", "granted"], "/operator/repo")).toEqual(["scan", "--target=source:/workspace/src", "--scope", "/workspace/scope.json", "--print", "inspect /operator/private", "--model", "granted"]);
+    expect(mapWorkbenchCliArguments(["scan", "--target=source:/operator/repo/src", "--db-path", "/operator/repo/db.sqlite", "--print", "inspect /operator/private", "--model", "granted"], "/operator/repo")).toEqual(["scan", "--target=source:/workspace/src", "--db-path", "/workspace/db.sqlite", "--print", "inspect /operator/private", "--model", "granted"]);
     expect(mapWorkbenchCliArguments(["automation", "run", "--inputs", "/operator/repo/inputs.json"], "/operator/repo")).toEqual(["automation", "run", "--inputs", "/workspace/inputs.json"]);
     expect(() => mapWorkbenchCliArguments(["automation", "run", "--inputs", "/operator/private/inputs.json"], "/operator/repo")).toThrow("outside");
     expect(() => mapWorkbenchCliArguments(["scan", "--target", "/operator/other"], "/operator/repo")).toThrow("outside");
   });
   it("does not serialize host authentication or executable resources", () => {
-    const config = { target: "/operator/repo", workspaceRoot: "/operator/repo", autonomyMode: "standard" as const, askOperator: async () => null };
-    expect(serializeWorkbenchConfig(config, "/operator/repo")).toEqual({ target: "/workspace", workspaceRoot: "/workspace", autonomyMode: "standard" });
+    const config = { workspaceRoot: "/operator/repo", autonomyMode: "standard" as const, askOperator: async () => null };
+    expect(serializeWorkbenchConfig(config, "/operator/repo")).toEqual({ workspaceRoot: "/workspace", autonomyMode: "standard" });
     expect(() => serializeWorkbenchConfig({ ...config, mcpHost: {} } as never, "/operator/repo")).toThrow("cannot execute");
   });
 });
@@ -91,6 +91,6 @@ describe("guest source references", () => {
   });
   it("serializes only the learning opt-in flag, never host stores or callbacks", () => {
     const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", codebaseLearning: true, memoryStore: {} as never } , "/operator/repo");
-    expect(serial).toEqual({ workspaceRoot: "/workspace", target: "", codebaseLearning: true });
+    expect(serial).toEqual({ workspaceRoot: "/workspace", codebaseLearning: true });
   });
  });

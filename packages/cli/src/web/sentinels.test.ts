@@ -44,9 +44,9 @@ describe("agent API", () => {
     const f = fixture();
     const created = await f.call("POST", P, { preset: "pen-tester", scope: { targets: ["https://staging.example.com"] } });
     expect(created.status).toBe(201);
-    const data = created.data as { sentinel: { id: string; status: string; role: string; attention: unknown; scope: { production: boolean } }; suggestedAutomations: unknown[] };
+    const data = created.data as { sentinel: { id: string; status: string; role: string; attention: unknown }; suggestedAutomations: unknown[] };
     expect(data.sentinel).toMatchObject({ status: "paused", role: "pen-tester", attention: { needsYou: false, pendingDecisions: 0 } });
-    expect(data.sentinel.scope.production).toBe(false);
+    expect(data.sentinel).not.toHaveProperty("scope");
     expect(data.suggestedAutomations.length).toBeGreaterThan(0);
     expect((await f.call("POST", P, { preset: "nope" })).status).toBe(400);
     expect((await f.call("POST", P, { name: "x", triggers: [] })).status).toBe(400);
@@ -58,10 +58,10 @@ describe("agent API", () => {
 
   it("creates an active Sentinel from a preset with no triggers or automations, so nothing runs by itself", async () => {
     const f = fixture();
-    const created = await f.call("POST", P, { preset: "pen-tester", status: "active", scope: { repos: ["/work/app"] } });
+    const created = await f.call("POST", P, { preset: "pen-tester", status: "active", folder: "/work/app" });
     expect(created.status).toBe(201);
-    const { sentinel, suggestedAutomations } = created.data as { sentinel: { id: string; status: string; scope: { repos: string[] }; attention: { needsReview: boolean } }; suggestedAutomations: Array<{ trigger: { kind: string } }> };
-    expect(sentinel).toMatchObject({ status: "active", scope: { repos: ["/work/app"] }, attention: { needsReview: false } });
+    const { sentinel, suggestedAutomations } = created.data as { sentinel: { id: string; status: string; folder: string | null; attention: { needsReview: boolean } }; suggestedAutomations: Array<{ trigger: { kind: string } }> };
+    expect(sentinel).toMatchObject({ status: "active", folder: "/work/app", attention: { needsReview: false } });
     expect(suggestedAutomations.some(item => item.trigger.kind === "schedule")).toBe(true);
     expect((await f.call("GET", `${P}/${sentinel.id}/triggers`)).data).toEqual({ triggers: [] });
     expect((await f.call("GET", `${P}/${sentinel.id}/automations`)).data).toEqual({ automations: [] });
@@ -86,14 +86,16 @@ describe("agent API", () => {
 
   it("runs a seeded thread through the chat session path and records the activation", async () => {
     const f = fixture();
-    const { sentinel } = (await f.call("POST", P, { name: "Watcher", skills: ["scoped-fix"], instructions: "Watch deps.", scope: { targets: ["https://a.example"], outOfScope: ["https://a.example/admin"] } })).data as { sentinel: { id: string } };
+    const { sentinel } = (await f.call("POST", P, { name: "Watcher", skills: ["scoped-fix"], instructions: "Watch deps.", folder: "/work/watch" })).data as { sentinel: { id: string } };
     expect((await f.call("POST", `${P}/${sentinel.id}/run`, { version: 1 })).status).toBe(400);
     expect((await f.call("POST", `${P}/${sentinel.id}/run`, { approval: "launch-authorized-run", version: 9 })).status).toBe(409);
     const run = await f.call("POST", `${P}/${sentinel.id}/run`, { approval: "launch-authorized-run", version: 1, task: "Check now" });
     expect(run.status).toBe(202);
     expect(f.missions.create).toHaveBeenCalledTimes(2);
     const config = f.missions.create.mock.calls[1]![0];
-    expect(config).toMatchObject({ target: "https://a.example", scope: { in_scope: ["https://a.example"], out_of_scope: ["https://a.example/admin"] } });
+    expect(config).toMatchObject({ workspacePath: "/work/watch" });
+    expect(config).not.toHaveProperty("scope");
+    expect(config).not.toHaveProperty("target");
     expect(config).not.toHaveProperty("autonomyMode");
     expect(config).not.toHaveProperty("workerPolicy");
     const [, text] = f.missions.send.mock.calls[0]!;

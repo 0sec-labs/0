@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/engine";
-import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/engine";
+import { createConsoleRuntime, isAdmittedSmolvmWorkbench } from "@0/engine";
+import type { ConsoleSession, ConsoleSessionConfig } from "@0/engine";
 import { osecDB } from "@0/engine/storage";
 import { findingFromRow } from "./state/findings-data.js";
 import { normalizeSettings } from "./state/settings.js";
@@ -12,7 +12,7 @@ import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
 
-const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
+const CALLBACKS = ["approveTool", "askOperator"] as const;
 const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"] as const;
 
 /** Keep policy acknowledgements independent of a send waiting on a host decision. */
@@ -45,7 +45,6 @@ async function runGuest(cli: boolean): Promise<number> {
   let turn: AbortController | undefined;
   const decisions = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
   const providers = new Map<string, import("node:http").ServerResponse>();
-  let policy: ScopeEnforcementState;
   const callback = (name: string, args: unknown[]): Promise<unknown> => {
     if (decisions.size >= WORKBENCH_MAX_PENDING) return Promise.reject(new Error("Workbench decision limit reached"));
     const id = randomUUID();
@@ -73,7 +72,7 @@ async function runGuest(cli: boolean): Promise<number> {
     let checkpoint;
     try { checkpoint = session.exportCheckpoint(); } catch { /* Active workers prevent safe handoff. */ }
     const snapshot = { scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools, messages: session.messages,
-      approvals: session.approvals, webSearchEnabled: session.webSearchEnabled, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
+      approvals: session.approvals, webSearchEnabled: session.webSearchEnabled, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
     await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
     // Memory provenance is live UI state, never part of persisted session artifacts.
@@ -124,13 +123,9 @@ async function runGuest(cli: boolean): Promise<number> {
           }
           const config = frame.config as Record<string, unknown>;
           config.codebaseLearning = false; // Memory lives on the host; the isolated guest neither reads nor writes notes.
-          const approvedPolicy = frame.scopeEnforcement as ScopeEnforcementState;
-          if (!approvedPolicy || typeof approvedPolicy.enabled !== "boolean" || typeof approvedPolicy.pluginId !== "string") throw new Error("Missing scope approval snapshot");
-          policy = { ...approvedPolicy, projectPath: "/workspace" };
           const callbacks: Record<string, unknown> = {};
           for (const name of CALLBACKS) if ((frame.callbacks as string[]).includes(name)) callbacks[name] = async (...args: unknown[]) => {
             const value = await callback(name, args);
-            if (name === "requestScope" && value && typeof value === "object") { const resolution = value as { target: string; scope: ConstructorParameters<typeof ScopePolicy>[0] }; return { ...resolution, scope: new ScopePolicy(resolution.scope) }; }
             return value;
           };
           if ((frame.callbacks as string[]).includes("skillRead")) callbacks.skillAuthoring = {
@@ -151,10 +146,9 @@ async function runGuest(cli: boolean): Promise<number> {
             invoke: (name: string, args: Record<string, unknown>) => callback("workflowInvoke", [name, args]),
           };
           if ((frame.callbacks as string[]).includes("historyList")) callbacks.conversationHistory = { list: (...args: unknown[]) => callback("historyList", args), read: (...args: unknown[]) => callback("historyRead", args) };
-          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, 
-            ...(config.scope ? { scope: new ScopePolicy(config.scope as ConstructorParameters<typeof ScopePolicy>[0]) } : {}),
+          session = createLocalConsoleSession({ ...config, ...callbacks,
             runtime: createConsoleRuntime({ ...selection, env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)) }), workspaceRoot: "/workspace",
-          } as unknown as Omit<ConsoleSessionConfig, "db">, "/home/zero/.0/controller.sqlite"));
+          } as unknown as Omit<ConsoleSessionConfig, "db">, "/home/zero/.0/controller.sqlite");
           await session.ready; await state(); emit({ type: "ready", platform: process.platform, workspace: process.cwd() }); return;
         }
         if (!session || closing || frame.type !== "request" || typeof frame.op !== "string") throw new Error("Invalid controller request");
@@ -163,7 +157,7 @@ async function runGuest(cli: boolean): Promise<number> {
           case "send": {
             if (typeof frame.text !== "string") throw new Error("Invalid operator message"); turn = new AbortController();
             const callbacks = Object.fromEntries(EVENTS.map(name => [name, (...args: unknown[]) => emit({ type: "event", name, args })]));
-            const result = withScopeEnforcement(policy, () => session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"] })); await state(); value = await result; turn = undefined; break;
+            const result = session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"] }); await state(); value = await result; turn = undefined; break;
           }
           case "autonomy": {
             // frame.value is the retired access value: accepted and ignored.
@@ -172,7 +166,6 @@ async function runGuest(cli: boolean): Promise<number> {
             break;
           }
           case "webSearch": { if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting"); await session.setWebSearchEnabled!(frame.value); break; }
-          case "configure": { const value = frame.value as { target?: string; scope?: ConstructorParameters<typeof ScopePolicy>[0] | null }; session.configureEngagement({ target: value.target, ...(value.scope === undefined ? {} : { scope: value.scope ? new ScopePolicy(value.scope) : null }) }); break; }
           case "clear": session.clearConversation(); break;
           case "reconfigure": { const value = frame.value as Record<string, unknown>; if (value.env !== undefined || (value.provider !== undefined && value.provider !== "chatgpt-codex")) throw new Error("Unsupported runtime configuration"); session.reconfigureRuntime(value); break; }
           case "stopWorker": value = await session.stopPersistentAgent(String(frame.agentId)); break;

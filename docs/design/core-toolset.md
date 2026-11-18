@@ -26,33 +26,21 @@ dispatch in `packages/engine/src/console/core-toolset-safety.test.ts`):
 |---|---|---|
 | Budget and sandbox | Cost ceiling and time caps stop a run; the optional container executor (SmolVM or Docker) isolates commands from the host | No |
 | Ask before running commands | `executionPolicy` plus the per-action approval gate: every effectful call, `bash` included, is put to the operator and does not run unless approved | No |
-| Target scope (hosts) | Network-capable tools go through the scope gate; `shellExec` additionally extracts URLs from the command and refuses any out-of-scope host or path before running (`agent/tools.ts`, `shellExec`) | Yes, for the URL check |
-| Scanner-binary suppression, rate limits, http_audit egress | `shellExec` pre-flight | Yes |
 
-Tests (all pass): ask-first runs nothing the operator declines and runs it after approval; six out-of-scope host
-spellings (`curl -X POST`, `--data`, `python3 -c urlopen`, `bash -c curl`, `wget`, `$()` in
-the URL) are refused without growing the scope.
+Tests (all pass): ask-first runs nothing the operator declines and runs it after approval.
 
 Decision on the classifier: I did not build a read-only shell, and since 2026-11-15 there is no
 Read-only mode at all (one mode: shell access). A text allowlist cannot be made reliable
 (`find -exec`, `awk system()`, `git -c`, `sed w`, `xargs`, `env` are all "read" commands that
-write), so the limits are scope, budget, the sandbox and Ask before running commands.
+write), so the limits are budget, the sandbox and Ask before running commands.
 
 ### Gaps I could not close
 
-1. **Hosts built at run time are invisible to the shell scope check.** `curl "$(printf
-   'https://evil.%s/x' example)"`, `h=evil.example; curl https://$h/x`, base64-decoded URLs and
-   `socket.create_connection(('evil.' + 'example', 443))` carry no URL in the text. This is the
-   gap already documented in `shellExec` ("a cleverer agent ... is NOT caught"). It matters more
-   with a shell-first default. The test `Known gap` pins it, so closing it forces an update.
-   The real fix is at the executor: a network proxy or network-isolated sandbox (container or
-   seatbelt profile with a host allowlist) so scope does not depend on text. Not implemented
-   here; scope enforcement for the Thread shell today is text-level plus the host executor.
-2. **The shell runs on the host** unless an execution profile selects a sandbox.
+1. **The shell runs on the host** unless an execution profile selects a sandbox.
    File writes by `bash` are not confined to the granted folder by anything but the approval
    gate (`ask`) and the operator's trust; `apply_patch` and `str_replace` are confined, `bash`
    is not.
-3. *(Closed 2026-11-15.)* Read-only Threads could not call `save_finding`. Read-only is removed,
+2. *(Closed 2026-11-15.)* Read-only Threads could not call `save_finding`. Read-only is removed,
    so every Thread and Agent can record findings.
 
 ## 4. A/B evidence

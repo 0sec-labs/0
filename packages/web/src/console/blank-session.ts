@@ -26,7 +26,7 @@ export function findBlankSession(
 ): DesktopConsoleSession | undefined {
   if (teamEnabled) return undefined;
   return sessions.find(
-    (item) => isBlankSession(item, snapshot) && !item.target && (!item.title || BLANK_TITLE.test(item.title)),
+    (item) => isBlankSession(item, snapshot) && (!item.title || BLANK_TITLE.test(item.title)),
   );
 }
 

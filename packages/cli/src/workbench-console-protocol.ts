@@ -103,11 +103,6 @@ export function mapWorkbenchCheckpoint(checkpoint: ConsoleSessionCheckpoint, wor
   const result = structuredClone(checkpoint);
   const map = host ? hostWorkspacePath : guestWorkspacePath;
   result.workspaceRoot = map(result.workspaceRoot, workspace);
-  result.target = mapWorkbenchTarget(result.target, workspace, host);
-  if (result.localScopePath) result.localScopePath = map(result.localScopePath, workspace);
-  result.deniedLocalPaths = result.deniedLocalPaths.map(path => {
-    try { return map(path, workspace); } catch { return path; } // Denials never create authority.
-  });
   if (result.harnessRoot) {
     // Live executable resources cannot be restored merely by copying a host path.
     throw new Error("Workbench checkpoint handoff with live executable resources is not supported");
@@ -120,12 +115,11 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
   for (const key of ["mcpHost", "extensionRuns", "contribution", "developmentSourceRoot"] as const) {
     if (config[key] !== undefined) throw new Error(`Host ${key} cannot execute through the workbench controller`);
   }
-  const result: Record<string, unknown> = { workspaceRoot: "/workspace", target: mapWorkbenchTarget(config.target ?? "", workspace) };
-  for (const key of ["role", "tools", "codebaseLearning", "scanId", "maxToolIterations", "allowScanners", "webSearchEnabled", "workerPolicy", "systemPrompt", "autonomyMode", "approvals", "refineObjective", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
+  const result: Record<string, unknown> = { workspaceRoot: "/workspace" };
+  for (const key of ["role", "tools", "codebaseLearning", "scanId", "maxToolIterations", "webSearchEnabled", "workerPolicy", "systemPrompt", "autonomyMode", "approvals", "refineObjective", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
     if (config[key] !== undefined) result[key] = structuredClone(config[key]);
   }
   if (config.maxTurnTokens !== undefined && Number.isFinite(config.maxTurnTokens)) result.maxTurnTokens = config.maxTurnTokens;
-  if (config.scope) result.scope = config.scope.raw;
   if (config.initialCheckpoint) result.initialCheckpoint = mapWorkbenchCheckpoint(config.initialCheckpoint, workspace, false);
   if (config.agentMessaging && typeof config.agentMessaging === "object") {
     const messaging = config.agentMessaging as Record<string, unknown>;
@@ -139,7 +133,7 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
 /** Interpret only known path-valued CLI options; operator prose is never rewritten. */
 export function mapWorkbenchCliArguments(args: readonly string[], workspace: string): string[] {
   const targetFlags = new Set(["--target", "-t", "--repo"]);
-  const pathFlags = new Set(["--scope", "--db-path", "--workspace", "--workspace-root", "--cwd", "--output", "-o", "--config", "--inputs"]);
+  const pathFlags = new Set(["--db-path", "--workspace", "--workspace-root", "--cwd", "--output", "-o", "--config", "--inputs"]);
   const result = [...args];
   for (let index = 0; index < result.length; index++) {
     const argument = result[index]!; const equal = argument.indexOf("=");

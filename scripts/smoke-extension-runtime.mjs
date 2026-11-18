@@ -49,7 +49,7 @@ const installed = name => run(["skills", "extensions", "list"]).split("\n").some
 try {
   // The old MCP server file is imported on first use, as a disabled local extension; nothing is started.
   const listed = run(["skills", "extensions", "list"]);
-  assert(/scope\s+built-in/.test(listed), listed);
+  assert(/github\s+built-in/.test(listed), listed);
   assert(/old/.test(listed), `the old MCP server was not imported:\n${listed}`);
   // One prompt first; nothing is installed without --yes.
   const review = run(["skills", "extensions", "add", fixture], { expect: 2 });
@@ -77,7 +77,7 @@ try {
     assert(installed("pty-smoke"), "answering y did not install the extension");
   } else console.log(`Skipping the terminal prompt case on ${process.platform}.`);
   const old = run(["skills", "extensions", "list"]);
-  assert(/scope/.test(old), old);
+  assert(/github/.test(old), old);
   console.log(`Extension smoke passed: review, refusal when a thread runs it, install without a terminal, enable, disable, list, old-data import ran from the built CLI without a PATH interpreter.`);
 } finally {
   rmSync(root, { recursive: true, force: true });

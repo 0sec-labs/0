@@ -164,7 +164,7 @@ research backends incrementally; do not silently map deep review, binary
 analysis, or kernel verification to an ordinary source assessment.
 
 Each run captures the definition/template revision, resolved target, model
-connection identity, scope references, and limits. Execution context belongs
+connection identity and limits. Execution context belongs
 to the caller/owner rather than requiring a fabricated browser conversation.
 Secrets remain in runtime credential bindings, not portable workflow JSON.
 Steps get explicit artifact references as inputs. Prior output is evidence
@@ -226,7 +226,7 @@ Expose workflow capabilities alongside existing atomic tools:
 
 `start_run` accepts one selector: a pinned template or saved workflow revision.
 It does not require saving a template clone just to execute it. Validate target
-compatibility, runtime availability, scope, budgets, and executor prerequisites
+compatibility, runtime availability, budgets, and executor prerequisites
 before launching. A long run returns its ID promptly; polling does not start
 another run. Support an owner-scoped idempotency key for retried launch calls.
 

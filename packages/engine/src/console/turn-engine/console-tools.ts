@@ -69,7 +69,7 @@ export const LIST_CONVERSATIONS_NAME = "list_conversations";
 export const READ_CONVERSATION_NAME = "read_conversation";
 export const LIST_CONVERSATIONS_DEF: ToolDefinition = {
   name: LIST_CONVERSATIONS_NAME,
-  description: "Discover saved 0 conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries, targets and IDs; use read_conversation to inspect a result.",
+  description: "Discover saved 0 conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries and IDs; use read_conversation to inspect a result.",
   parameters: {
     query: { type: "string", description: "Optional search text, at most 256 characters" },
     all_projects: { type: "boolean", description: "Include other projects (default false)" },

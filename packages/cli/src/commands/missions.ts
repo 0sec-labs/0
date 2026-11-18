@@ -83,18 +83,16 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
   action(transport(threads.command("start <prompt>").description("Create a thread, send the first prompt and print its ID")
     .option("--model <model>", "Model for this thread").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
     .addOption(new Option("--access <level>").hideHelp()).addOption(new Option("--mode <mode>").hideHelp()).addOption(new Option("--autonomy <level>").hideHelp()).addOption(new Option("--tool-access <level>").hideHelp()).addOption(new Option("--yolo").hideHelp()).addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).option("--folder <path>", "Folder the thread works in")
-    .option("--target <target>", "Authorized target").option("--scope <path>", "Scope policy JSON file")
     .option("--skill <id>", "Built-in skill to follow; if it declares a check, the harness runs it and the thread cannot claim Verified without it")
     .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
     .option("--cost-ceiling <usd>", "Stop the thread when its estimated spend reaches this many USD")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
-      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string; target?: string; scope?: string; skill?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
+      const flags = options as Options & { model?: string; effort?: string; approvals?: string; folder?: string; skill?: string; title?: string; wait?: boolean; timeout: string; costCeiling?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const config = {
         ...(Object.keys(runtime).length ? { runtime } : {}),
-        ...(flags.target ? { target: flags.target } : {}), ...(flags.skill ? { verifySkill: flags.skill } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
-        ...(flags.scope ? { scope: JSON.parse(deps.readFile(flags.scope)) as unknown } : {}),
+        ...(flags.skill ? { verifySkill: flags.skill } : {}), ...(flags.title ? { title: flags.title } : {}), ...(flags.costCeiling ? { costCeilingUsd: Number(flags.costCeiling) } : {}),
       };
       const created = asJson(asJson(await client.request("POST", "/api/console/sessions", config)).session);
       const id = String(created.id);

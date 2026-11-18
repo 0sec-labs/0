@@ -25,7 +25,7 @@ The product gap: nothing forces the Agent to re-run the detector with the reposi
 6. Each result is stored on the Thread with the commit it ran on; a later edit marks it stale.
 7. The Agent's reply and any pull request body show the recorded results (detector, tests, build: passed, failed, skipped and why), never prose alone.
 8. A fix with any failed or skipped check is labelled "needs review" and cannot be auto-published.
-9. Commands run in the Computer the Thread uses, under the same Scope and access rules; the step adds no new permission.
+9. Commands run in the Computer the Thread uses, under the same approval rules; the step adds no new permission.
 10. Measure with this experiment again: the target is that no fix labelled verified is later found not merge-ready for a verification reason.
 
 ## Status: first slice shipped

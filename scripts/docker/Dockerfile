@@ -12,7 +12,7 @@
 #
 # Usage:
 #   docker run --rm -e AZURE_OPENAI_API_KEY=$KEY \
-#     ghcr.io/0sec-labs/0security:latest scan --target https://example.com --scope /work/scope.json
+#     ghcr.io/0sec-labs/0security:latest -p "Review /work"
 # Build args:
 #   INSTALL_SECLISTS=1     include SecLists wordlists (~1GB extra, off by default)
 #   AZUREHOUND_VERSION=vX  pin the AzureHound release (checksum-verified, see below)

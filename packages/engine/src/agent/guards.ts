@@ -4,10 +4,10 @@
  * WHY THIS EXISTS
  * ---------------
  * 0 already authorizes tool calls through the name-keyed gates in
- * `console/turn-engine.ts` (`NETWORK_CAPABLE_TOOLS`, `LOCAL_SCOPE_TOOLS`,
+ * `console/turn-engine.ts` (`NETWORK_CAPABLE_TOOLS`,
  * `READ_ONLY_TOOLS`), fed by the single capability translation `gateFlagsFor`
  * in `plugins/manifest.ts`. Those gates decide, per tool NAME, whether a call
- * needs scope resolution, a local-directory prompt, or copilot approval.
+ * needs approval.
  *
  * This module sits BENEATH those gates as an additional, composable floor. It
  * exists because plugins want to contribute policy, and the study of the
@@ -35,10 +35,10 @@
  * The context a guard inspects. Every field is a already-resolved fact about
  * the call being authorized; a guard NEVER performs I/O to discover more.
  *
- * The three capability flags mirror exactly what `gateFlagsFor` produces and
+ * The capability flags mirror exactly what `gateFlagsFor` produces and
  * what the console gates consume, so a guard reasons in the same vocabulary as
- * the gates above it. `askFirst` and `hasScope` mirror the console's own
- * inputs to `maybeResolveScope` / `maybeApproveTool`.
+ * the gates above it. `askFirst` mirrors the console's own
+ * input to `maybeApproveTool`.
  *
  * `approvalAvailable` and `capabilitiesResolved` are additions beyond the
  * gates' own inputs, justified because the built-in guards below cannot express
@@ -47,19 +47,14 @@
  * them defensively (undefined is treated as the unsafe answer) so a loosely
  * typed JS caller can never widen access by omission.
  */
-import { executionPolicy } from "../shared/approvals.js";
-
 export interface GuardContext {
   /** The tool being authorized. Used only for human-readable denial reasons. */
   readonly toolName: string;
   /** Capability flags resolved for this tool (see `gateFlagsFor`). */
   readonly networkCapable: boolean;
-  readonly localScope: boolean;
   readonly readOnly: boolean;
   /** The "Ask before running commands" setting is on. */
   readonly askFirst?: boolean;
-  /** True when an engagement scope is configured. */
-  readonly hasScope: boolean;
   /** True when an operator-approval mechanism is available for this call. */
   readonly approvalAvailable: boolean;
   /**
@@ -248,44 +243,6 @@ export function composeGuards(...groups: readonly (readonly ToolGuard[])[]): Too
 // resolves toward denial, never toward access.
 
 /**
- * RETIRED — kept exported for backward compatibility, but wired NOWHERE.
- *
- * ORIGINAL INTENT: deny a network-capable tool when no scope is configured, in
- * Auto mode, mirroring an old `maybeResolveScope` hard-deny ("Auto mode: no
- * scope configured — tool ... cannot run").
- *
- * WHY IT WAS RETIRED: the "network requires a PRECONFIGURED scope" invariant no
- * longer holds in ANY mode, so there is no mode this guard could soundly fire
- * in:
- *   - yolo is anchored to the launch TARGET, not to a scope object. A scopeless
- *     yolo call (even `bash echo hello`) is legitimate; the target anchor is
- *     enforced precisely by `maybeResolveScope` (target-relatedness) plus the
- *     executor's own same-origin/scope boundary and the absolute SSRF rail.
- *     Firing here would wrongly re-deny scopeless yolo.
- *   - standard/recon run scope-on-demand (prompt) or fall through to
- *     same-origin validation — never a blanket "needs a scope" denial.
- *   - copilot auto-expands scope to in-engagement targets; it never requires a
- *     preconfigured scope either.
- * It is therefore fully SUPERSEDED by the executor's same-origin anchoring and
- * is removed from both `BUILTIN_GUARDS` and the console's `WIRED_GUARDS`. The
- * function survives only so external callers and its own unit tests still
- * resolve; do NOT add it to any wired set.
- *
- * Its body is unchanged (a pure predicate over the context) so its existing
- * unit tests stay coherent — retirement is about WIRING, not behaviour.
- */
-export function guardNetworkRequiresScope(ctx: GuardContext): string | null | undefined {
-  // Fail closed: treat a non-explicit-false networkCapable as capable, and a
-  // non-explicit-true hasScope as unscoped.
-  const networkCapable = ctx.networkCapable !== false;
-  const unscoped = ctx.hasScope !== true;
-  if (executionPolicy(ctx.askFirst).publicNetwork && networkCapable && unscoped) {
-    return `Tool "${ctx.toolName}" is network-capable but no scope is configured`;
-  }
-  return null;
-}
-
-/**
  * Deny a non-read-only tool when the global "Ask before running commands"
  * setting is on and no approval mechanism is available.
  *
@@ -339,10 +296,6 @@ export function guardUnresolvedCapabilities(ctx: GuardContext): string | null | 
  *     were not resolved from a known source (danger-by-omission).
  *   - `guardApprovalUnavailable` — in standard mode, refuse an effectful tool
  *     with no approval mechanism (closes the fail-open corner).
- * `guardNetworkRequiresScope` is intentionally ABSENT: it is retired (its
- * "network requires a preconfigured scope" invariant no longer holds in any
- * mode — see that function's doc), so keeping it here would re-introduce a
- * denial the executor's own same-origin anchoring already supersedes.
  */
 export const BUILTIN_GUARDS: readonly ToolGuard[] = Object.freeze([
   guardUnresolvedCapabilities,

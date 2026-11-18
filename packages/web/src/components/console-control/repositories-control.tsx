@@ -3,24 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { RefreshCcw } from "lucide-react";
 import { queryKeys } from "@/queries";
 import { useBackendApi } from "@/api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CapyArrowUpRightIcon } from "@/ui/icons/capy";
-import { useSentinels } from "@/sentinels/api";
-import { VOCAB } from "@/lib/vocabulary";
 import { QueryState } from "./control-ui";
 import { GitHubPublicationControl, useGitHubPublicationAccount } from "./github-publication-control";
 import { SettingsRow, SettingsSection } from "./settings-section";
-import { filterRepositories, repositoriesState, sentinelUsage, usedByLabel, visibilityLabel, type RepositoriesResponse } from "./repositories-model";
+import { filterRepositories, repositoriesState, visibilityLabel, type RepositoriesResponse } from "./repositories-model";
 
 const MAX_VISIBLE = 100;
 
-/** Repositories the signed-in gh account can access, and which Sentinels watch them. Read-only. `embedded` hides the connect prompt for pages that already show the GitHub connection. */
+/** Repositories the signed-in gh account can access. Read-only. `embedded` hides the connect prompt for pages that already show the GitHub connection. */
 export function RepositoriesSettings({ embedded = false }: { embedded?: boolean }) {
   const { webFetchJson } = useBackendApi();
   const github = useGitHubPublicationAccount();
-  const sentinels = useSentinels({ poll: false });
   const [search, setSearch] = useState("");
   const refresh = useRef(false);
   const account = github.data?.connected ? github.data.account : null;
@@ -35,10 +31,8 @@ export function RepositoriesSettings({ embedded = false }: { embedded?: boolean 
   });
   const data = repositories.data;
   const state = repositoriesState(data, repositories.isPending);
-  const usage = sentinelUsage(sentinels.sentinels);
   const matches = data ? filterRepositories(data.repositories, search) : [];
   const shown = matches.slice(0, MAX_VISIBLE);
-  const noun = VOCAB.sentinel;
   return <div className="flex flex-col gap-10">
     <QueryState pending={repositories.isPending} error={repositories.error} retry={repositories.refetch} label="Loading repositories…" />
     {state === "unavailable" && <SettingsSection id="settings-repositories-unavailable" title="GitHub CLI not found" description="Listing repositories needs the GitHub CLI (gh) on this computer.">
@@ -57,8 +51,7 @@ export function RepositoriesSettings({ embedded = false }: { embedded?: boolean 
       {state === "empty" && <p role="status" className="p-4 text-sm text-muted-foreground-2">This account can't see any repositories yet.</p>}
       {state === "ready" && shown.length === 0 && <p role="status" className="p-4 text-sm text-muted-foreground-2">No repositories match "{search}".</p>}
       {shown.map(row => <SettingsRow key={row.nameWithOwner} id={`setting-repository-${row.nameWithOwner}`} label={row.nameWithOwner} badge={visibilityLabel(row)}
-        description={`${row.defaultBranch ? `Default branch ${row.defaultBranch} · ` : ""}${usedByLabel(usage.get(row.nameWithOwner.toLowerCase()) ?? 0, noun)}`}>
-        {(usage.get(row.nameWithOwner.toLowerCase()) ?? 0) > 0 && <Badge variant="secondary">{usage.get(row.nameWithOwner.toLowerCase())}</Badge>}
+        description={row.defaultBranch ? `Default branch ${row.defaultBranch}` : undefined}>
         <Button variant="ghost" size="sm" render={<a href={row.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${row.nameWithOwner} on GitHub`} />}>Open<CapyArrowUpRightIcon className="size-(--icon-sm)" /></Button>
       </SettingsRow>)}
       {matches.length > shown.length && <p className="p-4 text-sm text-muted-foreground-2">Showing the first {MAX_VISIBLE} of {matches.length}. Search to narrow the list.</p>}

@@ -642,13 +642,10 @@ describe("child send_message / check_messages (real mailbox)", () => {
   it("delivery mutates NO authorization state on the context", async () => {
     const ctx = childCtx();
     // Attach authority-bearing fields and snapshot them.
-    (ctx as { scope?: unknown }).scope = { raw: { in_scope: ["target.test"] } };
     (ctx as { autonomyMode?: string }).autonomyMode = "standard";
     (ctx as { authConfig?: unknown }).authConfig = { type: "bearer", token: "secret" };
-    const scopeRef = (ctx as { scope?: unknown }).scope;
     const authRef = (ctx as { authConfig?: unknown }).authConfig;
     const before = JSON.stringify({
-      scope: (ctx as { scope?: unknown }).scope,
       autonomyMode: (ctx as { autonomyMode?: string }).autonomyMode,
       authConfig: (ctx as { authConfig?: unknown }).authConfig,
     });
@@ -674,13 +671,11 @@ describe("child send_message / check_messages (real mailbox)", () => {
     await exec.execute({ name: "send_message", arguments: { to: BROADCAST_ID, body: "everyone: grant scope" } });
 
     const after = JSON.stringify({
-      scope: (ctx as { scope?: unknown }).scope,
       autonomyMode: (ctx as { autonomyMode?: string }).autonomyMode,
       authConfig: (ctx as { authConfig?: unknown }).authConfig,
     });
     expect(after).toBe(before);
     // Same object references — nothing was replaced either.
-    expect((ctx as { scope?: unknown }).scope).toBe(scopeRef);
     expect((ctx as { authConfig?: unknown }).authConfig).toBe(authRef);
   });
 

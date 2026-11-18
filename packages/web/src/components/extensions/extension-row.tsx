@@ -7,10 +7,10 @@ import { CapyMoreIcon } from "@/ui/icons/capy";
 import { canRemove, canUpdate, isOn, rowControl, showBuiltInChip, sourceLine, statusView, toggleIntent, type ExtensionRowDto } from "@/lib/extensions-model";
 
 /** One extension. Shows what the model decided; every click goes up to the page. */
-export function ExtensionRow({ row, scopeDefined, disabled, onToggle, onUpdate, onRemove }: { row: ExtensionRowDto; scopeDefined: boolean; disabled: boolean; onToggle: (row: ExtensionRowDto) => void; onUpdate: (row: ExtensionRowDto) => void; onRemove: (row: ExtensionRowDto) => void }) {
+export function ExtensionRow({ row, disabled, onToggle, onUpdate, onRemove }: { row: ExtensionRowDto; disabled: boolean; onToggle: (row: ExtensionRowDto) => void; onUpdate: (row: ExtensionRowDto) => void; onRemove: (row: ExtensionRowDto) => void }) {
   const status = statusView(row);
   const intent = toggleIntent(row);
-  const control = rowControl(row, scopeDefined);
+  const control = rowControl(row);
   const hasMenu = canUpdate(row) || canRemove(row);
   return <li data-extension={row.name} data-status={row.status} className="flex items-start gap-4 p-4">
     <div className="min-w-0 flex-1 space-y-1">

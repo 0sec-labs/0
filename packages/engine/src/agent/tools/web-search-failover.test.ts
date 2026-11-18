@@ -10,9 +10,8 @@ const html = '<a href="https://typescript.test/docs" class="result__a">Docs</a>'
 beforeEach(() => { mocks.parallel.mockReset().mockResolvedValue({ ok: false, error: "Primary unavailable" }); mocks.http.mockReset().mockImplementation(async () => new Response(html)); });
 afterEach(() => { vi.useRealTimers(); });
 describe("one search tool with bounded provider failover", () => {
-  it("uses anonymous primary results through scoped/rate-limited transport without target credentials", async () => {
-    const acquire = vi.fn(async () => {}); const noteResponse = vi.fn();
-    const ctx = context(); ctx.rateLimiter = { acquire, noteResponse } as unknown as ToolContext["rateLimiter"];
+  it("uses anonymous primary results through the pinned transport without target credentials", async () => {
+    const ctx = context();
     mocks.parallel.mockImplementation(async (_query, options) => {
       await options.fetchImpl("https://mcp.parallel.ai/mcp", { method: "POST", body: "{}" });
       return { ok: true, results: [{ title: "Docs", url: "https://typescript.test/", snippet: "Official reference" }] };
@@ -22,8 +21,6 @@ describe("one search tool with bounded provider failover", () => {
       const result = await executor.execute(query);
       expect(result).toMatchObject({ success: true, output: { provider: "Parallel" }, meta: { provider: "Parallel" } });
       expect(mocks.http).toHaveBeenCalledOnce();
-      expect(acquire).toHaveBeenCalledWith("https://mcp.parallel.ai/mcp", 1, expect.any(AbortSignal));
-      expect(noteResponse).toHaveBeenCalledOnce();
       expect(new Headers(mocks.http.mock.calls[0]![1].headers).get("authorization")).toBeNull();
       expect(JSON.stringify(mocks.http.mock.calls)).not.toContain("target-secret");
       expect(ctx.target).toBe("https://target.test");

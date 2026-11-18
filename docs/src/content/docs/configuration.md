@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Settings, environment variables, scope, costs, telemetry, updates and the security model.
+description: Settings, environment variables, costs, telemetry, updates and the security model.
 ---
 
 Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models](/models/).
@@ -87,7 +87,7 @@ Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. Moving one pa
 
 A running console is tied to one folder and owns its database. Commands such as `0 skills list`, `0 memory list` and `0 threads list` run from another folder stop with `This console is for <folder>. Run the command there, or add --db-path <path>.`
 
-Thread transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
+Thread transcripts hold target hostnames, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
 
 ## The `0 config` command
 
@@ -227,7 +227,7 @@ If you are signed in with a 0security cloud token (`ZERO_CLOUD_TOKEN` or `~/.0/c
 
 ### What is never collected
 
-Never in any telemetry: targets, URLs, hostnames, IP addresses, file paths, finding titles, descriptions or evidence, prompts, model output, chat messages, tool arguments or results, scope entries, source code, credentials, environment variables, usernames, or error message text. Every string passes through the same redaction step before it leaves the process, and the usage fields above are an explicit allowlist, so a new field cannot be sent without a deliberate change.
+Never in any telemetry: targets, URLs, hostnames, IP addresses, file paths, finding titles, descriptions or evidence, prompts, model output, chat messages, tool arguments or results, source code, credentials, environment variables, usernames, or error message text. Every string passes through the same redaction step before it leaves the process, and the usage fields above are an explicit allowlist, so a new field cannot be sent without a deliberate change.
 
 ### Crash reports
 
@@ -316,160 +316,9 @@ Copies older than this feature cannot be updated from the console, and nothing c
 
 The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day. Copies older than 0.29 only check when `ZERO_UPDATE_CHECK=1` is set; update those with the installer, or with the upgrade command that older versions have.
 
-## Scope
+## Execution boundary
 
-A scope file lists the hosts 0 may test. Use one for every live target.
-
-Only test systems you own or are authorized to test. A scope file encodes that authorization; it does not grant it, and it is not a sandbox.
-
-### Set up scope
-
-Scope enforcement is a built-in extension. It is **on by default**, in every project. Scope is on whenever a scope is set: with no scope nothing is restricted, and the moment you set one (`--scope`, a thread, Sentinel or automation scope, or a pull request checkout) its hosts, paths and exclusions are enforced.
-
-If the scope extension is turned off or fails while a scope is set, commands are **denied**, not allowed. To also require a scope for every live target, enable it explicitly for the project:
-
-```bash
-0 skills extensions enable scope
-```
-
-Save `scope.json` with your authorized hosts:
-
-```json
-{
-  "in_scope": ["app.example.com"],
-  "out_of_scope": []
-}
-```
-
-Pass it to a headless prompt:
-
-```bash
-0 -p "Check the login flow" --target https://app.example.com --scope ./scope.json
-```
-
-With the extension enabled explicitly, a live target is refused without a scope file, including localhost. The target is checked before work starts. A missing or malformed file is always an error.
-
-With no scope set, host checks, exclusions and local filesystem boundaries have nothing to enforce. Credential protection, sandboxing and resource limits apply either way. Turning the extension off (`0 skills list scope --disable`) makes any scope you set deny commands until you turn it back on.
-
-### Matching rules
-
-Rules match the URL's **hostname**, case-insensitive. Port, path and resolved IP address are ignored.
-
-| Rule | Matches | Does not match |
-| --- | --- | --- |
-| `app.example.com` | `https://app.example.com/` on any path or port | `api.app.example.com`, `example.com` |
-| `*.example.com` | `app.example.com`, `a.b.example.com` | The apex `example.com`, `example.com.attacker.test` |
-| `192.0.2.0/24` | A literal IPv4 host in range, such as `http://192.0.2.10/` | A DNS name that resolves into the range |
-
-- Write the hostname alone. No `https://`, path or `:443`.
-- Only a leading `*.` wildcard works. No bare `*`, interior wildcards or IPv6 CIDRs.
-- Add the apex and `*.` as two rules if both are authorized.
-- IPv4 prefix lengths are integers from 0 to 32. Avoid broad ranges unless all of it is authorized.
-- Exact IPv6 addresses work in bare or bracketed form.
-- A trailing root dot is ignored (`app.example.com.` equals `app.example.com`).
-
-#### Exclusions win
-
-A matching `out_of_scope` rule always beats `in_scope`. An empty `in_scope` denies everything.
-
-```json
-{
-  "in_scope": ["example.com", "*.example.com"],
-  "out_of_scope": ["payments.example.com", "*.production.example.com"]
-}
-```
-
-- `https://app.example.com/` is allowed.
-- `https://payments.example.com/` is denied.
-- `https://api.production.example.com/` is denied.
-- `https://production.example.com/` is **allowed**. The wildcard does not match its apex; add it to `out_of_scope` too.
-
-A redirect or a linked third-party host does not become in scope because the start page was.
-
-### Scope is one input of several
-
-| Input | What it controls |
-| --- | --- |
-| `--scope` | Which hosts may be reached, once a scope is set. |
-| `--model` and your provider key | Which model does the work. |
-| `ZERO_ENGAGEMENT_PROFILE=conservative` | A quieter testing posture. Not a new scope. |
-
-With scope on, the shell refuses generic scanners (sqlmap, nikto and similar) on scoped engagements. `--allow-scanners` lifts that refusal without widening the host list.
-
-If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
-
-There is no access setting: a thread or Sentinel has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Ask before running commands](#ask-before-running-commands)).
-
-### Strict scope mode
-
-Without a scope file, scope-based shell egress guards are not on. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
-
-In threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply whenever a scope is set. Private-network restrictions always apply.
-
-To make unscoped work fail instead, set `ZERO_REQUIRE_SCOPE=1`. It needs the scope extension to be on, which it is by default.
-
-### Execution boundary
-
-The default shell executor runs on your host. URL checks and scanner suppression are not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
-
-Saved state is not ongoing authorization. Before you resume a thread, confirm the target, scope, credentials and allowed side effects are still valid.
-
-### Diagnose a scope refusal
-
-1. Check that `--scope` points to the right file where 0 runs. A host path is not inside a container unless you mount it.
-2. Check the JSON is valid and `in_scope` and `out_of_scope` are string arrays.
-3. Compare the target hostname with each rule, including apex versus wildcard and exclusions.
-4. Check whether a redirect, API call or tool argument goes to another host.
-5. Fix the mismatch or get more authorization. Do not widen scope just to silence the refusal.
-
-### Authorized scope
-
-Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
-
-<span id="engagement-posture-profile"></span>
-### Posture profile
-
-The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `ZERO_ENGAGEMENT_PROFILE=conservative` is quieter:
-
-| Behavior | Default | Conservative |
-| --- | --- | --- |
-| Request rate | 5 rps per host | 1 rps per host |
-| Jitter | none | 0 to 750 ms |
-| Reset-endpoint burst probe | 15 POSTs | off (reported as a manual-test lead) |
-| Web recon pre-pass | unthrottled | rate-limited |
-| WAF-evasion ladder | on when blocked | off |
-
-Turn off WAF evasion on its own with `ZERO_WAF_EVASION=0`. Detection and block reporting still work.
-
-Set the same controls in the scope file. The scope file beats environment variables:
-
-```json
-{
-  "in_scope": ["app.example.com"],
-  "out_of_scope": [],
-  "engagement": {
-    "profile": "conservative",
-    "waf_evasion": false,
-    "reset_burst_probe": false,
-    "rate_limit_rps": 1,
-    "jitter_ms": 750
-  }
-}
-```
-
-Environment variables: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`, `ZERO_ENGAGEMENT_RATE_RPS` and `ZERO_ENGAGEMENT_JITTER_MS`. A bad profile name or value stops the command with exit code 2.
-
-When a profile is active, the session emits an `engagement_posture_applied` event. These controls cover 0's own request paths, not arbitrary subprocess or extension traffic.
-
-<span id="what-0-does-not-do"></span>
-### What scope does not cover
-
-- Recon starts from domains you supply. It is not an organization-wide inventory or a CIDR sweep.
-- Identity collection and AD or Entra graph analysis do not exploit, spray credentials or walk the paths they report. See the CLI reference.
-- A quiet posture is not stealth.
-- A hostname in scope does not authorize persistence, implants, C2, pivoting or destructive impact.
-- A saved lead or a model's confirmation is not always a reproduced vulnerability. Check the verifier result before disclosure. See [Verified and Not verified](/findings/#verified-and-not-verified).
-- Scope does not limit where model traffic goes. See [Keep model traffic in one region](/models/#keep-model-traffic-in-one-region).
+The default shell executor runs on your host. It is not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
 
 ## Costs and budgets
 
@@ -493,16 +342,16 @@ The estimator prices input, output, cached-input and cache-write tokens from a b
 
 ## Security model
 
-0 runs as you, with bash. The agent can do what you can do in a terminal; the defences are scope, approvals, the sandbox when you use one, and the prompts below. This page covers third-party code and text: extensions, MCP servers and skills.
+0 runs as you, with bash. The agent can do what you can do in a terminal; the defences are approvals, the sandbox when you use one, and the prompts below. This page covers third-party code and text: extensions, MCP servers and skills.
 
 ### Extensions and MCP
 
 An extension or MCP server you add runs other people's code as your user. 0 puts an explicit review in front of it. It does not sandbox it. Setup is in [Extensions](/extensions/).
 
 - **Pinned by commit.** A git extension is fetched without running anything and pinned to a full 40-character commit. Branches, tags and short SHAs are refused. The installed folder is hashed; if it changes on disk, it is blocked until you review it again. Local folders are pinned by content hash.
-- **The install prompt.** It shows `repo @ commit`, the licence, the file list, hidden-Unicode flags and what the extension can do: scripts it ships, MCP servers (command or URL, variable names), services it calls (hosts, read or write) and any scope it defines. The click echoes the commit, and the server re-checks that the revision it installs is the one you saw. Approving is yours: a command run by a thread, or without a terminal, is refused. The audit log records `extension.install` with the commit and capabilities.
+- **The install prompt.** It shows `repo @ commit`, the licence, the file list, hidden-Unicode flags and what the extension can do: scripts it ships, MCP servers (command or URL, variable names), services it calls (hosts, read or write). The click echoes the commit, and the server re-checks that the revision it installs is the one you saw. Approving is yours: a command run by a thread, or without a terminal, is refused. The audit log records `extension.install` with the commit and capabilities.
 - **Updates re-prompt.** Any change, even one new script, shows the folder diff and a capability delta and asks again. There is no silent auto-update of third-party extensions. Built-ins update with the binary.
-- **Per-tool MCP pins.** The first time an MCP server connects you approve its tools; 0 stores a sha256 of each tool's name, description, input schema and annotations. If any tool is changed, new or removed, the whole server is blocked until you approve again. MCP servers start only when the model first loads them, run through `beforeCommand` (your scope and approvals), and their output is labelled untrusted and capped. Details are in [MCP servers in extensions](/extensions/#servers-bundled-in-an-extension).
+- **Per-tool MCP pins.** The first time an MCP server connects you approve its tools; 0 stores a sha256 of each tool's name, description, input schema and annotations. If any tool is changed, new or removed, the whole server is blocked until you approve again. MCP servers start only when the model first loads them, run through `beforeCommand` (your approvals), and their output is labelled untrusted and capped. Details are in [MCP servers in extensions](/extensions/#servers-bundled-in-an-extension).
 - **Environment allowlist.** A process gets a scrubbed environment plus only the variable names the extension declared and you approved. Provider keys are never passed unless declared and shown in the prompt. Loader variables (`LD_PRELOAD`, `DYLD_*`, `NODE_OPTIONS`) are always rejected. A connection token reaches only a declared variable.
 - **Repo config is a suggestion.** A repository's `.0/` or `.claude/` files cannot install or enable anything.
 - **Network.** Remote MCP servers need https (plain http only to loopback); hosts that resolve to private, loopback, link-local or metadata addresses are refused and redirects are not followed.

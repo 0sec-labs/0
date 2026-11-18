@@ -38,7 +38,7 @@ export function archiveIdleExceptAgentThreads(days: number, dbPath: string | und
   } finally { store.close(); }
 }
 
-type Options = { updates?: UpdateManager; relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
+type Options = { updates?: UpdateManager; relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
 export async function createWorkspaceServices(options: Options) {
   const skills = new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir: options.stateDir ?? homeStateDir(), team: options.auth.enabled });
   const remoteProviderRelays = new RemoteProviderRelayBroker({ epoch: options.relayEpoch ?? randomUUID() });
@@ -65,7 +65,7 @@ export async function createWorkspaceServices(options: Options) {
     workflows = new WebWorkflowService({ dbPath: options.dbPath });
     const workflow = workflows;
     gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflow.invokeLifecycle(sessionId, name, args) });
-    engine = new WorkflowEngineService({ token: options.engineBearer ?? options.controlToken, workspace: options.workspace, scopePath: options.scopePath, target: options.target, allowApply: options.allowApply, dbPath: options.dbPath, timeCapMs: options.timeCapMs, costCapUsd: options.costCapUsd }, { gateway, workflows: workflow });
+    engine = new WorkflowEngineService({ token: options.engineBearer ?? options.controlToken, workspace: options.workspace, allowApply: options.allowApply, dbPath: options.dbPath, timeCapMs: options.timeCapMs, costCapUsd: options.costCapUsd }, { gateway, workflows: workflow });
     await engine.ready;
     github = new GitHubPublicationAuth();
     sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: {

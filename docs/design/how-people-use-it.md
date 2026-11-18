@@ -18,8 +18,8 @@ Step counts are from today's product. "Dead end" means the user cannot continue 
   4. `gh auth login` (the console reuses it) or Settings, Git and pull requests, Sign in with GitHub
   5. `0 web`, open the browser
   6. Agents, New agent, pick "Dependency Watcher" (it proposes upgrades; it does not open a PR on its own)
-  7. The Agent opens Paused, with "Add scope to say what it covers, then turn it on"
-  8. Add scope, switch it on, Run now
+  7. The Agent opens Paused; turn it on
+  8. Run now
   9. Wait for a Thread, read the diff, apply it by hand
 - Dead end: nothing lists the alerts you already have. The Agent works from the lockfile, so "close these 47" never appears as a list with a before and after count. `0 scan deps fix` runs the package manager on the host without a safety net.
 - Day 7: a pull request waiting in the repo, or nothing, because no schedule is on by default and a schedule only fires while `0 web` is running.
@@ -47,11 +47,11 @@ Step counts are from today's product. "Dead end" means the user cannot continue 
 ### d. Consultant or pentester, repeatable evidence for clients
 
 - Trigger: the third client this quarter asks for "proof it was fixed".
-- First 5 minutes today, about 7 steps: install, model, `0 web`, New thread, "Whitebox pentest" or "Explain this folder" chip, set a scope, run. `0 automation run --template repository-review --target ... --format json` works from the CLI.
-- Dead end: results are tied to one Thread and one local database. There is no per-client folder of runs, and no "re-run last quarter's scope and show what changed".
+- First 5 minutes today, about 7 steps: install, model, `0 web`, New thread, "Whitebox pentest" or "Explain this folder" chip, run. `0 automation run --template repository-review --target ... --format json` works from the CLI.
+- Dead end: results are tied to one Thread and one local database. There is no per-client folder of runs, and no "re-run last quarter's work and show what changed".
 - Day 7: a re-test run per client on a schedule (Automations has hourly, daily, weekly triggers, and they stop when the server stops).
 - Day 30 reason to pay: low. They are single-player. Pay for branding of reports or a shared Computer.
-- Quits when: a re-test cannot reuse the original scope and evidence format.
+- Quits when: a re-test cannot reuse the original evidence format.
 
 ### e. Open-source maintainer drowning in AI-generated reports
 
@@ -84,7 +84,7 @@ Notification surfaces, each with one job:
 
 Approval moments:
 - Read-only: reading, scanning, listing alerts, proposing a patch as text. No approval.
-- Can make changes: opening a branch and a draft pull request. Asked once per repo, and again when the access level, scope or model changes (today `0 agents acknowledge` does that).
+- Can make changes: opening a branch and a draft pull request. Asked once per repo, and again when the access level or model changes (today `0 agents acknowledge` does that).
 - Never without a person: merge, force push, run package managers or scripts on the host, edit workflow permissions beyond what the fix needs.
 
 Where Memory improves run two:
@@ -108,7 +108,7 @@ Effort: S under a week, M one to three weeks, L more.
 | 7 | GitHub App | `gh` login, polling, webhook receiver in server mode; manual manifest flow not built | Check runs need an App; attribution to the `gh` user is confusing; needs an owner decision on app ownership | L |
 | 8 | Multi-repo view | One Agent per folder | A repo list with status, spend, open pull requests; one digest across repos | M |
 | 9 | Verification gate | Not present | Guard in the engine: detector must be clean after the fix, tests must run, no silent config weakening. Secrets lane: generated config disabled every rule in all six cases | M |
-| 10 | Preset defaults | Presets exist | Presets open Paused with no scope; the Dependency Watcher preset says "Can make changes" while tool access shows "read-only" (CLI `agents show`). One consistent first-run state | S |
+| 10 | Preset defaults | Presets exist | Presets open Paused; the Dependency Watcher preset says "Can make changes" while tool access shows "read-only" (CLI `agents show`). One consistent first-run state | S |
 | 11 | Team layer | Accounts, roles in `--team-config` | Shared inbox, shared budget, audit export. Not needed before the single-player loop works | L |
 
 Evidence for ranking 1, 2 and 9: merge-ready as is, per class, in our experiment (small and hand-picked, indicative only): workflow permissions about 7 of 8; config and IaC 2 of 9; dependency upgrades 2 of 11, with 7 of 11 after small edits; secrets 0 of 6. Cost per fix was roughly one to ten cents on the engine's own estimate. So start with the classes that verify cheaply (workflows, lockfile-only bumps) and gate the rest.

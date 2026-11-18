@@ -7,32 +7,20 @@
  * else allow. A policy that throws, rejects or times out counts as deny.
  *
  * Only first-party built-ins register a policy (see `builtin-policies.ts`); there is
- * deliberately no public registration API, so a plugin cannot loosen scope
+ * deliberately no public registration API, so a plugin cannot loosen a decider
  * (docs/design/one-extension-system.md section 3, open question 3).
  */
-/** The part of a scope policy the hook needs; `ScopePolicy` satisfies it. */
-export interface BeforeCommandScope {
-  match(url: string): { readonly allowed: boolean; readonly reason: string };
-  readonly raw: { readonly out_of_scope?: readonly string[] };
-}
-
 /**
  * What the call does: `bash` runs shell text, `process` starts a program or feeds a running one, `network` reaches a
  * host, `file-write` changes files, `file-read` reads them (never needs operator approval).
  */
 export type BeforeCommandKind = "bash" | "network" | "file-write" | "process" | "file-read";
 
-/** Who is running the command, and the scope that applies to it (undefined = none defined). */
+/** Who is running the command. */
 export interface BeforeCommandThread {
   readonly id?: string;
-  /** Host scope defined for this thread/run (project, --scope, Agent, automation, PR checkout). */
-  readonly scope?: BeforeCommandScope;
-  /** http_audit path allowlist prefixes, when defined. */
-  readonly pathPrefixes?: readonly string[];
   /** The global "Ask before running commands" setting. */
   readonly approvals?: "ask" | "auto";
-  /** An interactive channel can approve a scope that does not cover a target yet. */
-  readonly canAskScope?: boolean;
 }
 
 export interface BeforeCommandInput {

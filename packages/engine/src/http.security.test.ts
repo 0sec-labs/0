@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("./plugins/enablement.js", async (importOriginal) => ({
-  ...await importOriginal<object>(),
-  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
-}));
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { gzipSync } from "node:zlib";
 import { fetchScoped, isAllowedLocalOrigin } from "./http.js";
-import { ScopePolicy } from "./scope/scope.js";
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }));
 vi.mock("node:dns/promises", () => dns);
@@ -34,7 +29,7 @@ afterEach(async () => {
   await new Promise<void>(resolve => server.close(() => resolve()));
 });
 
-describe("scoped HTTP physical network boundary", () => {
+describe("pinned HTTP physical network boundary", () => {
   it("admits only the explicitly granted loopback origin from a no-target console", async () => {
     await expect(fetchScoped(base, {}, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal HTTP/);
     vi.stubEnv("ZERO_ALLOWED_LOCAL_ORIGINS", base);
@@ -65,7 +60,7 @@ describe("scoped HTTP physical network boundary", () => {
     expect(isAllowedLocalOrigin("http://localhost:48124")).toBe(false);
   });
 
-  it("binds absent scope to the base origin before resolving foreign hosts", async () => {
+  it("binds to the base origin before resolving foreign hosts", async () => {
     await expect(fetchScoped("http://foreign.invalid/", {}, { baseUrl: base })).rejects.toThrow(/Cross-origin/);
     expect(dns.lookup).not.toHaveBeenCalled();
     expect(hits).toEqual([]);
@@ -87,19 +82,6 @@ describe("scoped HTTP physical network boundary", () => {
     })).rejects.toThrow(/Local\/internal DNS/);
     await expect(fetchScoped(base, {}, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal HTTP/);
     expect(hits).toEqual([]);
-  });
-
-  it("enforces explicit restrictions and denial memory at redirects under public opt-in", async () => {
-    serve = (_req, res) => { res.writeHead(302, { Location: "https://denied.invalid/" }).end(); };
-    await expect(fetchScoped(base, { redirect: "follow" }, {
-      baseUrl: base, allowPublicNetwork: true, deniedHosts: new Set(["denied.invalid"]),
-    })).rejects.toThrow(/Operator-denied/);
-    expect(hits.map(hit => hit.url)).toEqual(["/"]);
-    await expect(fetchScoped("https://outside.invalid/", {}, {
-      baseUrl: "", allowPublicNetwork: true,
-      scope: ScopePolicy.fromJson({ in_scope: ["allowed.invalid"] }),
-    })).rejects.toThrow(/Scope violation/);
-    expect(dns.lookup).not.toHaveBeenCalled();
   });
 
   it("rejects public-looking DNS targets with any private answer before a socket", async () => {
@@ -149,44 +131,13 @@ describe("scoped HTTP physical network boundary", () => {
     expect(hits).toEqual([]);
   });
 
-  it("honors equivalent native IPv6 exclusions before dispatch admission", async () => {
-    dns.lookup.mockResolvedValue([{ address: "2606:4700:4700::1111", family: 6 }]);
-    const target = "http://public.invalid/";
-    const scope = ScopePolicy.fromJson({
-      in_scope: ["public.invalid"],
-      out_of_scope: ["2606:4700:4700::1111"],
-    });
-    await expect(fetchScoped(target, {}, {
-      baseUrl: target, scope,
-      beforeRequest: () => { throw new Error("excluded address reached dispatch admission"); },
-    })).rejects.toThrow(/excluded by scope/);
-    expect(hits).toEqual([]);
-  });
-
   it("pins the validated answer and keeps URL Host authority, not caller Host", async () => {
     dns.lookup.mockResolvedValueOnce([{ address: "127.0.0.1", family: 4 }]).mockRejectedValue(new Error("DNS changed after authorization"));
     const target = `http://pinned.invalid:${new URL(base).port}/`;
-    const scope = ScopePolicy.fromJson({ in_scope: ["pinned.invalid"] });
-    const response = await fetchScoped(target, { headers: { Host: "foreign.invalid" } }, { baseUrl: base, scope });
+    const response = await fetchScoped(target, { headers: { Host: "foreign.invalid" } }, { baseUrl: base, allowPublicNetwork: true });
     expect(await response.text()).toBe("fixture");
     expect(hits).toEqual([{ url: "/", host: new URL(target).host, authorization: undefined, key: undefined }]);
     expect(dns.lookup).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps explicit private anchors usable but honors mapped-address exclusions", async () => {
-    expect(await (await fetchScoped(base, {}, { baseUrl: base })).text()).toBe("fixture");
-    const target = `http://[::ffff:127.0.0.1]:${new URL(base).port}/denied`;
-    const scope = ScopePolicy.fromJson({ in_scope: [new URL(target).hostname], out_of_scope: ["127.0.0.1"] });
-    await expect(fetchScoped(target, {}, { baseUrl: base, scope })).rejects.toThrow(/excluded by scope/);
-    expect(hits).toHaveLength(1);
-  });
-
-  it("blocks a redirect before the denied destination receives a request", async () => {
-    serve = (_req, res) => { res.writeHead(302, { Location: `http://foreign.invalid:${new URL(base).port}/outside` }).end(); };
-    const scope = ScopePolicy.fromJson({ in_scope: ["127.0.0.1"], out_of_scope: ["foreign.invalid"] });
-    await expect(fetchScoped(base, { redirect: "follow" }, { baseUrl: base, scope })).rejects.toThrow(/Scope violation/);
-    expect(hits.map(hit => hit.url)).toEqual(["/"]);
-    expect(dns.lookup).not.toHaveBeenCalled();
   });
 
   it("strips standard and custom credentials on approved cross-origin redirects", async () => {
@@ -194,8 +145,7 @@ describe("scoped HTTP physical network boundary", () => {
       if (req.url === "/") res.writeHead(302, { Location: `http://second.invalid:${new URL(base).port}/final` }).end();
       else res.end("approved final response");
     };
-    const scope = ScopePolicy.fromJson({ in_scope: ["127.0.0.1", "second.invalid"] });
-    const response = await fetchScoped(base, { redirect: "follow", headers: { Authorization: "Bearer fixture", "X-Api-Key": "fixture-key" } }, { baseUrl: base, scope });
+    const response = await fetchScoped(base, { redirect: "follow", headers: { Authorization: "Bearer fixture", "X-Api-Key": "fixture-key" } }, { baseUrl: base, allowPublicNetwork: true });
     expect(await response.text()).toBe("approved final response");
     expect(response.url).toBe(`http://second.invalid:${new URL(base).port}/final`);
     expect(hits.map(hit => [hit.authorization, hit.key])).toEqual([["Bearer fixture", "fixture-key"], [undefined, undefined]]);
@@ -244,7 +194,7 @@ describe("scoped HTTP physical network boundary", () => {
     let release!: (value: Array<{ address: string; family: number }>) => void;
     dns.lookup.mockImplementation(() => new Promise(resolve => { release = resolve; }));
     const target = `http://delayed.invalid:${new URL(base).port}/`;
-    const pending = fetchScoped(target, {}, { baseUrl: base, scope: ScopePolicy.fromJson({ in_scope: ["delayed.invalid"] }), timeoutMs: 20 });
+    const pending = fetchScoped(target, {}, { baseUrl: target, timeoutMs: 20 });
     await expect(pending).rejects.toThrow(/timed out/);
     release([{ address: "127.0.0.1", family: 4 }]);
     await new Promise(resolve => setImmediate(resolve));

@@ -8,16 +8,15 @@ export interface ExtensionRowDto {
   status: "built-in" | "enabled" | "disabled" | "needs-approval" | "unmigrated" | "refused";
   enabled: boolean; revision: string | null; sourceLabel: string | null; canDo: string[]; skills: string[];
   refusal: { code: string; reason: string } | null; note: string;
-  /** Built-ins only: `always` has no switch; `scope-defined` has none while a scope is defined. */
-  required?: "always" | "scope-defined" | null;
+  /** Built-ins only: `always` has no switch. */
+  required?: "always" | null;
   /** The connector contract it declares, when it is a connector (its card is on the Connections section). */
   connector?: import("./connector-model").ConnectorDto | null;
   /** MCP servers the extension declares; `needs-approval` means a tool changed, is new or was removed (or was never approved). */
   mcp?: Array<{ server: string; state: "not-connected" | "approved" | "needs-approval"; reason: string }>;
 }
 export interface ImportReportDto { importedAt: string; migrated: Array<{ kind: string; name: string; detail: string }>; notMigrated: Array<{ kind: string; name: string; detail: string }>; notes: string[] }
-/** `scopeDefined` comes from the server (a project scope file, a scope in settings, or a Sentinel or automation scope). Only an older server leaves it unset, and the page then assumes a scope may exist, so scope shows no switch. */
-export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string; scopeDefined?: boolean }
+export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string }
 
 export interface InstallPromptDto {
   kind: "install" | "update"; name: string; version: string; description: string;
@@ -66,18 +65,10 @@ export function toggleIntent(row: ExtensionRowDto): ToggleIntent {
 }
 export const isOn = (row: ExtensionRowDto): boolean => row.enabled && row.status !== "refused" && row.status !== "needs-approval";
 
-/** The server says whether a scope is defined; before it answers (or from an older server) assume one may exist, so the scope row has no switch. */
-export const scopeDefinedOf = (overview: Pick<OverviewDto, "scopeDefined"> | undefined): boolean => overview?.scopeDefined ?? true;
-
-/**
- * The control on the right of a row. A required built-in is not an on/off setting: github is simply "Built in" (disconnect
- * lives on its connector card), scope is "On" while it enforces a defined scope. Scope keeps a switch when it is off (so it
- * can be turned back on) or when no scope is defined anywhere (so turning it off weakens nothing).
- */
+/** The control on the right of a row. A required built-in is not an on/off setting: github is simply "Built in" (disconnect lives on its connector card). */
 export type RowControl = { kind: "switch" } | { kind: "label"; text: string };
-export function rowControl(row: Pick<ExtensionRowDto, "required" | "enabled">, scopeDefined: boolean): RowControl {
+export function rowControl(row: Pick<ExtensionRowDto, "required">): RowControl {
   if (row.required === "always") return { kind: "label", text: "Built in" };
-  if (row.required === "scope-defined" && row.enabled && scopeDefined) return { kind: "label", text: "On" };
   return { kind: "switch" };
 }
 

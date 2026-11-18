@@ -490,8 +490,6 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
   /** Whether the task finished, rather than merely exhausting its run. */
   done?: boolean;
   completion_reason?: "done" | "turn_limit" | "cost_limit" | "output_limit" | "early_stop" | "error";
-  /** Scope rules inherited from the parent — only when scope is active. */
-  scope_rules?: string[];
   [k: string]: unknown;
 }
 
@@ -640,7 +638,7 @@ export interface PeerMessagePayload {
 export interface ToolHealthPayload {
   /** Tool / command name the issue is attributed to. */
   tool: string;
-  /** Coarse taxonomy: missing-binary | buffer-limit | wrong-lockfile | policy-denied | scope-denied | error. */
+  /** Coarse taxonomy: missing-binary | buffer-limit | wrong-lockfile | policy-denied | error. */
   category: string;
   /** Operator-facing description of what happened. */
   message: string;

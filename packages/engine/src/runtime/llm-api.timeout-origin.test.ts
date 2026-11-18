@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime } from "./llm-api.js";
 import type { NativeRuntimeResult, RuntimeResult } from "./types.js";
 
+// These tests count fetch calls; the shared-dispatcher warm-up fetch is not one of them.
+process.env["ZERO_LLM_SHARED_DISPATCHER"] = "1";
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();

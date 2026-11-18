@@ -3,6 +3,9 @@ import { estimateCost } from "../shared/index.js";
 import { LlmApiRuntime } from "./llm-api.js";
 import type { NativeRuntimeResult, RuntimeResult } from "./types.js";
 
+// These tests count fetch calls; the shared-dispatcher warm-up fetch is not one of them.
+process.env["ZERO_LLM_SHARED_DISPATCHER"] = "1";
+
 beforeEach(() => {
   for (const name of ["ZERO_FORCE_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_PROVIDER", "ZERO_MODEL", "ZERO_WORKBENCH_PROVIDER_PROXY", "ZERO_WORKBENCH_PROVIDER_PROXY_TOKEN"]) vi.stubEnv(name, "");
   vi.stubEnv("ZERO_LLM_FALLBACK", "");

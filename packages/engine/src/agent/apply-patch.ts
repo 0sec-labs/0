@@ -15,7 +15,7 @@
 //      no in-place editing — just write-with-overwrite).
 //   3. Delete operations refuse to unlink a missing file (would otherwise
 //      mask a typo).
-//   4. All paths are resolved through the same `resolveScopedPath` chokepoint
+//   4. All paths are resolved through the same `resolveFolderPath` chokepoint
 //      that `read_file` and `run_command` use; out-of-scope writes throw.
 //
 // Reference: BoxPwnr's `ApplyPatchTool` in `src/boxpwnr/tools/tools.py`

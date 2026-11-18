@@ -5,14 +5,13 @@ import { LEGACY_ACCESS_VALUES, executionPolicy, legacyAskedFirst, parseApprovals
  * Golden characterisation of the one execution policy. There is a single mode (shell access); the only switch is the
  * global operator setting "Ask before running commands".
  *
- *  - default (auto): public-network tools, full shell syntax, the lifted audit allow-list, inherited console tools,
- *    automatic folder grants, verification receipts and target-related scope growth. Scope guard, budget and sandbox still bound it.
+ *  - default (auto): full shell syntax and verification receipts. Budget and sandbox still bound it.
  *  - Ask before running commands: every effectful call goes to the operator (asksBeforeEffectfulTools) and the narrower
- *    capability set the setting always had (no public-network shortcut, tokenised commands, every grant behind a prompt).
+ *    capability set the setting always had (tokenised commands).
  * If this table changes, the safety posture changed, and that must be a deliberate decision.
  */
-const GOLDEN_AUTO = { asksBeforeEffectfulTools: false, publicNetwork: true, fullShell: true, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: true, verificationReceipts: true, scopeExpansion: "target-related" };
-const GOLDEN_ASK_FIRST = { asksBeforeEffectfulTools: true, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" };
+const GOLDEN_AUTO = { asksBeforeEffectfulTools: false, fullShell: true, verificationReceipts: true };
+const GOLDEN_ASK_FIRST = { asksBeforeEffectfulTools: true, fullShell: false, verificationReceipts: false };
 
 describe("execution policy golden table", () => {
   it("default keeps its capability flags", () => expect(executionPolicy()).toEqual(GOLDEN_AUTO));

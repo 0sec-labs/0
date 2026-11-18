@@ -51,13 +51,11 @@ The image is based on `ubuntu:24.04` and includes:
 docker run --rm \
   -e OPENAI_API_KEY=$KEY \
   -v "$PWD:/work:ro" -w /work \
-  ghcr.io/0sec-labs/0security:latest -p "Check the login flow" \
-    --target https://example.com \
-    --scope /work/scope.json
+  ghcr.io/0sec-labs/0security:latest -p "Check the login flow"
 ```
 
 The container runs as the `ubuntu` user (uid 1000). Mount your working directory
-at `/work` so the container can read source and write reports. Working on a web target needs a [scope file](/configuration/#scope). State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
+at `/work` so the container can read source and write reports. State lives in `/data` (`HOME=/data`, so `/data/.0`). Mount a volume there if you want findings to outlive the container: `-v zero-data:/data`.
 
 ## Run the app on a server (experimental, single node)
 

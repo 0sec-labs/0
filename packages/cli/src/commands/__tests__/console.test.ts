@@ -34,7 +34,6 @@ vi.mock("@0/engine", async (importOriginal) => {
   return {
     ...actual,
     connectMcpServers: async () => undefined,
-    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   };
 });
 
@@ -77,12 +76,6 @@ describe("console launch authorization", () => {
     const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
     registerConsoleCommand(program);
     await expect(program.parseAsync(["console", flag, "value"], { from: "user" })).rejects.toMatchObject({ code: "commander.unknownOption" });
-  });
-
-  it("does not treat headless prompts as an interactive approval channel", async () => {
-    await launch(["--print", "inspect this target"]);
-    expect(process.exitCode).toBe(2);
-    expect(startup.showConsole).not.toHaveBeenCalled();
   });
 });
 

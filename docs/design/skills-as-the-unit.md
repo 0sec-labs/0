@@ -11,7 +11,7 @@ from reading the code, not from running it.
   picks a module from the target. We keep it as the front door and stop treating
   each module as its own engine.
 - One primitive runs everything: a **Thread** runs a **Skill** against a target
-  (folder, repo, URL) with scope, access and budget. Output is **Findings**, a patch
+  (folder, repo, URL) with access and budget. Output is **Findings**, a patch
   or a report.
 - A Skill declares a **verifier**: a command the harness runs in a container after
   the agent says it is done. The harness, not the agent, decides "verified".
@@ -76,8 +76,8 @@ its own engine, and `campaign`, `orchestrate`, `verify`, `deps`, `eval`.
 | research (find, attack, write PoC) | LLM agent; per-file loop `runPerFileResearch` :171 | :1062-1357 |
 | verify ("blind verify") | LLM agents, concurrency-limited; not a command | :1427-1725, prompt `blindVerifyPrompt` :1534 |
 | report, novelty, scoring | code | :1746-1809 |
-| web discovery/attack/verify | LLM loop with scope enforcement | `agentic/phase-runners.ts:79, 175, 681` |
-| scope, rate limit, cost ceiling, time cap | code | `scope/*`, `scan-plan.ts:48,102`, `shared/types.ts:26` (`ScanPlan`) |
+| web discovery/attack/verify | LLM loop | `agentic/phase-runners.ts:79, 175, 681` |
+| rate limit, cost ceiling, time cap | code | `scan-plan.ts:48,102`, `shared/types.ts:26` (`ScanPlan`) |
 | source-fix recheck | code: `evaluateVerificationSpec` (regex predicates, no LLM, behavior predicates unsupported) | `verification-spec/spec.ts` |
 
 Runtime choice: `--runtime auto|api|claude|codex|gemini`. `pickRuntimeForStage`
@@ -106,7 +106,7 @@ useful, but it is not a harness-run check. Section 6 renames it.
 ### 2.5 Threads, Agents, Automations, Skills
 
 - Threads: `0 threads start <prompt>` already has `--model --effort --access
-  read-only|changes --folder --target --scope` (`missions.ts:86-88`). Slash
+  read-only|changes --folder` (`missions.ts:86-88`). Slash
   commands are one registry (`shared/slash-commands.ts`); `/fix` maps to `scan fix`.
 - Agents (`shared/sentinels.ts`): own `skills[]` (:141), instructions, access,
   budget. An activation (:229-236) opens a child Thread with a per-run skill
@@ -141,7 +141,7 @@ wiring. A "done" claim is accepted from the agent in all of them except path 6.
   0 scan source .  ==  0 threads start --skill source-review --folder .
                                   |
                                   v
-  Thread = { skill, target(folder|repo|url), scope, access, budget, computer }
+  Thread = { skill, target(folder|repo|url), access, budget, computer }
                                   |
           +-----------------------+------------------------+
           | prompt skill          | pipeline skill         |
@@ -196,9 +196,9 @@ concept.
 - Pipeline skills: `web-pentest` (`agenticScan`), `source-review`, `package-audit`
   (`runPipeline`), `deep-review`, `repair`. `kind: pipeline` names engine stages;
   the stage bodies stay TypeScript. Reasons: benchmark reproducibility,
-  resumable journals, cost accounting (`scan-plan.ts`), scope enforcement,
+  resumable journals, cost accounting (`scan-plan.ts`),
   per-stage runtime choice.
-- Prepare, static analysis, scoring, novelty, scope, rate limit, cost ledger,
+- Prepare, static analysis, scoring, novelty, rate limit, cost ledger,
   the verifier runner: code, never a prompt.
 - Community skills are `prompt` only. `pipeline` is first-party.
 - The envelope is the same, so a Thread, an Agent and the UI treat both alike.
@@ -229,7 +229,7 @@ Top-level command count stays 14. Verbs move under `scan`/`skills` or become fla
 0 scan --skill <id> <target> -> any skill, including community ones
 ```
 
-Every current flag (`--depth --runtime --cost-ceiling --scope --resume --emit ...`)
+Every current flag (`--depth --runtime --cost-ceiling --resume --emit ...`)
 maps to a Thread config or a pipeline-skill input and keeps working. `--resume`
 keeps using the journal. A conformance test compares the old and new parse
 for every flag (section 9, check A).
@@ -395,10 +395,10 @@ verifier (fails before, passes after).
 
 ### 8.1 What the model sees today (derived from `agent/tools.ts:7437`, not executed)
 
-- 76 registered tools. Visibility is decided by role, scope and feature flags in
+- 76 registered tools. Visibility is decided by role and feature flags in
   `getToolsForRole`; access (Read-only or Can make changes) does not hide tools,
   it only changes approvals (`READ_ONLY_TOOLS`, `console/turn-engine/session.ts:375,1168`).
-- Default Thread (role `audit`, no scope: "everything" set): the 76 minus about 17
+- Default Thread (role `audit`: "everything" set): the 76 minus about 17
   gated off by default (plan, pty_session, python_exec, analyze_binary, cloud x2,
   oast x2, memsafety_fuzz, npm_dynamic_discovery, weaponize_kernel, cve_adapt,
   run_scanner, proxy, self_extend, remember_codebase, write_todos alias) minus the 2
@@ -411,12 +411,12 @@ verifier (fails before, passes after).
   `browser`).
 - Scoped source audit: `SCOPED_SOURCE_AUDIT_TOOLS` (`agent/tools/shell-commands.ts:21`),
   about 18 names, read-only: no bash, no run_command, no network, no effectful engines.
-- Verify role with a scope: network tools plus file tools (`run_command`,
+- Verify role: network tools plus file tools (`run_command`,
   `str_replace`, `apply_patch`).
 - Report role: 4 common plus 2 skill tools.
 
 Action before any change: add a golden snapshot test that prints the exact tool
-names per role x scope x flag set, so counts above become checked facts.
+names per role x flag set, so counts above become checked facts.
 
 ### 8.2 Proposal: core plus packs
 
@@ -431,7 +431,7 @@ XBOW IDOR challenge, marked historical. It supports "bash is enough for some web
 tasks", not "only bash for all". So the core is a default, and the A/B in 8.4
 decides each pack.
 
-Packs (loaded by `load_tool`/skill `tools:`; a pack never grants authority, scope and
+Packs (loaded by `load_tool`/skill `tools:`; a pack never grants authority and
 access gates still apply independently):
 
 | Pack | Tools | Order |
@@ -468,7 +468,7 @@ model behavior is sensitive to tool lists and must be measured, not assumed.
 
 | Overlap | Facts | Merge into |
 |---------|-------|-----------|
-| `bash`, `run_command`, `pty_session`, `js_eval`, `python_eval`, `python_exec` | six ways to run code. `run_command` is tokenized, no shell (`tools/system.ts:105`); `js_eval`/`python_eval` are "thin wrappers over the same guarded shellExec path as bash" (comment in `tools.ts`); `python_exec` is a stateful kernel (flag off); `pty_session` interactive (flag off) | `bash` with restricted mode chosen by access and scope (replaces `run_command`), `pty` and `stdin` options; drop the two eval wrappers; keep `python_exec` as the only stateful one in `compute` |
+| `bash`, `run_command`, `pty_session`, `js_eval`, `python_eval`, `python_exec` | six ways to run code. `run_command` is tokenized, no shell (`tools/system.ts:105`); `js_eval`/`python_eval` are "thin wrappers over the same guarded shellExec path as bash" (comment in `tools.ts`); `python_exec` is a stateful kernel (flag off); `pty_session` interactive (flag off) | `bash` with restricted mode chosen by access (replaces `run_command`), `pty` and `stdin` options; drop the two eval wrappers; keep `python_exec` as the only stateful one in `compute` |
 | `spawn_agent`, `spawn_agents`, `spawn_persistent_agent` | the last two are already dispatch-only aliases (`LEGACY_DELEGATION_TOOL_NAMES`, `tools/system.ts:40`) | one `spawn_agent` with count and persistent options; delete aliases after the saved-conversation window |
 | `update_todos`, `write_todos`, `plan` | `write_todos` is a hidden alias; `plan` is a typed ledger behind a flag | `update_todos` only |
 | 6 skill tools | list, load, read, create, save, copy | `list_skills`, `load_skill` in core; the rest in `authoring` |

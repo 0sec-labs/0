@@ -11,7 +11,7 @@ import { ReviewSheet } from "@/components/extensions/review-sheet";
 import { useExtensions } from "@/components/extensions/use-extensions";
 import { useReviewFlow } from "@/components/extensions/use-review-flow";
 import { errorText } from "@/lib/api-error";
-import { importNote, scopeDefinedOf, toggleIntent, type ExtensionRowDto } from "@/lib/extensions-model";
+import { importNote, toggleIntent, type ExtensionRowDto } from "@/lib/extensions-model";
 
 /** One-line status that stays hidden for the first 250 ms so a quick load never flashes. */
 function useAfter(active: boolean, ms: number): boolean {
@@ -29,7 +29,6 @@ export function ExtensionsPage() {
   const [actionError, setActionError] = useState("");
   const showLoading = useAfter(api.overview.isPending, 250);
   const data = api.overview.data;
-  const scopeDefined = scopeDefinedOf(data);
   const note = importNote(data?.importReport ?? null);
   const busy = flow.pending || api.enable.isPending || api.disable.isPending || api.remove.isPending;
 
@@ -47,7 +46,7 @@ export function ExtensionsPage() {
   };
 
   return <>
-    <PageHeader title="Extensions" summary="Extensions connect 0 to your tools and services: GitHub, MCP servers and rules like scope. Each is pinned to a commit and never updates on its own."
+    <PageHeader title="Extensions" summary="Extensions connect 0 to your tools and services: GitHub and MCP servers. Each is pinned to a commit and never updates on its own."
       actions={<div className="flex gap-2"><Button size="sm" variant="outline" disabled={!api.canChange || busy} onClick={flow.openAddMcp}>Add MCP server</Button><Button size="sm" variant="inverse" disabled={!api.canChange || busy} onClick={flow.openAdd}><CapyPlusIcon className="size-4" />Add extension</Button></div>} />
     {!api.canChange && <p className="text-sm text-muted-foreground-1">Only owners can add or change extensions.</p>}
     <ConnectionsSection canChange={api.canChange} />
@@ -59,7 +58,7 @@ export function ExtensionsPage() {
       : api.overview.isPending ? (showLoading ? <p role="status" className="text-sm text-muted-foreground-1">Loading extensions…</p> : null)
       : data && data.rows.length === 0 ? <p className="text-sm text-muted-foreground-1">No extensions yet. Add one to connect 0 to a service or an MCP server.</p>
       : data && <ul aria-label="Installed extensions" className="-mx-4 flex flex-col divide-y-[0.5px] divide-border-1 overflow-clip rounded-md border-[0.5px] border-border-2">
-        {data.rows.map(row => <ExtensionRow key={row.name} row={row} scopeDefined={scopeDefined} disabled={!api.canChange || busy} onToggle={toggle} onUpdate={r => void flow.startUpdate(r)} onRemove={r => setConfirm({ kind: "remove", row: r })} />)}
+        {data.rows.map(row => <ExtensionRow key={row.name} row={row} disabled={!api.canChange || busy} onToggle={toggle} onUpdate={r => void flow.startUpdate(r)} onRemove={r => setConfirm({ kind: "remove", row: r })} />)}
       </ul>}
     <AddExtensionDialog open={flow.step === "source"} pending={flow.pending} error={flow.error} problem={flow.problem} onSubmit={source => void flow.submitSource(source)} onClose={flow.close} />
     <AddMcpDialog open={flow.step === "mcp"} pending={flow.pending} error={flow.error} onSubmit={input => void flow.submitInput(input)} onClose={flow.close} />

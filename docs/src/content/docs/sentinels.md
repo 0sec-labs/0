@@ -1,9 +1,9 @@
 ---
 title: Sentinels
-description: Standing jobs with a scope and a review gate, plus the prompt-based automations they run and the GitHub pull request trigger.
+description: Standing jobs with a review gate, plus the prompt-based automations they run and the GitHub pull request trigger.
 ---
 
-A Sentinel is a named standing job with a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a saved prompt plus a trigger: when the trigger fires, the prompt is sent into the Sentinel's thread. A Sentinel owns automations.
+A Sentinel is a named standing job with files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a saved prompt plus a trigger: when the trigger fires, the prompt is sent into the Sentinel's thread. A Sentinel owns automations.
 
 ## Create one
 
@@ -16,7 +16,7 @@ Creating a sentinel never turns a schedule on. A preset only suggests automation
 
 Sentinels run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Sentinel has a scope, a model, skills, instructions (`AGENTS.md`) and its own memory (`NOTES.md`), plus `handoffs/` and `reports/` folders.
+Each Sentinel has a model, skills, instructions (`AGENTS.md`) and its own memory (`NOTES.md`), plus `handoffs/` and `reports/` folders.
 
 ## One thread that never ends
 
@@ -28,7 +28,7 @@ The Sentinel's page is its real conversation, the same transcript and composer e
 - **Needs you.** The sidebar row shows the Sentinel's last message and a glyph only when it is working, waiting on you or failed. A row that needs you says so in place of its age.
 - **Older threads.** Work from before this change, or with `ZERO_AGENTS_PERSISTENT_THREAD=0` set, ran in a thread of its own. Those stay as ordinary threads and are listed under Activity in Overview with an **Open** link.
 
-Every wake-up message carries the Sentinel's instructions, scope and skills again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
+Every wake-up message carries the Sentinel's instructions and skills again, so a long thread that has been summarised never loses its limits. If you change the scope, model or skills, the next wake-up starts a fresh thread with the new ones and says so; the old thread stays as an ordinary thread.
 
 ## Presets
 
@@ -36,23 +36,22 @@ A preset fills in the job, skills and instructions. A new Sentinel starts with p
 
 | Preset | Job |
 | --- | --- |
-| `pen-tester` | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
+| `pen-tester` | Scheduled, non-destructive tests of authorized web and API targets. |
 | `pr-security-reviewer` | Review each opened or updated pull request diff and draft comments. |
 | `dependency-watcher` | Watch lockfiles and advisories and propose safe upgrades. |
 | `fix-engineer` | Turn a confirmed finding into a tested draft fix for review. |
 | `secrets-hunter` | Find leaked credentials in code and git history, reported redacted. |
-| `attack-surface-monitor` | Re-map the in-scope external surface daily and report what is new. |
+| `attack-surface-monitor` | Re-map the external surface daily and report what is new. |
 | `cloud-posture-auditor` | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
 | `incident-triage` | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
 | `regression-tester` | Re-check known findings and API spec drift to catch regressions. |
 | `release-gate` | Review what changed since the last release before you ship. |
 
-## Limits and scope
+## Limits
 
-There is one mode: a Sentinel has shell access, like a thread. There is no access setting to choose. What limits a Sentinel is its scope, the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
+There is one mode: a Sentinel has shell access, like a thread. There is no access setting to choose. What limits a Sentinel is the optional sandbox (SmolVM or Docker) and one global setting. No preset opens pull requests unprompted; each preset's instructions say what it may do.
 
 - **Ask before running commands.** One global setting (**Settings → Helpers**), off by default; see [Configuration](/configuration/#ask-before-running-commands). When on, a Sentinel needs your approval for its commands, as in threads. Sentinels that used Ask first before now follow this setting; turn it on to keep confirmations.
-- **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on. See [Scope](/configuration/#scope).
 
 ## Cost
 
@@ -99,7 +98,7 @@ Draft pull requests are skipped the same way, with the reason `draft pull reques
 
 The pull request is untrusted content, and a run has shell access, so these limits apply by default:
 
-- **Scope.** The run's scope is that repository's checked-out folder. It cannot reach other folders, and network scope rules still apply to live targets.
+- **Folder.** The run works in that repository's checked-out folder.
 - **Environment.** The shell starts with an allowlisted environment: `PATH`, home and temporary directory basics, locale, `TERM` and CI variables. Other provider keys and tokens are removed. Set `ZERO_BASH_ENV_ALLOW` to a comma-separated list of extra variable names to pass through, or `ZERO_BASH_ENV_PASSTHROUGH_ALL=1` to turn the allowlist off.
 - **Sandbox.** When the container sandbox (SmolVM or Docker) is available and enabled, the run uses it. Otherwise it runs on the host and the Sentinel detail shows a one-line note saying so.
 
@@ -112,7 +111,7 @@ The Sentinel's `gh` account needs permission to comment when `--comment` is on. 
 
 ## Review gate
 
-Scheduled and polled turns are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its scope, model, access level, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous turn. Your own messages are never blocked.
+Scheduled and polled turns are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its model, access level, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous turn. Your own messages are never blocked.
 
 
 ## From the CLI
@@ -123,7 +122,7 @@ Everything on the Sentinels page works from `0 sentinels`. Commands attach to a 
 0 sentinels list --presets
 0 sentinels set --create --preset pen-tester --name "Nightly probe"
 0 sentinels set SENTINEL_ID --mission "Watch the lockfile"
-0 sentinels set SENTINEL_ID --files put reports/scope.md --file ./scope.md
+0 sentinels set SENTINEL_ID --files put reports/notes.md --file ./notes.md
 0 sentinels set SENTINEL_ID --state active --acknowledge
 0 sentinels run SENTINEL_ID --task "Re-test the login flow" --yes
 0 sentinels run SENTINEL_ID --history
@@ -134,7 +133,7 @@ Everything on the Sentinels page works from `0 sentinels`. Commands attach to a 
 
 ## Automations
 
-An **automation** is a saved prompt plus a trigger (a schedule, a manual run or a GitHub pull request). When the trigger fires, the prompt goes into the Sentinel's own thread as a wake-up message, and the Sentinel does the work there with its scope, skills and memory. There are no steps to wire together: change what the Sentinel does by changing the prompt. Use one when you want the same job repeated or scheduled.
+An **automation** is a saved prompt plus a trigger (a schedule, a manual run or a GitHub pull request). When the trigger fires, the prompt goes into the Sentinel's own thread as a wake-up message, and the Sentinel does the work there with its skills and memory. There are no steps to wire together: change what the Sentinel does by changing the prompt. Use one when you want the same job repeated or scheduled.
 
 In the browser, open a Sentinel, add an automation from a preset's suggestions (or describe a custom one in the thread), and set its **Triggers** schedule. A schedule fires only while the app and its computer are running.
 
@@ -159,4 +158,3 @@ The API fields `access`, `autonomy` and `toolAccess` are ignored on write and no
 
 - [Skills](/skills/): instructions a Sentinel loads.
 - [Extensions](/extensions/): connect GitHub and other services.
-- [Configuration](/configuration/#scope): authorization rules.

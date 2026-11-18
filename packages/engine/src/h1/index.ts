@@ -29,12 +29,6 @@ export {
 } from "./programs.js";
 export type { ListProgramsOptions, AutomationVerdict, H1ProgramPage } from "./programs.js";
 
-export {
-  toScopeFile,
-  toScopeJson,
-} from "./scope-export.js";
-export type { ToScopeFileOptions, ScopeExportResult } from "./scope-export.js";
-
 export type {
   H1Resource,
   H1Collection,

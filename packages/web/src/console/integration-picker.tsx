@@ -85,7 +85,6 @@ export function useIntegrationPicker({
           kind: "mission" as const,
           id: session.id,
           label: session.title!.trim(),
-          description: session.target,
           token: mentionToken("mission", session.id, session.title!),
         })),
       query,

@@ -3,10 +3,6 @@ import { type WorkspaceIdentity } from "../workspace-identity.js";
 import type { NativeRuntime, NativeMessage, NativeRuntimeResult } from "../../runtime/types.js";
 import type { AuthConfig } from "../../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolContext, AgentRole } from "../types.js";
-import type { ScopePolicy } from "../../scope/scope.js";
-import type { AttributionConfig } from "../../scope/attribution.js";
-import type { EngagementPosture } from "../../scope/engagement-profile.js";
-import type { EnforcementTracker } from "../../scope/enforcement.js";
 import type { ToolHealthSummary } from "../tool-health.js";
 import { type TrustGraphConfig } from "../trust-graph-runtime.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
@@ -54,11 +50,6 @@ export interface NativeAgentConfig {
   /** Authentication credentials to inject into tool context */
   authConfig?: AuthConfig;
   /**
-   * Per-host token-bucket rate limiter (#214). Threaded into the
-   * ToolContext so every fetch chokepoint paces against it.
-   */
-  rateLimiter?: import("../../scope/rate-limit.js").RateLimiter;
-  /**
    * Hard cost ceiling in USD. When set, the loop checks the running
    * estimated cost after every tool-call turn and aborts cleanly when
    * the ceiling is exceeded. Partial findings collected so far are
@@ -86,43 +77,8 @@ export interface NativeAgentConfig {
    * Defaults to systemPrompt for a non-delegated root.
    */
   delegationSystemPrompt?: string;
-  /**
-   * Programmatic engagement scope (0#215). When set, every URL the
-   * agent touches is checked against this policy and out-of-scope URLs
-   * return as `ToolResult.error`. Same-origin checks remain enforced ON
-   * TOP of this; scope is additive, never substitutive.
-   */
-  scope?: ScopePolicy;
-  /**
-   * http_audit enforcement tracker (path allowlist + counters + kill
-   * switch). When set, the main loop polls `enforcement.isKillExpired()`
-   * at each turn boundary and aborts cleanly (preserving partial findings)
-   * once the wall-clock budget is exhausted. Also threaded onto the
-   * ToolContext so fetch chokepoints enforce the path allowlist and tally
-   * counters. Undefined for non-http_audit scans.
-   */
-  enforcement?: EnforcementTracker;
-  /**
-   * Generic-scanner-traffic suppression opt-out (0#217). Defaults
-   * to false. Only consulted when `scope` is set.
-   */
-  allowScanners?: boolean;
   /** Inherited built-in search policy, independent of network authorization. */
   webSearchEnabled?: boolean;
-  /**
-   * Resolved attribution-header config (0#216). Same propagation
-   * shape as `scope` — set once at agentic-scanner top-level and passed
-   * through to every fetch site so in-scope traffic is identifiable
-   * without leaking attribution to out-of-scope hosts.
-   */
-  attribution?: AttributionConfig;
-  /**
-   * Resolved engagement hardening posture (`scope/engagement-profile.ts`).
-   * Same propagation shape as `attribution`: resolved once in the scanner and
-   * threaded onto the ToolContext, where the WAF chokepoint consults it before
-   * escalating a block into the adaptive evasion ladder.
-   */
-  engagement?: EngagementPosture;
   /**
    * Methodology skill IDs to auto-load into context before the loop starts
    * (#557). Used by EGATS specialist routing so a class branch begins with the
@@ -150,7 +106,6 @@ export interface NativeAgentConfig {
    * `trust-graph-runtime.ts` for the full contract.
    */
   trustGraph?: TrustGraphConfig;
-  publicNetwork?: ToolContext["publicNetwork"];
   /**
    * Enable codebase learning: recall prior source-grounded notes into context
    * at loop start and expose the `memory` tool. For scoped source
@@ -229,13 +184,6 @@ export interface NativeAgentState {
    * `state.findings` are preserved.
    */
   costCeilingExceeded: boolean;
-  /**
-   * Set to true when the http_audit wall-clock kill switch fired and the
-   * loop aborted cleanly. Partial findings on `state.findings` are
-   * preserved and flow through the normal report-assembly path. Always
-   * false for non-http_audit scans (no kill switch configured).
-   */
-  killSwitchTriggered: boolean;
   /**
    * Set when the loop terminated because the planner LLM call returned an
    * error (or empty response). The legacy `state.summary = "Error: ..."`

@@ -990,7 +990,7 @@ export function Composer({
                 <FilePathPicker
                   workspace={workspace}
                   sessionId={snapshot.session.id}
-                  cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath}
+                  cwd={snapshot.workspacePath}
                   applyError={snapshot.session.workspaceError}
                   workspaceDisabled={
                     !canWrite ||
@@ -1516,7 +1516,7 @@ export function Composer({
               rail
               workspace={workspace}
               sessionId={snapshot.session.id}
-              cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath}
+              cwd={snapshot.workspacePath}
               applyError={snapshot.session.workspaceError}
               workspaceDisabled={
                 !canWrite ||

@@ -4,16 +4,11 @@ import { request as httpsRequest } from "node:https";
 import { BlockList, isIP } from "node:net";
 import { Readable, Transform, pipeline } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
-import { ScopePolicy, normalizeScopeHostname } from "./scope/scope.js";
-import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
 
 export interface ScopedHttpPolicy {
   baseUrl: string;
-  scope?: ScopePolicy;
   /** Host opt-in only; absent retains the required base/same-origin policy. */
   allowPublicNetwork?: boolean;
-  /** Canonical operator-denied hosts/addresses, checked at each hop and DNS answer. */
-  deniedHosts?: ReadonlySet<string>;
   validateUrl?: (url: string) => void;
   beforeRequest?: (url: string) => void | Promise<void>;
   maxResponseBytes?: number;
@@ -38,8 +33,14 @@ export function isPrivateAddress(hostname: string): boolean {
   return family !== 0 && privateNetworks.check(address, family === 4 ? "ipv4" : "ipv6");
 }
 
+function normalizeHostname(hostname: string): string {
+  const normalized = hostname.toLowerCase().replace(/\.+$/, "");
+  const address = normalized.startsWith("[") && normalized.endsWith("]") ? normalized.slice(1, -1) : normalized;
+  return isIP(address) === 6 ? new URL(`http://[${address}]/`).hostname : normalized;
+}
+
 function isLocalHost(hostname: string): boolean {
-  const name = normalizeScopeHostname(hostname);
+  const name = normalizeHostname(hostname);
   return name === "localhost" || name.endsWith(".localhost") || isPrivateAddress(name);
 }
 
@@ -62,7 +63,7 @@ export function isAllowedLocalOrigin(input: string | URL): boolean {
 }
 
 function httpBase(policy: ScopedHttpPolicy): URL | undefined {
-  if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork) return new URL(policy.baseUrl);
+  if (!policy.allowPublicNetwork) return new URL(policy.baseUrl);
   try {
     const base = new URL(policy.baseUrl);
     return base.protocol === "http:" || base.protocol === "https:" ? base : undefined;
@@ -82,13 +83,7 @@ function authorizeHttpUrl(input: string, policy: ScopedHttpPolicy): URL {
   if (isLocalHost(url.hostname) && (!base || !isLocalHost(base.hostname)) && !isAllowedLocalOrigin(url)) {
     throw new Error(`Local/internal HTTP request blocked: ${url.hostname}`);
   }
-  if (isScopeEnforcementEnabled() && policy.deniedHosts?.has(normalizeScopeHostname(url.hostname))) {
-    throw new Error(`Operator-denied HTTP host: ${url.hostname}`);
-  }
-  if (policy.scope) {
-    const verdict = policy.scope.enforce(url.href)
-    if (!verdict.allowed) throw new Error(`Scope violation blocked: ${verdict.reason}`);
-  } else if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork && url.origin !== base!.origin && !isAllowedLocalOrigin(url)) {
+  if (!policy.allowPublicNetwork && url.origin !== base!.origin && !isAllowedLocalOrigin(url)) {
     throw new Error(`Cross-origin HTTP request blocked: ${url.origin}`);
   }
   policy.validateUrl?.(url.href);
@@ -102,33 +97,6 @@ function authorizeAddress(url: URL, address: string, policy: ScopedHttpPolicy): 
     && !(isAllowedLocalOrigin(url) && address === url.hostname.replace(/^\[|\]$/g, ""))) {
     throw new Error(`Local/internal DNS address blocked for ${url.hostname}`);
   }
-  if (!isScopeEnforcementEnabled() || (!policy.scope?.raw.out_of_scope?.length && !policy.deniedHosts?.size)) return;
-  const candidates = [address];
-  if (isIP(address) === 6) {
-    const canonical = new URL(`http://[${address}]/`).hostname;
-    const mapped = /^\[::ffff:([0-9a-f]+):([0-9a-f]+)\]$/i.exec(canonical);
-    if (mapped) {
-      const upper = Number.parseInt(mapped[1], 16);
-      const lower = Number.parseInt(mapped[2], 16);
-      candidates.push(`${upper >>> 8}.${upper & 255}.${lower >>> 8}.${lower & 255}`);
-    }
-  }
-  for (const candidate of candidates) {
-    if (policy.deniedHosts?.has(normalizeScopeHostname(candidate))) {
-      throw new Error(`Operator-denied DNS address for ${url.hostname}`);
-    }
-    if (!policy.scope?.raw.out_of_scope?.length) continue;
-    const resolved = new URL(url);
-    resolved.hostname = isIP(candidate) === 6 ? `[${candidate}]` : candidate;
-    // Hostname authorization already passed; augment allows only to evaluate
-    // existing explicit IP exclusions, never to persist new authorization.
-    const addressScope = ScopePolicy.fromJson({
-      ...policy.scope.raw,
-      in_scope: [...(policy.scope.raw.in_scope ?? []), resolved.hostname],
-    });
-    const verdict = addressScope.enforce(resolved.href)
-    if (!verdict.allowed) throw new Error(`Resolved address is excluded by scope: ${verdict.reason}`);
-  }
 }
 
 async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -141,13 +109,13 @@ async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /**
- * Scope-check every hop and DNS answer, then connect using that exact address.
+ * Check every hop and DNS answer, then connect using that exact address.
  * No shared dispatcher, proxy, DNS cache, or TLS override is installed.
  * Redirects are manual unless explicitly requested; response bodies are streamed
  * with a decoded-byte ceiling and one deadline through DNS, headers and body.
  */
 export function fetchScoped(input: string, init: RequestInit, policy: ScopedHttpPolicy): Promise<Response> {
-  return withScopeEnforcement(getScopeEnforcementState(undefined, undefined, !!(policy.scope || policy.deniedHosts?.size)), () => fetchScopedInternal(input, init, policy));
+  return fetchScopedInternal(input, init, policy);
 }
 
 async function fetchScopedInternal(
@@ -318,7 +286,7 @@ export function isMcpTarget(target: string): boolean {
 export async function sendPrompt(
   target: string,
   prompt: string,
-  options?: { timeout?: number; headers?: Record<string, string>; baseUrl?: string; scope?: ScopePolicy; signal?: AbortSignal }
+  options?: { timeout?: number; headers?: Record<string, string>; baseUrl?: string; signal?: AbortSignal }
 ): Promise<HttpResponse> {
   const start = Date.now();
   const timeout = options?.timeout ?? 30_000;
@@ -338,7 +306,7 @@ export async function sendPrompt(
       }),
       signal: options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
       redirect: "follow",
-    }, { baseUrl: options?.baseUrl ?? target, scope: options?.scope, timeoutMs: timeout });
+    }, { baseUrl: options?.baseUrl ?? target, timeoutMs: timeout });
 
     const body = await res.text();
     const headers: Record<string, string> = {};

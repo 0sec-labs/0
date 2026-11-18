@@ -70,8 +70,7 @@ export async function connectConsoleMcp(workspaceRoot: string, env: NodeJS.Proce
     for (const tool of host.registeredTools()) {
       const name = tool.name.replace(/^mcp__zeroverse__/, "");
       if (!known.has(name)) continue;
-      const discovery = name === "get_capabilities" || name === "list_bug_classes";
-      host.setToolGateFlags(tool.name, { networkCapable: name === "scan_binary", localScope: !discovery, readOnly: name !== "scan_binary" });
+      host.setToolGateFlags(tool.name, { networkCapable: name === "scan_binary", readOnly: name !== "scan_binary" });
     }
     return host;
   } catch (error) {

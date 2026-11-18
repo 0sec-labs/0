@@ -5,7 +5,7 @@ import { orderSessionRail } from "../src/console/session-rail-order";
 const saved = (id: string, savedAt: number): ConsoleSavedSession => ({ id, savedAt, cwd: "/repo", messageCount: 8, preview: id });
 const live = (id: string, savedId?: string): DesktopConsoleSession => ({
   id, savedId, createdAt: "2026-10-01T12:00:00Z", updatedAt: "2026-10-01T12:00:00Z",
-  target: "/repo", role: "review", autonomyMode: "standard", scopeConfigured: false,
+  role: "review", autonomyMode: "standard",
   status: "ready", messageCount: 8,
 });
 

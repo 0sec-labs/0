@@ -19,7 +19,6 @@ import { ScanCostLedger } from "./cost-ledger.js";
 import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { Finding } from "../shared/index.js";
-import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -125,20 +124,6 @@ describe("native output-cap continuation", () => {
     expect(state.summary).toMatch(/cancelled/i);
     expect(state.messages.at(-1)?.content).toEqual(checkpoint.content);
     expect(state.totalUsage.outputTokens).toBe(8192);
-  });
-
-  it("stops at the original wall clock even when the preceding response is a recoverable cap", async () => {
-    let now = 0;
-    const enforcement = new EnforcementTracker({ pathPolicy: new PathPolicy([]), killAfterSec: 1, nowFn: () => now });
-    const executeNative = vi.fn(async () => { now = 1000; return structuredClone(checkpoint); });
-    const state = await runNativeAgentLoop({ config: { ...config, enforcement },
-      runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
-    expect(executeNative).toHaveBeenCalledOnce();
-    expect(state.killSwitchTriggered).toBe(true);
-    expect(state.errorExit).toBeUndefined();
-    expect(state.totalUsage.outputTokens).toBe(8192);
-    expect(state.messages.some(message => message.role === "assistant" && message.content[0]?.type === "text" &&
-      message.content[0].text === "Verified observation; plan still in progress.")).toBe(true);
   });
 
   it("does not extend the loop turn allowance to continue an output cap", async () => {
@@ -2160,7 +2145,7 @@ describe("recursive subagents", () => {
         config: {
           role: "review", systemPrompt: "ROOT_POLICY: Review without modifications.", target: home,
           scopePath: home, workspaceRoot: home, scanId: "recursive-root", maxTurns: 2,
-          tools: getToolsForRole("review", { hasScope: true }).filter(tool => tool.name !== "query_findings"),
+          tools: getToolsForRole("review", { sourceAudit: true }).filter(tool => tool.name !== "query_findings"),
           costLedger: ledger,
           codebaseLearning: false,
         },

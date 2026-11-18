@@ -1,60 +1,11 @@
-// Programmatic scope ingestion (0#215). `loadScope` reads a JSON
-// scope file; `ScopePolicy` is the matcher used by every URL chokepoint
-// in the agent (validateTargetUrl + 5 fetch sites + shellExec URL
-// extraction + redirect-final-URL re-check in the crawler).
-export {
-  loadScope,
-  matchUrl,
-  ScopePolicy,
-  normalizeScopeHostname,
-} from "./scope/scope.js";
-export type {
-  ScopeJson,
-} from "./scope/scope.js";
-export {
-  networkScopeRequiredRefusal,
-  targetRequiresScope,
-} from "./scope/scope-guard.js";
-export {
-  BUILTIN_PLUGINS,
-  getBuiltinPlugin,
-} from "./plugins/builtin.js";
-export { getBuiltinPluginState } from "./plugins/builtin-state.js";
-export type { BuiltinPluginState } from "./plugins/builtin-state.js";
 export { evaluateBeforeCommand } from "./hooks/before-command.js";
 export type { BeforeCommandDecision, BeforeCommandInput, BeforeCommandOutcome, BeforeCommandPolicy, BeforeCommandThread } from "./hooks/before-command.js";
 export { runBeforeCommand } from "./agent/before-command.js";
-export { getScopeEnforcementState, scopeCheckMode, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
-export type { ScopeEnforcementState } from "./scope/activation.js";
 export {
   withWorkflowAuditExecutionPolicy,
   assertWorkflowNativeRuntime,
   workflowPolicyRuntime,
 } from "./workflow-execution-policy.js";
-
-// Attribution-header injection (0#216). Builds on scope ingestion:
-// configures per-engagement headers + UA override that get merged into
-// every in-scope outbound request, so coordinated-disclosure venues can
-// deconflict 0 traffic from real attacks.
-export {
-  resolveAttribution,
-  extractAttributionFromScopeJson,
-} from "./scope/attribution.js";
-
-// Engagement hardening profile. One opt-in posture that makes the engine
-// behave conservatively on an authorized engagement (no reset-endpoint burst
-// probe, rate-limited web-recon pre-pass, no WAF-evasion ladder, jittered
-// pacing, reduced rps) plus the auditable record of what was applied.
-export {
-  resolveEngagementProfile,
-  extractEngagementFromScopeJson,
-  describeEngagementPosture,
-  effectiveFallbackRps,
-} from "./scope/engagement-profile.js";
-export type {
-  EngagementPosture,
-  EngagementProfileInputs,
-} from "./scope/engagement-profile.js";
 
 export type { ScanEvent } from "./events/scan-event.js";
 export {
@@ -283,24 +234,6 @@ export type {
 
 // Strategy racing (best-of-N)
 
-// Per-host rate limiter (#214)
-export {
-  RateLimiter,
-  parseRateLimitFlag,
-} from "./scope/rate-limit.js";
-export type {
-  HostRateConfig,
-  RateLimiterConfig,
-} from "./scope/rate-limit.js";
-
-// http_audit enforcement (path allowlist + counters + kill switch)
-export { PathPolicy, EnforcementTracker } from "./scope/enforcement.js";
-export type {
-  EnforcementSummary,
-} from "./scope/enforcement.js";
-
-
-
 // Vulnerability intelligence tools (0#439)
 export {
   buildIntelDossier,
@@ -459,15 +392,6 @@ export {
   clampOutboundBody,
   sendOperatorMessage,
 } from "./agent/agent-messaging.js";
-// Per-project view of first-party built-in enablement (today: scope). The one store is extensions/state.json.
-export {
-  emptyEnablement,
-  enable,
-  disable,
-  readEnablement,
-  writeEnablement,
-} from "./plugins/enablement.js";
-export type { EnablementRecord } from "./plugins/enablement.js";
 // Extensions: the one installable unit (store, installer, install prompt, importer). See plugins/extensions/index.ts.
 export {
   createExtensionService, parseManifest as parseExtensionManifest, renderInstallPrompt, extensionEnv, readRepoSuggestions, extensionSkillRoots, runStartupImport,
@@ -475,7 +399,7 @@ export {
 } from "./plugins/extensions/index.js";
 export type {
   ExtensionService, ExtensionStore, ExtensionSource, SourceResolver, Installer, Importer, PreparedInstall, InstallPrompt, ExtensionManifest, ExtensionState, ExtensionEntry,
-  ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, ScopeSignals as ExtensionScopeSignals, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
+  ImportReport, ExtensionErrorCode, Result as ExtensionResult, ExtensionOverview, ExtensionOverviewRow, LoadResult as ExtensionLoadResult, LoadedExtension, ListRow as ExtensionListRow, Suggestion as ExtensionSuggestion, Capabilities as ExtensionCapabilities,
   McpServerStatus as ExtensionMcpServerStatus, McpToolStatus as ExtensionMcpToolStatus, McpGate as ExtensionMcpGate,
 } from "./plugins/extensions/index.js";
 // Connector contract (extension manifest `connector`): declaration, auth port, token adapter, secret store.
@@ -532,7 +456,6 @@ export {
   getStructuredScopes,
   automationVerdict,
   summariseScopes,
-  toScopeFile,
 } from "./h1/index.js";
 export type {
   H1Program,
@@ -593,12 +516,10 @@ export {
 export type {
   ConsoleConversationHistory,
   ConsoleSession,
-  ConsoleEngagementSelection,
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
   ConsoleTurnOutcome,
-  ConsoleScopeRequest,
   ConsoleUsageReport,
   AutoTitleInput,
   AutoTitleResult,

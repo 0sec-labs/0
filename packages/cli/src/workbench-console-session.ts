@@ -3,12 +3,12 @@ import { z } from "zod";
 import { realpathSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join, sep } from "node:path";
-import { DEFAULT_MAX_TOOL_ITERATIONS, getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/engine";
+import { DEFAULT_MAX_TOOL_ITERATIONS, runSmolvmWorkbench } from "@0/engine";
 import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/engine";
 import { findingSchema, legacyAskedFirst, type ApprovalsChoice, type Finding } from "@0/engine/shared";
 import type { TuiSettings } from "./state/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame, WorkbenchSourceContextArtifact, WorkbenchSourceLesson } from "./workbench-console-protocol.js";
 
 const sourceContextSchema = z.object({
@@ -40,7 +40,6 @@ interface WorkbenchControllerOptions {
   assets?: { cliDist: string; dependencies?: string };
   artifactDirectory?: string;
   guestSettings?: TuiSettings;
-  pluginHomeDir?: string;
 }
 export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptions {
   config: Omit<ConsoleSessionConfig, "runtime" | "db">;
@@ -51,7 +50,7 @@ export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptio
   readSourceLessons?: (context: { workspaceRoot: string; scopePath: string }) => WorkbenchSourceLesson[] | Promise<WorkbenchSourceLesson[]>;
 }
 const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"]);
-const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead", "sourceLessons", "workflowList", "workflowSave", "workflowEditorRead", "workflowInvoke", "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead"]);
+const DECISIONS = new Set(["approveTool", "askOperator", "historyList", "historyRead", "sourceLessons", "workflowList", "workflowSave", "workflowEditorRead", "workflowInvoke", "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead"]);
 function validateOptions(options: WorkbenchControllerOptions): void {
   if (options.provider.provider !== "chatgpt-codex" || (options.selection.provider && options.selection.provider !== "chatgpt-codex") || !options.provider.models.includes(options.selection.model)) throw new Error("Workbench requires an explicit host provider/model grant");
   for (const model of Object.values(options.selection.agentModels ?? {})) if (model !== "auto" && !options.provider.models.includes(model)) throw new Error("Workbench worker model is outside the host provider grant");
@@ -196,23 +195,18 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   if (config.skillEditor) callbacks.push("skillEditorRead");
   const sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
   if (sourceLearningEnabled && options.readSourceLessons) callbacks.push("sourceLessons");
-  const scopeEnforcement = getScopeEnforcementState(workspace, options.pluginHomeDir);
-  const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, scopeEnforcement, workflowEditorId: config.workflowAuthoring?.editor?.id }, false);
+  const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, workflowEditorId: config.workflowAuthoring?.editor?.id }, false);
   let messages = structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []);
   let checkpoint = config.initialCheckpoint;
-  let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
-  // Guest state never creates authority. Only the host's initial grant and approval callback do.
-  // Initial host workspace authorization is independent of later mode RPCs.
-  const explicitAutoSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode !== undefined && config.approvals !== "ask" && !legacyAskedFirst(config.autonomyMode);
-  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitAutoSourceGrant ? workspace : undefined);
+  // Guest state never creates authority: lessons are read and written only for the workspace folder.
+  const sourceScopePath = workspace;
   const authorizedSourceRoot = (guestPath: unknown): string | undefined => {
-    if (!sourceScopePath || typeof guestPath !== "string") return undefined;
+    if (typeof guestPath !== "string") return undefined;
     try {
       const requested = realpathSync(hostWorkspacePath(guestPath, workspace));
-      const approved = realpathSync(sourceScopePath);
       if (!statSync(requested).isDirectory()) return undefined;
-      if (requested === approved || (explicitAutoSourceGrant && (requested === workspace || requested.startsWith(workspace + sep)))) return requested;
-    } catch { /* Unknown or foreign scope is not authority. */ }
+      if (requested === workspace || requested.startsWith(workspace + sep)) return requested;
+    } catch { /* Unknown or foreign path is not authority. */ }
     return undefined;
   };
   const sourceArtifacts = new Set<string>();
@@ -253,7 +247,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     if (name === "sourceLessons") {
       if (!sourceLearningEnabled || !sourceScopePath || !options.readSourceLessons || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "") || args.length !== 1 || typeof args[0] !== "string") return [];
       const requested = authorizedSourceRoot(args[0]);
-      if (!requested) return []; // Only exact scope or a subtree of an explicit host auto grant.
+      if (!requested) return []; // Only the workspace folder or a subtree of it.
       await flushSourceContext();
       const notes = await options.readSourceLessons({ workspaceRoot: workspace, scopePath: requested });
       return notes.slice(0, 6).flatMap(note => {
@@ -264,16 +258,6 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     if (name === "historyRead") return config.conversationHistory!.read(...args as Parameters<NonNullable<ConsoleSessionConfig["conversationHistory"]>["read"]>);
     const callback = (config as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[name];
     if (!callback || !callbacks.includes(name)) return null;
-    if (name === "requestLocalScope") {
-      const request = structuredClone(args[0]) as Record<string, unknown>;
-      for (const key of ["requestedPath", "currentScopePath"]) if (typeof request[key] === "string") request[key] = hostWorkspacePath(request[key] as string, workspace);
-      const value = await callback(request); if (!value) return null; const resolution = value as { scopePath: string }; const guestPath = guestWorkspacePath(resolution.scopePath, workspace); sourceScopePath = hostWorkspacePath(guestPath, workspace); return { scopePath: guestPath };
-    }
-    if (name === "requestScope") {
-      const request = args[0] as Record<string, unknown>;
-      const value = await callback({ ...request, target: mapWorkbenchTarget(String(request.target ?? ""), workspace, true), ...(request.currentScope ? { currentScope: new ScopePolicy((request.currentScope as { raw: ConstructorParameters<typeof ScopePolicy>[0] }).raw) } : {}) });
-      if (!value) return null; const resolution = value as { target: string; scope: ScopePolicy }; return { target: mapWorkbenchTarget(resolution.target, workspace), scope: resolution.scope.raw };
-    }
     return callback(...args);
   };
   controller.receive = frame => {
@@ -306,9 +290,6 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       const parsedSourceContext = sourceContextSchema.safeParse(state.sourceContext);
       sourceContext = parsedSourceContext.success ? parsedSourceContext.data : undefined;
       messages = state.messages as typeof messages; systemPrompt = String(state.systemPrompt ?? ""); tools = state.tools as typeof tools;
-      target = mapWorkbenchTarget(String(state.target ?? ""), workspace, true);
-      scope = state.scope ? new ScopePolicy(state.scope as ConstructorParameters<typeof ScopePolicy>[0]) : undefined;
-      localScopePath = state.localScopePath ? hostWorkspacePath(String(state.localScopePath), workspace) : undefined;
       if (autonomyRevision === 0) { if (state.approvals === "ask" || state.approvals === "auto") approvals = state.approvals; }
       if (typeof state.webSearchEnabled === "boolean") webSearchEnabled = state.webSearchEnabled;
       checkpoint = state.checkpoint ? mapWorkbenchCheckpoint(state.checkpoint as ConsoleSessionCheckpoint, workspace, true) : undefined;
@@ -322,7 +303,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   };
   return {
     scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; }, get sourceContext() { return sourceContext ? structuredClone(sourceContext) : undefined; },
-    get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get approvals() { return approvals; }, scopeEnforcement,
+    get approvals() { return approvals; },
     setApprovals(nextApprovals) {
       const mode = "changes";
       const revision = ++autonomyRevision;
@@ -353,9 +334,6 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       if (controller.done) await controller.request("webSearch", { value: enabled });
       webSearchEnabled = enabled; serial.webSearchEnabled = enabled;
     },
-    configureEngagement(selection) { if (selection.target !== undefined) target = selection.target; if (selection.scope !== undefined) scope = selection.scope ?? undefined;
-      const value = { ...(selection.target === undefined ? {} : { target: mapWorkbenchTarget(selection.target, workspace) }), ...(selection.scope === undefined ? {} : { scope: selection.scope?.raw ?? null }) };
-      if (!controller.done) Object.assign(serial, value); else queue("configure", value); },
     configureWorkspace(path) { if (realpathSync(path) !== workspace) throw new Error("The SmolVM workspace grant is fixed for this chat; start a new chat to change it"); },
     reconfigureRuntime(selection) { if (selection.env !== undefined || (selection.provider && selection.provider !== "chatgpt-codex") || (selection.model && !options.provider.models.includes(selection.model)) || Object.values(selection.agentModels ?? {}).some(model => model !== "auto" && !options.provider.models.includes(model))) throw new Error("Runtime selection is outside workbench provider grant");
       Object.assign(options.selection, selection); if (controller.done) queue("reconfigure", selection); },

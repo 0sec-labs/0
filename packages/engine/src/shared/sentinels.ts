@@ -2,23 +2,22 @@ import { z } from "zod";
 
 /**
  * Sentinels: named, always-on security agents that sit alongside Automations (workflows).
- * Records are default-inert: created paused, production off, with an explicit scope.
+ * Records are default-inert: created paused.
  * Instructions and memory live in virtual files (AGENTS.md, NOTES.md, ...).
  * Triggers belong to Automations (`ownerSentinelId` / `runIn` on the workflow), not here.
  */
 const identifier = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).refine(value => !["__proto__", "constructor", "prototype"].includes(value), "Reserved identifier.");
 const skillId = z.string().min(1).max(384).regex(/^[A-Za-z0-9_.:/-]+$/).refine(value => !value.split("/").some(part => part === "." || part === ".."), "Invalid skill ID.");
-const listOf = (item: z.ZodString, max: number) => z.array(item.trim().min(1).max(4096)).max(max).refine(values => new Set(values).size === values.length, "Entries must be unique.");
 
 export const SENTINEL_STATUSES = ["active", "paused", "archived"] as const;
 export type SentinelStatus = (typeof SENTINEL_STATUSES)[number];
 /**
- * There is one mode: a Sentinel has shell access, limited by its scope and the sandbox. Older records stored
+ * There is one mode: a Sentinel has shell access, limited by the sandbox. Older records stored
  * `autonomy` (observe, propose, act, run) and `toolAccess` (read-only, read-web, exec); they still load, the fields are
  * dropped on read, and input that still names them (or `access` / `accessLevel`) is accepted and ignored.
- * `budget` and `pauseReason` belong to the removed daily caps and are dropped the same way.
+ * `budget` and `pauseReason` belong to the removed daily caps, and `scope` to the removed scope; they are dropped the same way.
  */
-const IGNORED_ACCESS_KEYS = ["autonomy", "toolAccess", "access", "accessLevel", "budget", "pauseReason"] as const;
+const IGNORED_ACCESS_KEYS = ["autonomy", "toolAccess", "access", "accessLevel", "budget", "pauseReason", "scope"] as const;
 /** Removes the retired access fields from stored or submitted data; never throws. */
 export function dropAccessFields<T extends Record<string, unknown>>(value: T): Omit<T, (typeof IGNORED_ACCESS_KEYS)[number]> {
   const copy: Record<string, unknown> = { ...value };
@@ -55,14 +54,6 @@ const avatarSchema = z.object({
   emoji: z.string().trim().min(1).max(16).optional(),
   initials: z.string().trim().min(1).max(3).optional(),
 }).strict();
-const scopeSchema = z.object({
-  repos: listOf(z.string(), 100).default([]),
-  targets: listOf(z.string(), 200).default([]),
-  domains: listOf(z.string(), 200).default([]),
-  outOfScope: listOf(z.string(), 500).default([]),
-  /** Production targets are off unless an operator explicitly turns this on. */
-  production: z.boolean().default(false),
-}).strict();
 const modelSchema = z.object({
   providerId: z.string().trim().min(1).max(128),
   model: z.string().trim().min(1).max(256),
@@ -84,7 +75,8 @@ const base = {
   avatar: avatarSchema.default({ color: "#4f6bed" }),
   role: identifier.default(SENTINEL_CUSTOM_ROLE),
   skills: z.array(skillId).max(64).refine(values => new Set(values).size === values.length, "Skills must be unique.").default([]),
-  scope: scopeSchema.prefault({}),
+  /** The working directory its threads run in. */
+  folder: z.string().trim().min(1).max(4096).nullable().default(null),
   hostId: z.string().trim().min(1).max(256).nullable().default(null),
   model: modelSchema.nullable().default(null),
   notifications: notificationsSchema.prefault({}),
@@ -113,9 +105,9 @@ export interface Sentinel extends SentinelInput {
   id: string;
   /** Standing mission (chat/session) created on first run or at creation; activations are child missions. */
   homeMissionId: string | null;
-  /** Review fingerprint (scope, model, skills, folder) the standing thread was configured with. The gateway pins those at creation, so a changed fingerprint means a fresh thread. Absent on threads made before it was recorded. */
+  /** Review fingerprint (model, skills, folder) the standing thread was configured with. The gateway pins those at creation, so a changed fingerprint means a fresh thread. Absent on threads made before it was recorded. */
   homeFingerprint?: string;
-  /** Fingerprint of the authority-bearing fields (scope, model, skills) the operator last acknowledged. */
+  /** Fingerprint of the authority-bearing fields (model, skills) the operator last acknowledged. */
   reviewedFingerprint?: string;
   owner: string;
   version: number;
@@ -125,24 +117,43 @@ export interface Sentinel extends SentinelInput {
 export type SentinelCreateInput = z.output<typeof SentinelCreateSchema>;
 
 /**
- * Stable digest of what a scheduled run is allowed to do. Any change (scope, model, skills, production flag) makes the
+ * Stable digest of what a scheduled run is allowed to do. Any change (model, skills) makes the
  * Sentinel "needs review" until an operator acknowledges it. The retired access fields stay in the digest as the constant
  * they now mean, so Sentinels already reviewed with shell access keep their acknowledgement, while a Sentinel that was
  * read-only needs one review because its authority widened.
  */
-export function sentinelReviewFingerprint(sentinel: Pick<Sentinel, "scope" | "model" | "skills" | "hostId">): string {
+export function sentinelReviewFingerprint(sentinel: Pick<Sentinel, "model" | "skills" | "hostId" | "folder">): string {
   const sorted = (items: string[]) => [...items].sort();
   return JSON.stringify({
-    scope: { repos: sorted(sentinel.scope.repos), targets: sorted(sentinel.scope.targets), domains: sorted(sentinel.scope.domains), outOfScope: sorted(sentinel.scope.outOfScope), production: sentinel.scope.production },
     model: sentinel.model ? { p: sentinel.model.providerId, m: sentinel.model.model, r: sentinel.model.reasoning ?? null } : null,
     toolAccess: "exec", autonomy: "act", skills: sorted(sentinel.skills), hostId: sentinel.hostId,
+    ...(sentinel.folder ? { folder: sentinel.folder } : {}),
   });
+}
+/** A stored Sentinel's folder was kept as the first absolute path in `scope.repos`; read it from there when no folder is recorded. */
+export function folderFromRetiredScope(stored: { folder?: unknown; scope?: unknown }): string | null {
+  if (typeof stored.folder === "string" && stored.folder) return stored.folder;
+  const repos = (stored.scope as { repos?: unknown } | undefined)?.repos;
+  return Array.isArray(repos) ? repos.find((repo): repo is string => typeof repo === "string" && repo.startsWith("/")) ?? null : null;
+}
+/** A fingerprint stored before scope was removed carries a `scope` entry; read it as the fingerprint of the same Sentinel without it, so earlier reviews still hold. */
+export function dropScopeFromFingerprint(fingerprint: string): string {
+  try {
+    const parsed = JSON.parse(fingerprint) as Record<string, unknown>;
+    if (parsed && typeof parsed === "object" && "scope" in parsed) {
+      const folder = folderFromRetiredScope({ scope: parsed["scope"] });
+      delete parsed["scope"];
+      if (folder) parsed["folder"] = folder;
+      return JSON.stringify(parsed);
+    }
+  } catch { /* not JSON: keep as stored */ }
+  return fingerprint;
 }
 export const sentinelNeedsReview = (sentinel: Sentinel): boolean => sentinel.reviewedFingerprint !== sentinelReviewFingerprint(sentinel);
 
 export interface SentinelAttention {
   needsYou: boolean;
-  /** Review gate: scope/model/tools changed since the last acknowledgement; autonomous runs are blocked. */
+  /** Review gate: model/tools changed since the last acknowledgement; autonomous runs are blocked. */
   needsReview: boolean;
   /** Why it needs you, when known. */
   reason?: string;

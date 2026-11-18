@@ -19,7 +19,7 @@ type Descriptor = z.infer<typeof schema>;
 export type LocalEngineRegistration = Omit<Descriptor, "schemaVersion" | "nonce">;
 interface LocalEngineDiscoveryOptions {
   dbPath?: string; workspace: string; homeDir?: string;
-  model?: string; scopePath?: string; allowApply?: boolean;
+  model?: string; allowApply?: boolean;
 }
 export function localEngineDescriptorPath(dbPath?: string, homeDir?: string): string {
   const db = resolveOsecDbPath(dbPath);
@@ -112,7 +112,7 @@ function openLocalRegistry(options: Omit<LocalEngineDiscoveryOptions, "workspace
   if (!descriptor) return null;
   if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
   if (options.workspace !== undefined && realpathSync(options.workspace) !== descriptor.workspace) throw new Error(`This console is for ${descriptor.workspace}. Run the command there, or add --db-path <path>.`);
-  if (options.model !== undefined || options.scopePath !== undefined || options.allowApply === true) throw new Error("The running local engine owns model, scope and application permissions. Attach using its configuration instead of overriding it.");
+  if (options.model !== undefined || options.allowApply === true) throw new Error("The running local engine owns model and application permissions. Attach using its configuration instead of overriding it.");
   const backendId = "discovered-local-engine";
   const registry = new BackendConnectionRegistry({
     connections: [{ id: backendId, name: "Running local engine", url: descriptor.url, bearerTokenEnv: "LOCAL_ENGINE_DISCOVERY_TOKEN", expectedEngineId: descriptor.engineId }],

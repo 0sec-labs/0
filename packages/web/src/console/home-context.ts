@@ -29,9 +29,9 @@ export function homeSuggestions(
       {
         icon: "plan",
         label: "Plan a verification",
-        hint: "Start with the evidence and scope",
+        hint: "Start with the evidence",
         prompt:
-          "Propose a bounded verification plan for the focused finding, using its retained evidence and authorized scope.",
+          "Propose a bounded verification plan for the focused finding, using its retained evidence.",
       },
       {
         icon: "code",
@@ -86,28 +86,6 @@ export function homeSuggestions(
           },
     ];
   }
-  const target = snapshot.localScopePath || snapshot.session.target;
-  if (target)
-    return [
-      {
-        icon: "shield",
-        label: "Review this target",
-        hint: target,
-        prompt: `Review ${JSON.stringify(target)} for security issues. Start by identifying the authorized scope and evidence to inspect.`,
-      },
-      {
-        icon: "code",
-        label: "Inspect the available evidence",
-        hint: "Separate observations from hypotheses",
-        prompt: `Inspect the available evidence for ${JSON.stringify(target)} and distinguish verified issues from unconfirmed concerns.`,
-      },
-      {
-        icon: "plan",
-        label: "Plan a focused review",
-        hint: "Establish useful checks and limits",
-        prompt: `Create a focused security review plan for ${JSON.stringify(target)}, with explicit scope, time and cost limits before execution.`,
-      },
-    ];
   return [
     {
       icon: "code",
@@ -126,7 +104,7 @@ export function homeSuggestions(
       icon: "plan",
       label: "Plan an automation",
       hint: "Choose a target and useful checks",
-      prompt: "Help me plan a security automation with a target, authorized scope, and time and cost limits.",
+      prompt: "Help me plan a security automation with a target and time and cost limits.",
     },
   ];
 }

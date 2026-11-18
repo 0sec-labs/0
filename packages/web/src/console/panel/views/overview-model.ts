@@ -38,17 +38,6 @@ export function formatCost(costUsd: number | undefined): string | undefined {
   return costUsd > 0 && costUsd < 0.005 ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
-export type ScopeSummary = { target?: string; inCount: number; outCount: number; enforcement: "enforced" | "not-enforced"; enforcementMessage?: string };
-export function scopeSummary(snapshot: ConsoleSessionSnapshot): ScopeSummary {
-  return {
-    target: snapshot.session.target || undefined,
-    inCount: snapshot.scope?.in_scope?.length ?? 0,
-    outCount: snapshot.scope?.out_of_scope?.length ?? 0,
-    enforcement: snapshot.scopeEnforcement?.enabled ? "enforced" : "not-enforced",
-    enforcementMessage: snapshot.scopeEnforcement?.message || undefined,
-  };
-}
-
 export const SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
 export type Severity = (typeof SEVERITIES)[number];
 export type SeverityCounts = Record<Severity, number>;

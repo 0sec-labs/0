@@ -12,7 +12,7 @@ export interface ProtectedRule { id: string; reason: string; test: RegExp }
 const ext = "(?:ts|tsx|mts|cts|js|mjs|cjs|json|yaml|yml|sh)";
 export const PROTECTED_RULES: readonly ProtectedRule[] = [
   { id: "auth", reason: "authentication, credentials and team identity", test: new RegExp(`(^|/)[^/]*(?:^|[-_.])(?:auth|credentials?|oauth|sso)(?:[-_.][^/]*)?\\.${ext}$`, "i") },
-  { id: "scope", reason: "scope enforcement and source boundaries", test: /^packages\/engine\/src\/scope\/|(^|\/)(scope-path|scoped-source|source-scope|local-source-boundary|workflow-execution-policy)\.[a-z]+$/ },
+  { id: "guards", reason: "the command hook, protected paths and folder path checks", test: /^packages\/engine\/src\/hooks\/|(^|\/)(folder-path|workflow-execution-policy)\.[a-z]+$/ },
   { id: "approvals", reason: "approval, decision and request-authorisation code", test: /(^|\/)(approvals?|decisions?)[^/]*\.[a-z]+$|^packages\/cli\/src\/web\/(console-gateway|team-web|dashboard-http|dashboard-api)\.ts$|^packages\/cli\/src\/commands\/dashboard\.ts$/ },
   { id: "session-store", reason: "session persistence, settings and migrations", test: /^packages\/cli\/src\/state\/(session-store|credential-store|settings)[^/]*\.ts$/ },
   { id: "supervisor-gates", reason: "supervisor, engine swap and the self-edit gate/launcher/panel code", test: /^packages\/engine\/src\/hub\/supervisor\.ts$|^packages\/cli\/src\/dev-engine-updates\.ts$|^packages\/cli\/src\/web\/self-edit[^/]*$|^packages\/web\/src\/lib\/self-edit-api\.ts$|^packages\/web\/src\/console\/panel\/views\/preview[^/]*$|^packages\/engine\/src\/agent\/skills\/techniques\/develop-this-app\.yaml$|^scripts\/(dev-web|build-dev-engine|check-architecture)[^/]*\.mjs$|^scripts\/config\// },

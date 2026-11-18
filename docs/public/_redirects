@@ -44,8 +44,6 @@
 /scan-code/ / 301
 /scan-web / 301
 /scan-web/ / 301
-/scope /configuration/#scope 301
-/scope/ /configuration/#scope 301
 /security-model /configuration/#security-model 301
 /security-model/ /configuration/#security-model 301
 /self-improvement / 301
@@ -126,8 +124,8 @@
 /desktop/ / 301
 /features /#the-words-0-uses 301
 /features/ /#the-words-0-uses 301
-/engagements /configuration/#authorized-scope 301
-/engagements/ /configuration/#authorized-scope 301
+/engagements /configuration/ 301
+/engagements/ /configuration/ 301
 /methodology /findings/ 301
 /methodology/ /findings/ 301
 /research/fp-reduction-moat /findings/ 301

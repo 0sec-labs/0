@@ -3,11 +3,10 @@ import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { ScopePolicy } from "../scope/scope.js";
 import { runMobileStaticIntake } from "./intake.js";
 
 describe("runMobileStaticIntake — Android", () => {
-  it("extracts Android metadata and classifies endpoints with scope", () => {
+  it("extracts Android metadata and classifies endpoints", () => {
     const root = mkdtempSync(join(tmpdir(), "0-mobile-android-"));
     writeFileSync(
       join(root, "AndroidManifest.xml"),
@@ -37,16 +36,14 @@ describe("runMobileStaticIntake — Android", () => {
       `,
     );
 
-    const report = runMobileStaticIntake(root, {
-      scope: ScopePolicy.fromJson({ in_scope: ["*.sbbmobile.ch"] }),
-    });
+    const report = runMobileStaticIntake(root);
 
     expect(report.platform).toBe("android");
     expect(report.summary).toEqual({
       endpointCount: 5,
       backendCandidateCount: 2,
-      highPriorityEndpoints: 3,
-      mediumPriorityEndpoints: 0,
+      highPriorityEndpoints: 0,
+      mediumPriorityEndpoints: 3,
       lowPriorityEndpoints: 2,
       riskCount: 2,
     });
@@ -60,15 +57,13 @@ describe("runMobileStaticIntake — Android", () => {
         expect.objectContaining({
           value: "api.sbbmobile.ch",
           kind: "host",
-          priority: "high",
-          scope: expect.objectContaining({ allowed: true }),
+          priority: "medium",
         }),
         expect.objectContaining({
           value: "www.google-analytics.com",
           kind: "host",
           priority: "low",
           tags: ["third-party"],
-          scope: expect.objectContaining({ allowed: false }),
         }),
       ]),
     );
@@ -115,9 +110,7 @@ describe("runMobileStaticIntake — iOS", () => {
       `<string>https://app.sbbmobile.ch/timetable</string>`,
     );
 
-    const report = runMobileStaticIntake(root, {
-      scope: ScopePolicy.fromJson({ in_scope: ["*.sbbmobile.ch"] }),
-    });
+    const report = runMobileStaticIntake(root);
 
     expect(report.platform).toBe("ios");
     expect(report.ios).toEqual({
@@ -132,7 +125,6 @@ describe("runMobileStaticIntake — iOS", () => {
         expect.objectContaining({
           value: "https://app.sbbmobile.ch/timetable",
           kind: "url",
-          scope: expect.objectContaining({ allowed: true }),
         }),
       ]),
     );

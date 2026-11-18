@@ -382,7 +382,7 @@ describe("applyPatchOps (filesystem)", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  // Mirror tools.ts's resolveScopedPath chokepoint.
+  // Mirror tools.ts's resolveFolderPath chokepoint.
   function resolver(logical: string): string {
     const root = resolve(tmp);
     const candidate = isAbsolute(logical)

@@ -7,8 +7,6 @@ import { chatOption, engineOptions } from "./shared-options.js";
 import chalk from "chalk";
 import {
   createConsoleRuntime,
-  loadScope,
-  getScopeEnforcementState,
   parseMcpConfig,
   connectMcpServers,
   DEFAULT_MAX_TOOL_ITERATIONS,
@@ -41,8 +39,6 @@ interface ConsoleOptions {
   engineUrl?: string;
   engineTokenEnv?: string;
   format?: string;
-  target?: string;
-  scope?: string;
   finding?: string;
   findingIntent?: string;
   dbPath?: string;
@@ -55,7 +51,6 @@ interface ConsoleOptions {
   toolAccess?: string;
   approvals?: string;
   maxToolCalls?: string;
-  allowScanners?: boolean;
   /** `--resume [id]`: a session id/prefix to reopen, or `true` for the picker. */
   resume?: string | boolean;
   /** `--continue`: reopen the single most-recent console session, no picker. */
@@ -112,8 +107,6 @@ export function registerConsoleCommand(program: Command): void {
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
-    .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
-    .option("--scope <file>", "Initial policy for the scope extension; defining a scope turns enforcement on")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding mode: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
@@ -126,7 +119,6 @@ export function registerConsoleCommand(program: Command): void {
     .addOption(new Option("--tool-access <level>").hideHelp())
     .addOption(new Option("--yolo").hideHelp())
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
-    .option("--allow-scanners", "Disable generic-scanner suppression in the shell for scoped engagements.")
     .option("--resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
     .option("--continue", "With a headless prompt, continue the most recent saved console chat.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
@@ -184,27 +176,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       const approvals: ApprovalsChoice = autonomyResolution.approvals;
-      const scopeEnforcement = getScopeEnforcementState(undefined, undefined, !!opts.scope);
-      console.error(chalk.dim(scopeEnforcement.message));
-
-      let scope;
-      if (opts.scope) {
-        try {
-          scope = loadScope(opts.scope);
-        } catch (err) {
-          console.error(chalk.red(`Failed to load --scope '${opts.scope}': ${err instanceof Error ? err.message : String(err)}`));
-          process.exitCode = 2;
-          return;
-        }
-      }
-
-      if (scopeEnforcement.enabled && approvals === "auto" && !hasConfiguredScope(scope)) {
-        console.error(chalk.red("Running without asking requires --scope <file> with at least one in_scope entry."));
-        process.exitCode = 2;
-        return;
-      }
       let findingPrompt: string | undefined;
-      let findingTarget: string | undefined;
       if (opts.finding) {
         try {
           const focus = loadFindingFocus(opts.finding, { dbPath: opts.dbPath });
@@ -212,7 +184,6 @@ export function registerConsoleCommand(program: Command): void {
             focus,
             resolveFindingChatIntent(opts.findingIntent),
           );
-          findingTarget = focus.target;
         } catch (err) {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));
           process.exitCode = 2;
@@ -228,10 +199,9 @@ export function registerConsoleCommand(program: Command): void {
       // Resolve a saved console session to resume/continue. `--continue` (and
       // the `0 -c` shortcut) → the single most-recent; `--resume <id>` → that id
       // or a unique prefix; browser history provides interactive session selection.
-      // A resumed session inherits its stored model/target unless overridden.
+      // A resumed session inherits its stored model unless overridden.
       let resumeMessages: readonly unknown[] | undefined;
       let resumedModel: string | undefined;
-      let resumedTarget: string | undefined;
       if (opts.continue || opts.resume !== undefined) {
         const { listSessions, loadSession } = await import("../state/session-store.js");
         const idArg = typeof opts.resume === "string" ? opts.resume.trim() : "";
@@ -256,15 +226,12 @@ export function registerConsoleCommand(program: Command): void {
           }
           resumeMessages = stored.messages;
           resumedModel = stored.model;
-          resumedTarget = stored.target;
         } else {
           console.error("Choose a saved session id with --resume <id>, or open saved conversations in 0.");
           process.exitCode = 2;
           return;
         }
       }
-
-      const focusedTarget = resumedTarget ?? opts.target ?? findingTarget;
 
       // Non-interactive one-shot: run a single prompt headless and exit. Handled
       // BEFORE the TUI/readline branches — `-p` is a scriptable query, not a
@@ -286,16 +253,12 @@ export function registerConsoleCommand(program: Command): void {
           const resolvedModel = runtime.resolvedModel();
           printSession = createLocalConsoleSession({
             runtime,
-            target: focusedTarget,
             costModel: resolvedModel,
             role,
             maxToolIterations,
-            allowScanners: opts.allowScanners,
-            scope,
             approvals,
             ...(resumeMessages ? { initialMessages: resumeMessages as NativeMessage[] } : {}),
-            // Headless: no operator to approve a scope extension or an ask-first prompt.
-            requestScope: async () => null,
+            // Headless: no operator to answer an ask-first prompt.
             approveTool: approvals === "ask" ? async () => false : undefined,
           }, opts.dbPath);
         } catch (err) {
@@ -388,11 +351,6 @@ function previewResult(result: ToolResult): string {
   return flat.length > 100 ? flat.slice(0, 97) + "…" : flat;
 }
 
-function hasConfiguredScope(scope: ConsoleSession["scope"]): boolean {
-  return (scope?.raw.in_scope?.length ?? 0) > 0;
-}
-
-
 interface AttachedConsoleRuntime {
   attachSession?(id: string): unknown | Promise<unknown>;
   getSession?(id: string): unknown | Promise<unknown>;
@@ -419,8 +377,8 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
   if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires --engine.");
   if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
   if (options.engine && options.engineUrl) throw new Error("Select either --engine or --engine-url.");
-  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.access || options.yolo || options.approvals || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
-    throw new Error("Attached console uses the chat's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
+  if (options.resume !== undefined || options.continue || options.model || options.role || options.mode || options.access || options.yolo || options.approvals || options.finding || options.findingIntent || options.maxToolCalls || ((options.engine || options.engineUrl) && options.dbPath)) {
+    throw new Error("Attached console uses the chat's configuration; omit local model, role, mode, finding and resume flags.");
   }
   const runtime = await deps.runtime(options);
   try {

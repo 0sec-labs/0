@@ -18,7 +18,7 @@ describe("SentinelStore", () => {
     const sentinel = store.create({ name: "Watcher", instructions: "Watch deps." });
     expect(sentinel).toMatchObject({ status: "paused", homeMissionId: null, version: 1, hostId: null, model: null });
     expect(sentinel).not.toHaveProperty("autonomy");
-    expect(sentinel.scope.production).toBe(false);
+    expect(sentinel).not.toHaveProperty("scope");
     expect(sentinel).not.toHaveProperty("budget");
     expect(sentinel).not.toHaveProperty("crew");
     expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "NOTES.md"]);
@@ -128,8 +128,9 @@ describe("SentinelStore", () => {
   it("patches only the named fields and keeps everything else", () => {
     const store = new SentinelStore(":memory:");
     const created = store.create({ name: "A", skills: ["x"], status: "active", scope: { targets: ["https://a.example"] } });
+    expect(created).not.toHaveProperty("scope");
     const patched = store.update(created.id, { version: 1, name: "B" });
-    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active", scope: { targets: ["https://a.example"] } });
+    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active" });
     expect(status(() => store.update(created.id, { version: 2, bogus: 1 }))).toBe(400);
     store.close();
   });

@@ -1098,7 +1098,6 @@ describe("dashboard — web console API", () => {
         url: "/api/console/sessions",
         headers: { "x-0-control-token": token },
         body: {
-          target: "https://app.example.test",
           role: "audit",
           autonomyMode: "standard",
         },
@@ -1106,11 +1105,8 @@ describe("dashboard — web console API", () => {
     );
 
     expect(created.statusCode).toBe(201);
-    const session = JSON.parse(created.body) as { session: { id: string; target: string; status: string } };
-    expect(session.session).toMatchObject({
-      target: "https://app.example.test",
-      status: "ready",
-    });
+    const session = JSON.parse(created.body) as { session: { id: string; status: string } };
+    expect(session.session).toMatchObject({ status: "ready" });
 
     const events = await invokeHandler(
       makeRequest({

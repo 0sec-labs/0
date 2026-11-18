@@ -65,7 +65,7 @@ export async function runNativeAgentLoop(
     try {
       capture = getConfiguredRunContributionClient()?.begin({
         runId: opts.config.scanId, model: opts.runtime.resolvedModel?.() ?? opts.config.costModel ?? "unknown",
-        scope: { target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null },
+        scope: { target: opts.config.target, scopePath: opts.config.scopePath ?? null },
         objective: opts.config.systemPrompt, versions: { loop: "native-v1", runtime: opts.runtime.type },
         authSecretValues: secrets,
       }) ?? undefined;
@@ -73,7 +73,7 @@ export async function runNativeAgentLoop(
   }
   if (!capture) return runNativeAgentLoopInternal(opts);
   capture.protectSecrets(secrets);
-  if (!parent) capture.setInitialScope({ context: capture.manifest.scope, target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null });
+  if (!parent) capture.setInitialScope({ context: capture.manifest.scope, target: opts.config.target, scopePath: opts.config.scopePath ?? null });
   const agentId = randomUUID();
   const parentAgentId = parent === capture ? currentContributionAgent() ?? null : null;
   return withRunContribution(capture, agentId, parentAgentId, async () => {
@@ -88,7 +88,6 @@ export async function runNativeAgentLoop(
     try {
       const state = await runNativeAgentLoopInternal({ ...opts, runtime: captureNativeRuntime(opts.runtime, capture), onEvent });
       const termination = opts.signal?.aborted ? "operator_cancelled"
-        : state.killSwitchTriggered ? "timeout"
         : state.costCeilingExceeded ? "run_resource_limit"
         : state.errorExit ? state.errorExit.source === "harness" ? "harness_error" : "provider_error"
         : state.outputCapExit ? "run_resource_limit"
@@ -191,7 +190,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
-    publicNetwork: config.publicNetwork,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -201,16 +199,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     persistDelegatedFinding: config.persistDelegatedFinding,
     updateDelegatedFinding: config.updateDelegatedFinding,
     authConfig: config.authConfig,
-    scope: config.scope,
-    rateLimiter: config.rateLimiter,
-    enforcement: config.enforcement,
     agentMessaging: config.agentMessaging,
     workerTree: config.workerTree,
     workerFindings: config.workerTree ? config.workerFindings : undefined,
     webSearchEnabled: config.webSearchEnabled,
-    allowScanners: config.allowScanners,
-    attribution: config.attribution,
-    engagement: config.engagement,
     loot,
     // Thread the shared cost ledger + ceiling onto the tool context so the
     // spawn_agent / spawn_agents handlers can charge spawned subagents against
@@ -257,7 +249,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
-  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { sourceAudit: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
   const baseTools = config.singleAgent
     ? roleTools.filter(tool => tool.name !== "spawn_agent")
     : roleTools;
@@ -441,7 +433,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     progressSummary: "",
     estimatedCostUsd: 0,
     costCeilingExceeded: false,
-    killSwitchTriggered: false,
   };
   // Restored conversation history is context, not a new completion observation.
   let outputCapContinuations = 0;
@@ -948,40 +939,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // No-op unless the feature flag is on. Read-only observation + logging.
     runCoordinatorSupervisor();
 
-    // ── http_audit wall-clock kill switch ──
-    // Checked at the turn boundary BEFORE spending another LLM call so an
-    // expired budget can't trigger one more (expensive) round-trip. Breaks
-    // out cleanly: partial findings already live on toolCtx.findings and
-    // are synced to state.findings post-loop, then assembled into the
-    // report by agentic-scanner. We deliberately do NOT process.exit here.
-    if (config.enforcement && config.enforcement.isKillExpired()) {
-      state.killSwitchTriggered = true;
-      config.enforcement.markKilled();
-      state.summary =
-        `http_audit kill switch fired at turn ${state.turnCount} ` +
-        `(${config.enforcement.wallClockSec().toFixed(1)}s elapsed). ` +
-        `Aborting cleanly with ${toolCtx.findings.length} partial finding(s).`;
-      onEvent?.("kill_switch_triggered", {
-        turn: state.turnCount,
-        wallClockSec: config.enforcement.wallClockSec(),
-        findingCount: toolCtx.findings.length,
-      });
-      if (db) {
-        db.logEvent({
-          scanId: config.scanId,
-          stage: config.role,
-          eventType: "kill_switch_triggered",
-          agentRole: config.role,
-          payload: {
-            turn: state.turnCount,
-            wallClockSec: config.enforcement.wallClockSec(),
-            findingCount: toolCtx.findings.length,
-          },
-          timestamp: Date.now(),
-        });
-      }
-      break;
-    }
 
     state.turnCount++;
     // Keep the tool context's turn stamp fresh so tools that record state can
@@ -1136,7 +1093,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     // Maintenance is a metered model call too. Re-enter the boundary gates
     // before planning if its usage/cancellation/elapsed time spent the allowance.
-    if (executionSignal.aborted || config.enforcement?.isKillExpired() ||
+    if (executionSignal.aborted ||
         (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0 &&
           (config.costLedger?.totalCostUsd() ?? state.estimatedCostUsd) >= config.costCeilingUsd)) {
       state.turnCount--;

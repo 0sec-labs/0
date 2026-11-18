@@ -25,10 +25,10 @@ export interface WorkflowCliRuntime {
   getWorkflow(id: string): unknown | Promise<unknown>;
   dispose(): void | Promise<void>;
 }
-interface WorkflowOptions { chat?: string; engineUrl?: string; engineTokenEnv?: string; engine?: string; enginesConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
+interface WorkflowOptions { chat?: string; engineUrl?: string; engineTokenEnv?: string; engine?: string; enginesConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
 export interface WorkflowCommandDeps {
   createRemoteRuntime?(options: { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }): Promise<WorkflowCliRuntime>;
-  createRuntime(options: { ownerId: string; workspace?: string; scopePath?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean; requireEngine?: boolean }): Promise<WorkflowCliRuntime>;
+  createRuntime(options: { ownerId: string; workspace?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean; requireEngine?: boolean }): Promise<WorkflowCliRuntime>;
   out(text: string): void;
   err(text: string): void;
   sleep(): Promise<void>;
@@ -84,11 +84,11 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
     if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires an explicit --engine.");
     if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
     if (options.engine || options.engineUrl) {
-      if (options.workspace || options.scope || options.dbPath || options.model) throw new Error("Remote automation execution uses the engine's workspace, scope, storage and model connection; omit local execution flags.");
+      if (options.workspace || options.dbPath || options.model) throw new Error("Remote automation execution uses the engine's workspace, storage and model connection; omit local execution flags.");
       if (!deps.createRemoteRuntime) throw new Error("Remote automation transport is unavailable.");
       runtime = await deps.createRemoteRuntime({ backendId: options.engine, configPath: options.enginesConfig, ...(options.engineUrl ? { engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv } : {}), ...(options.chat ? { sessionId: options.chat } : {}) });
     } else {
-      runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}), ...(requireEngine ? { requireEngine: true } : {}) });
+      runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}), ...(requireEngine ? { requireEngine: true } : {}) });
     }
     if (options.chat && !options.engine && !options.engineUrl) {
       if (!runtime.attachSession) throw new Error("The selected engine does not support thread attachment.");

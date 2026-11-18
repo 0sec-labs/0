@@ -6,9 +6,7 @@ import type { McpToolHost } from "../../agent/mcp-host.js";
 import type { ExtensionRunPort } from "../../agent/types.js";
 import { type osecDB } from "../../storage/index.js";
 import type { NoteStore } from "../../notes/index.js";
-import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
-import { ScopePolicy } from "../../scope/scope.js";
-import type { ScopeEnforcementState } from "../../scope/activation.js";
+import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
 import type { ConsoleSessionCheckpoint } from "../session-checkpoint.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
 import { type ConsoleConversationHistory } from "./console-tools.js";
@@ -104,89 +102,15 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
   usageUnavailable?: boolean;
 }
 
-// ── Console autonomy / scope resolution (0 lab console) ──
+// ── Console autonomy ──
 
 /**
- * A console session has one mode: the agent has shell access. What limits it is the target scope,
- * the budget, the optional sandbox and the global "Ask before running commands" setting
+ * A console session has one mode: the agent has shell access. What limits it is the budget,
+ * the optional sandbox and the global "Ask before running commands" setting
  * (`ApprovalsChoice`). An older stored access value is accepted and ignored, except that the two
  * values that used to ask first (standard, propose) keep asking.
- *
- * The scope behavior applies only while the scope extension is enabled; turning that extension off
- * skips host/path/local-scope authorization. Credential, private-network, sandbox and resource
- * controls remain independent.
  */
 export type ConsoleAutonomyInput = LegacyAutonomyMode;
-
-/**
- * Request payload passed to `ConsoleSessionConfig.requestScope` when a
- * network-capable tool call references URLs outside the current scope.
- * The callback may return a resolution (new target + scope) or null to deny.
- */
-export interface ConsoleScopeRequest {
-  /** The pending tool call that triggered this request. */
-  call: ToolCall;
-  /** URLs extracted from the tool call's arguments. */
-  requestedUrls: string[];
-  /**
-   * Descriptions of network-reaching shell constructs whose destination could
-   * NOT be resolved to a URL (`curl "$H"`, `… | sh`, `eval …`). Present only
-   * for shell-payload tools. When this is non-empty the operator is being asked
-   * to approve a call whose destination is UNKNOWN — the request carries the
-   * full `call`, so the surface should show the actual command, not just
-   * `requestedUrls` (which may be empty). Approving such a call means "I read
-   * the command and I accept it", not "the scope covers it": nothing here can
-   * be checked against `ScopePolicy`.
-   */
-  unresolvedTargets?: string[];
-  /** Current session target (may be empty). */
-  target: string;
-  /** Current scope policy, if any. */
-  currentScope?: ScopePolicy;
-}
-
-/**
- * Operator approval of an expanded scope.
- * Returned by `requestScope` to authorise the tool call.
- */
-export interface ConsoleScopeResolution {
-  /** Updated target (may be the same as the current one). */
-  target: string;
-  /** Scope policy covering the requested URLs. Never undefined on approval. */
-  scope: ScopePolicy;
-}
-
-/**
- * Request payload passed to `ConsoleSessionConfig.requestLocalScope` when a
- * filesystem-scoped tool call (read_file/str_replace/…) is issued
- * with no local scope covering the path it wants to touch. The local-scope
- * analogue of {@link ConsoleScopeRequest}: the operator approves an in-memory,
- * session-only directory subtree, or the callback returns null to deny.
- */
-export interface ConsoleLocalScopeRequest {
-  /** The pending tool call that triggered this request. */
-  call: ToolCall;
-  /**
-   * The concrete filesystem path the tool asked to touch, already resolved to
-   * an ABSOLUTE, symlink-resolved real path. This is exactly the path the
-   * approval decision is made against — what the operator sees is what the
-   * engine authorizes.
-   */
-  requestedPath: string;
-  /** Current in-memory local scope directory, if any (absolute real path). */
-  currentScopePath?: string;
-}
-
-/**
- * Operator approval of a local filesystem scope.
- * Returned by `requestLocalScope` to authorise the tool call. The approved
- * directory authorises that directory SUBTREE only; it is applied to the
- * session's in-memory tool context and NEVER written to disk.
- */
-export interface ConsoleLocalScopeResolution {
-  /** Absolute directory path the operator authorized (its subtree becomes readable). */
-  scopePath: string;
-}
 
 /**
  * Why a single operator turn stopped.
@@ -315,7 +239,7 @@ export interface ConsoleSendOptions {
    * "cancelled by operator" result) before the turn returns, so history is
    * never left with an unmatched `tool_use` and the next `send()` resumes
    * cleanly. Cancelling a turn NEVER clears or bypasses authorization state —
-   * denied-host / denied-path memory and granted scope are untouched.
+   * authorization state is untouched.
    */
   signal?: AbortSignal;
 }
@@ -342,13 +266,6 @@ export interface ConsoleSessionConfig {
    * the session starts with empty history (unchanged behaviour).
    */
   initialMessages?: NativeMessage[];
-  /**
-   * Engagement target the tools operate against (same-origin checks, tool
-   * context). Optional — a bare console can start target-less and the operator
-   * can name targets in-conversation; target-scoped tools then return a
-   * graceful error until a target is set.
-   */
-  target?: string;
   /**
    * Role whose tool set the console exposes. Defaults to `"audit"`, which maps
    * to the full "everything" registry (web search, source, patch, shell,
@@ -390,15 +307,13 @@ export interface ConsoleSessionConfig {
    * first, and each is separately configurable.
    */
   maxTurnTokens?: number;
-  /** Opt in to generic-scanner tool wrappers (sqlmap/nikto/…). Default off. */
-  allowScanners?: boolean;
   /**
    * Which model-visible tool list to use: `core` (default for the console: a small
    * core plus skill-provided packs) or `full` (every tool the role allows).
    * ZERO_TOOLSET overrides the default but not an explicit value here.
    */
   toolset?: "core" | "full";
-  /** Built-in web search, independently of target scope and network authorization. */
+  /** Built-in web search, independently of network authorization. */
   webSearchEnabled?: boolean;
   /** System-prompt override. Defaults to {@link buildConsoleSystemPrompt}. */
   systemPrompt?: string;
@@ -413,35 +328,6 @@ export interface ConsoleSessionConfig {
    */
   approvals?: ApprovalsChoice;
   /**
-   * Pre-loaded scope policy. When absent, the session starts scopeless and
-   * `requestScope` is invoked before the first network-capable tool call.
-   * NEVER written to disk — in-memory only.
-   */
-  scope?: ScopePolicy;
-  /**
-   * Callback invoked when a network-capable tool call references URLs outside
-   * the current scope (or scope is absent). Return a
-   * {@link ConsoleScopeResolution} to approve with an updated target + scope,
-   * or return null to deny the call. The resolution updates the session's
-   * in-memory scope only — never rewrites a scope file.
-   * When absent, the legacy readline console keeps its historical behavior.
-   * The Bun/OpenTUI entrypoint always supplies this callback, so engagement
-   * egress there remains scope-on-demand.
-   */
-  requestScope?: (req: ConsoleScopeRequest) => Promise<ConsoleScopeResolution | null>;
-  /**
-   * Callback invoked when a filesystem-scoped tool
-   * (read_file/str_replace)
-   * is issued and no in-memory local scope covers the path it wants to touch.
-   * The local-filesystem analogue of {@link requestScope}: return a
-   * {@link ConsoleLocalScopeResolution} to approve an in-memory directory
-   * subtree, or return null to deny the call. The approved directory updates
-   * the session's tool context only — it is NEVER written to a scope file.
-   * When absent, behaviour is unchanged from the legacy readline console: the
-   * tool simply returns its "requires a scoped local directory" error.
-   */
-  requestLocalScope?: (req: ConsoleLocalScopeRequest) => Promise<ConsoleLocalScopeResolution | null>;
-  /**
    * Per-action approval callback used when `approvals` is `ask`. Invoked before
    * every non-read-only tool call; return true to allow, false to block with a
    * "denied" result. Not used otherwise. When absent, the gate falls through (the
@@ -450,17 +336,6 @@ export interface ConsoleSessionConfig {
    */
   approveTool?: (call: ToolCall, risk?: ToolRisk) => Promise<boolean>;
   /**
-   * Invoked when a tool is blocked purely by the scoped-source-audit
-   * allow-list (role `audit`/`review` with a local scope). Return true to
-   * let it run for the rest of the session, false to deny and remember.
-   *
-   * This lifts ONE restriction; it is not a master key. Network scope,
-   * local-filesystem scope and the co-pilot gate all still apply, and in
-   * yolo mode the allow-list is lifted without prompting. When absent,
-   * blocked tools hard-deny exactly as they always have.
-   */
-  escalateScopedAudit?: (req: ScopedAuditEscalationRequest) => Promise<boolean>;
-  /**
    * Operator question channel for the `ask_operator` tool. Invoked when the
    * model pauses to ask the operator a STRUCTURED question; render the
    * question(s), collect the answer, and resolve with an
@@ -468,7 +343,7 @@ export interface ConsoleSessionConfig {
    * without answering.
    *
    * This is INFORMATION-GATHERING ONLY and distinct from `approveTool` /
-   * `requestScope` / `escalateScopedAudit`: it authorizes NOTHING. When absent,
+   * `approveTool`: it authorizes NOTHING. When absent,
    * `ask_operator` returns a graceful "not available" result rather than
    * blocking, mirroring every other gate's "no callback → defer" contract.
    */
@@ -521,7 +396,7 @@ export interface ConsoleSessionConfig {
    * Read-only access to persisted console session transcripts. When supplied,
    * the model-facing tools `list_conversations` and `read_conversation` are
    * advertised and dispatch through this callback. Both tools are pure read-only
-   * operations: no network, no filesystem scope, approved in all autonomy modes
+   * operations: no network, approved in all autonomy modes
    * (recon/standard/copilot/yolo) without operator prompting. When absent, no
    * conversation-history tools are advertised and the model never sees them.
    */
@@ -537,7 +412,7 @@ export interface ConsoleSessionConfig {
   };
   /**
    * A checkpoint from a prior console session. When provided, the session is
-   * seeded from this checkpoint's state (messages, scope, denied sets,
+   * seeded from this checkpoint's state (messages,
    * self-extension registrations, etc.) instead of starting fresh. The caller
    * MUST construct the candidate session with this checkpoint BEFORE calling
    * {@link ConsoleSession.prepareHandoff} on the old session, so a candidate
@@ -573,12 +448,6 @@ export interface ConsoleSessionConfig {
   compaction?: { enabled: boolean; thresholdFraction: number };
 }
 
-/** Explicit operator configuration, applied only while the root turn is idle. */
-export interface ConsoleEngagementSelection {
-  target?: string;
-  scope?: ScopePolicy | null;
-}
-
 export interface ConsoleSourceLesson {
   title: string;
   summary: string;
@@ -606,24 +475,11 @@ export interface ConsoleSession {
   readonly workerPolicy?: WorkerPolicy;
   /** Idle only; active worker policies remain immutable through their lifetime. */
   setWorkerPolicy?(policy: WorkerPolicy | undefined): void;
-  /** Current engagement target (may be updated by scope resolution). */
-  readonly target: string;
-  /** Current in-memory scope policy (never persisted to disk). */
-  readonly scope: ScopePolicy | undefined;
-  /** Actual authorization activation; a configured scope alone is not enforcement. */
-  readonly scopeEnforcement: ScopeEnforcementState;
-  /**
-   * Current in-memory local filesystem scope directory (absolute real path), or
-   * undefined when none has been approved. Never persisted to disk.
-   */
-  readonly localScopePath: string | undefined;
-  /** Switch access (and optionally the ask-first setting) without discarding the conversation or in-memory scope. */
+  /** Switch access (and optionally the ask-first setting) without discarding the conversation. */
   setApprovals(approvals: ApprovalsChoice): void | Promise<void>;
   readonly webSearchEnabled?: boolean;
   /** Idle only; existing child agents must finish before changing their inherited policy. */
   setWebSearchEnabled?(enabled: boolean): void | Promise<void>;
-  /** Keep identity, resources and denied-decision memory while changing engagement configuration. */
-  configureEngagement(selection: ConsoleEngagementSelection): void;
   /** Explicit operator-approved local directory; idle only. */
   configureWorkspace(path: string): void;
   /**
@@ -646,8 +502,8 @@ export interface ConsoleSession {
     contextWindowTokens?: number | null;
   }): void;
   /**
-   * Clear all conversation messages while preserving session identity, target,
-   * scope, autonomy mode, system prompt, tools, and executor resources.
+   * Clear all conversation messages while preserving session identity,
+   * autonomy mode, system prompt, tools, and executor resources.
    * The next call to {@link send} starts from an empty history.
    */
   clearConversation(): void;

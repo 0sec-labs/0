@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySentinelPatch, dropAccessFields, parseSentinelCreate, sentinelReviewFingerprint, type Sentinel } from "./sentinels.js";
+import { applySentinelPatch, dropAccessFields, dropScopeFromFingerprint, folderFromRetiredScope, parseSentinelCreate, sentinelReviewFingerprint, type Sentinel } from "./sentinels.js";
 
 describe("Sentinel access: there is one mode", () => {
   const stored = (extra: Record<string, unknown>) => ({ ...parseSentinelCreate({ name: "A" }), id: "1", homeMissionId: null, owner: "x", version: 1, createdAt: "", updatedAt: "", ...extra }) as unknown as Sentinel;
@@ -23,10 +23,29 @@ describe("Sentinel access: there is one mode", () => {
     }
   });
   it("dropAccessFields removes only the retired keys", () => {
-    expect(dropAccessFields({ name: "A", autonomy: "observe", toolAccess: "read-only", access: "x", accessLevel: "y" })).toEqual({ name: "A" });
+    expect(dropAccessFields({ name: "A", autonomy: "observe", toolAccess: "read-only", access: "x", accessLevel: "y", scope: { repos: [] } })).toEqual({ name: "A" });
   });
   it("the review fingerprint keeps the shell-access constant so reviewed Sentinels stay reviewed", () => {
     const sentinel = parseSentinelCreate({ name: "A" });
     expect(sentinelReviewFingerprint(sentinel)).toContain('"toolAccess":"exec","autonomy":"act"');
+  });
+
+  it("accepts and ignores the removed scope field", () => {
+    expect(parseSentinelCreate({ name: "A", scope: { repos: ["a/b"], production: true } })).not.toHaveProperty("scope");
+  });
+  it("reads a fingerprint stored with a scope as the one without it", () => {
+    const sentinel = parseSentinelCreate({ name: "A", skills: ["x"] });
+    const current = sentinelReviewFingerprint(sentinel);
+    const old = JSON.stringify({ scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, ...JSON.parse(current) });
+    expect(dropScopeFromFingerprint(old)).toBe(current);
+    expect(dropScopeFromFingerprint(current)).toBe(current);
+  });
+  it("keeps the folder a stored scope held as its first absolute repository", () => {
+    expect(folderFromRetiredScope({ scope: { repos: ["owner/name", "/work/app"] } })).toBe("/work/app");
+    expect(folderFromRetiredScope({ folder: "/new", scope: { repos: ["/old"] } })).toBe("/new");
+    expect(folderFromRetiredScope({ scope: { repos: ["owner/name"] } })).toBeNull();
+    const sentinel = parseSentinelCreate({ name: "A", folder: "/work/app" });
+    const old = JSON.stringify({ scope: { repos: ["/work/app"] }, ...JSON.parse(sentinelReviewFingerprint({ ...sentinel, folder: null })) });
+    expect(dropScopeFromFingerprint(old)).toBe(sentinelReviewFingerprint(sentinel));
   });
 });

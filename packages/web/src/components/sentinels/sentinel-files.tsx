@@ -12,7 +12,7 @@ import { useSentinelClient, useSentinelFile, useSentinelFiles, useSentinelMutati
 import { DEFAULT_FILES, SENTINEL_LIMITS, fileBytes, isConflict, type SentinelFile, type SentinelFileRevision } from "@/sentinels/model";
 
 const FILE_HINTS: Record<string, string> = {
-  "AGENTS.md": "Instructions: its standing role, scope and hard limits.",
+  "AGENTS.md": "Instructions: its standing role and hard limits.",
   "NOTES.md": "Running memory. Review what it saves here.",
 };
 /** Unsaved edits survive switching files or views; a draft is dropped once the file moved on elsewhere. */

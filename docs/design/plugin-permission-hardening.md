@@ -11,7 +11,7 @@ model. They do. This note covers only what is still missing.
 | Piece | Location | What it gives |
 |---|---|---|
 | Closed capability vocabulary, mandatory per tool, empty list rejected, `gateFlagsFor` | `packages/engine/src/plugins/manifest.ts`, `plugin-manifest.schema.json` | Fail-closed declaration. Seven capabilities: `compute`, `model-call`, `network`, `filesystem-read`, `filesystem-write`, `process-exec`, `findings-write`. |
-| Invocation-time classification | `capability-classification.ts` | `checkInvocationCapabilities` routes plugin tools through the same scope, local-filesystem and co-pilot gates as built-ins. |
+| Invocation-time classification | `capability-classification.ts` | `checkInvocationCapabilities` routes plugin tools through the same approval gates as built-ins. |
 | Monotonic deny-only guards | `guards.ts` | Guards can only narrow what a call may do. |
 | Operator enablement and per-workspace trust | `enablement.ts`, `harness-trust.ts` | Installing never enables; a trust grant is operator-owned and never inferred from workspace contents. |
 | Loader hardening | `loader.ts` | No shell, fixed argv, explicit cwd, allowlisted env minus target auth; the child is treated as untrusted. |

@@ -6,7 +6,7 @@ Why 0 uses bash instead of structured tools, with A/B test data from the XBOW be
 >
 > **Historical experiment and rationale.** The small A/B observations below are
 > preserved, not a current universal performance claim or exhaustive tool list.
-> Current workflows expose additional tools, explicit scope controls and
+> Current workflows expose additional tools, and
 > configurable executors; see [Architecture](architecture.md). Shell access is not automatically sandboxed.
 
 Most AI security tools give agents structured tools with typed parameters -- `crawl(url)`, `submit_form(url, fields)`, `http_request(url, method, body)`. The agent must learn the tool API, choose the right tool, and compose multi-step operations across separate tool calls.

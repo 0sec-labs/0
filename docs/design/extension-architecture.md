@@ -1,6 +1,6 @@
 # Extension architecture (step 2 of the build plan)
 
-> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules like scope. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
+> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
 
 Implements the store, manifest reader, installer, install prompt and importer from
 `one-extension-system.md`. The owner naming decision applies: user-facing text says
@@ -66,7 +66,7 @@ reaches the extension code only through the `@0/engine` barrel.
    NODE_OPTIONS and proxies are always rejected. Extension processes get a scrubbed base plus declared-and-approved
    names only; model provider keys only if declared, shown and approved.
 6. **No in-process extension code.** Nothing here runs an extension. Scripts and MCP servers are commands
-   for bash and the MCP client, under the existing scope, approvals and sandbox.
+   for bash and the MCP client, under the existing approvals and sandbox.
 7. **Old stores are read-only, imports never over-approve.** The importer reads old stores, never copies secret
    values (secret-looking url query keys, `user:pass@` and args such as `--token x` become `${NAME}` placeholders,
    declared as env names), imports skills that have scripts or env as installed, unapproved and disabled (plain
@@ -96,8 +96,7 @@ self-approval require a deliberate, visible, multi-step attack and leave audit e
 boundary: the agent can read the seal key if text analysis misses a path, unset the marker, or write state through a
 path it builds at run time. The seal protects against hand edits and tooling mistakes, not against an attacker with
 the user's file permissions. The sandbox (and OS-level protection of `~/.0`) is the boundary; these are defence in
-depth. Built-in enablement is global, not per project; a project disabled before the migration disables for all
-(which only ever denies while a scope is defined). Sealing resets approvals once for installs made before seals existed.
+depth. Built-in enablement is global, not per project. Sealing resets approvals once for installs made before seals existed.
 
 ## Seams
 
@@ -108,6 +107,6 @@ depth. Built-in enablement is global, not per project; a project disabled before
 | `Installer` | `ExtensionInstaller` | CLI now, Extensions page (step 3) |
 | `Importer` | `LegacyImporter` | CLI, startup |
 
-Built-in extensions are rows in `core/builtins.ts`, the one registry. Step 1 registered the real `scope` there; step 5
+Built-in extensions are rows in `core/builtins.ts`, the one registry. Step 5
 replaces the `github` placeholder. `state.json` keys: `extensions` (was `plugins`; read once and rewritten), `builtins`,
 `seals`, `migrations`, `import`.

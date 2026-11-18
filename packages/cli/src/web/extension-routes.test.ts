@@ -24,18 +24,6 @@ function fixture() {
 const call = (svc: ReturnType<typeof createExtensionService>, method: string, path: string, body?: unknown) => handleExtensionRequest(svc, path, method, body);
 
 describe("extension routes", () => {
-  it("tells the page whether a scope is defined: none, a project scope file, or a Sentinel scope", async () => {
-    const { svc } = fixture();
-    const project = mkdtempSync(join(tmpdir(), "ext-route-project-")); dirs.push(project);
-    const overview = async (query: string, signals?: () => { agentScopes: number }) =>
-      (await handleExtensionRequest(svc, "extensions", "GET", {}, new URLSearchParams(query), signals))!.data as { scopeDefined: boolean };
-    expect((await overview(`project=${encodeURIComponent(project)}`)).scopeDefined).toBe(false);
-    expect((await overview("", () => ({ agentScopes: 0 }))).scopeDefined).toBe(false);
-    expect((await overview("", () => ({ agentScopes: 1 }))).scopeDefined).toBe(true);
-    writeFileSync(join(project, "scope.json"), JSON.stringify({ in_scope: ["app.example.com"] }));
-    expect((await overview(`project=${encodeURIComponent(project)}`)).scopeDefined).toBe(true);
-  });
-
   it("adds a typed MCP server as a local extension through the same prompt and exact-revision confirm", async () => {
     const { svc } = fixture();
     const mcp = { name: "docs", command: "npx", args: ["-y", "docs-mcp"] };
@@ -64,7 +52,7 @@ describe("extension routes", () => {
     expect(done?.status).toBe(201);
     const overview = (await call(svc, "GET", "extensions"))!.data as { rows: Array<{ name: string; status: string; skills: string[]; sourceLabel: string }> };
     expect(overview.rows.find(r => r.name === "demo")).toMatchObject({ status: "disabled", skills: ["a"] });
-    expect(overview.rows.some(r => r.name === "scope" && r !== undefined)).toBe(true);
+    expect(overview.rows.some(r => r.name === "github")).toBe(true);
   });
 
   it("a local folder that changed after review is refused (its revision is its content hash)", async () => {
@@ -80,7 +68,7 @@ describe("extension routes", () => {
     const { svc, repo, v1, commit } = fixture();
     await call(svc, "POST", "extensions/install", { source: `${repo}@${v1}`, approvedRevision: v1, confirm: true });
     expect((await call(svc, "POST", "extensions/enable", { name: "demo" }))?.status).toBe(200);
-    expect((await call(svc, "POST", "extensions/disable", { name: "scope" }))?.status).toBe(409);
+    expect((await call(svc, "POST", "extensions/disable", { name: "github" }))?.status).toBe(409);
     const v2 = commit({ "scripts/go.sh": "#!/bin/sh\necho hi\n" });
     const upd = await call(svc, "POST", "extensions/update/preview", { name: "demo", to: v2 });
     const p = (upd!.data as { prompt: { kind: string; diff: { added: string[] } } }).prompt;

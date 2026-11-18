@@ -20,7 +20,6 @@ import { parseProjectObservations, type ProposedProjectObservation } from "./sec
 import { scanGoalPrompt } from "./scan-plan.js";
 import { addRuntimeUsage } from "./agent/cost-ledger.js";
 import type { ScanCostLedger } from "./agent/cost-ledger.js";
-import type { ScopePolicy } from "./scope/scope.js";
 
 // ── Types ──
 
@@ -44,7 +43,6 @@ export interface AnalysisAgentOptions {
     singleModel?: boolean;
     nativeRuntime?: NativeRuntime;
     signal?: AbortSignal;
-    scope?: ScopePolicy;
     plan?: ScanPlan;
     costCeilingUsd?: number;
     costLedger?: ScanCostLedgerLike;
@@ -528,7 +526,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         config: {
           role,
           systemPrompt: agentSystemPrompt,
-          tools: getToolsForRole(role, { hasScope: !!scopePath }),
+          tools: getToolsForRole(role, { sourceAudit: !!scopePath }),
           maxTurns,
           singleAgent: opts.singleAgent,
           reviewDiffBase: opts.reviewDiffBase,
@@ -536,7 +534,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           target,
           scanId,
           scopePath,
-          scope: config.scope,
           codebaseLearning: scopedSourceAudit && purpose === "research",
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
@@ -711,7 +708,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     config: {
       role,
       systemPrompt: agentSystemPrompt,
-      tools: getToolsForRole(role, { hasScope: !!scopePath }),
+      tools: getToolsForRole(role, { sourceAudit: !!scopePath }),
       maxTurns,
       target,
       scanId,
@@ -721,7 +718,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       costLedger: config.costLedger as import("./agent/cost-ledger.js").ScanCostLedger | undefined,
       requirePricedUsage: Boolean(config.plan),
       signal: config.signal,
-      scope: config.scope,
     },
     runtime,
     db,

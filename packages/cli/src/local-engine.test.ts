@@ -113,7 +113,6 @@ describe("secure local engine discovery", () => {
     cleanup.push(registerLocalEngine(descriptor(paths.workspace), paths.dbPath, paths));
     await expect(connectLocalEngine({ ...paths, workspace: paths.homeDir })).rejects.toThrow("This console is for");
     await expect(connectLocalEngine({ ...paths, model: "replacement" })).rejects.toThrow("owns model");
-    await expect(connectLocalEngine({ ...paths, scopePath: "/scope.json" })).rejects.toThrow("owns model");
   });
   it("pins both engine identity and process epoch before attaching", async () => {
     const paths = fixture(); const input = descriptor(paths.workspace); const peer = await server(input);

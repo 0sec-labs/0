@@ -33,7 +33,7 @@ mapped to what `0` already has:
 | CI access | Read-only Findings API tokens (`read:findings`, optional expiry); GitHub Action with report artifacts | Named service accounts with a role, expiry and rotation |
 | Team sharing | One engine per team workspace; remote engines the console dials into | Aggregated view across engines, shared config and policy (only when a customer needs it; see `shared-server.md`) |
 | Integrations | GitHub issues exporter; third-party connectors are MCP-server plugins | Slack, Jira and similar sinks, SIEM forwarding, ticket sync |
-| Policy | Scope matcher with an injectable policy (`opts.scope`); off unless the scope plugin is enabled | Signed, tighten-only policy distribution |
+| Policy | None | Signed, tighten-only policy distribution |
 | Support | Community and GitHub issues | Support channel, response targets, release channels, deployment help |
 
 ## Seams that exist in the open-source code (see the gateway decision below)
@@ -44,7 +44,6 @@ mapped to what `0` already has:
 - **Plugins.** The plugin system loads fingerprint-approved, sandboxed, permission-gated
   executable plugins that speak newline-delimited JSON over stdio, plus MCP-server
   plugins. `ZERO_REGISTRY_URL` points the CLI at another registry index.
-- **Scope injection.** The scanner already accepts an in-memory scope.
 
 ## Seams that were added, then mostly reverted (see the gateway decision below)
 

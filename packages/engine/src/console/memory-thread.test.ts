@@ -6,10 +6,6 @@ import { createFileNoteStore, verifyContext, type NoteStore } from "../notes/ind
 import { createConsoleSession } from "./turn-engine.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 
-vi.mock("../plugins/enablement.js", async (importOriginal) => ({
-  ...await importOriginal<object>(),
-  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
-}));
 const done = (): NativeRuntimeResult => ({ content: [{ type: "text", text: "Done" }], stopReason: "end_turn", durationMs: 0 });
 const tool = (name: string, input: Record<string, unknown>): NativeRuntimeResult => ({ content: [{ type: "tool_use", id: name, name, input }], stopReason: "tool_use", durationMs: 0 });
 class Runtime implements NativeRuntime {
@@ -57,9 +53,9 @@ describe("Memory in a thread", () => {
     const thread = session(first);
     await thread.send("Fix the SQL injection"); await thread.cleanup();
     expect(first.calls[1]?.tools.some(t => t.name === "memory")).toBe(true);
-    const saved = store.list(); // no folder access was granted yet, so the note is global
+    const saved = store.list(); // the note belongs to the thread folder
     expect(saved).toHaveLength(1);
-    expect(saved[0]).toMatchObject({ source: "model", status: "live", kind: "fix-decision", scope: "global" });
+    expect(saved[0]).toMatchObject({ source: "model", status: "live", kind: "fix-decision", scope: "folder" });
     expect(saved[0]?.thread).toBeTruthy();
     const second = new Runtime([inspect(), done()]);
     const next = session(second); await next.send("What did we decide?"); await next.cleanup();

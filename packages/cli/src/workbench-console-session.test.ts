@@ -5,11 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ scopeEnabled: false, scopeHome: undefined as string | undefined, sourceOnClose: undefined as unknown, lessonOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, holdAutonomy: false, autonomyError: undefined as string | undefined, releaseAutonomy: undefined as (() => void) | undefined, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
+const mock = vi.hoisted(() => ({ sourceOnClose: undefined as unknown, lessonOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, holdAutonomy: false, autonomyError: undefined as string | undefined, releaseAutonomy: undefined as (() => void) | undefined, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
 vi.mock("@0/engine", () => ({
   DEFAULT_MAX_TOOL_ITERATIONS: 100,
-  ScopePolicy: class { constructor(readonly raw: unknown) {} },
-  getScopeEnforcementState: (projectPath: string, homeDir?: string) => ({ pluginId: "scope", enabled: mock.scopeHome ? homeDir === mock.scopeHome : mock.scopeEnabled, projectPath, message: "scope snapshot" }),
   runSmolvmWorkbench: (options: { signal: AbortSignal; onStartupProgress?: (message: string) => void; transport: { initialInput: string; onStdout(data: string): void; onReady(input: { write(data: string): void; end(): void }): void } }) => {
     mock.launches.push(options); mock.output = options.transport.onStdout;
     const init = JSON.parse(options.transport.initialInput);
@@ -38,7 +36,7 @@ vi.mock("./workbench-plugins.js", () => ({ GUEST_PLUGIN_ASSETS: "/opt/0-approved
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.scopeEnabled = false; mock.scopeHome = undefined; mock.sourceOnClose = undefined; mock.lessonOnClose = undefined; mock.destroyed = false; mock.holdReady = false; mock.holdSend = false; mock.holdAutonomy = false; mock.autonomyError = undefined; mock.releaseAutonomy = undefined; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.sourceOnClose = undefined; mock.lessonOnClose = undefined; mock.destroyed = false; mock.holdReady = false; mock.holdSend = false; mock.holdAutonomy = false; mock.autonomyError = undefined; mock.releaseAutonomy = undefined; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
 async function options() {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "0-controller-test-"))); roots.push(root);
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
@@ -240,14 +238,6 @@ it("persists final source references before releasing the guest for destruction"
  release(); await cleanup; expect(mock.destroyed).toBe(true);
  await session.cleanup(); expect(persist).toHaveBeenCalledOnce();
 });
-it("never treats guest state as a host source grant", async () => {
- const input = await options(); mock.scopeEnabled = true;
- await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
- const persist = vi.fn(); const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, codebaseLearning: true }, onSourceContext: persist }); await session.send("hello");
- mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: session.scanId, messages: [], tools: [], target: "/workspace", localScopePath: "/workspace", autonomyMode: "standard" } }) + "\n");
- mock.output!(JSON.stringify({ type: "source-context", artifact: { sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] } }) + "\n");
- await session.cleanup(); expect(persist).not.toHaveBeenCalled();
-});
 it("surfaces durable-ingestion failure while still confirming teardown", async () => {
  const input = await options(); await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
  mock.sourceOnClose = { sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] };
@@ -256,7 +246,7 @@ it("surfaces durable-ingestion failure while still confirming teardown", async (
  expect(mock.destroyed).toBe(true);
 });
 
-it("persists semantic lessons before destruction and recalls only the exact host-authorized scope", async () => {
+it("persists semantic lessons before destruction and recalls only the workspace folder", async () => {
  const input = await options(); await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
  const lesson = { title: "Ownership", summary: "Review ownership checks in code.ts.", sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] };
  mock.lessonOnClose = lesson;
@@ -274,56 +264,6 @@ it("persists semantic lessons before destruction and recalls only the exact host
  expect(persist.mock.calls[0]?.[1]).toMatchObject({ workspaceRoot: input.config.workspaceRoot, scopePath: input.config.workspaceRoot });
  expect(mock.destroyed).toBe(true);
 });
-it("guest state and malformed lesson frames never create source authority", async () => {
- const input = await options(); mock.scopeEnabled = true;
- await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
- const persist = vi.fn(); const read = vi.fn(async () => []);
- const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, codebaseLearning: true }, onSourceLesson: persist, readSourceLessons: read });
- await session.send("Inspect");
- mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: session.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "standard", localScopePath: "/workspace" } }) + "\n");
- mock.output!(JSON.stringify({ type: "source-lesson", lesson: { title: "Ownership", summary: "Review ownership", sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] } }) + "\n");
- mock.output!(JSON.stringify({ type: "decision", id: "unapproved-query", name: "sourceLessons", args: ["/workspace"] }) + "\n");
- await vi.waitFor(() => expect(mock.requests.find(frame => frame.id === "unapproved-query")).toMatchObject({ value: [] }));
- await session.cleanup(); expect(persist).not.toHaveBeenCalled(); expect(read).not.toHaveBeenCalled();
-});
-
-it.each(["explicit-yolo", "implicit-yolo", "explicit-standard", "explicit-mode-switch"])("bounds semantic child-root handoff under %s host authorization", async mode => {
- const input = await options(); mock.scopeEnabled = true;
- await mkdir(join(input.config.workspaceRoot, "child")); await writeFile(join(input.config.workspaceRoot, "child", "code.ts"), "source");
- const lesson = { title: "Child ownership", summary: "Review the child code.ts ownership checks.", sourceLinks: [{ path: "child/code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] };
- const persist = vi.fn(async (_lesson: unknown, _context: unknown) => {}); const read = vi.fn(async () => [lesson]);
- const workbench = { ...input.workbench, ...(mode === "implicit-yolo" ? { workspaceRoot: undefined } : {}) };
- const session = createWorkbenchConsoleSession({ ...input, workbench, config: { ...input.config, codebaseLearning: true, autonomyMode: mode === "explicit-standard" || mode === "explicit-mode-switch" ? "standard" : "yolo" }, onSourceLesson: persist, readSourceLessons: read });
- if (mode === "explicit-mode-switch") session.setApprovals("auto");
- const authorized = mode === "explicit-yolo";
- await session.send("Inspect child");
- mock.output!(JSON.stringify({ type: "decision", id: "child-query", name: "sourceLessons", args: ["/workspace/child"] }) + "\n");
- mock.output!(JSON.stringify({ type: "decision", id: "outside-query", name: "sourceLessons", args: ["/etc"] }) + "\n");
- mock.output!(JSON.stringify({ type: "source-lesson", scopePath: "/workspace/child", lesson }) + "\n");
- mock.output!(JSON.stringify({ type: "source-lesson", scopePath: "/etc", lesson }) + "\n");
- await vi.waitFor(() => expect(mock.requests.find(frame => frame.id === "child-query")).toMatchObject({ value: authorized ? [lesson] : [] }));
- await vi.waitFor(() => expect(mock.requests.find(frame => frame.id === "outside-query")).toMatchObject({ value: [] }));
- await session.cleanup();
- expect(persist).toHaveBeenCalledTimes(authorized ? 1 : 0);
- expect(read).toHaveBeenCalledTimes(authorized ? 1 : 0);
- if (authorized) expect(persist.mock.calls[0]?.[1]).toMatchObject({ scopePath: join(input.config.workspaceRoot, "child") });
-});
-
-it("uses the selected plugin home for both host source authority and the forwarded guest policy", async () => {
- const input = await options(); const selectedHome = join(input.config.workspaceRoot, "isolated-plugin-home");
- mock.scopeHome = selectedHome; // This home enables scope; the ordinary user's home does not.
- await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
- const persist = vi.fn();
- const session = createWorkbenchConsoleSession({ ...input, pluginHomeDir: selectedHome, config: { ...input.config, codebaseLearning: true, autonomyMode: "standard" }, onSourceLesson: persist });
- await session.send("Inspect");
- const launch = mock.launches[0] as { transport: { initialInput: string } };
- expect(JSON.parse(launch.transport.initialInput).scopeEnforcement.enabled).toBe(true);
- mock.output!(JSON.stringify({ type: "source-lesson", scopePath: "/workspace", lesson: { title: "Ownership", summary: "Check ownership in code.ts.", sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] } }) + "\n");
- await session.cleanup();
- expect(persist).not.toHaveBeenCalled(); // No host-approved source scope despite the disabled default home.
-});
-
-
 it.each([false, true])("confirms guest policy before publishing an active mode change (rejected=%s)", async rejected => {
   const input = await options(); mock.holdSend = true; mock.holdAutonomy = true;
   mock.autonomyError = rejected ? "Guest refused mode" : undefined;
@@ -345,32 +285,4 @@ it.each([false, true])("confirms guest policy before publishing an active mode c
   } finally {
     abort.abort(); await turn; await session.cleanup();
   }
-});
-
-it.each([false, true])("does not widen source-learning authority after an active switch to Can make changes (approved subtree=%s)", async approvedSubtree => {
-  const input = await options(); mock.scopeEnabled = true; mock.holdSend = true;
-  const child = join(input.config.workspaceRoot, "child");
-  await mkdir(child); await mkdir(join(input.config.workspaceRoot, "other"));
-  const read = vi.fn(async () => []);
-  const authorizeDirectory = vi.fn(async () => ({ scopePath: child }));
-  const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "standard", codebaseLearning: true, requestLocalScope: authorizeDirectory }, readSourceLessons: read });
-  const abort = new AbortController(), turn = session.send("Wait for an operator action", {}, { signal: abort.signal });
-  const ask = async (id: string, name: string, args: unknown[]) => {
-    mock.output!(JSON.stringify({ type: "decision", id, name, args }) + "\n");
-    await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "decision-result" && frame.id === id)).toBe(true));
-    return mock.requests.find(frame => frame.type === "decision-result" && frame.id === id)!;
-  };
-  try {
-    await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
-    if (approvedSubtree) await ask("directory-grant", "requestLocalScope", [{ requestedPath: "/workspace/child", call: { name: "read_file", arguments: {} } }]);
-    await session.setApprovals("auto");
-    expect(session.approvals).toBe("auto");
-    expect((await ask("workspace-lessons", "sourceLessons", ["/workspace"])).value).toEqual([]);
-    expect((await ask("other-lessons", "sourceLessons", ["/workspace/other"])).value).toEqual([]);
-    expect(read).not.toHaveBeenCalled();
-    await ask("child-lessons", "sourceLessons", ["/workspace/child"]);
-    expect(read).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
-    if (approvedSubtree) expect(read).toHaveBeenCalledWith({ workspaceRoot: input.config.workspaceRoot, scopePath: child });
-    expect(authorizeDirectory).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
-  } finally { abort.abort(); await turn; await session.cleanup(); }
 });

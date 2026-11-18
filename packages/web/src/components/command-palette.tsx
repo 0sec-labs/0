@@ -127,8 +127,8 @@ export function CommandPalette({
       const [sessions, saved] = await Promise.all([listConsoleSessions(signal), listSavedConsoleSessions(signal)]);
       const live = sessions.slice(0, 1000).filter(session => session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.titleSource === "user" || session.status !== "ready"));
       const activeIds = new Set(live.flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]));
-      const results: ChatSearchResult[] = live.map(session => ({ id: session.id, title: session.title || session.target || v("Untitled {mission}"), preview: session.target || "", updatedAt: session.updatedAt, archived: false, source: "live" }));
-      results.push(...saved.slice(0, 1000).filter(session => !activeIds.has(session.id) && session.messageCount > 0).map(session => ({ id: session.id, title: session.summary || session.target || session.preview || v("Past {mission}"), preview: session.preview, updatedAt: new Date(session.savedAt).toISOString(), archived: Boolean(session.archived), source: "saved" as const })));
+      const results: ChatSearchResult[] = live.map(session => ({ id: session.id, title: session.title || v("Untitled {mission}"), preview: "", updatedAt: session.updatedAt, archived: false, source: "live" }));
+      results.push(...saved.slice(0, 1000).filter(session => !activeIds.has(session.id) && session.messageCount > 0).map(session => ({ id: session.id, title: session.summary || session.preview || v("Past {mission}"), preview: session.preview, updatedAt: new Date(session.savedAt).toISOString(), archived: Boolean(session.archived), source: "saved" as const })));
       const terms = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
       const matching = results.filter(result => terms.every(term => `${result.title} ${result.preview}`.toLowerCase().includes(term))).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
       const nextOffset = pageParam + 30;
@@ -197,7 +197,7 @@ export function CommandPalette({
         ["models", "Models", "Providers and the models 0 uses", ["providers", "connections"]],
         ["doctor", "Diagnostics", "Check that everything works", []],
         ["tools", "Tools", "What 0 can use", []],
-        ["project", "Folder", "Folder and scope", []],
+        ["project", "Folder", "Review checks for a folder", []],
       ].map(([route, label, meta, extra]): PaletteAction => ({
         id: `control-${route}`, group: "Pages", href: `/${route}`, label: label as string, meta: meta as string, icon: CapySlidersIcon,
         keywords: [route as string, label as string, ...(extra as string[])],

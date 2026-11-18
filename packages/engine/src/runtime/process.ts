@@ -75,15 +75,6 @@ function buildOsecMcpCommandArgs(context: RuntimeContext): string[] {
   if (context.mcp?.dbPath) {
     args.push("--db-path", context.mcp.dbPath);
   }
-  if (context.mcp?.scopeFile) {
-    args.push("--scope", context.mcp.scopeFile);
-  }
-  if (context.mcp?.rateLimit) {
-    args.push("--rate-limit", context.mcp.rateLimit);
-  }
-  if (context.mcp?.allowScanners) {
-    args.push("--allow-scanners");
-  }
 
   return args;
 }
@@ -409,12 +400,6 @@ export class ProcessRuntime implements Runtime {
     }
     if (context?.mcp?.auth) {
       env["ZERO_MCP_AUTH_JSON"] = JSON.stringify(context.mcp.auth);
-    }
-    if (context?.mcp?.attributionHeaders) {
-      env["ZERO_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify(context.mcp.attributionHeaders);
-    }
-    if (context?.mcp?.attributionUaToken) {
-      env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = context.mcp.attributionUaToken;
     }
 
     return env;

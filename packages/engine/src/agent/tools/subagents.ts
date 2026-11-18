@@ -485,7 +485,6 @@ export interface SubagentLifecycleBase {
   parent_scan_id: string;
   task: string;
   max_turns?: number;
-  scope_rules?: string[];
 }
 
 /**

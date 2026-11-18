@@ -6,25 +6,22 @@ import {
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
 const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
 describe("form model", () => {
   test("preset defaults are inert", () => {
     const form = formFromPreset(preset);
-    expect(form).toMatchObject({ name: "Pen Tester", production: false, repos: "", targets: "" });
-    const parsed = fieldsFromForm(form);
-    expect(parsed.ok && parsed.fields.scope).toEqual({ repos: [], targets: [], domains: [], outOfScope: [], production: false });
+    expect(form).toMatchObject({ name: "Pen Tester" });
+    expect(fieldsFromForm(form).ok).toBe(true);
   });
   test("blank form needs a name and a sane job", () => {
     expect(fieldsFromForm(formFromPreset(undefined))).toEqual({ ok: false, error: "Give it a name." });
     expect(fieldsFromForm({ ...formFromPreset(preset), mission: "x".repeat(161) }).ok).toBe(false);
   });
-  test("scope lines split into repos, targets and domains and de-duplicate", () => {
+  test("lines split and de-duplicate", () => {
     expect(parseLines("a\n b ,a\n\n")).toEqual(["a", "b"]);
-    const parsed = fieldsFromForm({ ...formFromPreset(preset), repos: "org/app", targets: "https://x.test/app\nexample.com\nexample.com", outOfScope: "admin.example.com" });
-    expect(parsed.ok && parsed.fields.scope).toEqual({ repos: ["org/app"], targets: ["https://x.test/app"], domains: ["example.com"], outOfScope: ["admin.example.com"], production: false });
   });
 });
 
@@ -99,6 +96,6 @@ describe("one mode", () => {
     expect(form).not.toHaveProperty("autonomy");
     expect(form).not.toHaveProperty("toolAccess");
     const parsed = fieldsFromForm(form);
-    expect(parsed.ok && Object.keys(parsed.fields).sort()).toEqual(["mission", "name", "scope"]);
+    expect(parsed.ok && Object.keys(parsed.fields).sort()).toEqual(["mission", "name"]);
   });
 });

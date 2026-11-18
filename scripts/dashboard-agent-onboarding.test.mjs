@@ -20,6 +20,6 @@ test("external-agent setup discovers the CLI before optional MCP and preserves a
     assert.match(setupPrompt, /Preserve client integrations, model connections, workspace grants, and execution profiles/);
     assert.match(setupPrompt, /never disable the workbench or switch SmolVM to host execution automatically/);
     assert.match(setupPrompt, /Setup and discovery do not authorize assessments, automation runs, live-target requests, or patch application/);
-    assert.match(setupPrompt, /Remote workspace, scope, model, and apply permissions belong to that engine/);
+    assert.match(setupPrompt, /Remote workspace, model, and apply permissions belong to that engine/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

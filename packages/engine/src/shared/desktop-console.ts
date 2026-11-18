@@ -3,7 +3,7 @@ import type { VerifierResult } from "../verifier/result.js";
 
 /**
  * Renderer-neutral contract between the browser and the local console daemon.
- * It contains only JSON-safe values: clients never receive a live tool, scope,
+ * It contains only JSON-safe values: clients never receive a live tool,
  * credential, or runtime object.
  */
 export const DESKTOP_CONSOLE_SCHEMA_VERSION = 1 as const;
@@ -66,14 +66,11 @@ export interface DesktopConsoleSession {
   /** Original durable conversation, when this engine resumes saved work. */
   savedId?: string;
   id: string;
-  target: string;
   role: DesktopConsoleRole;
   autonomyMode: DesktopConsoleAutonomyMode;
   /** Built-in web search only; not an internet access firewall. */
   webSearchEnabled?: boolean;
   workerPolicy?: ConsoleWorkerPolicy;
-  scopeConfigured: boolean;
-  localScopeConfigured: boolean;
   status: DesktopConsoleSessionStatus;
   createdAt: string;
   updatedAt: string;
@@ -150,7 +147,7 @@ export interface DesktopConsoleOperatorQuestion {
   allowCustom?: boolean;
 }
 
-export type DesktopConsoleDecisionKind = "tool" | "scope" | "local-scope" | "audit-escalation" | "operator-question";
+export type DesktopConsoleDecisionKind = "tool" | "operator-question";
 
 export interface DesktopConsoleDecision {
   id: string;
@@ -158,21 +155,13 @@ export interface DesktopConsoleDecision {
   title: string;
   detail: string;
   call?: DesktopConsoleToolCall;
-  requestedUrls?: string[];
-  requestedPath?: string;
   questions?: DesktopConsoleOperatorQuestion[];
   risk?: { level: "destructive" | "unknown"; category?: string };
   reason?: string;
-  unresolvedTargets?: string[];
-  currentScope?: ConsoleScope | null;
-  currentScopePath?: string;
   ownerId?: string;
   context?: {
-    target: string;
     role: DesktopConsoleRole;
     autonomyMode: DesktopConsoleAutonomyMode;
-    scopeEnforcement: ConsoleScopeEnforcement;
-    localScopePath?: string;
   };
 }
 
@@ -259,19 +248,6 @@ export interface ConsoleRuntimeSnapshot {
   contextWindowTokens: number | null;
 }
 
-export interface ConsoleScope {
-  in_scope?: string[];
-  out_of_scope?: string[];
-  attribution?: { headers?: Record<string, string>; user_agent_token?: string };
-}
-
-export interface ConsoleScopeEnforcement {
-  pluginId: string;
-  enabled: boolean;
-  projectPath: string;
-  message: string;
-}
-
 /** Operator-owned ceilings for delegated workers; never grants execution authority. */
 export interface ConsoleWorkerPolicy {
   allowedTools?: string[];
@@ -285,9 +261,7 @@ export interface ConsoleSessionConfiguration {
   modelSource?: { kind: "local"; grantId: string };
   workspacePath?: string;
   title?: string;
-  target?: string;
   autonomyMode?: DesktopConsoleAutonomyMode;
-  scope?: ConsoleScope | null;
   runtime?: ConsoleRuntimeSelection;
 }
 
@@ -402,7 +376,6 @@ export interface ConsoleSavedSession {
   cwd: string;
   messageCount: number;
   preview: string;
-  target?: string;
   model?: string;
   mode?: string;
   summary?: string;
@@ -419,9 +392,6 @@ export interface ConsoleSessionSnapshot {
   queuedMessages: ConsoleQueuedMessage[];
   runtime: ConsoleRuntimeSnapshot | null;
   execution?: ConsoleExecutionSnapshot;
-  scope: ConsoleScope | null;
-  scopeEnforcement: ConsoleScopeEnforcement;
-  localScopePath?: string;
   workspacePath?: string;
   usage: { inputTokens: number; outputTokens: number; costUsd?: number; costKind?: "estimated" | "reported"; costUnavailable?: boolean };
   /** Lessons supplied to the latest model request, not an assertion of reliance. */
@@ -459,11 +429,9 @@ export interface ConsoleCreateSessionInput {
   /** Link this session to an existing parent session (Sentinel activation to home mission). */
   parentSessionId?: string;
   modelSource?: { kind: "local"; grantId: string };
-  target?: string;
   role?: DesktopConsoleRole;
   autonomyMode?: DesktopConsoleAutonomyMode;
   title?: string;
-  scope?: ConsoleScope;
   runtime?: ConsoleRuntimeSelection;
   findingId?: string;
   findingIntent?: "investigate" | "verify" | "draft_fix" | "impact";

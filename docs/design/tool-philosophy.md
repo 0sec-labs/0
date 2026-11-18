@@ -20,7 +20,7 @@ up"). The evidence and the per-tool table are in
    operator enabled it. A tool nobody references is deleted, not hidden.
 5. **Verify before claiming.** `done` is a claim. "Verified" is set by harness
    code (the verifier gate), never by a tool the model can call.
-6. **Fewer tools never means weaker guards.** Target scope, budget and
+6. **Fewer tools never means weaker guards.** Budget and
    "ask before running commands" are enforced at dispatch and in the executor,
    not in the prompt and not by parsing shell text. There is one mode (shell
    access); there is no read-only variant. The shell's scope check reads URLs from the command text, so
@@ -35,7 +35,7 @@ up"). The evidence and the per-tool table are in
 ## How to add a pack
 
 1. Register the tool definition and handler as today (the per-domain file under
-   `packages/engine/src/agent/tools/` and `dispatch.ts`). Gating (role, scope,
+   `packages/engine/src/agent/tools/` and `dispatch.ts`). Gating (role,
    feature flag) stays where it is; a pack never grants authority.
 2. Add the tool name to one pack in `TOOL_PACKS`
    (`packages/engine/src/agent/toolset.ts`), or create a new pack. A name may live

@@ -128,11 +128,6 @@ export interface RuntimeContext {
   mcp?: {
     enableTargetTools?: boolean;
     dbPath?: string;
-    scopeFile?: string;
-    rateLimit?: string;
-    allowScanners?: boolean;
-    attributionHeaders?: string[];
-    attributionUaToken?: string;
     auth?: AuthConfig;
   };
 }

@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import type { NativeMessage } from "../../runtime/types.js";
 import type { ToolContext } from "../types.js";
-import { getLocalSourceBoundary } from "../../scope/local-source-boundary.js";
 import { features } from "../features.js";
 import { currentRunContribution } from "../../telemetry/run-contribution.js";
 import { loadJournal, rehydrateContext, renderSeedMessages } from "../journal/index.js";
@@ -133,9 +132,6 @@ export function buildContinuePrompt(config: NativeAgentConfig, turnCount: number
 }
 
 function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
-  if (config.consoleSession && /^https?:\/\//i.test(config.target) && !getLocalSourceBoundary()) {
-    return "Continue the delegated web task using only the provided tools and inherited scope. Report observations and untested coverage accurately. Reply without a tool call when the assigned task is complete or blocked; a local workspace does not require source-code inspection for a web task.";
-  }
   const scopedSourceAudit =
     typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
 

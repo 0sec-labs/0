@@ -1,5 +1,5 @@
 // `0 skills add <source>` and `0 skills extensions ...`: the CLI adapter over the engine's extension service.
-// An extension connects 0 to a service or tool (a connector, MCP servers) or adds rules (a scope policy, a verifier);
+// An extension connects 0 to a service or tool (a connector, MCP servers) or adds rules (a verifier);
 // it is a git folder pinned by commit and may come with a skill, scripts run through bash. This file only parses arguments and prints: every
 // decision (pin, diff, approval, tamper check, env allowlist) lives in the engine.
 import { existsSync } from "node:fs";

@@ -34,7 +34,7 @@ export function mcpFolder(name: string, s: LegacyMcp): FolderFile[] {
 
 /** Plain text only: a SKILL.md folder with no script, no executable bit, no environment, no MCP server, no service. Safe to enable without a prompt. */
 export const isPlainSkill = (c: ReturnType<typeof capabilitiesOf>): boolean =>
-  c.runs.length === 0 && c.env.length === 0 && c.mcp.length === 0 && c.service === null && c.scope === null && c.verify === null && c.bins.length === 0 && c.ignored.length === 0;
+  c.runs.length === 0 && c.env.length === 0 && c.mcp.length === 0 && c.service === null && c.verify === null && c.bins.length === 0 && c.ignored.length === 0;
 
 /** `existing`: import keys already recorded by an earlier run (key -> entry name), so a forced re-run adds nothing twice. */
 export function planImport(data: LegacyData, taken: ReadonlySet<string>, now: string, existing: ReadonlyMap<string, string> = new Map()): ImportPlan {

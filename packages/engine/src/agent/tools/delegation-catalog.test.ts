@@ -6,8 +6,8 @@ import { TOOL_DEFINITIONS } from "./index.js";
 describe("public delegation catalog", () => {
   it("offers one delegation tool, spawn_agent, in every audit and review role", () => {
     for (const role of ["audit", "review"]) {
-      for (const hasScope of [false, true]) {
-        const names = getToolsForRole(role, { hasScope }).map(tool => tool.name);
+      for (const sourceAudit of [false, true]) {
+        const names = getToolsForRole(role, { sourceAudit }).map(tool => tool.name);
         expect(names).toContain("spawn_agent");
         for (const gone of ["spawn_agents", "spawn_persistent_agent", "monitor"]) expect(names).not.toContain(gone);
       }

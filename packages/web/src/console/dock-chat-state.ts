@@ -90,7 +90,7 @@ export function reconcileDockChatState({
     else remap.delete(reference.id);
     if (seen.has(session.id)) continue;
     seen.add(session.id);
-    const title = (session.title?.trim() || session.target?.trim() || reference.title?.trim() || newMission)
+    const title = (session.title?.trim() || reference.title?.trim() || newMission)
       .replace(/[\u0000-\u001f\u007f]/g, " ")
       .slice(0, 200);
     const savedId = session.savedId || reference.savedId;

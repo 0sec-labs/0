@@ -15,7 +15,7 @@ describe("sentinel presets", () => {
       const parsed = parseSentinelCreate(preset.sentinel);
       expect(parsed.role).toBe(preset.id);
       expect(parsed.status).toBe("paused");
-      expect(parsed.scope.production).toBe(false);
+      expect(parsed).not.toHaveProperty("scope");
       expect(parsed).not.toHaveProperty("autonomy");
       expect(parsed).not.toHaveProperty("toolAccess");
     }

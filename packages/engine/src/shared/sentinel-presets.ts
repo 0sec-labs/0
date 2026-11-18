@@ -36,13 +36,13 @@ const make = (preset: Omit<SentinelPreset, "sentinel"> & { skills: string[]; ins
 
 export const SENTINEL_PRESETS: readonly SentinelPreset[] = [
   make({
-    id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Scheduled, scoped, non-destructive tests of web and API targets.",
-    job: "Run scheduled, scoped, non-destructive penetration tests of authorized web and API targets.",
-    requiredInputs: ["target URLs", "scope and exclusions", "optional test credentials"],
+    id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Scheduled, non-destructive tests of web and API targets.",
+    job: "Run scheduled, non-destructive penetration tests of authorized web and API targets.",
+    requiredInputs: ["target URLs", "exclusions", "optional test credentials"],
     expectedOutputs: ["Findings with proof of concept", "Report", "Trend notes"],
     skills: ["jwt-attacks", "graphql-introspection", "blind-exploitation", "ssrf-bypass", "sqli-advanced"],
-    instructions: "Test only targets listed in scope, at low request rates, without destructive actions. Verify every finding with a minimal proof of concept before reporting. Stop and ask when scope is unclear.",
-    suggestedAutomations: [{ name: "Weekly scoped penetration test", templateId: "scoped-penetration-test", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }, { name: "API authorization review", templateId: "api-security", trigger: { kind: "manual" }, runIn: "new-mission" }],
+    instructions: "Test only the targets named in AGENTS.md, at low request rates, without destructive actions. Verify every finding with a minimal proof of concept before reporting. Stop and ask when the targets are unclear.",
+    suggestedAutomations: [{ name: "Weekly penetration test", templateId: "scoped-penetration-test", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }, { name: "API authorization review", templateId: "api-security", trigger: { kind: "manual" }, runIn: "new-mission" }],
   }),
   make({
     id: "pr-security-reviewer", name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" }, description: "Reviews each pull request diff for vulnerabilities and drafts comments.",
@@ -82,20 +82,20 @@ export const SENTINEL_PRESETS: readonly SentinelPreset[] = [
   }),
   make({
     id: "attack-surface-monitor", name: "Attack-surface Monitor", avatar: { color: "#22c55e", icon: "radar" }, description: "Re-maps your external surface daily and reports what is new.",
-    job: "Re-map the in-scope external surface daily and report new hosts, ports and endpoints.",
-    requiredInputs: ["domains in scope", "exclusions"],
+    job: "Re-map the external surface daily and report new hosts, ports and endpoints.",
+    requiredInputs: ["domains to monitor", "exclusions"],
     expectedOutputs: ["Surface diff", "New-exposure findings"],
     skills: ["attack-surface-diff"],
-    instructions: "Enumerate only in-scope domains passively. Compare with the last snapshot in NOTES.md, report only new exposure, then update the snapshot.",
+    instructions: "Enumerate only the domains named in AGENTS.md, passively. Compare with the last snapshot in NOTES.md, report only new exposure, then update the snapshot.",
     suggestedAutomations: [{ name: "Daily surface check", templateId: "web-configuration", trigger: { kind: "schedule", cadence: "daily" }, runIn: "sentinel-home" }],
   }),
   make({
     id: "cloud-posture-auditor", name: "Cloud Posture Auditor", avatar: { color: "#14b8a6", icon: "cloud" }, description: "Reviews infrastructure-as-code in your repos for misconfigurations.",
-    job: "Review infrastructure-as-code in the in-scope repositories for cloud misconfigurations.",
+    job: "Review infrastructure-as-code in the repositories you name for cloud misconfigurations.",
     requiredInputs: ["repositories containing IaC"],
     expectedOutputs: ["Misconfiguration findings with corrected snippets"],
     skills: ["cloud-iac-review", "seedless-depth-review"],
-    instructions: "Review IaC files in the in-scope repositories read-only. Never connect to a cloud account, never use cloud credentials and never run mutating commands. Include a corrected snippet with each finding.",
+    instructions: "Review IaC files in the named repositories read-only. Never connect to a cloud account, never use cloud credentials and never run mutating commands. Include a corrected snippet with each finding.",
     suggestedAutomations: [{ name: "Weekly posture review", templateId: "repository-review", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }],
   }),
   make({
@@ -110,10 +110,10 @@ export const SENTINEL_PRESETS: readonly SentinelPreset[] = [
   make({
     id: "regression-tester", name: "Web Regression Tester", avatar: { color: "#06b6d4", icon: "flask" }, description: "Re-checks known findings and API spec drift to catch regressions.",
     job: "Re-test previously confirmed web findings and compare the live API with its spec to catch regressions.",
-    requiredInputs: ["target URLs in scope", "findings or an OpenAPI spec"],
+    requiredInputs: ["target URLs", "findings or an OpenAPI spec"],
     expectedOutputs: ["Fixed or regressed verdict per finding", "Spec drift report"],
     skills: [],
-    instructions: "Replay only existing proofs of concept against in-scope targets, at low request rates and without destructive actions. Report each finding as still present, fixed or regressed, with evidence. Stop and ask when scope is unclear.",
+    instructions: "Replay only existing proofs of concept against the named targets, at low request rates and without destructive actions. Report each finding as still present, fixed or regressed, with evidence. Stop and ask when the targets are unclear.",
     suggestedAutomations: [{ name: "Weekly regression pass", templateId: "api-security", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }, { name: "Verify a finding", templateId: "finding-verification", trigger: { kind: "manual" }, runIn: "new-mission" }],
   }),
   make({

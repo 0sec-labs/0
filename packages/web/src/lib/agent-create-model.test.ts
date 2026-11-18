@@ -41,7 +41,7 @@ describe("create request", () => {
   });
   it("carries the preset, folder, computer and model", () => {
     const draft = { ...choosePreset(newAgentDraft({ folder: "/work/app" }), preset), computerId: "mini", model: { providerId: "openai", model: "gpt-6" } };
-    expect(createRequest(draft)).toEqual({ ok: true, body: { name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, status: "active", preset: "pen-tester", scope: { repos: ["/work/app"] }, hostId: "mini", model: { providerId: "openai", model: "gpt-6" } } });
+    expect(createRequest(draft)).toEqual({ ok: true, body: { name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, status: "active", preset: "pen-tester", folder: "/work/app", hostId: "mini", model: { providerId: "openai", model: "gpt-6" } } });
   });
   it("never sends automations or triggers", () => {
     const result = createRequest(choosePreset(newAgentDraft(), preset));

@@ -33,11 +33,11 @@ describe("manifest read order", () => {
     expect(r.value.ignored).toEqual(["hooks", "commands"]);
   });
 
-  it("plugin.json supports the \"0\" object: connector, scope, verifier, requires", () => {
-    const r = parse({ "plugin.json": JSON.stringify({ name: "svc", "0": { connector: { service: "jira", auth: "token", env: ["JIRA_TOKEN"], hosts: ["example.atlassian.net"], access: { read: ["issues"], write: [] } }, scope: "scope.json", verify: "scripts/verify.sh", requires: { bins: ["gh"], env: ["GITHUB_TOKEN"], "0": ">=0.36" } } }), "scope.json": "{}", "scripts/verify.sh": { content: "#!/bin/sh\n", exec: true } });
+  it("plugin.json supports the \"0\" object: connector, verifier, requires", () => {
+    const r = parse({ "plugin.json": JSON.stringify({ name: "svc", "0": { connector: { service: "jira", auth: "token", env: ["JIRA_TOKEN"], hosts: ["example.atlassian.net"], access: { read: ["issues"], write: [] } }, verify: "scripts/verify.sh", requires: { bins: ["gh"], env: ["GITHUB_TOKEN"], "0": ">=0.36" } } }), "scripts/verify.sh": { content: "#!/bin/sh\n", exec: true } });
     expect(r.ok).toBe(true); if (!r.ok) return;
     expect(r.value.connector).toMatchObject({ service: "jira", hosts: ["example.atlassian.net"], read: ["issues"] });
-    expect(r.value.scope).toBe("scope.json"); expect(r.value.verify).toBe("scripts/verify.sh");
+    expect(r.value.verify).toBe("scripts/verify.sh");
     const caps = capabilitiesOf(r.value);
     expect(caps.env).toEqual(["GITHUB_TOKEN", "JIRA_TOKEN"]); expect(caps.runs).toContain("scripts/verify.sh");
   });
@@ -50,7 +50,7 @@ describe("manifest read order", () => {
   it("refuses the old executable format, traversal, loader variables and bad names", () => {
     const legacy = parse({ "plugin.json": JSON.stringify({ id: "old", tools: [] }), "plugin.js": "x" });
     expect(!legacy.ok && legacy.error.code).toBe("legacy_executable");
-    expect(parse({ "plugin.json": JSON.stringify({ name: "a", "0": { scope: "../etc/passwd" } }) }).ok).toBe(false);
+    expect(parse({ "plugin.json": JSON.stringify({ name: "a", "0": { verify: "../etc/passwd" } }) }).ok).toBe(false);
     expect(parse({ "plugin.json": JSON.stringify({ name: "a", "0": { requires: { env: ["LD_PRELOAD"] } } }) }).ok).toBe(false);
     expect(parse({ "extension.json": JSON.stringify({ name: "Bad Name" }) }).ok).toBe(false);
     expect(parse({ "README.md": "nothing" }).ok).toBe(false);

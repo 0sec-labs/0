@@ -190,7 +190,7 @@ describe("Sentinel scheduler", () => {
 });
 
 describe("review gate", () => {
-  it("blocks autonomous runs after a scope or model change until acknowledged; scheduled runs use the pinned model", async () => {
+  it("blocks autonomous runs after a model change until acknowledged; scheduled runs use the pinned model", async () => {
     const f = fixture();
     const { id } = await f.armed({ model: { providerId: "anthropic", model: "claude-sonnet-5" } });
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
@@ -199,7 +199,7 @@ describe("review gate", () => {
     f.emit("mission-2", { type: "turn-complete", stopReason: "end_turn" });
     const current = await f.view(id);
     expect(current.attention.needsReview).toBe(false);
-    const patched = await f.call("PATCH", `${P}/${id}`, { version: current.version, model: { providerId: "openai", model: "other" }, scope: { targets: ["https://prod.example"], production: true } });
+    const patched = await f.call("PATCH", `${P}/${id}`, { version: current.version, model: { providerId: "openai", model: "other" } });
     expect(patched.status).toBe(200);
     expect((await f.view(id)).attention).toMatchObject({ needsReview: true, needsYou: true });
     vi.setSystemTime(T0 + 10 * MIN + 1_000);
@@ -459,7 +459,7 @@ describe("GitHub pull request polling", () => {
     expect(f.missions.send.mock.calls.filter(call => call[1].includes("UNTRUSTED FORK PULL REQUEST"))).toHaveLength(1);
   });
 
-  it("runs pull request reviews scoped to the repository checkout, with no access setting, and says where it runs", async () => {
+  it("runs pull request reviews in the repository checkout, with no access setting, and says where it runs", async () => {
     let listing = [pr(1, "aaa")];
     const { f, id } = await armedPr(gh(() => listing), {}, { checkouts: { "o/r": "/work/o-r" } });
     await poll(f, 0);
@@ -470,7 +470,7 @@ describe("GitHub pull request polling", () => {
     expect(create).not.toHaveProperty("autonomyMode");
     expect(create).not.toHaveProperty("workerPolicy");
     const [run] = await f.activations(id);
-    expect(run?.note).toBe("Runs on this host: no sandbox is enabled. Scope: the checked-out folder /work/o-r.");
+    expect(run?.note).toBe("Runs on this host: no sandbox is enabled. Folder: the checked-out folder /work/o-r.");
   });
 
   it("notes the sandbox when the SmolVM execution profile is on, and a missing checkout", async () => {
@@ -626,7 +626,7 @@ describe("persistent thread delivery (flag on)", () => {
     expect((await f.activations(id))).toHaveLength(0);
   });
 
-  it("never reuses a thread configured with an older scope, model or skills: the gateway pins those at creation, so a changed Sentinel gets a fresh thread", async () => {
+  it("never reuses a thread configured with an older folder, model or skills: the gateway pins those at creation, so a changed Sentinel gets a fresh thread", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();
     await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
@@ -634,7 +634,7 @@ describe("persistent thread delivery (flag on)", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(1);
     expect(f.store.get(id)!.homeFingerprint).toBeTruthy();
     let minute = 10;
-    for (const change of [{ scope: { targets: ["https://narrower.example.com"] } }, { skills: [] }]) {
+    for (const change of [{ folder: "/work/other" }, { skills: [] }]) {
       const before = f.missions.create.mock.calls.length;
       const { version } = await f.view(id);
       expect((await f.call("PATCH", `${P}/${id}`, { version, ...change })).status).toBe(200);
@@ -646,7 +646,7 @@ describe("persistent thread delivery (flag on)", () => {
       expect(missionId).toBe(`mission-${before + 1}`);
       expect(text).toContain("fresh thread configured with the current ones");
       expect(text).toContain("Your saved notes");
-      expect(f.missions.create.mock.calls.at(-1)![0]).toMatchObject(change.skills ? { skillAllowList: [] } : { scope: { in_scope: ["https://narrower.example.com"] } });
+      expect(f.missions.create.mock.calls.at(-1)![0]).toMatchObject(change.skills ? { skillAllowList: [] } : { workspacePath: "/work/other" });
       f.emit(missionId, { type: "turn-complete", stopReason: "end_turn" });
     }
   });

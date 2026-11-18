@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 export function pendingHomeSnapshot(id: string): ConsoleSessionSnapshot {
   const now = new Date(0).toISOString();
   return {
-    session: { id, target: "", role: "audit", autonomyMode: "changes", scopeConfigured: false, localScopeConfigured: false, status: "ready", createdAt: now, updatedAt: now, messageCount: 0 },
+    session: { id, role: "audit", autonomyMode: "changes", status: "ready", createdAt: now, updatedAt: now, messageCount: 0 },
     title: "",
     cursor: 0,
     messages: [],
@@ -20,8 +20,6 @@ export function pendingHomeSnapshot(id: string): ConsoleSessionSnapshot {
     workers: [],
     queuedMessages: [],
     runtime: null,
-    scope: null,
-    scopeEnforcement: { pluginId: "", enabled: false, projectPath: "", message: "" },
     usage: { inputTokens: 0, outputTokens: 0 },
     lastOutcome: null,
     compaction: null,

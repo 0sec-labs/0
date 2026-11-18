@@ -1134,7 +1134,7 @@ Commands:
 ### 0 sentinels acknowledge (hidden)
 Usage: 0 sentinels acknowledge [options] <id>
 
-Mark changed scope, model or tools as reviewed
+Mark changed model or tools as reviewed
 
 Options:
   --json            Print machine-readable JSON
@@ -1277,7 +1277,7 @@ Usage: 0 sentinels resume [options] <id>
 Resume a paused Sentinel
 
 Options:
-  --acknowledge     Also acknowledge review of changed scope, model or tools
+  --acknowledge     Also acknowledge review of changed model or tools
   --json            Print machine-readable JSON
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
@@ -2027,8 +2027,6 @@ Options:
   --model <model>            Model for this thread
   --effort <level>           Reasoning effort: minimal, low, medium, high, xhigh
   --folder <path>            Folder the thread works in
-  --target <target>          Authorized target
-  --scope <path>             Scope policy JSON file
   --skill <id>               Built-in skill to follow; if it declares a check, the harness runs it
                              and the thread cannot claim Verified without it
   --title <title>            Thread title
@@ -2073,8 +2071,6 @@ Options:
   --engine-token-env <name>     Environment variable holding the engine bearer credential (32–4096
                                 characters)
   --engine-workspace <path>     Engine-owned authorized workspace for persistent workflow calls
-  --engine-scope <path>         Engine-owned scope JSON for persistent live-target workflows
-  --engine-target <target>      Restrict persistent workflow calls to this target
   --engine-allow-apply          Admit explicitly approved patch application in persistent workflow
                                 calls
   --engine-time-cap <ms>        Server workflow deadline ceiling (default 600000 ms)

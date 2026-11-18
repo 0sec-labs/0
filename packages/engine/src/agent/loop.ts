@@ -74,12 +74,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     scopePath: config.scopePath,
     persistFindings: db !== null,
     authConfig: config.authConfig,
-    scope: config.scope,
-    rateLimiter: config.rateLimiter,
     webSearchEnabled: config.webSearchEnabled,
-    allowScanners: config.allowScanners,
-    attribution: config.attribution,
-    engagement: config.engagement,
     recentToolResultTexts,
     costLedger: config.costLedger as ScanCostLedger | undefined,
     costCeilingUsd: config.costCeilingUsd,
@@ -89,7 +84,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   };
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
+  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { sourceAudit: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
   toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&

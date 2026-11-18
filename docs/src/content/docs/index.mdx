@@ -85,7 +85,7 @@ Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings 
 The **Finish setting up** card in the sidebar tracks steps 2 and 3.
 
 :::caution
-Only point 0 at systems you own or are authorized to test. See [Scope](/configuration/#scope).
+Only point 0 at systems you own or are authorized to test.
 :::
 
 ## The words 0 uses
@@ -93,10 +93,10 @@ Only point 0 at systems you own or are authorized to test. See [Scope](/configur
 | Term | Meaning |
 | --- | --- |
 | **Thread** | A conversation with the agent. You describe a job; it plans, runs tools and records findings. See [Threads](/threads/). |
-| **Sentinel** | A named, standing job with a scope and a schedule. It runs threads on a schedule, on a pull request or by hand. See [Sentinels](/sentinels/). |
+| **Sentinel** | A named, standing job with a schedule. It runs threads on a schedule, on a pull request or by hand. See [Sentinels](/sentinels/). |
 | **Computer** | The machine where threads run and tools execute: this one, a VM or a remote server. See [Computers](/computers/). |
 | **Memory** | Short notes 0 remembers across threads, per folder or everywhere. See [Threads](/threads/#memory). |
-| **Folder** | The directory a thread works in. It is always allowed; scope applies to everything else. |
+| **Folder** | The directory a thread works in. |
 | **Skill** | A folder of instructions the agent loads when a task needs it. Not code. See [Skills](/skills/). |
 | **Extension** | An installable git folder, pinned to a commit, that can bundle skills, scripts, MCP servers and a connection. See [Extensions](/extensions/). |
 | **Finding** | A security issue with evidence. One without reproduced evidence is a lead. See [Findings](/findings/). |
@@ -124,7 +124,6 @@ Start with `0 config doctor`. It checks the runtime, your model provider and the
 - **API provider `missing` or `bad`.** No usable model credential was found. Connect one in **Settings → Models** or export a key. `configured` means a credential was found, not that it works; the first model request tests access and quota. See [Models](/models/).
 - **A `0 ...` variable will not export.** Some shells reject names that start with a digit. Use `env ZERO_...=... 0 ...`.
 - **Cost ceiling cannot be enforced.** A model with no known price counts as unknown, not zero, so a ceiling cannot bound it. Also set a time limit.
-- **Target is out of scope.** See [Scope](/configuration/#diagnose-a-scope-refusal).
 - **`database is locked`.** Two processes write the same SQLite file. Stop the other one. Do not delete a live database. `0 config doctor --fix` moves a damaged file aside and creates a fresh one; it does not recover rows, so back up first.
 - **The app does not open.** Use `0 --no-open` and open the printed URL. On macOS, the first access to Desktop, Documents or Downloads makes macOS ask for permission; if you declined, enable the app that runs 0 under **System Settings → Privacy & Security → Files & Folders**.
 - **Docker prints help and exits.** The image runs `0 --help` by default and mounts nothing. Pass your folder, key and a command (see [Server mode and Docker](/server-mode/)).
@@ -139,7 +138,7 @@ Still stuck? Run `0 config doctor` and [open an issue](https://github.com/0sec-l
   <LinkCard title="Sentinels" description="Standing jobs on a schedule or pull request." href="/sentinels/" />
   <LinkCard title="Extensions" description="Skills, MCP servers and connections." href="/extensions/" />
   <LinkCard title="Server mode and Docker" description="Run 0 for a team on a server." href="/server-mode/" />
-  <LinkCard title="Configuration" description="Settings, scope, telemetry and updates." href="/configuration/" />
+  <LinkCard title="Configuration" description="Settings, telemetry and updates." href="/configuration/" />
 </CardGrid>
 
 <div className="docs-resources">

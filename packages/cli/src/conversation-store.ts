@@ -17,7 +17,7 @@ export function matchConversation(document: ConversationDocument, query: string)
   const recordedTitle = line(cleanConversationText(document.title)).slice(0, 200);
   const title = !recordedTitle || /^(new chat|untitled chat)$/i.test(recordedTitle) ? text.slice(0, 120) : recordedTitle;
   const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
-  const metadata = [document.session.id, document.session.cwd, document.session.target, document.session.preview, document.session.summary]
+  const metadata = [document.session.id, document.session.cwd, document.session.preview, document.session.summary]
     .map(value => value ? cleanConversationText(value) : "").join("\n").toLocaleLowerCase();
   const searchableTitle = title.toLocaleLowerCase();
   const searchableText = text.toLocaleLowerCase();

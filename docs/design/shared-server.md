@@ -44,7 +44,6 @@ deployment, run from the private enterprise repository.
 | Versioned format | Findings API envelope, CI `run.json` and `0 reports export` output carry `schemaVersion: 1`; `report.json` itself is unversioned (tests pin its bytes) | `findings-api.md`, `scripts/run-github-action.sh`, `packages/engine/src/shared/share-safe.ts` |
 | Teams | `0 team init`, `0 web --team-config`; owner/editor/viewer; scrypt accounts in a JSON file; OIDC; sessions in memory | `packages/cli/src/web/team-*.ts` |
 | Remote engines | The console dials out to engines with a static bearer token per engine; engines never dial in | `backend-connections.ts` |
-| Scope | `ScopePolicy` matcher with an injectable `opts.scope`; off unless the scope plugin is enabled | `packages/engine/src/scope` |
 | Telemetry | Level defaults to `usage`; only sends when a cloud token is configured (no credentials is a silent no-op; verified in analytics-pipeline.ts and cloud/credentials.ts) | `telemetry/analytics-level.ts` |
 
 ## Gaps
@@ -119,12 +118,12 @@ A versioned JSON document for one run, derived from the Findings API shape.
 
 ## 4. Policy and approved targets
 
-- A signed, versioned document: `{ policyId, sequence, issuedAt, expiresAt, scope, costCeilingUsd, modelAllowlist }`.
+- A signed, versioned document: `{ policyId, sequence, issuedAt, expiresAt, costCeilingUsd, modelAllowlist }`.
 - Signature (for example Ed25519) is checked against a key pinned in the binary, with a rotation plan; cache the last-known-good copy at `~/.0/policy/` (mode 0600) and reject lower sequence numbers.
-- **It can only tighten.** It may intersect scope, lower ceilings and restrict models. It must never widen anything.
-- Feed it through the existing `opts.scope` seam so each run sees one pinned snapshot; record `policyId` and hash in the run and the envelope.
+- **It can only tighten.** It may lower ceilings and restrict models. It must never widen anything.
+- Each run sees one pinned snapshot; record `policyId` and hash in the run and the envelope.
 - Offline behaviour: use the cache until it expires, then fail closed unless the operator chooses otherwise.
-- **Honest limit:** on a machine the user controls, a user can disable the scope plugin or edit local files. Policy is advisory unless enforcement is mandatory. State this in the docs. **Open:** mandatory enforcement mode for managed environments.
+- **Honest limit:** on a machine the user controls, a user can edit local files. Policy is advisory unless enforcement is mandatory. State this in the docs. **Open:** mandatory enforcement mode for managed environments.
 
 ## 5. Telemetry and privacy
 

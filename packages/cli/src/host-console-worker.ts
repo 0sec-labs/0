@@ -1,6 +1,6 @@
 import { createReadStream, createWriteStream, writeSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { ScopePolicy, withScopeEnforcement, eventBus, TOOL_DEFINITIONS, observeExecutionResources,
+import { eventBus, TOOL_DEFINITIONS, observeExecutionResources,
   type ConsoleSession, type ConsoleSessionConfig, type McpToolHost } from "@0/engine";
 import { VERSION, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
@@ -68,8 +68,7 @@ export async function runHostConsoleWorker(): Promise<void> {
     emit({ type: "snapshot", value: {
       scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools,
       messages: session.messages, approvals: session.approvals, webSearchEnabled: session.webSearchEnabled,
-      target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath,
-      scopeEnforcement: session.scopeEnforcement, sourceContext: session.sourceContext,
+      sourceContext: session.sourceContext,
       ...(checkpoint ? { checkpoint } : {}), active,
     } });
   };
@@ -109,13 +108,8 @@ export async function runHostConsoleWorker(): Promise<void> {
         Object.assign(process.env, bootstrap.executionEnvironment);
         runtime = createWebConsoleRuntimeFromBootstrap(bootstrap.runtime).runtime;
         const config = { ...bootstrap.config, scanId: bootstrap.sessionId, runtime } as unknown as Omit<ConsoleSessionConfig, "db">;
-        if (bootstrap.config.scope) config.scope = ScopePolicy.fromJson(bootstrap.config.scope as Parameters<typeof ScopePolicy.fromJson>[0]);
-        const direct = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"];
+        const direct = ["approveTool", "askOperator"];
         for (const name of direct) if (bootstrap.callbacks.includes(name)) (config as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => invoke(name, args);
-        if (bootstrap.callbacks.includes("requestScope")) config.requestScope = async request => {
-          const value = await invoke("requestScope", [request]) as { target: string; scope: Parameters<typeof ScopePolicy.fromJson>[0] } | null;
-          return value ? { ...value, scope: ScopePolicy.fromJson(value.scope) } : null;
-        };
         if (bootstrap.callbacks.includes("historyList")) config.conversationHistory = {
           list: (...args) => invoke("historyList", args) as ReturnType<NonNullable<ConsoleSessionConfig["conversationHistory"]>["list"]>,
           read: (...args) => invoke("historyRead", args) as ReturnType<NonNullable<ConsoleSessionConfig["conversationHistory"]>["read"]>,
@@ -132,7 +126,7 @@ export async function runHostConsoleWorker(): Promise<void> {
         if (bootstrap.callbacks.includes("workflowInvoke")) config.workflowLifecycle = { invoke: (...args: unknown[]) => invoke("workflowInvoke", args) };
         mcpHost = connectExtensionMcp(await connectConsoleMcp(config.workspaceRoot ?? process.cwd()), config.workspaceRoot ?? process.cwd());
         config.mcpHost = mcpHost; config.extensionRuns = connectExtensionRuns(config.workspaceRoot ?? process.cwd());
-        session = withScopeEnforcement(bootstrap.scopeEnforcement, () => createHostLocalConsoleSession(config, bootstrap.dbPath));
+        session = createHostLocalConsoleSession(config, bootstrap.dbPath);
         await session.ready; snapshot(); emit({ type: "ready" }); return;
       }
       if (!session || closing || frame.type !== "request" || typeof frame.op !== "string") throw new Error("Invalid host session request");
@@ -146,7 +140,7 @@ export async function runHostConsoleWorker(): Promise<void> {
             if (!["onAssistantDelta", "onReasoningDelta", "onRetry"].includes(name)) snapshot();
           }]));
           try {
-            const pending = withScopeEnforcement(bootstrap.scopeEnforcement, () => session!.send(frame.text as string, render, { signal: turn!.signal, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"], generateTitle: frame.generateTitle === true }));
+            const pending = session!.send(frame.text as string, render, { signal: turn!.signal, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"], generateTitle: frame.generateTitle === true });
             snapshot(); value = await pending;
           } finally { active = false; turn = undefined; }
           break;
@@ -168,10 +162,6 @@ export async function runHostConsoleWorker(): Promise<void> {
         case "workerPolicy": {
           if (active || !session.setWorkerPolicy) throw new Error("Worker policy requires an idle session with policy support");
           session.setWorkerPolicy(frame.value === null ? undefined : frame.value as Parameters<NonNullable<ConsoleSession["setWorkerPolicy"]>>[0]); break;
-        }
-        case "configure": {
-          const selected = frame.value as { target?: string; scope?: Parameters<typeof ScopePolicy.fromJson>[0] | null };
-          session.configureEngagement({ target: selected.target, ...(selected.scope === undefined ? {} : { scope: selected.scope ? ScopePolicy.fromJson(selected.scope) : null }) }); break;
         }
         case "workspace": if (typeof frame.value !== "string") throw new Error("Invalid workspace"); else { session.configureWorkspace(frame.value); break; }
         case "clear": session.clearConversation(); break;

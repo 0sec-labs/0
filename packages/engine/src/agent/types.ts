@@ -2,12 +2,6 @@ import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import type { WorkspaceIdentity } from "./workspace-identity.js";
 import type { ApprovalsChoice } from "../shared/approvals.js";
 import type { Finding, AttackResult, TargetInfo, AuthConfig } from "../shared/index.js";
-import type { ScopePolicy } from "../scope/scope.js";
-import type { ScopeEnforcementState } from "../scope/activation.js";
-import type { RateLimiter } from "../scope/rate-limit.js";
-import type { AttributionConfig } from "../scope/attribution.js";
-import type { EngagementPosture } from "../scope/engagement-profile.js";
-import type { EnforcementTracker } from "../scope/enforcement.js";
 import type { LootLedger } from "./loot.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
 import type { ToolHealthTracker } from "./tool-health.js";
@@ -75,7 +69,7 @@ export type ToolRiskLevel = "destructive" | "unknown";
  * boundary — a sibling value, never a mutation of the call. It is
  * PRESENTATION-ONLY: it changes how an approval is surfaced to the operator
  * (a distinct tone + glyph, a deny-first selection) and NEVER whether the gate
- * is raised, what is authorized, or the scope. A `"destructive"` result is a
+ * is raised or what is authorized. A `"destructive"` result is a
  * cue to look carefully, not a claim that every destructive command is caught
  * — obfuscated or unrecognized commands remain `"unknown"` and still gate
  * normally.
@@ -223,24 +217,6 @@ export interface ToolResultMeta {
   // `durationMs` (execution time, header badge) and `exitCode` above are reused.
 }
 
-// ── Console autonomy (scoped source-audit gate) ──
-
-
-/**
- * Payload handed to {@link ToolContext.escalateScopedAudit} when a scoped
- * source audit hits a tool outside the `SCOPED_SOURCE_AUDIT_TOOLS` allow-list
- * in `standard` / `copilot` mode. The console renders this to the operator and
- * resolves to `true` (allow the call, once, and remember it) or `false` (deny,
- * and remember the denial so a retry does not re-prompt). Mirrors the shape of
- * the console's existing scope-request callbacks.
- */
-export interface ScopedAuditEscalationRequest {
-  /** The blocked tool call. */
-  call: ToolCall;
-  /** Human-readable reason the call was blocked (for the operator prompt). */
-  reason: string;
-}
-
 // ── Operator question channel (`ask_operator`) ──
 
 /**
@@ -263,7 +239,7 @@ export interface OperatorQuestionOption {
  * the full prose. When `options` are present the operator picks from them
  * (`multiSelect` allows more than one); `allowCustom` additionally permits a
  * free-text answer. This is an INFORMATION-GATHERING structure only — answering
- * it grants no authority, widens no scope, and approves no tool.
+ * it grants no authority and approves no tool.
  */
 export interface OperatorQuestion {
   header: string;
@@ -349,60 +325,8 @@ export interface AgentConfig {
   attachTargetToolsMcp?: boolean;
   dbPath?: string;
   authConfig?: AuthConfig;
-  /**
-   * Programmatic engagement scope (0#215). When set, every URL the
-   * agent touches — http_request, submit_form, browser navigate, crawl,
-   * shellExec URL extraction, wp_fingerprint, web_search inputs — is
-   * checked against this policy and out-of-scope URLs return as
-   * `ToolResult.error`. Same-origin checks remain enforced ON TOP of
-   * this; scope is additive, never substitutive.
-   */
-  scope?: ScopePolicy;
-  /**
-   * Per-host rate limiter for outbound HTTP. When set, every fetch
-   * chokepoint (`http_request`, `crawl`, `submit_form`, `web_search`,
-   * `wp_fingerprint`) acquires a token before the network call and
-   * pipes the response back via `noteResponse` so 429 honours.
-   * See `scope/rate-limit.ts` (#214).
-   */
-  rateLimiter?: RateLimiter;
-  /**
-   * http_audit enforcement tracker (path allowlist + counters + kill
-   * switch). Present ONLY in `mode: "http_audit"` scans; undefined for
-   * every other mode, leaving behaviour identical to the pre-http_audit
-   * path. When set, the path-prefix allowlist is enforced alongside the
-   * host scope at every fetch chokepoint and the scope/rate counters are
-   * tallied into the report's `enforcement_summary` block.
-   */
-  enforcement?: EnforcementTracker;
-  /**
-   * Generic-scanner-traffic suppression opt-out (0#217). When
-   * scope is loaded the agent refuses to spawn `sqlmap`, `wpscan`,
-   * `nikto`, `gobuster`, `dirb`, `wfuzz`, `ffuf`, and the noisy `nmap -sV` /
-   * `nmap -A` modes — those binaries fingerprint themselves on the
-   * wire and most coordinated-disclosure programs forbid them. Setting
-   * this to `true` disables that gate (use only when the engagement
-   * explicitly permits generic-scanner traffic).
-   */
-  allowScanners?: boolean;
   /** Built-in web search only; does not restrict other network tools. */
   webSearchEnabled?: boolean;
-  /**
-   * Resolved attribution-header config (0#216). When set, every
-   * fetch site merges these headers + applies the User-Agent override on
-   * IN-SCOPE requests. Out-of-scope hosts are never tagged. When `scope`
-   * is also undefined, attribution behaves as opt-in: present here means
-   * the operator explicitly configured it (env or CLI) and wants it on.
-   */
-  attribution?: AttributionConfig;
-  /**
-   * Resolved engagement hardening posture (`scope/engagement-profile.ts`).
-   * Read at the WAF chokepoint to decide whether a blocked response escalates
-   * into the adaptive evasion ladder. When undefined the tool falls back to
-   * resolving the standalone `ZERO_WAF_EVASION` env opt-out, so the default
-   * (ladder enabled) is unchanged.
-   */
-  engagement?: EngagementPosture;
   /**
    * Tool-call dispatch protocol (0#232). When unset or `"json"`, the
    * legacy `TOOL_CALL: <name> {...}` line format is used. When `"xml"`,
@@ -505,30 +429,6 @@ export interface ToolContext {
   /** The "Ask before running commands" setting; `ask` gates effectful tools through approvals. */
   approvals?: ApprovalsChoice;
   /**
-   * Explicit console Auto authority, never inferred from a tool argument or
-   * target. Scope contains operator restrictions, not derived target grants.
-   * Absent for existing scan/native callers, whose URL policy is unchanged.
-   */
-  publicNetwork?: {
-    readonly scope?: ScopePolicy;
-    readonly deniedHosts?: ReadonlySet<string>;
-  };
-  /**
-   * Escalation callback for the scoped-source-audit allow-list gate. When a
-   * scoped source audit (role audit/review + a non-empty {@link scopePath})
-   * hits a tool outside `SCOPED_SOURCE_AUDIT_TOOLS` in `standard`/`copilot`
-   * mode, the executor invokes this instead of dead-ending: `true` runs the
-   * tool (and the grant is remembered per-tool for the session), `false`
-   * returns the existing denial (and is remembered so a retry does not
-   * re-prompt). When ABSENT — every existing non-console caller — the gate
-   * falls back to today's hard denial, so no existing behaviour changes.
-   *
-   * This callback ONLY lifts the scoped-source-audit allow-list. It is not a
-   * master key: the console's network scope-on-demand, local-filesystem scope,
-   * and per-tool approval gates all still apply on top.
-   */
-  escalateScopedAudit?: (req: ScopedAuditEscalationRequest) => Promise<boolean>;
-  /**
    * Operator question channel for the `ask_operator` tool.
    *
    * When wired, the tool builds a typed {@link OperatorQuestionRequest} and
@@ -539,8 +439,8 @@ export interface ToolContext {
    * so the model treats it as the operator's input/data.
    *
    * This is an INFORMATION-GATHERING gate ONLY — distinct from
-   * `approveTool` / `requestScope` / `escalateScopedAudit`. It authorizes
-   * NOTHING: it never widens scope, approves a tool, or changes autonomy mode.
+   * `approveTool`. It authorizes
+   * NOTHING: it never approves a tool.
    * `ask_operator` is in `READ_ONLY_TOOLS` for exactly this reason.
    *
    * When ABSENT — every non-console caller, including the scan pipeline — the
@@ -560,34 +460,8 @@ export interface ToolContext {
   agentMessaging?: unknown;
   persistFindings?: boolean;
   authConfig?: AuthConfig;
-  /**
-   * See `AgentConfig.scope`. When present, every URL-touching tool
-   * runs `policy.match()` before egress and refuses out-of-scope URLs
-   * with `ToolResult.error`.
-   */
-  scope?: ScopePolicy;
-  /** Host-owned approval snapshot; refreshed only at scan/turn/tool boundaries. */
-  scopeEnforcement?: ScopeEnforcementState;
-  /** Per-host rate limiter; see AgentConfig.rateLimiter. */
-  rateLimiter?: RateLimiter;
-  /**
-   * See `AgentConfig.enforcement`. http_audit-only path allowlist +
-   * scope/rate counters + kill switch. Every URL-touching tool consults
-   * `enforcement.pathPolicy` (when set) in addition to host scope, and
-   * increments the in-scope / out-of-scope counters at the verdict sites.
-   */
-  enforcement?: EnforcementTracker;
-  /**
-   * See `AgentConfig.allowScanners`. Opt-out for the scanner-binary
-   * suppression gate (0#217). Only consulted when `scope` is set.
-   */
-  allowScanners?: boolean;
   /** Built-in web search only; does not restrict other network tools. */
   webSearchEnabled?: boolean;
-  /** See `AgentConfig.engagement`. */
-  engagement?: EngagementPosture;
-  /** See `AgentConfig.attribution` (0#216). */
-  attribution?: AttributionConfig;
   /**
    * Recent tool result texts for JIT skill trigger matching (#457).
    * Populated by the agent loop with the last N tool result strings so
@@ -656,7 +530,7 @@ export interface ToolContext {
   /**
    * Tool-health recorder (0#tool-reliability). When present, the executor
    * routes structured tool-failure / skip events (missing binary, buffer
-   * limit, wrong lockfile, policy/scope denial) into it so the run can surface
+   * limit, wrong lockfile, policy denial) into it so the run can surface
    * a concise "N tool issues" summary and the CLI /doctor path can explain WHY
    * a tool didn't run. Absent for callers that don't care — the executor then
    * creates its own private tracker so recording is always safe; only the

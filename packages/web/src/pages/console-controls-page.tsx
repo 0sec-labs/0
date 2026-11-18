@@ -47,7 +47,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : mode === "settings" ? <SettingsControl category={category} />
     : mode === "doctor" ? <DoctorControl />
     : mode === "tools" ? <ToolsControl sessionId={sessionId} />
-    : <ProjectControl sessionId={sessionId} />;
+    : <ProjectControl />;
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
   const subtitle = mode === "settings" && category === "shortcuts" ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;

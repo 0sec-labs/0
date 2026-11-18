@@ -49,9 +49,9 @@ Chat-only commands are `/help`, `/status`, `/tools`, `/explain [topic]`, `/feedb
 
 ### Limits and approvals
 
-A thread has one mode: the agent has shell access and runs commands as your user in the folder you chose. What limits it is the scope, its budget (cost ceiling and time cap), the optional sandbox and one global setting, **Ask before running commands** under **Settings → Helpers** (off by default). When it is on, each command or change is put to you first. See [Configuration](/configuration/#ask-before-running-commands).
+A thread has one mode: the agent has shell access and runs commands as your user in the folder you chose. What limits it is its budget (cost ceiling and time cap), the optional sandbox and one global setting, **Ask before running commands** under **Settings → Helpers** (off by default). When it is on, each command or change is put to you first. See [Configuration](/configuration/#ask-before-running-commands).
 
-The agent also has a `web_search` tool (Parallel's anonymous hosted search, with DuckDuckGo as a fallback; no key needed). Results are links and snippets, not a sign that a page was read in full. `ZERO_FEATURE_WEB_SEARCH=0` turns it off by default. It can clone a public HTTPS repository to review it; cloning does not add the host to your scope.
+The agent also has a `web_search` tool (Parallel's anonymous hosted search, with DuckDuckGo as a fallback; no key needed). Results are links and snippets, not a sign that a page was read in full. `ZERO_FEATURE_WEB_SEARCH=0` turns it off by default. It can clone a public HTTPS repository to review it;
 
 `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded, because whoever wrote the target controls that text. Your own instructions live under **Settings → Instructions**: a global `~/.0/AGENTS.md` and one file per folder, each up to 32,000 characters.
 
@@ -103,7 +103,7 @@ id=$(0 threads send new "Map the login flow" --folder ~/code/app)
 `0 -p` runs one prompt through the same app process and exits.
 
 ```bash
-0 -p "Review the selected folder" --scope scope.yaml
+0 -p "Review the selected folder"
 0 -p "Summarize the open findings" --format json
 printf '%s' 'Summarize the selected findings' | 0 -p
 ```
@@ -113,11 +113,10 @@ printf '%s' 'Summarize the selected findings' | 0 -p
 | `--format <text\|json\|ndjson>` | Output format. Default `text`. |
 | `-m, --model <id>` | Model to use. |
 | `--approvals <ask\|auto>` | `ask` puts each command to you first; headless runs cannot answer, so effectful tools are refused. Default `auto`, or your `approvals` setting. |
-| `--target <url>`, `--scope <file>` | Target and scope for the run. |
 | `--finding <id>`, `--finding-intent <intent>` | Focus on one saved finding: `investigate`, `verify`, `draft_fix` or `impact`. |
 | `--resume <id>`, `--continue` | Continue a saved thread by id or prefix, or the most recent one (`0 -r <id>`, `0 -c`). |
 
-A task that needs a human decision cannot finish headless; open it in the browser. To continue a live thread, pass `--chat <id>` (the thread keeps its own model and scope, so `--model`, `--target` and `--scope` are rejected; pending decisions are reported, not approved).
+A task that needs a human decision cannot finish headless; open it in the browser. To continue a live thread, pass `--chat <id>` (the thread keeps its own model, so `--model` is rejected; pending decisions are reported, not approved).
 
 On a server or in CI, start the app with `0 --headless --ready-json`. It opens no browser and serves the API only. To drive a running app from scripts, `0 api` calls its backend HTTP API with the normal authentication and approval checks. Keep the token in an environment variable, for example `--engine-token-env ZERO_AGENT_TOKEN`, never on the command line.
 
@@ -131,7 +130,7 @@ On a server or in CI, start the app with `0 --headless --ready-json`. It opens n
 ## Limits
 
 - Local means tools run on the computer's host. Your model endpoint can still be remote; where tools run and which model you use are separate choices.
-- A provider connection does not authorize a target. Scope and tool isolation are separate.
+- A provider connection does not authorize a target. Tool isolation is separate.
 - A source build serves the app from built assets. Rebuild after changing source.
 
 ## Next

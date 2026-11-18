@@ -46,10 +46,8 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
     setError("");
     try { await acknowledge.mutateAsync({ id: sentinel.id, version: sentinel.version }); } catch (cause) { setError(errorText(cause, "Unable to acknowledge the review.")); }
   };
-  const noScope = sentinel.scope.repos.length + sentinel.scope.targets.length + sentinel.scope.domains.length === 0;
   const toggle = async () => {
     setError("");
-    if (paused && noScope) { setError("Add scope in Settings before turning it on."); return; }
     try { await setPaused.mutateAsync({ id: sentinel.id, paused: !paused, version: sentinel.version }); } catch (cause) { setError(errorText(cause, "Unable to change status.")); }
   };
   return <div className="space-y-8">
@@ -62,11 +60,9 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <span>{sentinel.name} is waiting on {sentinel.attention?.pendingDecisions ?? 1} decision{(sentinel.attention?.pendingDecisions ?? 1) === 1 ? "" : "s"} from you.</span>
       <Button size="sm" variant="secondary" render={<Link to={sentinelHref(sentinel.id)} />}>Open thread</Button>
     </div>}
-    {!readOnly && !archived && paused && noScope
-      && <Link to={sentinelHref(sentinel.id, "settings")} className="block rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm text-muted-foreground outline-none hover:bg-muted focus-visible:outline-ring-inset">Add scope to say what it covers, then turn it on.</Link>}
     <Section title="Status">
       <div className="flex items-center justify-between gap-4 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived." : paused ? "Triggers are off. You can still message it." : "Wakes on its triggers, within its scope and budget."}</p></div>
+        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived." : paused ? "Triggers are off. You can still message it." : "Wakes on its triggers and budget."}</p></div>
         <Switch aria-label={paused ? v("Resume {Sentinel}") : v("Pause {Sentinel}")} checked={sentinel.status === "active"} disabled={readOnly || archived || setPaused.isPending} onCheckedChange={() => void toggle()} />
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -134,7 +130,7 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
     <Dialog open={reviewing !== null} onOpenChange={next => { if (!next) { setReviewing(null); setError(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
-        <p className="text-sm">Each time it fires, {sentinel.name} wakes up and takes a turn in its thread, within its scope.</p>
+        <p className="text-sm">Each time it fires, {sentinel.name} wakes up and takes a turn in its thread, .</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="secondary" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>

@@ -1,14 +1,14 @@
 import { realpath } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { z } from "zod";
-import { EngineService, ENGINE_OPERATIONS, loadScope } from "@0/engine";
+import { EngineService, ENGINE_OPERATIONS } from "@0/engine";
 import { createEngineCapabilityManifest } from "@0/engine/shared";
 import { osecDB, resolveOsecDbPath } from "@0/engine/storage";
 import type { ConsoleGateway } from "./web/console-gateway.js";
 import type { WebWorkflowService } from "./web/workflows.js";
 
 interface WorkflowEngineServiceOptions {
-  token: string; workspace?: string; scopePath?: string; target?: string; dbPath?: string; model?: string;
+  token: string; workspace?: string; dbPath?: string; model?: string;
   allowApply?: boolean; timeCapMs?: number; costCapUsd?: number;
 }
 interface WorkflowEngineHost { gateway: ConsoleGateway; workflows: WebWorkflowService }
@@ -60,9 +60,7 @@ export class WorkflowEngineService {
   }
   async #createSession(config: Record<string, unknown>): Promise<{ id: string }> {
     if (this.#disposed) throw new Error("Engine transport is closed.");
-    if (this.options.target && config.target !== undefined && config.target !== this.options.target) throw new Error("Target does not match this engine's configured target.");
-    if (this.options.scopePath && config.scope !== undefined) throw new Error("This engine owns its configured scope.");
-    return this.host.gateway.create({ ...config, ...(this.options.target ? { target: this.options.target } : {}), ...(this.options.scopePath ? { scope: loadScope(this.options.scopePath).raw } : {}), ...(this.options.model ? { runtime: { model: this.options.model } } : {}) });
+    return this.host.gateway.create({ ...config, ...(this.options.model ? { runtime: { model: this.options.model } } : {}) });
   }
   async invoke(name: string, raw: Record<string, unknown>): Promise<unknown> {
     if (this.#disposed) throw new Error("Engine transport is closed.");

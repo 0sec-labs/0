@@ -6,7 +6,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { eventBus } from "@0/engine";
-import type { ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
+import type { ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
 import { getSettings } from "./state/settings-store.js";
 
 const execute = promisify(execFile);
@@ -24,7 +24,7 @@ function assertSessionContract(session: ConsoleSession): void {
   if (!session || typeof session !== "object" || !session.ready || typeof session.ready.then !== "function") {
     throw new Error("Built engine does not implement asynchronous session readiness");
   }
-  for (const method of ["send", "cleanup", "exportCheckpoint", "prepareHandoff", "configureEngagement", "configureWorkspace", "clearConversation", "stopPersistentAgent", "stopPersistentAgents"] as const) {
+  for (const method of ["send", "cleanup", "exportCheckpoint", "prepareHandoff", "configureWorkspace", "clearConversation", "stopPersistentAgent", "stopPersistentAgents"] as const) {
     if (typeof session[method] !== "function") throw new Error(`Built engine omitted ${method}`);
   }
 }
@@ -136,7 +136,7 @@ export function withDevEngineUpdates(
       directory = undefined;
       try { previousEvents?.(); }
       catch (error) { warnings.push(`Previous event bridge: ${String(error)}`); }
-      notify(`Development engine ${digest.slice(0, 12)} is active. Conversation, scope decisions and task state were retained; engine-owned resources were drained. The terminal/UI shell, injected provider/MCP clients and shared package dependencies were not reloaded.`);
+      notify(`Development engine ${digest.slice(0, 12)} is active. Conversation and task state were retained; engine-owned resources were drained. The terminal/UI shell, injected provider/MCP clients and shared package dependencies were not reloaded.`);
       if (warnings.length) notify(`Engine handoff cleanup warnings: ${warnings.join("; ")}`);
     } catch (error) {
       if (closingStarted || signal?.aborted || !getSettings().allowDevSourceUpdates) rejectedDigest = undefined;
@@ -232,10 +232,6 @@ export function withDevEngineUpdates(
         // An in-flight candidate is not necessarily ready. Its checkpoint comparison
         // detects this change and safely abandons that handoff.
         current.configureWorkspace(path);
-      };
-      if (key === "configureEngagement") return (selection: ConsoleEngagementSelection) => {
-        current.configureEngagement(selection);
-        handoffCandidate?.configureEngagement(selection);
       };
       if (key === "clearConversation") return () => {
         current.clearConversation();

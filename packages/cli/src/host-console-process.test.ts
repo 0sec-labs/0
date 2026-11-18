@@ -72,7 +72,7 @@ const mirror = {
   messages: [{ role: "user", content: "Retained operator message" }],
   workers: [{ id: "prior-worker", status: "completed" }], queuedMessages: [{ id: "queued", text: "Keep queued" }],
   usage: { inputTokens: 42, outputTokens: 7, costUsd: 0.01 },
-  scope: { in_scope: ["https://fixture.invalid"] }, autonomyMode: "standard",
+  autonomyMode: "standard",
   selection: { providerId: "selected-provider", model: "selected-model", connectionIdentity: "selected-account" },
 };
 

@@ -41,6 +41,7 @@ on the GitHub Release tag.
 
 ### Removed
 
+- Scope: removed; Threads and Sentinels run in their folder and sandbox.
 - 0 is now a product for threads, Agents, Computers, Memory, Skills, Extensions and Findings, and a lot of the older security engine is gone. The scan pipelines and the `0 scan` command (including `scan fix`, `scan verify` and `scan disclose`), the kernel, identity, research, disclosure, improvement, review, verification and triage engines, the `0 lab research`, `0 lab improve` and `0 lab runs` commands, workflow graphs and steps, learning, and the benchmarks are removed. The old code is kept on the `archive/security-engine` branch.
 - The model now has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. The web probing, browser, proxy, cloud, callback, binary and scanner tools and the file read, list, search and patch tools are gone; use the shell or an extension.
 - `0 agents run --automation`, `--template` and the other workflow options are gone. An Agent's automation is now a saved prompt plus a trigger, and `0 agents run <id> --task <text>` sends a message into the Agent's thread. The GitHub Action no longer matches the CLI, since it ran `0 scan`.

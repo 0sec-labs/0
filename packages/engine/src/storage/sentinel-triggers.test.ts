@@ -70,13 +70,13 @@ describe("Sentinel triggers", () => {
 });
 
 describe("Sentinel review gate, ledger and ownership", () => {
-  it("flags needs-review when scope or model change and clears on acknowledge", () => {
+  it("flags needs-review when the model changes and clears on acknowledge", () => {
     const store = new SentinelStore(":memory:");
     const s = store.create({ name: "A" });
     expect(sentinelNeedsReview(s)).toBe(false);
     const renamed = store.update(s.id, { version: 1, name: "B", mission: "x" });
     expect(sentinelNeedsReview(renamed)).toBe(false);
-    const widened = store.update(s.id, { version: 2, scope: { targets: ["https://prod.example"], production: true } });
+    const widened = store.update(s.id, { version: 2, skills: ["x"] });
     expect(sentinelNeedsReview(widened)).toBe(true);
     const swapped = store.acknowledge(s.id, widened.version);
     expect(sentinelNeedsReview(swapped)).toBe(false);

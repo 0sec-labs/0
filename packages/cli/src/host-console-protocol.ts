@@ -1,4 +1,3 @@
-import type { ScopeEnforcementState } from "@0/engine";
 import type { WebConsoleRuntimeBootstrap } from "./web/operator-services.js";
 import { randomUUID } from "node:crypto";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, type WorkbenchFrame } from "./workbench-console-protocol.js";
@@ -56,7 +55,6 @@ export interface HostConsoleBootstrap {
   dbPath?: string;
   executionEnvironment: Record<string, string>;
   runtime: WebConsoleRuntimeBootstrap;
-  scopeEnforcement: ScopeEnforcementState;
   callbacks: string[];
 }
 
@@ -71,7 +69,7 @@ export interface HostConsoleStopResult {
 }
 
 export const HOST_CONSOLE_CALLBACKS = [
-  "requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator",
+  "approveTool", "askOperator",
   "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead",
   "workflowList", "workflowRead", "workflowSave", "workflowEditorRead", "workflowInvoke",
   "historyList", "historyRead",

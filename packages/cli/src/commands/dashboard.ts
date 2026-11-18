@@ -65,8 +65,6 @@ type DashboardOptions = {
   teamConfig?: string;
   engineTokenEnv?: string;
   engineWorkspace?: string;
-  engineScope?: string;
-  engineTarget?: string;
   engineAllowApply?: boolean;
   engineTimeCap?: string;
   engineCostCap?: string;
@@ -101,8 +99,6 @@ export function registerDashboardCommand(program: Command): void {
     .option("--team-config <path>", "Enable workspace accounts, roles, and shared conversation controls")
     .option("--engine-token-env <name>", "Environment variable holding the engine bearer credential (32–4096 characters)")
     .option("--engine-workspace <path>", "Engine-owned authorized workspace for persistent workflow calls")
-    .option("--engine-scope <path>", "Engine-owned scope JSON for persistent live-target workflows")
-    .option("--engine-target <target>", "Restrict persistent workflow calls to this target")
     .option("--engine-allow-apply", "Admit explicitly approved patch application in persistent workflow calls")
     .option("--engine-time-cap <ms>", "Server workflow deadline ceiling (default 600000 ms)")
     .option("--engine-cost-cap <usd>", "Server workflow estimated cost ceiling (default $5)")
@@ -148,7 +144,7 @@ export function registerDashboardCommand(program: Command): void {
       }
 
 
-      if (!serverMode && port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
+      if (!serverMode && port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
         console.log(chalk.gray(`  0 is already running: ${origin}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
         if (opts.open !== false) openBrowser(`${origin}/chats`);
@@ -158,7 +154,7 @@ export function registerDashboardCommand(program: Command): void {
       const engineBearer = backendBearerFromEnv(opts.engineTokenEnv);
       const explicitTeamConfig = opts.teamConfig ?? process.env.ZERO_TEAM_CONFIG;
       const teamConfigPath = findTeamConfigPath({ workspacePath: opts.engineWorkspace ?? process.cwd(), explicitConfigPath: explicitTeamConfig });
-      if (!engineBearer && !teamConfigPath && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env or --team-config.");
+      if (!engineBearer && !teamConfigPath && [opts.engineWorkspace, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env or --team-config.");
       const timeCapMs = opts.engineTimeCap === undefined ? 600_000 : Number(opts.engineTimeCap);
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
@@ -252,7 +248,7 @@ export function registerDashboardCommand(program: Command): void {
           console.log(chalk.gray("  Dashboard assets not found: serving the API only."));
         }
         startupAssetCleanup = cleanupAssetDir;
-        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
+        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
         stopHostReconnect = watchManagedHosts();
         let { skills, gateway: consoleGateway, engagements, operator, workflows, github, sentinels } = services;

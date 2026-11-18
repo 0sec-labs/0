@@ -11,14 +11,13 @@ test("home suggestions describe only the selected workspace's observed context",
     const output=resolve(directory,"fixture.mjs");
     await build({entryPoints:[resolve(root,"packages/web/src/console/home-context.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {homeSuggestions,selectedWorkspacePath}=await import(pathToFileURL(output).href);
-    const snapshot={workspacePath:"/selected/project",session:{target:""},scopeEnforcement:{projectPath:"/wrong-global-cwd"},todos:null};
+    const snapshot={workspacePath:"/selected/project",todos:null};
     const project={path:"/selected/project",name:"project",git:{root:"/selected/project",branch:"main",dirty:true,error:null}};
     const observed=homeSuggestions(snapshot,{requestedPath:"/selected/project",project});
     assert.deepEqual(observed.map(item=>item.label),["Whitebox pentest","Review uncommitted changes","Plan a focused review"]);
     assert.match(observed[0].hint,/project · main/);
     assert.match(observed[0].prompt,/selected folder "\/selected\/project"/);
     assert.match(observed[1].prompt,/preserve the working tree/);
-    assert.doesNotMatch(JSON.stringify(observed),/wrong-global-cwd/);
     const wrong=homeSuggestions(snapshot,{requestedPath:"/another/project",project});
     assert.equal(wrong[0].label,"Explore this folder","another folder's Git metadata cannot be reused");
     const child={...snapshot,workspacePath:"/selected/project/subdirectory"};
@@ -33,8 +32,7 @@ test("home suggestions describe only the selected workspace's observed context",
     assert.match(pending[2].prompt,/Inspect parser boundaries/);
     const finding=homeSuggestions({...snapshot,focusedFinding:{title:"Observed issue"}});
     assert.equal(finding[0].label,"Review this finding");
-    assert.equal(selectedWorkspacePath({session:{target:""},scopeEnforcement:{projectPath:"/wrong-global-cwd"}}),undefined);
-    assert.equal(homeSuggestions({session:{target:""}})[0].label,"Whitebox pentest");
-    assert.equal(homeSuggestions({session:{target:"https://example.test"}})[0].label,"Review this target");
+    assert.equal(selectedWorkspacePath({}),undefined);
+    assert.equal(homeSuggestions({})[0].label,"Whitebox pentest");
   }finally{await rm(directory,{recursive:true,force:true});}
 });

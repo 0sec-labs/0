@@ -369,11 +369,8 @@ function ConsolePageContent({
         id,
         autonomyMode: "changes",
         title,
-        target: "",
         role: "audit",
         status: "ready",
-        scopeConfigured: false,
-        localScopeConfigured: false,
         createdAt: "",
         updatedAt: "",
       };

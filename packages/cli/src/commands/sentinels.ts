@@ -86,13 +86,13 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
 
   for (const [verb, text, path] of [["pause", "Pause a Sentinel", "pause"], ["resume", "Resume a paused Sentinel", "resume"]] as const) {
     const command = group.command(`${verb} <id>`).description(text);
-    if (verb === "resume") command.option("--acknowledge", "Also acknowledge review of changed scope, model or tools");
+    if (verb === "resume") command.option("--acknowledge", "Also acknowledge review of changed model or tools");
     consoleFlags(command).action((id: string, options: ConsoleFlags & { acknowledge?: boolean }) => withConsole(options, deps, async client => {
       const current = await sentinel(client, id);
       return view(await client.request("POST", `${ROOT}/${enc(current.id)}/${path}`, { version: current.version, ...(options.acknowledge ? { acknowledge: true } : {}) }) as { sentinel: Sentinel });
     }, detail));
   }
-  consoleFlags(group.command("acknowledge <id>").description("Mark changed scope, model or tools as reviewed"))
+  consoleFlags(group.command("acknowledge <id>").description("Mark changed model or tools as reviewed"))
     .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => {
       const current = await sentinel(client, id);
       return view(await client.request("POST", `${ROOT}/${enc(current.id)}/acknowledge`, { version: current.version }) as { sentinel: Sentinel });
@@ -112,7 +112,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
   consoleFlags(group.command("run <id>").description("Run a Sentinel now; starts a thread (needs a running engine)")
     .option("--task <text>", "Task for this run").option("--yes", "Confirm that this run is authorized"))
     .action((id: string, options: ConsoleFlags & { task?: string; yes?: boolean }) => withConsole(options, deps, async client => {
-      requireYes(options.yes, "Running a Sentinel starts an autonomous thread within its scope.");
+      requireYes(options.yes, "Running a Sentinel starts an autonomous thread in its folder.");
       const current = await sentinel(client, id);
       return await client.request("POST", `${ROOT}/${enc(current.id)}/run`, { approval: "launch-authorized-run", version: current.version, ...(options.task ? { task: options.task } : {}) }) as { activation: { id: string; status: string; missionId?: string } };
     }, ({ activation }) => renderFields({ activation: activation.id, status: activation.status, thread: activation.missionId }), { requireHost: "Running a Sentinel" }));

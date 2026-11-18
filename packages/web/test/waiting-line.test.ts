@@ -7,9 +7,8 @@ import { ApprovalPanel, rememberAnswer, resolvedSummary, waitingRequest } from "
 const base = { id: "d1", title: "Run nmap", kind: "tool" } as DesktopConsoleDecision;
 
 describe("waiting line presentation", () => {
-  it("names the request by the decision title for tool, scope and folder decisions", () => {
+  it("names the request by the decision title for tool decisions", () => {
     expect(waitingRequest(base)).toBe("Run nmap");
-    expect(waitingRequest({ ...base, kind: "local-scope", title: "Read /repo" })).toBe("Read /repo");
   });
   it("names a question by its header", () => {
     const question = { ...base, kind: "operator-question", questions: [{ header: "Which env?", question: "Pick one" }] } as DesktopConsoleDecision;

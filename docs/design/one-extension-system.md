@@ -1,11 +1,11 @@
 # One extension system: plugins
 
-> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules like scope. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
+> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
 
 Architecture of the store, installer and importer (step 2): [extension-architecture.md](./extension-architecture.md). Naming decision: user-facing text says "extension"; skills stay "skills".
 
 Status: DESIGN ONLY, nothing implemented. Owner direction (Doruk): everything beyond
-the tiny core is a plugin; scope, connectors and MCP are plugins; one word; drop
+the tiny core is a plugin; connectors and MCP are plugins; one word; drop
 registry signatures and harness trust.
 Supersedes `plugins-one-concept.md` and the audit's "skills only" idea; keeps the
 audit's finding that the skill install flow (pin by SHA, preview, click, no
@@ -51,8 +51,7 @@ tool the user approved is quietly changed). This one is worth keeping, but only 
 MCP tools, the only place descriptions can change without a new commit (section 3).
 
 **Simple mechanism that covers the rest.** One install prompt: `repo @ commit`, what
-it can do (runs commands / connects to MCP servers / calls <service> / defines a
-scope), and a diff since the last approved version. Pin by SHA, re-prompt on any
+it can do (runs commands / connects to MCP servers / calls <service>), and a diff since the last approved version. Pin by SHA, re-prompt on any
 change, no auto-update of third-party plugins, no registry signatures until a
 registry with real publishers exists.
 
@@ -60,7 +59,7 @@ registry with real publishers exists.
 
 **A plugin is a folder, pinned by commit, that may bundle any of:** skills
 (`SKILL.md` know-how), scripts (run only through bash), MCP server definitions, a
-connector (auth + access to a service), a scope policy, a verifier.
+connector (auth + access to a service), a verifier.
 
 **Manifest.** Reading order, first hit wins, so existing material works unchanged:
 1. `.claude-plugin/plugin.json` (Claude Code layout: `name`, `version`,
@@ -69,14 +68,14 @@ connector (auth + access to a service), a scope policy, a verifier.
    "ignored: hooks", never silently run.
 2. `plugin.json` at the root, same fields, plus an optional `"0"` object for
    what Claude has no word for:
-   `{"connector": {...}, "scope": "scope.json", "verify": "scripts/verify.sh",
+   `{"connector": {...}, "verify": "scripts/verify.sh",
    "requires": {"bins": ["gh"], "env": ["GITHUB_TOKEN"], "0": ">=0.36"}}`.
 3. A bare `SKILL.md` folder (or `.agents/skills/x`): a plugin with one skill and a
    synthesized manifest. Nothing existing needs editing.
 The old `plugin.json` + `plugin.js` executable format (guest protocol,
 `protocol.ts`, `executable.ts`) is not read after migration (section 5).
 
-**Sources.** (a) `git url@sha`, the existing skills flow; only the full SHA is stored. (b) local folder: linked, "unpinned, local", re-prompts when content hash changes. (c) built-in first-party bundles inside the binary (scope, github, later slack/email-digest), updated with the binary, same manifest.
+**Sources.** (a) `git url@sha`, the existing skills flow; only the full SHA is stored. (b) local folder: linked, "unpinned, local", re-prompts when content hash changes. (c) built-in first-party bundles inside the binary (github, later slack/email-digest), updated with the binary, same manifest.
 
 **On disk.** `~/.0/plugins/<name>/<sha>/` (immutable per SHA) and
 `~/.0/plugins/state.json` (source, SHA, approved capabilities, enabled global or per
@@ -107,20 +106,8 @@ else allow. The existing "Ask before running commands" setting
 (`settings.ts:393`) and the sandbox choice become the lowest-priority policy on this
 same hook, not separate code paths. A hook that throws or times out means deny.
 
-**Scope as a plugin, but safe.** `scope` ships built in and implements
-`beforeCommand` using the existing `enforcement.ts`/`scope.ts` code (no rewrite).
-Differences from today (`scope/activation.ts:19-36`, enablement flag, OFF on fresh
-installs, message "NOT enforced"):
-- Enabled by default on every install and every project. With no scope defined it
-  allows everything (no behaviour change for casual use). The moment a scope is
-  defined for the project, it is enforced. "A scope file alone never activates
-  checks" (`activation.ts:18` comment) is reversed on purpose: defining a scope is
-  the operator's consent.
-- Fail closed: if a scope is defined and the plugin errors, cannot load, or is
-  disabled, commands are denied. Disabling needs an explicit "run without scope"
-  confirm, written to the audit log, and shows a banner on the thread.
-- Not special-cased in core: core only knows the hook. Third-party hook plugins are
-  out of scope for v1 (open question 3); only built-ins register `beforeCommand`.
+Third-party hook plugins are out of scope for v1 (open question 3); only built-ins
+register `beforeCommand`.
 
 **Connectors as plugins.** A connector plugin declares `connector`:
 `{service, auth: "token" | "oauth-device" | "cli", env, access: {read:[...],
@@ -148,13 +135,12 @@ untrusted data. stdio servers run through the same env allowlist and sandbox as 
 
 ## 4. Security model (one page)
 
-- **What a plugin can do:** anything bash can do, under the same scope, budget,
+- **What a plugin can do:** anything bash can do, under the same budget,
   approvals and sandbox. There is no second permission system and no in-process
   plugin code. Its scripts and MCP servers are just commands.
 - **Install prompt shows:** `repo @ full commit`, licence, file list, hidden-Unicode
   flags, and what it can do: runs commands (lists scripts), connects to MCP servers
-  (command or URL, env names), calls a service (hosts, read/write list), defines a
-  scope. The click echoes the SHA. Audit event `plugin.install` with SHA and
+  (command or URL, env names), calls a service (hosts, read/write list). The click echoes the SHA. Audit event `plugin.install` with SHA and
   capabilities.
 - **Update:** `0 plugins update` fetches the new SHA, shows the folder diff plus a
   capability delta, and asks. Any change re-prompts, even one new script. No silent
@@ -170,7 +156,7 @@ untrusted data. stdio servers run through the same env allowlist and sandbox as 
   install prompt each; ignored means nothing runs. Plain SKILL.md text is still read
   as instructions (no execution), as today.
 - **Sandbox preference:** with a Computer/VM available, plugin scripts and MCP servers run there by default; "run on host" is a per-plugin choice shown in the prompt.
-- **Not done:** signatures, publisher identity. A malicious approved plugin can do what bash can; the defence is the prompt, the pin, scope and the sandbox.
+- **Not done:** signatures, publisher identity. A malicious approved plugin can do what bash can; the defence is the prompt, the pin and the sandbox.
 
 ## 5. Migration
 
@@ -184,7 +170,6 @@ old data.
 | Model-authored plugins (`self_extend`, `~/.0/executable-plugins`) | Reported, files left in place. `self_extend` tool and `allowModelSelfExtension` removed; the model writes a skill or script folder (`create_skill`) and the user installs it as a local plugin. |
 | Custom MCP servers | Each becomes a local plugin with one `.mcp.json`, imported as installed and enabled only for projects where it was enabled, marked "re-approve" (prompt on first use). |
 | Service connections (GitHub, Slack, Elastic) | GitHub: built-in plugin, connection and token kept. Token-only ones (Slack, Linear, Cloudflare, Teams): imported as connector extensions needing approval, token not copied. The rest (URL or ids needed): reported only; stored credentials untouched. (Step 5, shipped.) |
-| `scope` enablement | Enabled everywhere. Projects that had it enabled or had a scope defined stay enforced; projects with a defined scope but scope OFF become enforced and the report says so. |
 | Skills (user, project, mounted, built-in, team) | Unchanged on disk; shown as plugins of kind skills-only; provenance and pinned SHA carried over. |
 
 **Deleted code (LOC from the audit, tests included):**
@@ -215,7 +200,6 @@ old data.
   Removed": replaced by a folder diff; per-tool hash kept for MCP only.
 - 0.32/0.33: Explore ("Explore keeps Plugins and Themes", brand logos) and the seven-item sidebar (becomes six).
 - 0.33: "a single Plugin concept (MCP servers and tool plugins are kinds)": kept; "tool plugins" go.
-- 0.33: "Scope now means one thing" stays; the rule that scope is OFF until enabled is reversed.
 - 0.35 (unreleased): `0 plugin` folded into `0 skills --plugin/--enable/--info`:
   rewrite before release; it becomes `0 plugins`.
 
@@ -223,10 +207,8 @@ old data.
 
 ## 6. Build plan (six PRs, each revertible)
 
-1. **`beforeCommand` hook + built-in `scope`, default on, fail closed (M).** Proof:
-   fresh HOME with a defined scope denies an out-of-scope `curl`; hook throw denies;
-   disabling confirms and audits; existing scope hostile tests pass; Ask-before-running
-   uses the same hook. Ships first because it closes the known gap.
+1. **`beforeCommand` hook + decider, fail closed (M).** Proof:
+   hook throw denies; Ask-before-running uses the same hook. Ships first because it closes the known gap.
 2. **Plugin store, manifest reader, git@sha installer, install prompt, diff, audit,
    importer report (L).** Reads the three manifest shapes; old skill installs import.
    Proof: install a Claude-layout plugin and a bare SKILL.md folder; update shows
@@ -244,14 +226,14 @@ old data.
 6. **Delete (L).** Executable runtime, `self_extend`, harness trust, registry
    signatures, service plugins, old plugin UI/CLI; CHANGELOG with the reversals above;
    rewrite `plugin-trust.md` as one page. Proof: typecheck, suites, importer test on a
-   fixture home with old plugins/MCP/scope. Needs 1-5 shipped for one release.
+   fixture home with old plugins/MCP. Needs 1-5 shipped for one release.
 
 ## 7. Open questions (recommendation each)
 
 1. Plugins or Skills as the name? Recommend Plugins, `0 skills` hidden alias; owner decides.
 2. Keep MCP server mode (`0 lab mcp-server`, 3.4k LOC)? Recommend keep, hidden; separate work.
 3. May third-party plugins register `beforeCommand`? Recommend no in v1: built-ins only,
-   so a plugin cannot loosen scope.
+   so a plugin cannot loosen a decider.
 4. Keep any registry? Recommend no: curated catalog of pinned SHAs; delete
    `registry-client.ts`; signatures return only with real publishers.
 5. Support Claude `hooks/` and `commands/`? Recommend no in v1: ignore and say so in the

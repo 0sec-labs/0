@@ -1,5 +1,5 @@
-import { ScopePolicy, getScopeEnforcementState, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
-  type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/engine";
+import { type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
+  type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage } from "@0/engine";
 import { legacyAskedFirst, type ApprovalsChoice } from "@0/engine/shared";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
 import { HOST_CONSOLE_CALLBACKS, encodeHostConsoleFrame, type HostConsoleBootstrap, type HostConsoleFrame, type HostConsoleStopResult } from "./host-console-protocol.js";
@@ -8,16 +8,16 @@ import { captureWebConsoleRuntimeBootstrap, applyWebConsoleRuntimeBootstrap, typ
 type Config = Omit<ConsoleSessionConfig, "db">;
 interface Mirror {
   scanId: string; systemPrompt: string; tools: ConsoleSession["tools"]; messages: NativeMessage[];
-  approvals: ApprovalsChoice; webSearchEnabled?: boolean; target: string;
-  localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
+  approvals: ApprovalsChoice; webSearchEnabled?: boolean;
+  sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
-const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
+const DIRECT_CALLBACKS = ["approveTool", "askOperator"] as const;
 const UNSUPPORTED = ["mcpHost", "extensionRuns", "contribution", "developmentSourceRoot"] as const;
-const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", ...DIRECT_CALLBACKS]);
+const BRIDGED = new Set<string>(["runtime", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", ...DIRECT_CALLBACKS]);
 
 function executionEnvironment(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined &&
-    /^(ZERO_(?:DISABLE_[A-Z0-9_]+|ALLOW_[A-Z0-9_]+|ALLOWED_LOCAL_ORIGINS|FEATURE_[A-Z0-9_]+|NO_TELEMETRY|MCP|0VERSE_MCP|0VERSE_ROOT|0VERSE_RUNTIME_CONFIG|BASH_TIMEOUT_MS|AUDIT_SKILLS_MANIFEST|NETWORK_[A-Z0-9_]+|PUBLIC_NETWORK|SCOPE_[A-Z0-9_]+)|DO_NOT_TRACK|HTTPS?_PROXY|ALL_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE)$/.test(entry[0])));
+    /^(ZERO_(?:DISABLE_[A-Z0-9_]+|ALLOW_[A-Z0-9_]+|ALLOWED_LOCAL_ORIGINS|FEATURE_[A-Z0-9_]+|NO_TELEMETRY|MCP|0VERSE_MCP|0VERSE_ROOT|0VERSE_RUNTIME_CONFIG|BASH_TIMEOUT_MS|AUDIT_SKILLS_MANIFEST|NETWORK_[A-Z0-9_]+|PUBLIC_NETWORK)|DO_NOT_TRACK|HTTPS?_PROXY|ALL_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE)$/.test(entry[0])));
 }
 
 /** Append truthful termination results; never replay or discard an old tool call. */
@@ -47,18 +47,17 @@ function serialConfig(config: Config): Record<string, unknown> {
     });
     if (encoded !== undefined) result[key] = JSON.parse(encoded);
   }
-  if (config.scope) result.scope = config.scope.raw;
   if (config.workflowAuthoring?.editor) result.workflowEditorId = config.workflowAuthoring.editor.id;
   return result;
 }
 
 /** Explicit eligibility, never fallback to a different provider or execution profile. */
-export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "executionEnvironment" | "scopeEnforcement"> = {}): { supported: boolean; reason?: string } {
+export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "executionEnvironment"> = {}): { supported: boolean; reason?: string } {
   if (!["darwin", "linux"].includes(process.platform)) return { supported: false, reason: "Confirmed host session termination is qualified only on macOS and Linux; this platform keeps in-process execution" };
   if (!process.versions.bun) return { supported: false, reason: "Confirmed host session termination requires Bun native SQLite; Node's WASM database locks are not qualified for forced exit" };
   try {
     encodeHostConsoleFrame({ type: "init", value: { sessionId: config.scanId, executionProfile: "local", config: serialConfig(config), runtime: captureWebConsoleRuntimeBootstrap(config.runtime),
-      executionEnvironment: options.executionEnvironment ?? executionEnvironment(), scopeEnforcement: options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
+      executionEnvironment: options.executionEnvironment ?? executionEnvironment(), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
     return { supported: true };
   }
   catch { return { supported: false, reason: "This session has a runtime or live host resource that cannot be captured by the host execution worker" }; }
@@ -71,7 +70,6 @@ interface HostConsoleSessionOptions {
   /** Captured execution/MCP policy, private pipe only; never a public snapshot. */
   executionEnvironment?: Record<string, string>;
   launch: Pick<HostConsoleProcessOptions, "command" | "args" | "cwd" | "env" | "graceMs" | "confirmationMs">;
-  scopeEnforcement?: ScopeEnforcementState;
   onBus?: (name: string, value: unknown) => void;
   onSnapshot?: (value: unknown) => void;
 }
@@ -88,15 +86,10 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   const serial = serialConfig(config);
   const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);
   if (!config.scanId) throw new Error("Host session workers require a stable session identity");
-  let scope = config.initialCheckpoint
-    ? config.initialCheckpoint.grantedScope === null ? undefined : ScopePolicy.fromJson(config.initialCheckpoint.grantedScope)
-    : config.scope;
-  let target = config.initialCheckpoint?.target ?? config.target ?? "";
-  let localScopePath = config.initialCheckpoint?.localScopePath;
   let mirror: Mirror = {
     scanId: config.scanId, systemPrompt: config.systemPrompt ?? "", tools: config.tools ?? [],
     messages: structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []),
-    approvals: config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(config.initialCheckpoint?.autonomyMode) ? "ask" : "auto"), target,
+    approvals: config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(config.initialCheckpoint?.autonomyMode) ? "ask" : "auto"),
     webSearchEnabled: config.webSearchEnabled, checkpoint: config.initialCheckpoint,
   };
   let render: ConsoleRenderCallbacks | undefined;
@@ -118,18 +111,6 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     const callback = config[name];
     if (typeof callback === "function") callbacks[name] = (...args) => (callback as (...args: unknown[]) => unknown)(...args);
   }
-  if (config.requestScope) callbacks.requestScope = async (...args) => {
-    const request = args[0] as Parameters<NonNullable<Config["requestScope"]>>[0];
-    if (request.currentScope) request.currentScope = scope;
-    const result = await config.requestScope!(request);
-    if (result && !fenced) { scope = result.scope; target = result.target; mirror.target = result.target; }
-    return result ? { ...result, scope: result.scope.raw } : null;
-  };
-  if (config.requestLocalScope) callbacks.requestLocalScope = async (...args) => {
-    const result = await config.requestLocalScope!(args[0] as Parameters<NonNullable<Config["requestLocalScope"]>>[0]);
-    if (result && !fenced) localScopePath = result.scopePath;
-    return result;
-  };
   if (config.conversationHistory) {
     callbacks.historyList = (...args) => config.conversationHistory!.list(...args as Parameters<NonNullable<Config["conversationHistory"]>["list"]>);
     callbacks.historyRead = (...args) => config.conversationHistory!.read(...args as Parameters<NonNullable<Config["conversationHistory"]>["read"]>);
@@ -148,9 +129,8 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     if (config.workflowAuthoring.editor) callbacks.workflowEditorRead = () => config.workflowAuthoring!.editor!.read();
   }
   if (config.workflowLifecycle) callbacks.workflowInvoke = (...args) => config.workflowLifecycle!.invoke(...args as Parameters<NonNullable<Config["workflowLifecycle"]>["invoke"]>);
-  const policy = options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot);
   const bootstrap: HostConsoleBootstrap = { sessionId: config.scanId, executionProfile: "local", config: serial, dbPath: options.dbPath,
-    executionEnvironment: options.executionEnvironment ?? executionEnvironment(), runtime, scopeEnforcement: policy, callbacks: Object.keys(callbacks) };
+    executionEnvironment: options.executionEnvironment ?? executionEnvironment(), runtime, callbacks: Object.keys(callbacks) };
   // Eligibility must fail before an OS process is created; no silent truncation.
   encodeHostConsoleFrame({ type: "init", value: bootstrap });
   const earlyPolicy = Object.fromEntries(Object.entries(bootstrap.executionEnvironment).filter(([key]) =>
@@ -211,8 +191,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     get executionProcess() { return controller; },
     get scanId() { return mirror.scanId; }, ready,
     get systemPrompt() { return mirror.systemPrompt; }, get tools() { return mirror.tools; }, get messages() { return mirror.messages; },
-    get approvals() { return mirror.approvals; }, get target() { return target; }, get scope() { return scope; },
-    get scopeEnforcement() { return policy; }, get localScopePath() { return localScopePath ?? undefined; },
+    get approvals() { return mirror.approvals; },
     get sourceContext() { return mirror.sourceContext; }, get webSearchEnabled() { return mirror.webSearchEnabled; },
     setApprovals(approvals) {
       queue("autonomy", "changes", { approvals });
@@ -223,8 +202,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     },
     setWebSearchEnabled(value) { queue("webSearch", value); return mutations; },
     setWorkerPolicy(value) { queue("workerPolicy", value ?? null); },
-    configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) { target = value.target; mirror.target = value.target; } },
-    configureWorkspace(value) { queue("workspace", value); localScopePath = value; },
+    configureWorkspace(value) { queue("workspace", value); },
     reconfigureRuntime(value) {
       const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);
       synchronizingRuntime = true;

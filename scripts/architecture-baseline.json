@@ -1,5 +1,5 @@
 {
   "engineDirectoryCycles": [
-    "agent,events,plugins,recon,runtime,scope,telemetry"
+    "agent,events,plugins,recon,runtime,telemetry"
   ]
 }

@@ -24,10 +24,10 @@ async function connectEchoServer(host: McpHost, id = "testsrv"): Promise<McpServ
 describe("McpHost (in-memory e2e)", () => {
   it("resolves only discovered tools conservatively and accepts trusted per-tool classification", async () => {
     const host = new McpHost(); const server = await connectEchoServer(host);
-    expect(host.toolGateFlags("mcp__testsrv__echo")).toEqual({ networkCapable: true, localScope: false, readOnly: false });
+    expect(host.toolGateFlags("mcp__testsrv__echo")).toEqual({ networkCapable: true, readOnly: false });
     expect(host.toolGateFlags("mcp__testsrv__unknown")).toBeUndefined();
-    expect(() => host.setToolGateFlags("mcp__testsrv__unknown", { networkCapable: false, localScope: false, readOnly: true })).toThrow(/unregistered/);
-    host.setToolGateFlags("mcp__testsrv__echo", { networkCapable: false, localScope: false, readOnly: true });
+    expect(() => host.setToolGateFlags("mcp__testsrv__unknown", { networkCapable: false, readOnly: true })).toThrow(/unregistered/);
+    host.setToolGateFlags("mcp__testsrv__echo", { networkCapable: false, readOnly: true });
     expect(host.toolGateFlags("mcp__testsrv__echo")?.readOnly).toBe(true);
     await host.closeAll(); await server.close(); expect(host.toolGateFlags("mcp__testsrv__echo")).toBeUndefined();
   });

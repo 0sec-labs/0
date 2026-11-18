@@ -32,7 +32,7 @@ export const GROUPS = {
     "pnpm test:pr-agent-e2e",
     "pnpm test:webhook-e2e",
     "pnpm test:telemetry",
-    "node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-autonomy-modes.test.mjs",
+    "node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs",
     "pnpm test:dashboard",
   ],
   packages: [

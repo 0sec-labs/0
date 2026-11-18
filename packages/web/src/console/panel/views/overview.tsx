@@ -15,7 +15,6 @@ import {
   contextUsage,
   newestFindings,
   planSummary,
-  scopeSummary,
   severityCounts,
   SEVERITIES,
   statusSummary,
@@ -118,7 +117,6 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
     );
   const status = statusSummary(snapshot);
   const context = contextUsage(snapshot);
-  const scope = scopeSummary(snapshot);
   const plan = planSummary(snapshot);
   const counts = severityCounts(groups);
   const newest = newestFindings(groups);
@@ -169,22 +167,6 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
           </p>
         )}
       </div>
-
-      <Group title="Target and scope">
-        {scope.target ? (
-          <p className="break-all px-2 py-1 font-mono text-xs">{scope.target}</p>
-        ) : (
-          <p className="px-2 py-1 text-xs text-muted-foreground-2">No target set.</p>
-        )}
-        <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1">
-          <Pill>{scope.inCount} in scope</Pill>
-          <Pill>{scope.outCount} out of scope</Pill>
-          <Pill title={scope.enforcementMessage}>
-            <ShieldCheck aria-hidden="true" className="mr-1 size-3" />
-            {scope.enforcement === "enforced" ? "Enforced" : "Not enforced"}
-          </Pill>
-        </div>
-      </Group>
 
       {snapshot.pendingDecisions.length > 0 && (
         <Group title="Needs your decision" count={snapshot.pendingDecisions.length}>

@@ -30,7 +30,7 @@ const gateways: ConsoleGateway[] = [];
 afterEach(async () => { await Promise.all(gateways.splice(0).map(gateway => gateway.closeAll())); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 describe("agent turns through a real gateway with compaction forced", () => {
-  it("sends the current charter and scope in the turn that follows a compaction, and the earlier envelope is no longer what the model relies on", async () => {
+  it("sends the current charter in the turn that follows a compaction, and the earlier envelope is no longer what the model relies on", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zero-agent-turns-")); dirs.push(dir);
     const dbPath = join(dir, "control.db");
     const runtime = new CompactionRuntime();
@@ -41,7 +41,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
     gateways.push(gateway);
     const store = new SentinelStore(dbPath);
     const workflows = new SecurityWorkflowStore(dbPath);
-    const agent = store.create({ name: "Guard", instructions: "Review dependencies.", scope: { targets: ["https://staging.example.com"], outOfScope: ["https://staging.example.com/admin"] } });
+    const agent = store.create({ name: "Guard", instructions: "Review dependencies." });
     store.setStatus(agent.id, "active", undefined, true);
     const automation = workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: agent.id });
     const trigger = store.createTrigger(agent.id, { automationId: automation.id, kind: "schedule", schedule: { frequency: "minutes", every: 5 }, enabled: false });
@@ -70,7 +70,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
 
     // The charter and scope are edited between turns. The next turn compacts first, then must carry the edit.
     const charter = store.getFile(agent.id, "AGENTS.md")!;
-    store.putFile(agent.id, "AGENTS.md", `${charter.content}\n- NEW-CHARTER-RULE-77: never open network connections to hosts outside scope.\n`, charter.revision, "human", "local");
+    store.putFile(agent.id, "AGENTS.md", `${charter.content}\n- NEW-CHARTER-RULE-77: never open network connections to unlisted hosts.\n`, charter.revision, "human", "local");
     const second = await delivery.deliver(request("k2", "2026-03-02T10:05:00.000Z"));
     expect(second.status).toBe("queued");
     if (second.status !== "queued") return;
@@ -82,7 +82,6 @@ describe("agent turns through a real gateway with compaction forced", () => {
     const turnMessage = textOf(afterCompaction.at(-1));
     expect(turnMessage).toContain("NEW-CHARTER-RULE-77");
     expect(turnMessage).toContain("Hard limits");
-    expect(turnMessage).toContain("https://staging.example.com/admin");
     expect(turnMessage).toContain("Your charter was edited since your last turn");
     // The first turn's envelope was part of what compaction was free to summarise; the rule only exists in the new envelope.
     expect(afterCompaction.slice(0, -1).some(message => textOf(message).includes("NEW-CHARTER-RULE-77"))).toBe(false);

@@ -70,7 +70,7 @@ export function createRequest(draft: AgentDraft): { ok: true; body: Record<strin
       avatar: { color: draft.avatar.color, icon: draft.avatar.icon },
       status: "active",
       ...(draft.presetId ? { preset: draft.presetId } : {}),
-      ...(draft.folder ? { scope: { repos: [draft.folder] } } : {}),
+      ...(draft.folder ? { folder: draft.folder } : {}),
       ...(draft.computerId !== THIS_COMPUTER ? { hostId: draft.computerId } : {}),
       ...(draft.model ? { model: { providerId: draft.model.providerId, model: draft.model.model } } : {}),
     },

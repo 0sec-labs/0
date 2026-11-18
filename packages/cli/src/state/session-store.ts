@@ -9,7 +9,7 @@
  * its full result. On a security tool that is engagement content, not chat
  * history. In practice a single file here can contain:
  *
- *   - target hostnames, IPs, internal URLs and the scope an operator approved;
+ *   - hostnames, IPs and internal URLs;
  *   - discovered findings before they are triaged, redacted or disclosed;
  *   - raw HTTP requests and responses captured as exploit evidence, including
  *     session cookies, bearer tokens and CSRF tokens seen on the wire;
@@ -78,8 +78,6 @@ export interface StoredSessionMeta {
    * nondeterministic clocks in logic that has tests.
    */
   savedAt: number;
-  /** Engagement target at save time, when the session had one. */
-  target?: string;
   /** Model id the session was running on, for the listing. */
   model?: string;
   /** Autonomy mode at save time, for the listing. */
@@ -238,14 +236,12 @@ function sanitizeSummary(value: unknown): string | undefined {
 export function storedSessionMetadata(id: string, raw: unknown, messageCount: number): StoredSessionMeta {
   const savedAt = rawValue(raw, "savedAt");
   const cwd = rawValue(raw, "cwd");
-  const target = optionalString(raw, "target");
   const model = optionalString(raw, "model");
   const mode = optionalString(raw, "mode");
   const summary = sanitizeSummary(rawValue(raw, "summary"));
   return {
     id,
     savedAt: typeof savedAt === "number" && Number.isFinite(savedAt) ? savedAt : 0,
-    ...(target !== undefined ? { target } : {}),
     ...(model !== undefined ? { model } : {}),
     ...(mode !== undefined ? { mode } : {}),
     cwd: typeof cwd === "string" ? cwd : "",
@@ -294,7 +290,8 @@ const consoleStateSchema = z.object({
     skillId: z.string().min(1).max(384).refine(value => !/[\u0000-\u001f\u007f]/.test(value)).optional(),
     skillAllowList: z.array(z.string().min(1).max(384).regex(/^[A-Za-z0-9_.:/-]+$/)).max(64).optional(),
     parentSessionId: z.string().min(1).max(128).optional(),
-    target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
+    /** Written by releases that had a target; accepted and ignored. */
+    target: z.string().max(8_000).optional(), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
       connectionIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),

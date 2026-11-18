@@ -15,12 +15,9 @@ import { DeferredToolRegistry, partitionToolDefinitions, DEFERRED_TOOLS_MIN, DEF
 import { createThreadGuard, memoryContext, parseRememberRequest, memoryDisabledByEnv, openMemory, runMemoryTool, type NoteStore } from "../../notes/index.js";
 import { TOOL_DISPATCH } from "../../agent/tools/dispatch.js";
 import { evaluateGuards, guardApprovalUnavailable, guardUnresolvedCapabilities, type GuardContext, type ToolGuard } from "../../agent/guards.js";
-import { NETWORK_CAPABLE_TOOLS, LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../../agent/tool-classification.js";
+import { NETWORK_CAPABLE_TOOLS, READ_ONLY_TOOLS } from "../../agent/tool-classification.js";
 import type { AgentRole, ToolCall, ToolContext, ToolDefinition, ToolResult } from "../../agent/types.js";
 import { classifyToolRisk } from "../../agent/destructive-classifier.js";
-import { ScopePolicy } from "../../scope/scope.js";
-import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../../scope/activation.js";
-import type { ScopeEnforcementState } from "../../scope/activation.js";
 import { eventBus } from "../../events/bus.js";
 import { analyticsPipeline } from "../../telemetry/analytics-pipeline.js";
 import { createSessionObjectiveService } from "../session-objective.js";
@@ -32,10 +29,10 @@ import { renderInboundBatch } from "../../agent/agent-messaging.js";
 import type { MessagingRuntime } from "../../agent/agent-messaging.js";
 import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture, type RunManifest } from "../../telemetry/run-contribution.js";
 import { registerSignalCleanup } from "../../agent/signal-cleanup.js";
-import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleScopeResolution, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
+import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
-import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, extractToolTargets } from "./tool-targets.js";
+import { isDangerousLocalRoot } from "./folder.js";
 import { runBeforeCommand } from "../../agent/before-command.js";
 import { loadMcpServers, mcpLoadResult } from "./mcp-load.js";
 import { beforeCommandInputForCall } from "./before-command.js";
@@ -73,47 +70,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
   // Ask-first is the global setting, not a mode. An older "standard" value passed here still asks.
   let approvals: ApprovalsChoice = config.approvals ?? (legacyAskedFirst(config.autonomyMode) || legacyAskedFirst(cp?.autonomyMode) ? "ask" : "auto");
-  const scopeIsDefined = () => !!(sessionScope || configuredScope || toolContext.publicNetwork?.scope);
-  let sessionScopeEnforcement = getScopeEnforcementState(workspaceRoot, undefined, !!(cp ? cp.grantedScope ?? cp.configuredScope : config.scope));
-
-  // In-memory mutable scope state — updated by requestScope, NEVER written
-  // to disk. Seeded from checkpoint when provided.
-  let sessionTarget = cp?.target ?? config.target ?? "";
-  // An unset checkpoint scope stays unset; it must never resurrect config grants.
-  let sessionScope = cp
-    ? cp.grantedScope === null ? undefined : new ScopePolicy(cp.grantedScope)
-    : config.scope;
-  let configuredScope = cp
-    ? cp.configuredScope === null ? undefined : new ScopePolicy(cp.configuredScope)
-    : config.scope;
-
-  // Session-scoped memory of hosts the operator explicitly DECLINED via
-  // requestScope. In-memory only, per session — NEVER persisted to a scope
-  // file. Once a host is recorded here, further tool calls that touch it are
-  // denied outright without re-prompting, so a single rejection can't turn
-  // into an unbounded re-prompt loop when the model retries the same target.
-  // Seeded from checkpoint when provided.
-  const deniedHosts = new Set<string>(cp?.deniedHosts);
-
-  // Session-scoped memory of SHELL PAYLOADS the operator declined when this
-  // gate could not resolve their destination. An unresolved destination has no
-  // hostname, so `deniedHosts` cannot hold it; keying on the exact command text
-  // is what stops a retried `curl "$H"` from re-prompting on every round.
-  // In-memory only, per session — never persisted. Seeded from checkpoint.
-  const deniedShellPayloads = new Set<string>(cp?.deniedShellPayloads);
-
-  // In-memory, session-only local filesystem scope — the directory subtree the
-  // operator authorized via requestLocalScope. Starts unset (the console never
-  // grants a scope implicitly); NEVER written to disk. Seeded from checkpoint.
-  let sessionScopePath: string | undefined = cp?.localScopePath ?? undefined;
-
-  // Session-scoped memory of local paths the operator explicitly DECLINED via
-  // requestLocalScope. In-memory only, per session. Once a path is recorded
-  // here, a later tool call whose requested path falls inside that declined
-  // directory is denied outright without re-prompting — the filesystem mirror
-  // of `deniedHosts`, guarding against the same re-prompt loop when the model
-  // retries the same (or a covered) path. Seeded from checkpoint.
-  const deniedLocalPaths = new Set<string>(cp?.deniedLocalPaths);
+  // The thread folder is where tools run; nothing but the folder itself is ever granted.
+  let sessionFolder: string | undefined = isDangerousLocalRoot(workspaceRoot) ? undefined : workspaceRoot;
 
   let contribution = config.contribution ?? currentRunContribution();
   const contributionParentId = currentContributionAgent() ?? null;
@@ -183,15 +141,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  const effectiveContributionScope = () => ({
-    target: sessionTarget, scopePath: sessionScopePath ?? null, policy: sessionScope?.raw ?? null,
-    configuredPolicy: configuredScope?.raw ?? null, deniedHosts: [...deniedHosts],
-    deniedLocalPaths: [...deniedLocalPaths], deniedShellPayloads: [...deniedShellPayloads],
-    approvals, allowScanners: config.allowScanners ?? false,
-  });
+  const effectiveContributionScope = () => ({ scopePath: sessionFolder ?? null, approvals });
 
   const toolContext: ToolContext = {
-    target: sessionTarget,
+    target: "",
     scanId,
     consoleSession: true,
     workerPolicy,
@@ -202,18 +155,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     targetInfo: cp ? structuredClone(cp.sessionData.targetInfo) : {},
     loadedSkills: new Set(cp?.sessionData.loadedSkills),
     recentToolResultTexts: cp ? [...cp.sessionData.recentToolResultTexts] : [],
-    scopePath: sessionScopePath,
+    scopePath: sessionFolder,
     webSearchEnabled,
-    allowScanners: config.allowScanners,
-    scope: sessionScope,
-    scopeEnforcement: sessionScopeEnforcement,
-    // The executor re-reads these per call, so a mid-session /mode switch
-    // changes what is dispatchable without rebuilding anything. Escalation
-    // lifts ONLY the scoped-source-audit allow-list — the network, local
-    // filesystem and co-pilot gates in this file still run first.
+    // The executor re-reads this per call, so an approvals change takes effect without rebuilding anything.
     approvals,
-    publicNetwork: executionPolicy(approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined,
-    escalateScopedAudit: config.escalateScopedAudit,
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
     agentMessaging: config.agentMessaging,
@@ -237,7 +182,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     (toolContext as ToolContext & { mcpHost?: McpToolHost }).mcpHost = config.mcpHost;
   }
   config.mcpHost?.attachOperator?.({
-    cwd: workspaceRoot, thread: () => ({ id: scanId, scope: sessionScope, approvals, canAskScope: false }),
+    cwd: workspaceRoot, thread: () => ({ id: scanId, approvals }),
     ...(config.approveTool ? { approve: ({ name, summary }) => config.approveTool!({ name, arguments: { summary } }) } : {}),
   });
   // One session catalog covers specialist built-ins and connected MCP tools.
@@ -255,8 +200,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const memoryOn = role !== "verify" && config.codebaseLearning !== false &&
     (config.codebaseLearning === true || config.memoryStore !== undefined) && !memoryDisabledByEnv();
   let memoryStore: NoteStore | undefined = memoryOn ? config.memoryStore : undefined;
-  const memoryRoot = (): string | undefined => sessionScopePath ??
-    (!isScopeEnforcementEnabled() && !isDangerousLocalRoot(workspaceRoot) ? workspaceRoot : undefined);
+  const memoryRoot = (): string | undefined => sessionFolder;
   const getMemory = (): NoteStore | undefined => {
     if (!memoryOn) return undefined;
     try { return memoryStore ??= openMemory(); } catch { return undefined; }
@@ -322,7 +266,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // When both self-extension and a plugin host are absent these stay plain
   // copies of the module consts, so every gate reads identical values to before.
   let networkCapableTools: Record<string, true> = { ...NETWORK_CAPABLE_TOOLS };
-  let localScopeTools: Record<string, true> = { ...LOCAL_SCOPE_TOOLS };
   let readOnlyTools: Record<string, true> = { ...READ_ONLY_TOOLS };
 
   /**
@@ -338,7 +281,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let mcpDefs: ToolDefinition[] = [];
   const refreshInjectedTools = (): void => {
     const net: Record<string, true> = { ...NETWORK_CAPABLE_TOOLS };
-    const loc: Record<string, true> = { ...LOCAL_SCOPE_TOOLS };
     const ro: Record<string, true> = { ...READ_ONLY_TOOLS };
     const extras: NativeToolDef[] = [];
     const catalog: ToolDefinition[] = [...basePartition.deferred];
@@ -364,13 +306,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // External MCP-server tools. Each defaults to network-capable (MCP tools
       // reach out of process — the danger-by-omission floor from the mcp-client
       // paper), unless trusted host configuration supplies explicit per-tool flags.
-      // They go through the same scope/approval gates as built-ins. Their
+      // They go through the same approval gates as built-ins. Their
       // mcp__ name means the native loop fences their results as untrusted.
       mcpDefs = config.mcpHost.registeredTools();
       const classifyMcp = (name: string) => {
-        const flags = config.mcpHost!.toolGateFlags?.(name) ?? { networkCapable: true, localScope: false, readOnly: false };
+        const flags = config.mcpHost!.toolGateFlags?.(name) ?? { networkCapable: true, readOnly: false };
         if (flags.networkCapable) net[name] = true;
-        if (flags.localScope) loc[name] = true;
         if (flags.readOnly) ro[name] = true;
       };
       // A lazy host (extension MCP servers) adds one catalog line per unloaded server; the tools of servers the model
@@ -409,7 +350,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     if (corePartition) extras.push(...packTools.loadedDefinitions().map(toNativeToolDef));
 
     networkCapableTools = net;
-    localScopeTools = loc;
     readOnlyTools = ro;
     nativeTools = (extras.length > 0 ? [...baseNativeTools, ...extras] : baseNativeTools).filter(tool => webSearchEnabled || tool.name !== "web_search");
   };
@@ -431,7 +371,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
   const operatorInstructionsBlock = buildOperatorInstructionsBlock(config.operatorInstructions);
-  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -485,498 +425,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // Consumers observe the original rejecting promise through send() or the loader.
   void ready.catch(() => {});
 
-  function applySessionScope(target: string, scope: ScopePolicy, configured = false): void {
-    sessionTarget = target;
-    sessionScope = scope;
-    toolContext.target = target;
-    toolContext.scope = scope;
-    if (configured) {
-      configuredScope = scope;
-      if (executionPolicy(approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
-    }
-    if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
-    }
-  }
-
-  async function selectOperatorTarget(text: string, notify?: (message: string) => void, signal?: AbortSignal): Promise<void> {
-    const target = operatorTargetFromMessage(text);
-    if (!target) return;
-    if (!isScopeEnforcementEnabled()) {
-      sessionTarget = target;
-      toolContext.target = target;
-      if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
-      }
-      notify?.(`Target set to ${target}; scope extension is disabled and no scope is defined, authorization is not enforced.`);
-      return;
-    }
-    const host = hostOf(target)!;
-    if (toolContext.publicNetwork?.scope && !toolContext.publicNetwork.scope.match(target).allowed) {
-      notify?.(`Target ${target} is outside the configured scope; the current target and restrictions are unchanged.`);
-      return;
-    }
-    let confirmed = false;
-    const base = sessionScope?.raw ?? {};
-    let scope = ScopePolicy.fromJson({ ...base, in_scope: [...(base.in_scope ?? []), host] });
-    if (!scope.match(target).allowed) {
-      notify?.(`Target ${target} is explicitly out of scope; the current target is unchanged.`);
-      return;
-    }
-    if (deniedHosts.has(host)) {
-      const requestScope = config.requestScope;
-      if (!requestScope) {
-        notify?.(`Target ${target} was previously declined; an interactive scope approval is required to change that decision.`);
-        return;
-      }
-      // This control request originates only from fresh root-operator input;
-      // it does not execute a tool or let a model retry clear a denial.
-      let resolution: ConsoleScopeResolution | null;
-      let onAbort: (() => void) | undefined;
-      try {
-        const cancelled = new Promise<null>(resolve => {
-          onAbort = () => resolve(null);
-          signal?.addEventListener("abort", onAbort, { once: true });
-        });
-        resolution = await Promise.race([requestScope({
-          call: { name: "update_target", arguments: { endpoints: [target] } },
-          requestedUrls: [target], target: sessionTarget, currentScope: sessionScope,
-        }), cancelled]);
-      } finally {
-        if (onAbort) signal?.removeEventListener("abort", onAbort);
-      }
-      if (signal?.aborted || !resolution) return;
-      const approvedScope = ScopePolicy.fromJson({
-        ...resolution.scope.raw,
-        out_of_scope: [...new Set([...(base.out_of_scope ?? []), ...(resolution.scope.raw.out_of_scope ?? [])])],
-      });
-      if (!resolution.target.trim() || !approvedScope.match(target).allowed) {
-        notify?.(`Scope approval does not cover target ${target}; the current target is unchanged.`);
-        return;
-      }
-      // Recovery grants only the freshly selected host, never unrelated hosts
-      // included in a broad approval response.
-      scope = ScopePolicy.fromJson({
-        ...base,
-        in_scope: [...new Set([...(base.in_scope ?? []), host])],
-        out_of_scope: approvedScope.raw.out_of_scope,
-      });
-      deniedHosts.delete(host);
-      confirmed = true;
-    }
-    applySessionScope(target, scope, confirmed);
-    notify?.(`Target set to ${target}; continuing in the same session.`);
-  }
-
-  // AUTO-EXPAND the in-memory engagement scope to cover `uncoveredUrls`, used by
-  // copilot (in-engagement targets) and yolo (target-anchored hosts) to grow
-  // scope WITHOUT prompting. Adds each host as an EXACT-host rule (never a
-  // wildcard — no silent broadening) on top of whatever scope already exists.
-  // The out_of_scope deny-list is preserved and still WINS: a host the operator
-  // explicitly excluded is refused even here, so auto-expansion can only ever
-  // add hosts the anchor already vouches for, never override a deny. Never
-  // written to disk; the expansion is announced via `notify` so it is auditable.
-  function autoExpandScope(
-    uncoveredUrls: string[],
-    notify: ((message: string) => void) | undefined,
-    modeLabel: string,
-  ): "approved" | ToolResult {
-    const hosts = [
-      ...new Set(
-        uncoveredUrls.map((url) => hostOf(url)).filter((h): h is string => h !== null),
-      ),
-    ];
-    const base = sessionScope?.raw ?? {};
-    const expanded = ScopePolicy.fromJson({
-      ...base,
-      in_scope: [...(base.in_scope ?? []), ...hosts],
-    });
-    // Deny-wins floor: an explicitly out-of-scope host is never authorized by
-    // auto-expansion, and an unparseable pseudo-URL never becomes "covered".
-    const stillUncovered = uncoveredUrls.filter((url) => !expanded.match(url).allowed);
-    if (stillUncovered.length > 0) {
-      return {
-        success: false,
-        output: null,
-        error: `${modeLabel} mode: ${stillUncovered.join(", ")} is explicitly out of scope and was not auto-expanded.`,
-      };
-    }
-    sessionScope = expanded;
-    toolContext.scope = expanded;
-    if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
-    }
-    notify?.(
-      `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
-    );
-    return "approved";
-  }
-
-  // Resolve scope for a network-capable tool call, or return a "denied"
-  // ToolResult. Per-mode friction (see ConsoleAutonomyMode):
-  //   - standard: prompt the operator (requestScope) for anything uncovered.
-  //   - copilot: auto-expand for in-engagement targets; defer the rest to the
-  //     operator (or refuse when no prompt channel exists).
-  //   - yolo: auto-expand target-related hosts; ask for unrelated named hosts.
-  //     Opaque local commands retain existing full-autonomy behavior.
-  // In EVERY mode the executor's own validateTargetUrl (target/scope boundary +
-  // the absolute SSRF rail) still runs underneath, and the denied-decision
-  // memory below is never cleared or skipped by a mode.
-  async function maybeResolveScope(
-    call: ToolCall,
-    notify?: (message: string) => void,
-    allowScopeExpansion = true,
-  ): Promise<"approved" | ToolResult> {
-    if (!isScopeEnforcementEnabled()) return "approved";
-    if (!networkCapableTools[call.name]) return "approved";
-
-    const { urls, unresolved, shellPayloads } = extractToolTargets(
-      call,
-      sessionTarget,
-      networkCapableTools[call.name] === true,
-    );
-
-    // Nothing to decide about: no destination was named AND nothing in the call
-    // reaches the network in a way this gate could not read. This is the branch
-    // that keeps `bash echo hello`, `read_file`, and every other ordinary local
-    // call prompt-free — the escalation below is driven by evidence of network
-    // reach, never by mere membership in NETWORK_CAPABLE_TOOLS. It is also what
-    // lets yolo run a local shell command with NO scope configured.
-    if (urls.length === 0 && unresolved.length === 0) return "approved";
-
-    // Check if every extracted URL is already covered by the current scope. An
-    // unresolved destination can NEVER be "covered": there is nothing to match
-    // a policy against, so scope coverage cannot discharge it.
-    const publicNetwork = toolContext.publicNetwork;
-    const effectiveScope = publicNetwork ? publicNetwork.scope : sessionScope;
-    const allCovered = urls.every((url) => effectiveScope?.match(url).allowed);
-
-    // ── Denied-decision memory (ALL modes; never cleared or skipped by a mode) ──
-    // A previously-declined opaque payload or host is denied outright — without a
-    // fresh prompt and without auto-expansion — in standard, copilot AND yolo.
-    // Keyed on the exact payload text for unresolved destinations (no host to
-    // key on) and on the hostname for named ones.
-    if (unresolved.length > 0) {
-      const refused = shellPayloads.find((payload) => deniedShellPayloads.has(payload));
-      if (refused !== undefined) {
-        return {
-          success: false,
-          output: null,
-          error: `Scope request for tool "${call.name}" denied — this command was already declined by the operator this session; not prompting again.`,
-        };
-      }
-    }
-    // A scope approval for another host must not erase a prior refusal, even
-    // when that approval happened to contain a wildcard covering this host.
-    const uncoveredUrls = urls.filter((url) => !effectiveScope?.match(url).allowed);
-    const previouslyDenied = urls.filter((url) => {
-      const host = hostOf(url);
-      return host !== null && deniedHosts.has(host);
-    });
-    if (previouslyDenied.length > 0) {
-      return {
-        success: false,
-        output: null,
-        error: `Scope request for tool "${call.name}" denied — ${previouslyDenied.join(", ")} was already declined by the operator this session; not prompting again.`,
-      };
-    }
-    if (!publicNetwork && allCovered && unresolved.length === 0) return "approved";
-    if (!allowScopeExpansion && !publicNetwork) {
-      return { success: false, output: null, error: "Executable code cannot expand network scope. Establish the required scope in the parent session first." };
-    }
-
-    const exclusions = effectiveScope?.raw.out_of_scope ?? [];
-    if (exclusions.length) {
-      const exclusionPolicy = ScopePolicy.fromJson({
-        in_scope: uncoveredUrls.map(hostOf).filter((host): host is string => host !== null),
-        out_of_scope: exclusions,
-      });
-      const excluded = uncoveredUrls.filter(url => !exclusionPolicy.match(url).allowed);
-      if (excluded.length) return {
-        success: false, output: null,
-        error: `Explicit scope exclusions forbid ${excluded.join(", ")}; scope is unchanged.`,
-      };
-
-    }
-
-    if (publicNetwork) {
-      if (publicNetwork.scope && uncoveredUrls.length > 0) {
-        return { success: false, output: null,
-          error: `Configured scope excludes ${uncoveredUrls.join(", ")}; restrictions are unchanged.` };
-      }
-      // This grants dispatch, not private-network/credential/host-code trust.
-      // The executor and pinned HTTP transport enforce those independently.
-      return "approved";
-    }
-
-    const anchorHost = anchorHostFromTarget(sessionTarget);
-    // Partition the uncovered destinations by the TARGET ANCHOR: those that
-    // belong to the engagement (target host / its sub-domains / already scoped)
-    // versus foreign ones. Co-pilot retains this engagement boundary.
-    const foreign = uncoveredUrls.filter(
-      (url) => !hostBelongsToEngagement(hostOf(url), anchorHost, sessionScope),
-    );
-
-
-    // Ask for uncovered targets.
-    const requestScope = config.requestScope;
-    if (!requestScope) {
-      if (executionPolicy(approvals).scopeExpansion === "target-related") {
-        return { success: false, output: null,
-          error: `Approval is required for ${foreign.join(", ")} but no scope-approval channel is available. Select this target explicitly or use an interactive session with scope approval.` };
-      }
-      // no callback → the executor's own validateTargetUrl governs
-      // (no scope → same-origin only). Unchanged from the legacy console.
-      return "approved";
-    }
-
-    // URLs are not covered — ask the operator for approval.
-    const resolution = await requestScope({
-      call,
-      requestedUrls: urls,
-      ...(unresolved.length > 0 ? { unresolvedTargets: unresolved } : {}),
-      target: sessionTarget,
-      currentScope: sessionScope,
-    });
-
-    if (!resolution) {
-      // Remember every requested host so a retry of the same (or an
-      // overlapping) target is denied outright above instead of re-prompting.
-      // Unparseable URLs contribute no host (fail safe — see hostOf).
-      for (const url of urls) {
-        const host = hostOf(url);
-        if (host !== null) deniedHosts.add(host);
-      }
-      // An unreadable destination contributes no host, so remember the payload
-      // itself; otherwise a retried `curl "$H"` would re-prompt forever.
-      if (unresolved.length > 0) {
-        for (const payload of shellPayloads) deniedShellPayloads.add(payload);
-      }
-      return {
-        success: false,
-        output: null,
-        error: `Scope request denied for tool "${call.name}" — operator declined to expand scope.`,
-      };
-    }
-    if (!resolution.target.trim()) {
-      return {
-        success: false,
-        output: null,
-        error: `Scope request for tool "${call.name}" returned an empty target.`,
-      };
-    }
-
-    const approvedScope = exclusions.length ? ScopePolicy.fromJson({
-      ...resolution.scope.raw,
-      out_of_scope: [...new Set([...exclusions, ...(resolution.scope.raw.out_of_scope ?? [])])],
-    }) : resolution.scope;
-    const uncovered = urls.filter((url) => !approvedScope.match(url).allowed);
-    if (uncovered.length > 0) {
-      return {
-        success: false,
-        output: null,
-        error: `Scope approval for tool "${call.name}" does not cover ${uncovered.join(", ")}.`,
-      };
-    }
-
-    // Apply the resolution: update in-memory target + scope (never persist).
-    applySessionScope(resolution.target, approvedScope, true);
-    notify?.(`Scope approved for ${urls.join(", ") || resolution.target}; continuing in the same session.`);
-    return "approved";
-  }
-
-  // AUTO-GRANT a local filesystem scope covering `requestedPath` WITHOUT
-  // prompting, used by yolo (any non-dangerous path) and copilot (paths that
-  // belong to the engagement). Grants the requested path's directory subtree
-  // (grounded on a directory that exists), re-checks the dangerous-root floor on
-  // the directory actually granted, and applies it to the in-memory tool context
-  // (never persisted). The grant is deliberately silent: the operator already
-  // chose the autonomy mode, so a per-call transcript notice is pure noise.
-  function autoGrantLocalScope(
-    call: ToolCall,
-    requestedPath: string,
-  ): "approved" | ToolResult {
-    const grantDir = directoryToGrantFor(requestedPath);
-    if (isDangerousLocalRoot(grantDir)) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope for tool "${call.name}" refused — granting ${grantDir} would expose a protected root (filesystem root or home directory).`,
-      };
-    }
-    if (!isWithinDir(requestedPath, grantDir)) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope for tool "${call.name}" could not be auto-granted for ${requestedPath}.`,
-      };
-    }
-    sessionScopePath = grantDir;
-    toolContext.scopePath = grantDir;
-    return "approved";
-  }
-
-  // Resolve LOCAL filesystem scope for a filesystem-scoped tool call, or return
-  // a "denied" ToolResult. Per-mode friction:
-  //   - standard: prompt the operator (requestLocalScope) for uncovered paths.
-  //   - copilot: auto-grant paths that belong to the engagement (adjacent to an
-  //     established local scope); defer the rest to the operator prompt.
-  //   - yolo: auto-grant any path (no prompt), subject only to the floors below.
-  // Floors that hold in ALL modes: tools not in LOCAL_SCOPE_TOOLS pass straight
-  // through; a path already inside the approved subtree passes through; dangerous
-  // roots (filesystem/home root) are refused without ever prompting or granting;
-  // a previously-declined path is denied without re-prompting. On the operator
-  // prompt path, the approved directory is re-canonicalized and confirmed to
-  // cover the requested path before it is applied (never persisted).
-  async function maybeResolveLocalScope(
-    call: ToolCall,
-    notify?: (message: string) => void,
-    allowScopeExpansion = true,
-  ): Promise<"approved" | ToolResult> {
-    if (!isScopeEnforcementEnabled()) return "approved";
-    if (!localScopeTools[call.name]) return "approved";
-
-    // Resolve the concrete path the tool wants to touch to an absolute,
-    // symlink-resolved real path — the exact value the decision is made against.
-    let requestedPath: string;
-    try {
-      requestedPath = canonicalizeRealPath(resolve(sessionScopePath ?? workspaceRoot, extractLocalPath(call)));
-    } catch {
-      if (!allowScopeExpansion) {
-        return { success: false, output: null, error: "Executable code requires a resolvable path inside the parent's approved local scope." };
-      }
-      // The path resolves to nothing real (no existing ancestor). There is
-      // nothing concrete to authorize; defer to today's behaviour and let the
-      // executor produce its own error.
-      return "approved";
-    }
-
-    // Already inside an approved local scope subtree → run it.
-    if (sessionScopePath && isWithinDir(requestedPath, sessionScopePath)) {
-      return "approved";
-    }
-    if (!allowScopeExpansion) {
-      return { success: false, output: null, error: "Executable code cannot expand local scope. Establish the required scope in the parent session first." };
-    }
-
-    // ── Floors that apply in EVERY mode, before any prompt or auto-grant ──
-    // Refuse obviously dangerous roots outright — never prompt, never grant.
-    if (isDangerousLocalRoot(requestedPath)) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope request for tool "${call.name}" refused — ${requestedPath} is a protected root (filesystem root or home directory) and cannot be authorized as a scan scope.`,
-      };
-    }
-    // A path covered by an earlier denial must not trigger a fresh prompt or a
-    // silent grant — the denied-decision memory is honoured in every mode.
-    for (const denied of deniedLocalPaths) {
-      if (isWithinDir(requestedPath, denied)) {
-        return {
-          success: false,
-          output: null,
-          error: `Local scope request for tool "${call.name}" denied — ${denied} was already declined by the operator this session; not prompting again.`,
-        };
-      }
-    }
-
-    // ── yolo: auto-grant the path's subtree, no prompt (floors above still ran) ──
-    if (executionPolicy(approvals).autoGrantsLocalPaths) {
-      return autoGrantLocalScope(call, requestedPath);
-    }
-
-    // ── Ask before running commands: ask the operator ──
-    // No callback wired (legacy readline console / tests): behave exactly as
-    // today — fall through so the executor returns its own scope error.
-    const requestLocalScope = config.requestLocalScope;
-    if (!requestLocalScope) return "approved";
-
-    const resolution = await requestLocalScope({
-      call,
-      requestedPath,
-      currentScopePath: sessionScopePath,
-    });
-
-    if (!resolution) {
-      // Remember the declined path so a retry of the same (or a covered) path is
-      // denied outright above instead of re-prompting.
-      deniedLocalPaths.add(requestedPath);
-      return {
-        success: false,
-        output: null,
-        error: `Local scope request denied for tool "${call.name}" — operator declined to grant local filesystem scope.`,
-      };
-    }
-
-    if (!resolution.scopePath.trim()) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope approval for tool "${call.name}" returned an empty directory path.`,
-      };
-    }
-
-    // Re-canonicalize the APPROVED directory to what will actually be
-    // authorized, so a symlink swapped between prompt and apply cannot widen it.
-    let approvedDir: string;
-    try {
-      approvedDir = canonicalizeRealPath(resolution.scopePath);
-    } catch {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope approval for tool "${call.name}" points to a path that does not exist: ${resolution.scopePath}.`,
-      };
-    }
-    // A local scope is a DIRECTORY subtree. If the approved path is a FILE
-    // (e.g. the exact read_file/search_files target the operator confirmed),
-    // grant its containing directory instead of erroring — mirrors the
-    // auto-grant path (directoryToGrantFor) so standard mode behaves the same.
-    approvedDir = directoryToGrantFor(approvedDir);
-
-    // Re-apply the dangerous-root guard to the approved directory.
-    if (isDangerousLocalRoot(approvedDir)) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope approval for tool "${call.name}" refused — ${approvedDir} is a protected root (filesystem root or home directory) and cannot be authorized as a scan scope.`,
-      };
-    }
-
-    // The approved scope must be a real directory.
-    try {
-      if (!statSync(approvedDir).isDirectory()) {
-        return {
-          success: false,
-          output: null,
-          error: `Local scope approval for tool "${call.name}" is not a directory: ${approvedDir}.`,
-        };
-      }
-    } catch {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope approval for tool "${call.name}" points to a path that does not exist: ${approvedDir}.`,
-      };
-    }
-
-    // What the operator saw must cover what the tool asked for — a requested
-    // path that escapes the approved directory subtree is rejected.
-    if (!isWithinDir(requestedPath, approvedDir)) {
-      return {
-        success: false,
-        output: null,
-        error: `Local scope approval for tool "${call.name}" does not cover ${requestedPath} (outside the approved directory ${approvedDir}).`,
-      };
-    }
-
-    // Apply the resolution: set the in-memory local scope on the shared tool
-    // context so the tool now works (never persisted to disk).
-    sessionScopePath = approvedDir;
-    toolContext.scopePath = approvedDir;
-    return "approved";
-  }
-
   /**
    * The guards actually wired into dispatch — the deny-only monotonic floor that
    * runs LAST, after every per-mode gate above has already approved. Listed
@@ -996,14 +444,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
    * The deny-only pattern is preserved intact — "allow" remains inexpressible,
    * and adding guards can only narrow access.
    *
-   * The THIRD built-in, `guardNetworkRequiresScope`, is DELIBERATELY NOT wired:
-   * it is retired. Console Auto now explicitly opts into public-network access;
-   * optional operator restrictions, denied decisions and private-network
-   * boundaries remain enforced by the console, executor and pinned transport.
-   * Existing non-console callers retain their target/same-origin policy.
-   * Wiring it would wrongly re-deny scopeless yolo (even `bash echo hello`). The
-   * function still exists and is exported from `plugins/guards.ts` for its own
-   * unit tests and any other consumer; only the wired sets omit it.
    */
   const WIRED_GUARDS: readonly ToolGuard[] = [
     guardUnresolvedCapabilities,
@@ -1026,10 +466,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     return {
       toolName: call.name,
       networkCapable: networkCapableTools[call.name] === true,
-      localScope: localScopeTools[call.name] === true,
       readOnly: readOnlyTools[call.name] === true,
       askFirst: approvals === "ask",
-      hasScope: sessionScope !== undefined,
       approvalAvailable: config.approveTool !== undefined,
       // `capabilitiesResolved` is true only for a tool this session actually
       // knows: a built-in with a dispatch entry, a plugin tool the host owns
@@ -1083,17 +521,16 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     call: ToolCall,
     notify?: (message: string) => void,
     signal?: AbortSignal,
-    allowScopeExpansion = true,
     assertAuthority?: () => void,
   ): Promise<ToolResult> {
     toolContext.delegationSystemPrompt = systemPrompt;
     const capture = contribution;
-    if (!capture) return dispatchAuthorizedInternal(call, notify, signal, allowScopeExpansion, assertAuthority);
+    if (!capture) return dispatchAuthorizedInternal(call, notify, signal, assertAuthority);
     const callId = randomUUID();
     const startedAt = Date.now();
     capture.record("tool_call", { callId, tool: call.name, arguments: call.arguments, effectiveScope: effectiveContributionScope() });
     try {
-      const result = await dispatchAuthorizedInternal(call, notify, signal, allowScopeExpansion, assertAuthority);
+      const result = await dispatchAuthorizedInternal(call, notify, signal, assertAuthority);
       capture.record("tool_result", { callId, tool: call.name, result, durationMs: Date.now() - startedAt, effectiveScope: effectiveContributionScope() });
       return result;
     } catch (error) {
@@ -1102,7 +539,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
   }
 
-  async function dispatchAuthorizedInternal(call: ToolCall, notify?: (message: string) => void, signal?: AbortSignal, allowScopeExpansion = true, assertAuthority?: () => void): Promise<ToolResult> {
+  async function dispatchAuthorizedInternal(call: ToolCall, notify?: (message: string) => void, signal?: AbortSignal, assertAuthority?: () => void): Promise<ToolResult> {
     assertAuthority?.();
     if (call.name === "web_search" && !webSearchEnabled) return { success: false, output: null, error: "Web search is disabled for this chat." };
     if (signal?.aborted) return { success: false, output: null, error: "Tool call cancelled before dispatch." };
@@ -1135,20 +572,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           message: "Draft saved. Inspect it in Automations and use its explicit Run action to execute it." } };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow draft could not be saved." }; }
     }
-    // One decision point: scope (deny/ask) and the Ask-before-running setting (ask).
+    // One decision point: protected paths (deny) and the Ask-before-running setting (ask).
     const hook = await runBeforeCommand(beforeCommandInputForCall(call, {
-      threadId: scanId, target: sessionTarget, cwd: workspaceRoot,
-      scope: toolContext.publicNetwork ? toolContext.publicNetwork.scope : sessionScope,
+      threadId: scanId, cwd: workspaceRoot,
       approvals, networkCapable: networkCapableTools[call.name] === true,
       readOnly: readOnlyTools[call.name] === true,
-      pathPrefixes: toolContext.enforcement?.pathPolicy.snapshot(),
-      canAskScope: allowScopeExpansion && config.requestScope !== undefined && executionPolicy(approvals).scopeExpansion === "ask",
     }));
     if (hook.decision === "deny") return { success: false, output: null, error: `Tool "${call.name}" denied: ${hook.reason}` };
-    const scope = await maybeResolveScope(call, notify, allowScopeExpansion);
-    if (scope !== "approved") return scope;
-    const local = await maybeResolveLocalScope(call, notify, allowScopeExpansion);
-    if (local !== "approved") return local;
     const approval = hook.asks.some(ask => ask.policyId === "approvals") ? await maybeApproveTool(call) : "approved";
     if (approval !== "approved") return approval;
     const guard = evaluateGuards(WIRED_GUARDS, guardContextFor(call));
@@ -1172,11 +602,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let turnInProgress = false;
 
   function send(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
-    if (!turnInProgress) {
-      sessionScopeEnforcement = getScopeEnforcementState(workspaceRoot, undefined, scopeIsDefined());
-      toolContext.scopeEnforcement = sessionScopeEnforcement;
-    }
-    return withScopeEnforcement(sessionScopeEnforcement, () => sendWithContribution(userText, callbacks, opts));
+    return sendWithContribution(userText, callbacks, opts);
   }
 
   async function sendWithContribution(
@@ -1185,7 +611,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
     if (customSystemPrompt === undefined && !turnInProgress) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
+      systemPrompt = buildConsoleSystemPrompt({ scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
     }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
@@ -1323,9 +749,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let maintenanceCancelled = false;
     try {
     await ready;
-    // Only the direct operator input can authorize a target. Keep this after
-    // admission/abort checks and before any model, peer, or tool content.
-    await selectOperatorTarget(userText, callbacks?.onNotice, signal);
     if (signal?.aborted) {
       return {
         assistantText: "", toolCalls: [], usage,
@@ -1333,13 +756,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         stopReason: "cancelled",
       };
     }
-    try {
-      if (sessionTarget) analyticsPipeline.recordScope({ target: sessionTarget, kind: "target" });
-      if (sessionScopePath) analyticsPipeline.recordScope({ target: sessionScopePath, kind: "scope-path" });
-    } catch {
-      // Collection must never block a console turn.
-    }
-
     const operatorMessage: NativeMessage = { role: "user", content: [{ type: "text", text: userText }, ...(opts?.images ?? []).map(image => ({ type: "image" as const, ...image }))] };
     messages.push(operatorMessage);
     if (memoryToolEnabled) saveUserRemember(userText);
@@ -1732,10 +1148,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // PRIOR iteration of this loop cannot be interrupted (same-process JS is
         // not hard-killable); the abort takes effect here, before the NEXT tool
         // is dispatched. Every remaining block still gets a matching tool_result
-        // so history stays well-formed. This runs BEFORE the scope / local-scope
-        // / copilot / guard gates so a cancel never consults, mutates, or
-        // bypasses any authorization state — denial memory and granted scope are
-        // left exactly as they were.
+        // so history stays well-formed. This runs BEFORE the approval and guard
+        // gates so a cancel never consults, mutates, or bypasses any
+        // authorization state.
         if (cancelledMidRound || signal?.aborted) {
           cancelledMidRound = true;
           const cancelResult: ToolResult = {
@@ -1760,7 +1175,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         const startedAt = Date.now();
         const findingsBefore = toolContext.findings.length;
         let toolResult: ToolResult;
-        toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal, true);
+        toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal);
         memoryGuard.sawTool(call.name);
         // A successful save is a workflow handoff, never proof of runtime
         // reproduction. Build the receipt from the host's finding ledger, not
@@ -1958,19 +1373,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       webSearchEnabled = enabled;
       refreshInjectedTools();
     },
-    get target(): string { return sessionTarget; },
-    get scope(): ScopePolicy | undefined { return toolContext.publicNetwork ? configuredScope : sessionScope; },
-    get scopeEnforcement(): ScopeEnforcementState { return sessionScopeEnforcement; },
-    get localScopePath(): string | undefined { return sessionScopePath; },
     get approvals(): ApprovalsChoice { return approvals; },
     setApprovals: (approvalsArg) => {
       approvals = approvalsArg;
       toolContext.approvals = approvals;
       // The executor shares this mutable context object, so updating it here
       // is what makes an approvals change take effect without a restart.
-      toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
+        systemPrompt = buildConsoleSystemPrompt({ scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
       }
     },
     configureWorkspace: (path) => {
@@ -1978,30 +1388,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       const directory = realpathSync(path);
       if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new Error("Workspace must be an existing unprotected local directory.");
       workspaceRoot = directory;
-      sessionScopePath = directory;
+      sessionFolder = directory;
       toolContext.workspaceRoot = directory;
       if (toolContext.agentMessaging) (toolContext.agentMessaging as MessagingRuntime).projectPath = directory;
       executor.configureWorkspace(directory);
-    },
-    configureEngagement: (selection) => {
-      if (turnInProgress || closing) throw new Error("Scope configuration requires an initialized idle console mission.");
-      if (selection.scope !== undefined && selection.scope !== null) {
-        applySessionScope(selection.target ?? sessionTarget, selection.scope, true);
-        return;
-      }
-      if (selection.target !== undefined) {
-        sessionTarget = selection.target;
-        toolContext.target = selection.target;
-      }
-      if (selection.scope === null) {
-        sessionScope = undefined;
-        configuredScope = undefined;
-        toolContext.scope = undefined;
-        toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
-      }
-      if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
-      }
     },
     reconfigureRuntime: (sel) => {
       // Mutate the existing runtime in place; the engine reads config.runtime
@@ -2043,13 +1433,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         autonomyMode: "changes",
         webSearchEnabled,
         ...(workerPolicy !== undefined ? { workerPolicy: workerPolicySchema.parse(workerPolicy) } : {}),
-        target: sessionTarget,
-        configuredScope: configuredScope ? structuredClone(configuredScope.raw) : null,
-        grantedScope: sessionScope ? structuredClone(sessionScope.raw) : null,
-        localScopePath: sessionScopePath ?? null,
-        deniedHosts: [...deniedHosts],
-        deniedShellPayloads: [...deniedShellPayloads],
-        deniedLocalPaths: [...deniedLocalPaths],
         systemPrompt: customSystemPrompt ?? null,
         objective: objectiveService.snapshot(),
         sessionData: {

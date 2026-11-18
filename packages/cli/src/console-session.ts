@@ -30,7 +30,7 @@ export function createHostLocalConsoleSession(
   try {
     if (!db.getScan(scanId)) {
       db.createScan({
-        target: config.target ?? "",
+        target: "",
         depth: "default",
         format: "terminal",
         runtime: "api",

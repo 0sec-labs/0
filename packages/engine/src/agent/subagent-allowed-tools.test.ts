@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeRuntime, NativeRuntimeResult } from "../runtime/types.js";
 import { withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy } from "../workflow-execution-policy.js";
-import { withLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { eventBus } from "../events/bus.js";
 import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import type { ToolContext } from "./types.js";
@@ -118,19 +117,6 @@ it("does not let a child widen its tool capabilities through another spawn", asy
     expect(factory).toHaveBeenCalledTimes(1);
   } finally { await ex.cleanup(); }
 });
-
-it("refuses network capability requests across an explicit read-only source boundary", async () => {
-  const factory = vi.fn(async () => native(() => done()));
-  const ex = new ToolExecutor(context(), null, undefined, factory);
-  try {
-    const result = await withLocalSourceBoundary(process.cwd(), () => ex.execute({ name: "spawn_agent", arguments: {
-      task: "Request web search from a source-only worker.", wait: true, allowed_tools: ["web_search", "load_skill"],
-    } }));
-    expect(result).toMatchObject({ success: false, error: expect.stringContaining('unavailable tool "web_search"') });
-    expect(factory).not.toHaveBeenCalled(); expect(fetchStub).not.toHaveBeenCalled();
-  } finally { await ex.cleanup(); }
-});
-
 
 it.each([undefined, 100])("enforces the operator policy when task constraints exist only in prose (task max=%s)", async requestedTurns => {
   const { runNativeAgentLoop } = await import("./native-loop.js");

@@ -64,7 +64,7 @@ describe("update shows a diff and requires approval", () => {
     const { repo, svc } = setup([V1]);
     unwrap(approve(svc, unwrap(await svc.installer.prepare(`${repo.dir}@${repo.shas[0]}`)), { approvedRevision: repo.shas[0]! }));
     expect(unwrap(await svc.installer.prepareUpdate("demo", repo.shas[0]))).toEqual({ upToDate: true, revision: repo.shas[0] });
-    const b = await svc.installer.prepareUpdate("scope"); expect(!b.ok && b.error.code).toBe("builtin");
+    const b = await svc.installer.prepareUpdate("github"); expect(!b.ok && b.error.code).toBe("builtin");
   });
 
   it("a local folder is unpinned and asks again when its content changes", async () => {
@@ -130,17 +130,17 @@ describe("layouts and built-ins", () => {
     const a = unwrap(await svc.installer.prepare(`${claude.dir}@${claude.shas[0]}`)); expect(a.prompt.format).toBe("claude"); expect(a.prompt.capabilities.ignored).toEqual(["hooks"]); expect(a.prompt.canDo.join()).toContain("ignored, never run: hooks");
     const b = unwrap(await svc.installer.prepare(`${bare.dir}@${bare.shas[0]}`)); expect(b.prompt.format).toBe("skill-folder"); expect(b.prompt.name).toBe("bare-demo");
     unwrap(approve(svc, a, { approvedRevision: a.prompt.revision })); unwrap(approve(svc, b, { approvedRevision: b.prompt.revision }));
-    expect(svc.list().rows.map(r => r.name)).toEqual(expect.arrayContaining(["scope", "github", "claude-demo", "bare-demo"]));
+    expect(svc.list().rows.map(r => r.name)).toEqual(expect.arrayContaining(["github", "claude-demo", "bare-demo"]));
   });
 
   it("built-ins are listed from the registry array, cannot be removed, and disabling needs confirmation and is audited", async () => {
     const { home, svc } = setup([V1]);
-    expect(svc.list().rows.filter(r => r.kind === "built-in").map(r => r.name)).toEqual(["scope", "github"]);
-    const rm = svc.installer.remove("scope"); expect(!rm.ok && rm.error.code).toBe("builtin");
-    const no = svc.installer.disable("scope"); expect(!no.ok && no.error.code).toBe("needs_confirmation");
-    unwrap(svc.installer.disable("scope", { confirm: true })); expect(svc.loadable().builtins).toEqual(["github"]);
+    expect(svc.list().rows.filter(r => r.kind === "built-in").map(r => r.name)).toEqual(["github"]);
+    const rm = svc.installer.remove("github"); expect(!rm.ok && rm.error.code).toBe("builtin");
+    const no = svc.installer.disable("github"); expect(!no.ok && no.error.code).toBe("needs_confirmation");
+    unwrap(svc.installer.disable("github", { confirm: true })); expect(svc.loadable().builtins).toEqual([]);
     expect(readFileSync(join(home, ".0", "extensions", "audit.jsonl"), "utf8")).toContain("extension.disable");
-    const inst = await svc.installer.prepare("scope"); expect(!inst.ok && inst.error.code).toBe("builtin");
+    const inst = await svc.installer.prepare("github"); expect(!inst.ok && inst.error.code).toBe("builtin");
   });
 
   it("remove deletes every stored revision and the state entry", async () => {

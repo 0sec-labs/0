@@ -29,9 +29,8 @@ function fakeModel(repo: string, claim: string, edit: boolean): (input: ConsoleG
   return input => {
     const messages: NativeMessage[] = [];
     return {
-      scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages, approvals: "auto", target: input.target, scope: undefined,
-      scopeEnforcement: { pluginId: "scope", enabled: true, pluginEnabled: true, explicit: true, scopeDefined: true, denied: false, projectPath: repo, message: "" },
-      localScopePath: repo, webSearchEnabled: false, workerPolicy: input.workerPolicy,
+      scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages, approvals: "auto",
+      webSearchEnabled: false, workerPolicy: input.workerPolicy,
       configureWorkspace: () => undefined, setWebSearchEnabled: () => undefined, setApprovals: async () => undefined, reconfigureRuntime: () => undefined,
       configureEngagement: () => undefined, setWorkerPolicy: () => undefined, clearConversation: () => undefined, stopPersistentAgent: async () => true,
       stopPersistentAgents: async () => undefined, exportCheckpoint: () => { throw new Error("no"); }, prepareHandoff: async () => ({}), cleanup: async () => undefined,

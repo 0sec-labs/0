@@ -4,7 +4,7 @@ import { findBlankSession, isBlankSession, withCreateLock } from "./blank-sessio
 import { mergeSessionAliases } from "./use-session-aliases";
 
 const session = (over: Partial<DesktopConsoleSession>) =>
-  ({ id: "a", title: "New thread", target: "", status: "ready", messageCount: 0, ...over }) as DesktopConsoleSession;
+  ({ id: "a", title: "New thread", status: "ready", messageCount: 0, ...over }) as DesktopConsoleSession;
 
 describe("blank sessions", () => {
   test("ready, empty, untitled sessions are blank", () => {
@@ -13,7 +13,7 @@ describe("blank sessions", () => {
     expect(isBlankSession(session({ status: "working" }), null)).toBe(false);
   });
   test("finds the first reusable blank and skips team mode", () => {
-    const list = [session({ id: "x", target: "t" }), session({ id: "y" }), session({ id: "z" })];
+    const list = [session({ id: "x", title: "Real work" }), session({ id: "y" }), session({ id: "z" })];
     expect(findBlankSession(list, null, false)?.id).toBe("y");
     expect(findBlankSession(list, null, true)).toBeUndefined();
     expect(findBlankSession([session({ title: "Audit foo" })], null, false)).toBeUndefined();

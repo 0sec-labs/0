@@ -292,7 +292,6 @@ then search for exploits, then execute the simplest working PoC.
 ### Step 1: Fingerprint Software and Versions
 - If WordPress is suspected, enumerate plugins and themes from page source, /wp-json/ and readme.txt files, then match each (slug, version) against known CVEs.
 - Run manual low-noise probes first: whatweb -a 3 <target>, targeted curl requests to known version endpoints, and plain nmap -p only when port mapping is needed.
-- If the engagement explicitly permits generic scanner traffic and --allow-scanners is set: wpscan --url <target> --enumerate vp,vt,u (vulnerable plugins, themes, users). Do not use wpscan on scoped disclosure targets that ban automated scanners.
 - Pull version hints from:
   - /readme.html, /readme.txt, /CHANGELOG, /CHANGELOG.txt, /VERSION
   - /package.json, /composer.json, /composer.lock

@@ -38,9 +38,9 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "`old_string` must match the file contents EXACTLY — including all whitespace and indentation — and must be UNIQUE (appear once), " +
       "so include a few surrounding lines when a bare snippet would be ambiguous. Set `replace_all: true` to replace every occurrence instead. " +
       "To CREATE a new file, pass an empty `old_string` and the whole file text as `new_string` (parent folders are created; it refuses to overwrite a non-empty file). " +
-      "Errors are explicit and self-correctable (not found / N matches not unique). Use bash for deletes, renames and multi-file patches (`git apply`). Path must be within the scoped directory.",
+      "Errors are explicit and self-correctable (not found / N matches not unique). Use bash for deletes, renames and multi-file patches (`git apply`). Path must be within the folder.",
     parameters: {
-      path: { type: "string", description: "File path (relative to scope root or absolute) of the file to edit or create" },
+      path: { type: "string", description: "File path (relative to the folder or absolute) of the file to edit or create" },
       old_string: { type: "string", description: "Exact text to find, matching the file byte-for-byte including whitespace/indentation. Must be unique unless replace_all is set. Empty creates a new file." },
       new_string: { type: "string", description: "Text to replace it with (or the full content of the new file). May be empty to delete the matched text." },
       replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match (default false)." },
@@ -54,7 +54,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     description:
       "Spawn or manage workers in this coordinator’s owned subtree. op defaults to spawn; list/get inspect authoritative state, stop drains one owned subtree and stop_all drains owned descendants. No foreign session access. Terminal history is bounded; live workers are never evicted. Lifecycle/cleanup state does not prove whether files were modified. " +
       "For spawn supply exactly one of task or tasks. " +
-      "Workers inherit the parent's role, scope, permitted built-in tools and shared usage limits; model selections remain subject to the parent's approved routing. " +
+      "Workers inherit the parent's role, permitted built-in tools and shared usage limits; model selections remain subject to the parent's approved routing. " +
       "In console sessions with a result-delivery route, workers run in the background by default and remain addressable for follow-ups. " +
       "Other hosts wait by default. Set wait:true when results are needed before proceeding; wait:false requires a background result-delivery route. " +
       "To follow up with an existing directly owned background worker, supply agent_id and task; this returns immediately. " +
