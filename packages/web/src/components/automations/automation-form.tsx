@@ -85,7 +85,7 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, me
       <SettingsCard className="mx-0">
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s memory")}</p></div>
-          <Link to={sentinelHref(ownerId, "overview")} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Agent"}</Link>
+          <Link to={sentinelHref(ownerId)} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Agent"}</Link>
         </SettingsCardRow>}
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Runs in</p><p className="text-xs text-muted-foreground">Where each run lives</p></div>

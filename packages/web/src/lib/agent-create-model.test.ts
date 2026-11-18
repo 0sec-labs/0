@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_COLORS, agentFirstMessage, agentThreadHref, checkDraft, choosePreset, createRequest, defaultFolder, newAgentDraft, setAvatar, setName } from "./agent-create-model";
 import type { SentinelPreset } from "@/sentinels/model";
 
-const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" } };
+const preset = { id: "pr-security-reviewer", name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" } };
 const withSchedule = { suggestedAutomations: [{ name: "Weekly", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }, { name: "Manual", trigger: { kind: "manual" }, runIn: "new-mission" }] } as Pick<SentinelPreset, "suggestedAutomations">;
 
 describe("new sentinel draft", () => {
@@ -17,12 +17,12 @@ describe("new sentinel draft", () => {
   });
   it("a preset fills name and avatar; Blank clears them again", () => {
     const filled = choosePreset(newAgentDraft(), preset);
-    expect(filled).toMatchObject({ presetId: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" } });
+    expect(filled).toMatchObject({ presetId: "pr-security-reviewer", name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" } });
     expect(choosePreset(filled, undefined)).toMatchObject({ presetId: "", name: "", avatar: { icon: "agent" } });
   });
   it("keeps what the owner typed or picked when a preset is chosen", () => {
     const own = setAvatar(setName(newAgentDraft(), "Mine"), { color: "#22c55e" });
-    expect(choosePreset(own, preset)).toMatchObject({ presetId: "pen-tester", name: "Mine", avatar: { color: "#22c55e", icon: "agent" } });
+    expect(choosePreset(own, preset)).toMatchObject({ presetId: "pr-security-reviewer", name: "Mine", avatar: { color: "#22c55e", icon: "agent" } });
   });
 });
 
@@ -41,7 +41,7 @@ describe("create request", () => {
   });
   it("carries the preset, folder, computer and model", () => {
     const draft = { ...choosePreset(newAgentDraft({ folder: "/work/app" }), preset), computerId: "mini", model: { providerId: "openai", model: "gpt-6" } };
-    expect(createRequest(draft)).toEqual({ ok: true, body: { name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, status: "active", preset: "pen-tester", folder: "/work/app", hostId: "mini", model: { providerId: "openai", model: "gpt-6" } } });
+    expect(createRequest(draft)).toEqual({ ok: true, body: { name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" }, status: "active", preset: "pr-security-reviewer", folder: "/work/app", hostId: "mini", model: { providerId: "openai", model: "gpt-6" } } });
   });
   it("never sends automations or triggers", () => {
     const result = createRequest(choosePreset(newAgentDraft(), preset));
@@ -53,7 +53,7 @@ describe("create request", () => {
 describe("landing", () => {
   it("opens the sentinel's own thread", () => { expect(agentThreadHref("a/b")).toBe("/sentinels/a%2Fb"); });
   it("says schedules are off in one line when the preset suggests any", () => {
-    const lines = agentFirstMessage({ name: "Pen Tester", mission: "Run scoped tests." }, withSchedule);
+    const lines = agentFirstMessage({ name: "PR Security Reviewer", mission: "Run scoped tests." }, withSchedule);
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("weekly");
     expect(lines[1]).toContain("None are on");

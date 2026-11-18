@@ -14,7 +14,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,12 +22,6 @@ const started = performance.now();
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(root, 'packages/cli/dist/index.js');
 const assets = join(root, 'packages/web/dist');
-const requireEngine = createRequire(join(root, 'packages/engine/package.json'));
-const { chromium } = (() => {
-  try { return requireEngine('playwright'); }
-  catch { return requireEngine(join(root, 'node_modules/.pnpm/playwright-core@1.60.0/node_modules/playwright-core')); }
-})();
-
 const SCRUB = /(_API_KEY|_TOKEN|_SECRET|_ACCESS_KEY|^OPENAI|^ANTHROPIC|^AZURE_|^GOOGLE_|^GEMINI|^DEEPSEEK|^OPENROUTER|^QWEN|^GH_|^GITHUB_)/;
 const REPO = 'acme/app';
 const wait = ms => new Promise(done => setTimeout(done, ms));
@@ -109,7 +102,6 @@ Object.assign(env, {
 });
 
 let child;
-let browser;
 try {
   child = spawn(process.execPath, [cli, '--host', '127.0.0.1', '--port', '0', '--no-open', '--ready-json',
     '--db-path', join(base, 'engine.db'), '--asset-dir', assets, '--engine-token-env', 'ZERO_E2E_ENGINE_TOKEN',
@@ -243,28 +235,17 @@ try {
   await settle(async () => (await triggerOf(withComments)).lastStatus !== 'blocked', 'recovery after gh works again');
   lap('ghFailure');
 
-  // 7. The Agent page's Overview lists the turns and links to the threads they ran in.
-  browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const problems = [];
-  page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));
-  await page.goto(new URL(`/sentinels/${withComments.id}?view=overview`, origin).href, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-  await page.getByText('Pull request #4', { exact: false }).first().waitFor({ timeout: 15000 });
-  const text = await page.locator('body').innerText();
-  assert.match(text, /Pull request #5/);
-  assert.match(text, /Pull request #6/);
-  assert.match(text, /skipped/i);
-  assert.match(text, /fork pull request/);
-  assert.match(text, /draft pull request/);
-  const threadLinks = await page.locator('a[href^="/chats/"]').count();
-  assert.ok(threadLinks >= 2, `expected thread links for both reviews, saw ${threadLinks}`);
-  assert.deepEqual(problems, []);
-  lap('browser');
+  // 7. The Sentinel's turns list the reviews, the skipped fork and draft pull requests and the threads they ran in.
+  const turns = (await api('GET', `/api/console/sentinels/${withComments.id}/turns?limit=100`)).data.turns;
+  const detail = JSON.stringify(turns);
+  assert.match(detail, /fork pull request/);
+  assert.match(detail, /draft pull request/);
+  assert.ok(turns.some(turn => turn.status === 'skipped'), 'a skipped turn is recorded');
+  assert.ok(turns.filter(turn => turn.sessionId).length >= 2, 'both reviews ran in a thread');
+  lap('turns');
 
   console.log(`PR Agent end to end passed in ${(performance.now() - started) / 1000 | 0}s ${JSON.stringify(timings)}; ${modelRequests.length} model calls, ${(await ghCalls()).length} gh calls.`);
 } finally {
-  await browser?.close();
   model.closeAllConnections?.();
   await new Promise(done => model.close(done));
   if (child && child.exitCode === null) {

@@ -1,19 +1,19 @@
 import { describe, expect, test } from "vitest";
 import { createSentinelClient } from "../src/sentinels/api";
 import {
-  SentinelApiError, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
+  SentinelApiError, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, presentStatus, sentinelHref,
   type Sentinel, type SentinelPreset,
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "PR Security Reviewer", mission: "m", avatar: { color: "#3b82f6", emoji: "T" }, role: "pr-security-reviewer", skills: [], notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
-const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
+const preset = { id: "pr-security-reviewer", name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
 describe("form model", () => {
   test("preset defaults are inert", () => {
     const form = formFromPreset(preset);
-    expect(form).toMatchObject({ name: "Pen Tester" });
+    expect(form).toMatchObject({ name: "PR Security Reviewer" });
     expect(fieldsFromForm(form).ok).toBe(true);
   });
   test("blank form needs a name and a sane job", () => {
@@ -33,18 +33,14 @@ describe("presentation", () => {
     const rows = orderSentinels([make({ id: "a", name: "Paused", status: "paused" }), make({ id: "b", name: "Live", status: "active" }), make({ id: "c", name: "Ask", status: "active", attention: { needsYou: true, pendingDecisions: 2 } }), make({ id: "d", status: "archived" })]);
     expect(rows.map(row => row.id)).toEqual(["c", "b", "a"]);
     expect(avatarInitials(make({ avatar: { color: "#000000" }, name: "Secrets Hunter" }))).toBe("SH");
-    expect(avatarInitials(make({}))).toBe("PT");
-    expect(avatarIconId(make({}))).toBe("target");
+    expect(avatarInitials(make({}))).toBe("PR");
+    expect(avatarIconId(make({}))).toBe("shield");
     expect(avatarIconId(make({ avatar: { color: "#000000", icon: "key" } }))).toBe("key");
     expect(avatarIconId(make({ role: "custom" }))).toBeUndefined();
     expect(avatarIconId(make({ avatar: { color: "#000000" } }))).toBeUndefined();
   });
   test("routes and vocabulary", () => {
     expect(sentinelHref("a b")).toBe("/sentinels/a%20b");
-    expect(sentinelHref("x", "automations")).toBe("/sentinels/x?view=automations");
-    expect(parseView("bogus")).toBeNull();
-    expect(parseView("files")).toBe("overview");
-    expect(parseView("settings")).toBe("settings");
     expect(v("Create {a sentinel}")).toBe("Create a sentinel");
   });
 });

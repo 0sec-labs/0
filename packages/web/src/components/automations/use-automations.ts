@@ -13,7 +13,7 @@ export const AUTOMATION_DEFINITIONS = "/api/console/workflow-definitions";
 type Definitions = { definitions: SecurityWorkflow[] };
 export type AutomationOwner = { ownerSentinelId: string; runIn?: "sentinel-home" | "new-mission" };
 
-/** The saved automations, shared by the Sentinels page and every Sentinel's Automations view. */
+/** The saved automations, shared by the Sentinels page and a Sentinel's pane. */
 export function useAutomationDefinitions(refetchMs = 30_000) {
   const { client, webFetchJson } = useBackendApi();
   const team = useTeamAccess();
@@ -43,7 +43,7 @@ export function useCreateAutomation() {
   };
   return {
     fromTemplate: (templateId: string, owner?: AutomationOwner | null) => post({ ...createSecurityWorkflowTemplate(templateId, workspace && securityWorkflowScopeKind(templateId) === "workspace" ? { target: workspace } : {}), ...(owner ?? {}) } as SecurityWorkflowInput),
-    blank: (owner?: AutomationOwner | null) => post({ ...blankAutomationInput({ target: workspace }), ...(owner ?? {}) }),
+    blank: (owner?: AutomationOwner | null, overrides: { name?: string; instructions?: string } = {}) => post({ ...blankAutomationInput({ target: workspace, ...overrides }), ...(owner ?? {}) }),
   };
 }
 

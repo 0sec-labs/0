@@ -15,7 +15,7 @@ import { NotFound } from "@/ui/components/not-found";
 import { errorText } from "@/lib/api-error";
 import { workflowInput } from "@/components/automations/automation-draft";
 
-/** One automation, edited in place: the form, duplicate and delete. Lives inside a Sentinel's Automations view. */
+/** One automation, edited in place: the form, duplicate and delete. Opens from the Sentinels page. */
 export function AutomationEditor({ workflowId, onClose }: { workflowId: string; onClose: () => void }) {
   const { webFetchJson } = useBackendApi();
   const team = useTeamAccess();

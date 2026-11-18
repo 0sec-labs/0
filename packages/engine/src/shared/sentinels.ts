@@ -29,7 +29,7 @@ const stripAccess = (value: unknown): unknown => typeof value === "object" && va
 export const SENTINEL_NOTIFY_EVENTS = ["finding-high", "needs-you", "run-failed", "fix-ready"] as const;
 export const SENTINEL_NOTIFY_CHANNELS = ["in-app", "github", "slack"] as const;
 /** Built-in preset ids; "custom" is a blank Sentinel. Role ids are open strings so imported presets stay valid. */
-export const SENTINEL_PRESET_IDS = ["pen-tester", "pr-security-reviewer", "dependency-watcher", "fix-engineer", "secrets-hunter", "attack-surface-monitor", "cloud-posture-auditor", "incident-triage", "regression-tester", "release-gate"] as const;
+export const SENTINEL_PRESET_IDS = ["pr-security-reviewer", "dependency-watcher", "fix-engineer", "secrets-hunter", "incident-triage", "release-gate"] as const;
 export const SENTINEL_CUSTOM_ROLE = "custom";
 
 export const SENTINEL_FILE_DEFAULTS = ["AGENTS.md", "NOTES.md"] as const;

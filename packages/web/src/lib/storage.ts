@@ -28,6 +28,7 @@ export const STORAGE_KEYS = {
   editorChatSessions: "0-editor-chat-sessions",
   recentWorkspaces: "0-recent-workspaces",
   sidebarOpen: "0-sidebar-open",
+  sentinelPane: "0-sentinel-pane",
   sidebarWidth: "0-sidebar-width",
   sidebarSort: "host-sidebar-sort",
   sidebarListMode: "0-sidebar-list-mode",

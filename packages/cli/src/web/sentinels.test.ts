@@ -36,16 +36,16 @@ describe("agent API", () => {
     expect(await f.service.handle("/api/console/workflow-definitions", "GET", undefined, new URLSearchParams())).toBeNull();
     const presets = await f.call("GET", "/api/console/sentinel-presets");
     expect(presets.status).toBe(200);
-    expect((presets.data as { presets: unknown[] }).presets).toHaveLength(10);
+    expect((presets.data as { presets: unknown[] }).presets).toHaveLength(6);
     expect((await f.call("POST", "/api/console/sentinel-presets", {})).status).toBe(405);
   });
 
   it("creates inert Sentinels, from a preset or from scratch", async () => {
     const f = fixture();
-    const created = await f.call("POST", P, { preset: "pen-tester", scope: { targets: ["https://staging.example.com"] } });
+    const created = await f.call("POST", P, { preset: "pr-security-reviewer", scope: { targets: ["https://staging.example.com"] } });
     expect(created.status).toBe(201);
     const data = created.data as { sentinel: { id: string; status: string; role: string; attention: unknown }; suggestedAutomations: unknown[] };
-    expect(data.sentinel).toMatchObject({ status: "paused", role: "pen-tester", attention: { needsYou: false, pendingDecisions: 0 } });
+    expect(data.sentinel).toMatchObject({ status: "paused", role: "pr-security-reviewer", attention: { needsYou: false, pendingDecisions: 0 } });
     expect(data.sentinel).not.toHaveProperty("scope");
     expect(data.suggestedAutomations.length).toBeGreaterThan(0);
     expect((await f.call("POST", P, { preset: "nope" })).status).toBe(400);
@@ -58,7 +58,7 @@ describe("agent API", () => {
 
   it("creates an active Sentinel from a preset with no triggers or automations, so nothing runs by itself", async () => {
     const f = fixture();
-    const created = await f.call("POST", P, { preset: "pen-tester", status: "active", folder: "/work/app" });
+    const created = await f.call("POST", P, { preset: "dependency-watcher", status: "active", folder: "/work/app" });
     expect(created.status).toBe(201);
     const { sentinel, suggestedAutomations } = created.data as { sentinel: { id: string; status: string; folder: string | null; attention: { needsReview: boolean } }; suggestedAutomations: Array<{ trigger: { kind: string } }> };
     expect(sentinel).toMatchObject({ status: "active", folder: "/work/app", attention: { needsReview: false } });

@@ -5,7 +5,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SidebarModeToggle } from "./sidebar-mode-toggle";
 
-/** Section header shared by both lists: 32px, 13px/500 title on the left, then a fixed right-hand group in the same order and positions in both modes: the icon Sentinels|Threads toggle, a 28px search, a 28px "+" and a 28px "..." menu with Sort by and Density. */
+/** Section header shared by both lists: 32px, with the list's name read by screen readers only (the active icon below says which list this is), then a fixed right-hand group in the same order and positions in both modes: the icon Sentinels|Threads toggle, a 28px search, a 28px "+" and a 28px "..." menu with Sort by and Density. */
 export function SidebarListHeader<Sort extends string>({ title, newLabel, onNew, searchLabel, onSearch, searchActive, sortLabel, sortOptions, sort, onSort, density, onDensity }: {
   title: string;
   newLabel: string;
@@ -21,8 +21,9 @@ export function SidebarListHeader<Sort extends string>({ title, newLabel, onNew,
   searchActive?: boolean;
 }) {
   return <div className="mt-4 mb-2 flex h-8 shrink-0 items-center gap-1 px-2">
-    <h2 className="min-w-0 flex-1 truncate pl-2 text-[13px] leading-4 font-medium text-foreground">{title}</h2>
+    <h2 className="sr-only">{title}</h2>
     <SidebarModeToggle />
+    <span aria-hidden="true" className="min-w-0 flex-1" />
     <Tooltip content={searchLabel} side="bottom"><Button type="button" variant="ghost" size="icon-sm" aria-label={searchLabel} aria-pressed={searchActive} className="text-muted-foreground-1 aria-pressed:bg-foreground/8 aria-pressed:text-foreground" onClick={event => onSearch(event.currentTarget)}><Search /></Button></Tooltip>
     <Tooltip content={newLabel} side="bottom"><Button type="button" variant="ghost" size="icon-sm" aria-label={newLabel} className="text-muted-foreground-1" onClick={onNew}><Plus /></Button></Tooltip>
     <DropdownMenu>

@@ -6,23 +6,18 @@ import { CapyAgentIcon } from "@/ui/icons/capy";
 import { v } from "@/lib/vocabulary";
 import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { NotFound } from "@/ui/components/not-found";
 import { useTeamAccess } from "@/components/team-access";
 import { openNewAgent } from "@/lib/new-agent";
 import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sentinel-avatar";
 import { AgentConversation } from "@/components/sentinels/agent-conversation";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { SentinelAutomations, SentinelOverview, SentinelSettings } from "@/components/sentinels/sentinel-views";
 import { GitHubWebhookControl } from "@/components/console-control/github-webhook-control";
 import { AutomationEditor } from "@/components/automations/automation-editor";
 import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
 import { useAutomationRows } from "@/components/automations/use-automations";
 import { useSentinel, useSentinels } from "@/sentinels/api";
-import { SENTINEL_VIEWS, orderSentinels, parseView, sentinelHref, type SentinelView } from "@/sentinels/model";
-
-const VIEW_LABELS: Record<SentinelView, string> = { overview: "Overview", automations: "Automations", settings: "Settings" };
+import { orderSentinels, sentinelHref } from "@/sentinels/model";
 
 /** Index of Sentinels; also the landing target for "New Sentinel" from the command palette (`?new=1`). */
 export function SentinelsPage() {
@@ -40,13 +35,13 @@ export function SentinelsPage() {
   useEffect(() => { if (asksToCreate) { openNewAgent(); setSearch(previous => { const next = new URLSearchParams(previous); next.delete("new"); return next; }, { replace: true }); } }, [asksToCreate, setSearch]);
   // Old "Set up" links carried the owner in the query; the automation now lives in that Sentinel's page.
   const legacyOwner = search.get("owner");
-  if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner, "automations")} replace />;
+  if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner)} replace />;
   if (loading || isLoading) return <><LoadingState label="Loading" /></>;
   if (error) return <><ErrorState error={error} onRetry={() => void refetch()} /></>;
   if (!supported) return <><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></>;
   const rows = orderSentinels(sentinels);
   const nameOf = new Map(sentinels.map(item => [item.id, item.name]));
-  const hrefFor = (id: string, owner?: string | null) => owner && nameOf.has(owner) ? `${sentinelHref(owner, "automations")}&workflow=${encodeURIComponent(id)}` : `/sentinels?workflow=${encodeURIComponent(id)}`;
+  const hrefFor = (id: string) => `/sentinels?workflow=${encodeURIComponent(id)}`;
   const owners = new Map(automations.definitions.map(item => [item.id, item.ownerSentinelId]));
   if (workflowId) return <><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></>;
   return <>
@@ -61,54 +56,24 @@ export function SentinelsPage() {
     {automations.rows.length > 0 && <section aria-label="Automations" className="space-y-2">
       <h2 className="text-sm font-medium">Automations</h2>
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
-        {automations.rows.map(item => { const owner = owners.get(item.id); return <li key={item.id}><Link to={hrefFor(item.id, owner)} className="flex items-center gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="hidden truncate text-xs text-muted-foreground-1 sm:block">{owner ? nameOf.get(owner) : ""}</span><span className="hidden w-40 truncate text-xs text-muted-foreground-1 md:block">{item.trigger}</span></Link></li>; })}
+        {automations.rows.map(item => { const owner = owners.get(item.id); return <li key={item.id}><Link to={hrefFor(item.id)} className="flex items-center gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="hidden truncate text-xs text-muted-foreground-1 sm:block">{owner ? nameOf.get(owner) : ""}</span><span className="hidden w-40 truncate text-xs text-muted-foreground-1 md:block">{item.trigger}</span></Link></li>; })}
       </ul>
     </section>}
     {!readOnly && <GitHubWebhookControl />}
-    <NewAutomationDialog open={newAutomation} onOpenChange={setNewAutomation} sentinels={sentinels} onCreated={(owner, id) => navigate(hrefFor(id, owner))} />
+    <NewAutomationDialog open={newAutomation} onOpenChange={setNewAutomation} sentinels={sentinels} onCreated={(_owner, id) => navigate(hrefFor(id))} />
   </>;
 }
 
-/**
- * One sentinel: its own thread, the real conversation, full width. "View sentinel" opens the Profile dialog (`?view=`) on one of
- * three tabs: Overview (status, memory and files), Automations (its triggers and schedules) and Settings.
- */
+/** One sentinel: its own thread, the real conversation, with a collapsible pane on the right and a Profile dialog behind the "..." menu. */
 export function SentinelPage() {
   const { sentinelId = "" } = useParams();
-  const [search, setSearch] = useSearchParams();
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
   const query = useSentinel(sentinelId);
   useBreadcrumbLabel(query.data?.name);
   usePageVariant("full");
-  const view = parseView(search.get("view"));
-  const setView = (next: SentinelView | null) => setSearch(previous => { const params = new URLSearchParams(previous); if (next) params.set("view", next); else { params.delete("view"); params.delete("workflow"); } return params; }, { replace: next !== null });
   if (query.isLoading) return <><LoadingState label="Loading" variant="detail" /></>;
   if (query.error || !query.data) return <>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</>;
   const sentinel = query.data;
-  return <>
-    <AgentConversation key={sentinel.id} sentinel={sentinel} readOnly={readOnly} onViewAgent={() => setView("overview")} />
-    <Dialog open={view !== null} onOpenChange={open => { if (!open) setView(null); }}>
-      <DialogContent className="max-h-[88dvh] grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto sm:max-w-[672px]" data-testid="agent-profile">
-        <DialogTitle className="sr-only">{sentinel.name}</DialogTitle>
-        <header className="flex items-center gap-4">
-          <SentinelAvatar sentinel={sentinel} size="lg" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><h2 className="min-w-0 truncate font-sans text-[22px]/7 font-medium tracking-[-0.02em]">{sentinel.name}</h2><SentinelStatusBadge sentinel={sentinel} /></div>
-            <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No job set yet."}</p>
-          </div>
-        </header>
-        {view && <>
-          <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setView(next as SentinelView)}>
-            <TabsList variant="line" aria-label="Sentinel views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
-          </Tabs></div>
-          <div role="region" aria-label={VIEW_LABELS[view]}>
-            {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}
-            {view === "automations" && <SentinelAutomations sentinel={sentinel} readOnly={readOnly} />}
-            {view === "settings" && <SentinelSettings key={sentinel.id} sentinel={sentinel} readOnly={readOnly} onClose={() => setView(null)} />}
-          </div>
-        </>}
-      </DialogContent>
-    </Dialog>
-  </>;
+  return <AgentConversation key={sentinel.id} sentinel={sentinel} readOnly={readOnly} />;
 }

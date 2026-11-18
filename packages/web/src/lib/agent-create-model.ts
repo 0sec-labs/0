@@ -87,7 +87,7 @@ export function agentFirstMessage(sentinel: Pick<Sentinel, "name" | "mission">, 
   const scheduled = (preset?.suggestedAutomations ?? []).filter(item => item.trigger.kind === "schedule");
   if (scheduled.length > 0) {
     const cadences = [...new Set(scheduled.map(item => CADENCE[item.trigger.cadence ?? ""] ?? "scheduled"))].join(" and ");
-    lines.push(`I suggest ${cadences} runs. None are on: nothing runs by itself until you turn it on in Automations.`);
+    lines.push(`I suggest ${cadences} runs. None are on: nothing runs by itself until you turn it on under Triggers.`);
   }
   return lines;
 }

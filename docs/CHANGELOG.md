@@ -20,6 +20,7 @@ on the GitHub Release tag.
 
 ### Changed
 
+- A Sentinel's tabbed dialog is now a side pane on its thread (status, triggers, instructions, memory) and a small Profile dialog; four presets that needed web probing or scans are gone.
 - The model has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. The other tools are gone; use the shell or an extension.
 - Agents are now Sentinels (`0 sentinels`, `/sentinels`). A Sentinel is one thread that keeps going: schedules and pull request triggers send their work into it. A Sentinel's automation is a saved prompt plus a trigger.
 - The CLI has eight visible commands: `findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers` and `config`. `0 computers remove <id>` is new.

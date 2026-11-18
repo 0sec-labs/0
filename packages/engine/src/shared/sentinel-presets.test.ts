@@ -7,8 +7,8 @@ import { SECURITY_WORKFLOW_TEMPLATES } from "./security-workflow-templates.js";
 describe("sentinel presets", () => {
   it("covers every preset id once", () => {
     expect(SENTINEL_PRESETS.map(preset => preset.id).sort()).toEqual([...SENTINEL_PRESET_IDS].sort());
-    expect(SENTINEL_PRESET_IDS).toHaveLength(10);
-    expect(getSentinelPreset("pen-tester")?.name).toBe("Pen Tester");
+    expect(SENTINEL_PRESET_IDS).toHaveLength(6);
+    expect(getSentinelPreset("pr-security-reviewer")?.name).toBe("PR Security Reviewer");
   });
   it("validates every preset against the Sentinel schema with safe defaults", () => {
     for (const preset of SENTINEL_PRESETS) {
@@ -44,6 +44,13 @@ describe("sentinel presets", () => {
       expect(preset).not.toHaveProperty("autonomy");
       expect(preset.sentinel).not.toHaveProperty("autonomy");
       expect(preset.sentinel).not.toHaveProperty("toolAccess");
+    }
+  });
+  it("keeps the charters plain: no scope or budget wording and no tools the Sentinel does not have", () => {
+    for (const preset of SENTINEL_PRESETS) {
+      const text = JSON.stringify([preset.sentinel.instructions, preset.job, preset.description]);
+      expect(text, preset.id).not.toMatch(/\b(scope|budget|targets?)\b/i);
+      expect(text, preset.id).not.toMatch(/\b(scan|probe|nmap|browser|http_request)\b/i);
     }
   });
 });
