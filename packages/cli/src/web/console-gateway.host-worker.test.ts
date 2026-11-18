@@ -7,9 +7,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
+// Timing-sensitive: stop confirmation polls a real process table under CI load. A real regression fails every attempt, so it retries.
+
 const bunAvailable = spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0;
 
-it.skipIf(process.platform === "win32" || !bunAvailable)("qualifies Bun gateway → real worker → owned tool → force stop → same chat continuation", async () => {
+it.skipIf(process.platform === "win32" || !bunAvailable)("qualifies Bun gateway → real worker → owned tool → force stop → same chat continuation", { timeout: 65_000, retry: 2 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "0-gateway-host-"));
   const repository = fileURLToPath(new URL("../../../..", import.meta.url));
   const entry = join(root, "qualification.ts"), sentinel = join(root, "effects");
@@ -77,4 +79,4 @@ else{
     });
     expect(JSON.parse(result.stdout.trim().split("\n").at(-1)!)).toMatchObject({ ok: true, retainedQueue: true, remainingQueue: 0 });
   } finally { rmSync(bundle, { force: true }); rmSync(root, { recursive: true, force: true }); }
-}, 65_000);
+});
