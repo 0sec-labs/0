@@ -27,7 +27,7 @@ export function helpSnapshot(program: Command): string {
 
 // Same root as index.ts (name, description, positional options); the real `--version` flag is not part of the fixture.
 function plainRoot(): Command {
-  return new Command().name("0").description("Security agents for your repositories. Run 0 to open the console.").enablePositionalOptions();
+  return new Command().name("0").description("Security sentinels for your repositories. Run 0 to open the console.").enablePositionalOptions();
 }
 
 export function eagerProgram(): Command {
@@ -63,7 +63,7 @@ describe("help snapshot", () => {
 
   it("loading only the invoked command leaves every other name known and gives the same help", async () => {
     const real = eagerProgram();
-    for (const [argv, path] of [[["doctor", "--help"], ["doctor"]], [["help", "findings"], ["findings"]], [["threads", "list"], ["threads"]], [["lab", "console"], ["lab"]]] as const) {
+    for (const [argv, path] of [[["doctor", "--help"], ["doctor"]], [["help", "findings"], ["findings"]], [["threads", "list"], ["threads"]], [["sentinels", "list"], ["sentinels"]]] as const) {
       const program = createRootProgram();
       await registerLazyCommandTree(program, argv);
       expect(program.commands.map((c) => c.name()).sort()).toEqual(real.commands.map((c) => c.name()).sort());

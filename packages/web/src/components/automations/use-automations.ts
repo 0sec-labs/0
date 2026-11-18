@@ -13,7 +13,7 @@ export const AUTOMATION_DEFINITIONS = "/api/console/workflow-definitions";
 type Definitions = { definitions: SecurityWorkflow[] };
 export type AutomationOwner = { ownerSentinelId: string; runIn?: "sentinel-home" | "new-mission" };
 
-/** The saved automations, shared by the Agents page and every Agent's Automations view. */
+/** The saved automations, shared by the Sentinels page and every Sentinel's Automations view. */
 export function useAutomationDefinitions(refetchMs = 30_000) {
   const { client, webFetchJson } = useBackendApi();
   const team = useTeamAccess();
@@ -29,7 +29,7 @@ export function useAutomationWorkspace(): string {
   return project.data?.path ?? "";
 }
 
-/** Create an automation from a template or blank, optionally owned by an Agent, and keep the cached list current. */
+/** Create an automation from a template or blank, optionally owned by a Sentinel, and keep the cached list current. */
 export function useCreateAutomation() {
   const { webFetchJson } = useBackendApi();
   const cache = useQueryClient();
@@ -47,7 +47,7 @@ export function useCreateAutomation() {
   };
 }
 
-/** Every automation with its schedule, for the Agents page and an Agent's own list. */
+/** Every automation with its schedule, for the Sentinels page and a Sentinel's own list. */
 export function useAutomationRows() {
   const { webFetchJson } = useBackendApi();
   const { definitions, query } = useAutomationDefinitions();

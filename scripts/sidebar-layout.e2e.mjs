@@ -52,7 +52,7 @@ try {
     });
     const toggle = page.locator('[aria-label="Sidebar list"]');
     await toggle.waitFor({ timeout: 15000 });
-    await page.getByRole('button', { name: 'Agents', exact: true }).click();
+    await page.getByRole('button', { name: 'Sentinels', exact: true }).click();
     await wait(300);
     const inAgents = await header();
     await page.getByRole('button', { name: 'Threads', exact: true }).click();

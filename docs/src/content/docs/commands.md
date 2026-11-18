@@ -15,18 +15,18 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 | Task | Commands | Guide |
 | --- | --- | --- |
 | Review findings and threads | [findings](#findings) · [findings update](#findings-update) · [threads](#threads) | [Findings](/findings/), [Threads](/threads/) |
-| Automate | [agents](#agents) · [mcp-server](#lab-mcp-server) · [api](#api) | [Agents](/agents/), [Extensions](/extensions/#mcp-servers) |
+| Automate | [sentinels](#sentinels) · [api](#api) | [Sentinels](/sentinels/) |
 | Set up and extend | [config](#config) · [config doctor](#config-doctor) · [models](#models) · [models connect](#models-connect) · [skills](#skills) · [computers](#computers) | [Models](/models/), [Extensions](/extensions/), [Computers](/computers/) |
 
 ## The eight commands
 
-`0` with no arguments opens the web console. Everything else is one of eight commands, each with at most three subcommands in `--help`. The sections below also document the earlier names, which still work for one release and print `moved: use ...` on a terminal. See the [0.35 migration notes](/changelog/#cli-changes-in-035) for every old command and what replaces it.
+`0` with no arguments opens the web console. Everything else is one of eight commands.
 
 | Command | What it does | Subcommands |
 | --- | --- | --- |
 | `0 findings` | Browse findings and change their status. `--format` exports, `--import` loads a report. | `list`, `show`, `update` |
-| `0 threads` | Start, follow and stop threads. | `list`, `send`, `stop` |
-| `0 agents` | Agents and, with `--automation`, saved automations. | `list`, `run`, `set` |
+| `0 threads` | Start, follow and stop threads. | `list`, `send`, `start`, `stop` |
+| `0 sentinels` | Sentinels and, with `--automation`, saved automations. | `list`, `run`, `set` |
 | `0 skills` | Skills, extensions, MCP servers and connectors. | `list`, `add`, `run` |
 | `0 memory` | What 0 remembers across threads. | `list`, `add`, `remove` |
 | `0 models` | Models and provider connections. | `list`, `set`, `connect` |
@@ -35,9 +35,9 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 
 ### Commands, skills and workflows
 
-The eight commands are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors them (`/threads list` is `0 threads list`). Skills are instructions a thread loads (see [Skills](/skills/)). An Agent is a standing thread with prompt-based automations and triggers (see [Agents](/agents/#automations)). See [Threads](/threads/#commands-skills-and-automations).
+The eight commands are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors them (`/threads list` is `0 threads list`). Skills are instructions a thread loads (see [Skills](/skills/)). A Sentinel is a standing thread with prompt-based automations and triggers (see [Sentinels](/sentinels/#automations)). See [Threads](/threads/#commands-skills-and-automations).
 
-`0 doctor` stays as an alias of `0 config doctor`. `0 api` and `0 lab` are hidden developer commands. The old top-level names `web`, `plugin` and `automation` are hidden aliases for one release.
+`0 api` is a hidden developer command.
 
 ## Invocation and safety
 
@@ -54,8 +54,8 @@ a handler may resolve configuration or require an explicit value. Inverse
 [Configuration](/configuration/) for environment and runtime resolution.
 
 - With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/threads/).
-- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation.
-- `0 --help` lists 8 top-level commands. Every earlier command name and flag still works for one release through hidden aliases with identical behaviour and exit codes. On a terminal (not when piped, in CI or with `--json`) an old name prints one dim `moved: use ...` line to stderr.
+- `0 -p "<prompt>"` runs one headless chat prompt. `0 -c` continues the last chat and `0 --resume <id>` a saved one.
+- `0 --help` lists the 8 top-level commands.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/configuration/#scope).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
@@ -64,7 +64,7 @@ a handler may resolve configuration or require an explicit value. Inverse
 
 ## Replacements for moved commands
 
-These subcommands carry the arguments of the commands they replace; `command-compat.ts` translates them onto the older implementation commands documented in the other sections.
+These forms run the implementation commands documented in the sections below.
 
 ### findings update
 
@@ -136,66 +136,6 @@ Check this machine and the engine. `config doctor upgrade`, `config doctor workb
 | `--fix` | — | Repair the local database |
 
 ## Interactive & setup
-
-### lab
-
-Developer commands that most people never need: `research`, `improve`, `console`, `mcp-server` and `runs`. `lab` is hidden from `0 --help` to keep the main list short.
-
-```text
-0 lab
-```
-
-Subcommands: [console](#lab-console) · [mcp-server](#lab-mcp-server).
-
-### lab console
-
-Run chat with the full tool registry: recon, web, source-scan, variant-hunt, verify, and patch-gen.
-
-```text
-0 lab console [options]
-```
-
-Interactive chat uses `0 web`. `0 lab console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
-
-Guide: [Read the workflow](/threads/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the engine token |
-| `--format <format>` | `text` | Output format: text, json, ndjson |
-| `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
-| `--scope <file>` | — | Initial authorization scope. Headless auto approvals require at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
-| `--finding <id>` | — | Focus the chat on one persisted finding |
-| `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
-| `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
-| `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
-| `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
-| `--approvals <ask\|auto>` | — | ask puts each command or change to you first (headless runs cannot answer, so effectful tools are refused). auto, the default, runs commands without asking. Credential, private-network and sandbox protections apply either way. Overrides the approvals setting. |
-| `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
-| `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
-| `--resume [id]` | — | With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker. |
-| `--continue` | — | With a headless prompt, continue the most recent saved console chat. |
-| `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
-| `--engine <id>` | — | Use a registered remote engine |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Send to an existing live engine chat |
-
-#### Approvals
-
-See [Browser app](/threads/) for Ask and Auto behavior. Approvals never grant testing authorization.
-
-#### Approval prompts
-
-Tool, network-scope, and directory approvals are distinct gates. Per-action prompts (the Ask before running commands setting) require a wired approval callback, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/threads/) before relying on an approval boundary.
-
-#### Session persistence
-
-See [Threads](/threads/).
-
-#### Console settings
-
-The canonical settings reference is [Configuration](/configuration/).
 
 ### web
 
@@ -740,7 +680,7 @@ profile is enabled. Direct invocation outside an admitted guest is refused.
 Internal, hidden entrypoint for the host-controlled chat engine inside an
 admitted Linux SmolVM workbench. The host owns the terminal/browser UI and
 forwards requests, events and approvals over the framed controller transport.
-Use `0 lab console` or `0 web` to start a chat; do not invoke this transport endpoint
+Use `0 -p` or `0` to start a chat; do not invoke this transport endpoint
 manually. Direct invocation outside an admitted guest is refused.
 
 ```text
@@ -1195,7 +1135,6 @@ to work there. `worker` still works as an older name.
 
 Subcommands: [list](#computers-list) · [add](#computers-add) · [stop](#computers-stop) · [repair](#computers-repair) · [remove](#computers-remove) · [hosts](#computers-hosts).
 
-Aliases: `worker`.
 
 #### computers list
 
@@ -1311,205 +1250,6 @@ connectivity or whether each host supports a Linux engine.
 
 ```text
 0 computers hosts
-```
-
-### lab mcp-server
-
-Expose selected target tools or managed workflows over MCP stdio.
-
-```text
-0 lab mcp-server [options]
-```
-
-Use `--automations --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope extension. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
-
-Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 automation` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
-
-Guide: [Read the workflow](/extensions/#mcp-servers).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--target <target>` | — | Target URL for this MCP chat |
-| `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--allow-apply` | `false` | Permit explicit automation apply requests inside the authorized workspace |
-| `--workspace <path>` | — | Absolute authorized local root for automation source scans |
-| `--db-path <path>` | — | Path to SQLite database |
-| `--timeout <ms>` | `30000` | Default tool timeout in milliseconds |
-| `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool. |
-| `--tools <names>` | — | Comma-separated 0 MCP tools to expose (default: live tools, or automation tools with --automations). |
-| `--rate-limit <spec>` | — | Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it. |
-| `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements. |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP chat: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
-| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
-| `--engine <id>` | — | Use a registered remote engine; no local execution fallback |
-| `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Attach automation runs to an existing chat on the selected engine |
-| `--automations` | `false` | Expose automation discovery and run lifecycle tools instead of live tools |
-
-### plugin
-
-Hidden. The old `0 plugin` group is kept as aliases that print where each command went. The executable plugin runtime, the registry and `self_extend` were removed; extensions replace them (see [Extensions](/extensions/)).
-
-```text
-0 plugin
-```
-
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
-
-#### plugin list
-
-Moved: `0 skills extensions list`.
-
-```text
-0 plugin list
-```
-
-#### plugin search
-
-Moved: `0 skills extensions list`.
-
-```text
-0 plugin search
-```
-
-#### plugin browse
-
-Moved: `0 skills list --catalog`.
-
-```text
-0 plugin browse
-```
-
-#### plugin install
-
-Moved: `0 skills add <repo>@<sha>` (or `0 skills extensions add <folder>`).
-
-```text
-0 plugin install
-```
-
-#### plugin enable
-
-Moved: `0 skills extensions enable <name>`.
-
-```text
-0 plugin enable
-```
-
-#### plugin disable
-
-Moved: `0 skills extensions disable <name>`.
-
-```text
-0 plugin disable
-```
-
-#### plugin info
-
-Moved: `0 skills extensions info <name>`.
-
-```text
-0 plugin info
-```
-
-#### plugin run
-
-Removed: an extension's scripts run through bash; there is no plugin runner.
-
-```text
-0 plugin run
-```
-
-#### plugin init
-
-Removed: write a folder with `extension.json` or a `SKILL.md`, then review it with `0 skills add <folder> --preview`.
-
-```text
-0 plugin init
-```
-
-#### plugin validate
-
-Moved: `0 skills add <folder> --preview`.
-
-```text
-0 plugin validate
-```
-
-#### plugin submit
-
-Removed: extensions are installed from git, `0 skills add <repo>@<sha>`. Registry submission no longer exists.
-
-```text
-0 plugin submit
-```
-
-#### plugin connectors
-
-Removed: connect services on the Extensions page.
-
-```text
-0 plugin connectors
-```
-
-#### plugin connect
-
-Removed: connect services on the Extensions page.
-
-```text
-0 plugin connect
-```
-
-#### plugin disconnect
-
-Removed: disconnect services on the Extensions page.
-
-```text
-0 plugin disconnect
-```
-
-#### plugin mcp
-
-Moved: `0 skills extensions mcp <name> --url <url>`.
-
-```text
-0 plugin mcp
-```
-
-Subcommands: [list](#plugin-mcp-list) · [add](#plugin-mcp-add) · [test](#plugin-mcp-test) · [remove](#plugin-mcp-remove).
-
-#### plugin mcp list
-
-Moved: `0 skills extensions list`.
-
-```text
-0 plugin mcp list
-```
-
-#### plugin mcp add
-
-Moved: `0 skills extensions mcp <name> --url <url>`.
-
-```text
-0 plugin mcp add
-```
-
-#### plugin mcp test
-
-Removed: MCP tools are pinned per tool; see `0 skills extensions info <name>`.
-
-```text
-0 plugin mcp test
-```
-
-#### plugin mcp remove
-
-Moved: `0 skills extensions remove <name>`.
-
-```text
-0 plugin mcp remove
 ```
 
 ### skills
@@ -2139,7 +1879,7 @@ Add the notes from an export file
 
 ## Workflow execution
 
-These are the older automation commands. Current work goes through [Agents](/agents/#automations).
+These are the older automation commands. Current work goes through [Sentinels](/sentinels/#automations).
 
 ### automation
 
@@ -2151,7 +1891,6 @@ Discover reusable definitions and execute them through the shared workflow runti
 
 Subcommands: [list](#automation-list) · [show](#automation-show) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete).
 
-Aliases: `automations`.
 
 #### automation list
 
@@ -2203,7 +1942,7 @@ Create an automation from a template or a JSON definition.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--template <id>` | — | Start from a template (see `0 agents list --automation --templates`) |
+| `--template <id>` | — | Start from a template (see `0 sentinels list --automation --templates`) |
 | `--file <path>` | — | Definition JSON object |
 | `--name <name>` | — | Name for the new automation |
 | `--target <target>` | — | Target the automation runs against |
@@ -2278,7 +2017,7 @@ Restore an earlier revision as a new revision.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--revision <n>` **required** | — | Revision to restore (see `0 agents set --automation versions`) |
+| `--revision <n>` **required** | — | Revision to restore (see `0 sentinels set --automation versions`) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
@@ -2313,7 +2052,7 @@ Inspect and control the same live sessions used by the browser. Attach with --en
 0 threads list --engine production
 ```
 
-Subcommands: [list](#threads-list) · [send](#threads-send) · [stop](#threads-stop) · [show](#threads-show) · [create](#threads-create) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [start](#threads-start) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
+Subcommands: [list](#threads-list) · [send](#threads-send) · [start](#threads-start) · [stop](#threads-stop) · [show](#threads-show) · [create](#threads-create) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
 
 #### threads list
 
@@ -2871,22 +2610,22 @@ Export a thread transcript as JSON or Markdown.
 | `--db-path <path>` | — | Control database of the local engine to attach to |
 | `--json` | — | Print the engine response as JSON |
 
-### agents
+### sentinels
 
-Create, inspect and control Agents.
+Create, inspect and control Sentinels.
 
 ```text
-0 agents
+0 sentinels
 ```
 
-Subcommands: [list](#agents-list) · [run](#agents-run) · [set](#agents-set) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [activations](#agents-activations) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
+Subcommands: [list](#sentinels-list) · [run](#sentinels-run) · [set](#sentinels-set) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [activations](#sentinels-activations) · [files](#sentinels-files) · [triggers](#sentinels-triggers) · [webhook](#sentinels-webhook).
 
-#### agents list
+#### sentinels list
 
-List Agents.
+List Sentinels.
 
 ```text
-0 agents list [options]
+0 sentinels list [options]
 ```
 
 | Option | Registered default | Description |
@@ -2895,12 +2634,12 @@ List Agents.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents show
+#### sentinels show
 
-Show a Agent (full or prefix ID).
+Show a Sentinel (full or prefix ID).
 
 ```text
-0 agents show [options] <id>
+0 sentinels show [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -2912,12 +2651,12 @@ Show a Agent (full or prefix ID).
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents presets
+#### sentinels presets
 
-List Agent presets.
+List Sentinel presets.
 
 ```text
-0 agents presets [options]
+0 sentinels presets [options]
 ```
 
 | Option | Registered default | Description |
@@ -2925,28 +2664,28 @@ List Agent presets.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents create
+#### sentinels create
 
-Create a Agent from a preset or a JSON definition.
+Create a Sentinel from a preset or a JSON definition.
 
 ```text
-0 agents create [options]
+0 sentinels create [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--preset <id>` | — | Start from a preset (see `0 agents list --presets`) |
+| `--preset <id>` | — | Start from a preset (see `0 sentinels list --presets`) |
 | `--name <name>` | — | Name |
-| `--file <path>` | — | Agent JSON object (overrides preset fields) |
+| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents set
+#### sentinels set
 
-Change a Agent's settings.
+Change a Sentinel's settings.
 
 ```text
-0 agents set [options] <id>
+0 sentinels set [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -2963,12 +2702,12 @@ Change a Agent's settings.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents pause
+#### sentinels pause
 
-Pause a Agent.
+Pause a Sentinel.
 
 ```text
-0 agents pause [options] <id>
+0 sentinels pause [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -2980,12 +2719,12 @@ Pause a Agent.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents resume
+#### sentinels resume
 
-Resume a paused Agent.
+Resume a paused Sentinel.
 
 ```text
-0 agents resume [options] <id>
+0 sentinels resume [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -2998,12 +2737,12 @@ Resume a paused Agent.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents acknowledge
+#### sentinels acknowledge
 
 Mark changed scope, model or tools as reviewed.
 
 ```text
-0 agents acknowledge [options] <id>
+0 sentinels acknowledge [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3015,12 +2754,12 @@ Mark changed scope, model or tools as reviewed.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents archive
+#### sentinels archive
 
-Archive a Agent; its history stays.
+Archive a Sentinel; its history stays.
 
 ```text
-0 agents archive [options] <id>
+0 sentinels archive [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3032,12 +2771,12 @@ Archive a Agent; its history stays.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents delete
+#### sentinels delete
 
-Delete a Agent; its automations are detached, not deleted.
+Delete a Sentinel; its automations are detached, not deleted.
 
 ```text
-0 agents delete [options] <id>
+0 sentinels delete [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3050,12 +2789,12 @@ Delete a Agent; its automations are detached, not deleted.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents run
+#### sentinels run
 
-Run a Agent now; starts a thread (needs a running engine).
+Run a Sentinel now; starts a thread (needs a running engine).
 
 ```text
-0 agents run [options] <id>
+0 sentinels run [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3069,12 +2808,12 @@ Run a Agent now; starts a thread (needs a running engine).
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents activations
+#### sentinels activations
 
-List a Agent's recent runs.
+List a Sentinel's recent runs.
 
 ```text
-0 agents activations [options] <id>
+0 sentinels activations [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3088,22 +2827,22 @@ List a Agent's recent runs.
 | `--db-path <path>` | — | Control database (default: the user database) |
 
 
-#### agents files
+#### sentinels files
 
-Read and edit a Agent's instructions and memory files.
+Read and edit a Sentinel's instructions and memory files.
 
 ```text
-0 agents files
+0 sentinels files
 ```
 
-Subcommands: [list](#agents-files-list) · [get](#agents-files-get) · [put](#agents-files-put) · [rm](#agents-files-rm).
+Subcommands: [list](#sentinels-files-list) · [get](#sentinels-files-get) · [put](#sentinels-files-put) · [rm](#sentinels-files-rm).
 
-#### agents files list
+#### sentinels files list
 
 List files.
 
 ```text
-0 agents files list [options] <id>
+0 sentinels files list [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3115,12 +2854,12 @@ List files.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents files get
+#### sentinels files get
 
 Print a file's content.
 
 ```text
-0 agents files get [options] <id> <path>
+0 sentinels files get [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -3133,12 +2872,12 @@ Print a file's content.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents files put
+#### sentinels files put
 
 Create or replace a file from --file or --content.
 
 ```text
-0 agents files put [options] <id> <path>
+0 sentinels files put [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -3153,12 +2892,12 @@ Create or replace a file from --file or --content.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents files rm
+#### sentinels files rm
 
 Delete a file.
 
 ```text
-0 agents files rm [options] <id> <path>
+0 sentinels files rm [options] <id> <path>
 ```
 
 | Argument | Required | Description |
@@ -3172,22 +2911,22 @@ Delete a file.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers
+#### sentinels triggers
 
-Control what starts a Agent's automations.
+Control what starts a Sentinel's automations.
 
 ```text
-0 agents triggers
+0 sentinels triggers
 ```
 
-Subcommands: [list](#agents-triggers-list) · [add](#agents-triggers-add) · [enable](#agents-triggers-enable) · [disable](#agents-triggers-disable) · [check](#agents-triggers-check) · [rm](#agents-triggers-rm).
+Subcommands: [list](#sentinels-triggers-list) · [add](#sentinels-triggers-add) · [enable](#sentinels-triggers-enable) · [disable](#sentinels-triggers-disable) · [check](#sentinels-triggers-check) · [rm](#sentinels-triggers-rm).
 
-#### agents triggers list
+#### sentinels triggers list
 
 List triggers.
 
 ```text
-0 agents triggers list [options] <id>
+0 sentinels triggers list [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3199,12 +2938,12 @@ List triggers.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers add
+#### sentinels triggers add
 
-Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
+Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes.
 
 ```text
-0 agents triggers add [options] <id>
+0 sentinels triggers add [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3225,12 +2964,12 @@ Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers enable
+#### sentinels triggers enable
 
 Enable a trigger after reviewing it.
 
 ```text
-0 agents triggers enable [options] <id> <trigger-id>
+0 sentinels triggers enable [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -3244,12 +2983,12 @@ Enable a trigger after reviewing it.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers disable
+#### sentinels triggers disable
 
 Pause a trigger.
 
 ```text
-0 agents triggers disable [options] <id> <trigger-id>
+0 sentinels triggers disable [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -3262,12 +3001,12 @@ Pause a trigger.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers check
+#### sentinels triggers check
 
 Poll a pull request trigger now instead of waiting for its next poll.
 
 ```text
-0 agents triggers check [options] <id> <trigger-id>
+0 sentinels triggers check [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -3280,12 +3019,12 @@ Poll a pull request trigger now instead of waiting for its next poll.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents triggers rm
+#### sentinels triggers rm
 
 Delete a trigger.
 
 ```text
-0 agents triggers rm [options] <id> <trigger-id>
+0 sentinels triggers rm [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
@@ -3299,22 +3038,22 @@ Delete a trigger.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents webhook
+#### sentinels webhook
 
-GitHub webhook for pull request Agents (server mode). Hidden: most installs poll. See [Agents](/agents/#faster-with-a-github-webhook-server-mode).
+GitHub webhook for pull request Sentinels (server mode). Hidden: most installs poll. See [Sentinels](/sentinels/#faster-with-a-github-webhook-server-mode).
 
 ```text
-0 agents webhook
+0 sentinels webhook
 ```
 
-Subcommands: [status](#agents-webhook-status) · [secret](#agents-webhook-secret).
+Subcommands: [status](#sentinels-webhook-status) · [secret](#sentinels-webhook-secret).
 
-#### agents webhook status
+#### sentinels webhook status
 
 Show whether the webhook is set up and the last deliveries.
 
 ```text
-0 agents webhook status [options]
+0 sentinels webhook status [options]
 ```
 
 | Option | Registered default | Description |
@@ -3322,22 +3061,22 @@ Show whether the webhook is set up and the last deliveries.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents webhook secret
+#### sentinels webhook secret
 
 Manage the webhook secret.
 
 ```text
-0 agents webhook secret
+0 sentinels webhook secret
 ```
 
-Subcommands: [rotate](#agents-webhook-secret-rotate).
+Subcommands: [rotate](#sentinels-webhook-secret-rotate).
 
-#### agents webhook secret rotate
+#### sentinels webhook secret rotate
 
 Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
 
 ```text
-0 agents webhook secret rotate [options]
+0 sentinels webhook secret rotate [options]
 ```
 
 | Option | Registered default | Description |

@@ -13,7 +13,7 @@ const listOf = (item: z.ZodString, max: number) => z.array(item.trim().min(1).ma
 export const SENTINEL_STATUSES = ["active", "paused", "archived"] as const;
 export type SentinelStatus = (typeof SENTINEL_STATUSES)[number];
 /**
- * There is one mode: an Agent has shell access, limited by its scope and the sandbox. Older records stored
+ * There is one mode: a Sentinel has shell access, limited by its scope and the sandbox. Older records stored
  * `autonomy` (observe, propose, act, run) and `toolAccess` (read-only, read-web, exec); they still load, the fields are
  * dropped on read, and input that still names them (or `access` / `accessLevel`) is accepted and ignored.
  * `budget` and `pauseReason` belong to the removed daily caps and are dropped the same way.
@@ -127,7 +127,7 @@ export type SentinelCreateInput = z.output<typeof SentinelCreateSchema>;
 /**
  * Stable digest of what a scheduled run is allowed to do. Any change (scope, model, skills, production flag) makes the
  * Sentinel "needs review" until an operator acknowledges it. The retired access fields stay in the digest as the constant
- * they now mean, so Agents already reviewed with shell access keep their acknowledgement, while an Agent that was
+ * they now mean, so Sentinels already reviewed with shell access keep their acknowledgement, while a Sentinel that was
  * read-only needs one review because its authority widened.
  */
 export function sentinelReviewFingerprint(sentinel: Pick<Sentinel, "scope" | "model" | "skills" | "hostId">): string {
@@ -182,13 +182,13 @@ export interface SentinelActivation {
   costUsd?: number;
   /** Why a run was skipped, failed or stopped (review gate, ...). */
   error?: string;
-  /** One-line fact about how the run executes (for example, that it runs on the host without a sandbox). Shown in the Agent detail. */
+  /** One-line fact about how the run executes (for example, that it runs on the host without a sandbox). Shown in the Sentinel detail. */
   note?: string;
   startedAt: string;
   finishedAt?: string;
 }
 
-/** What started a turn in an Agent's thread. A manual "Run now" is `user`; `legacy` marks an activation projected from before the turn ledger existed. */
+/** What started a turn in a Sentinel's thread. A manual "Run now" is `user`; `legacy` marks an activation projected from before the turn ledger existed. */
 export const AGENT_TURN_ORIGINS = ["schedule", "github", "user", "promote", "legacy"] as const;
 export type AgentTurnOrigin = (typeof AGENT_TURN_ORIGINS)[number];
 /** Provenance detail of a turn. `via` says how it arrived (for example `poll` or `webhook` for GitHub, or the old trigger kind for a legacy row). */
@@ -198,13 +198,13 @@ export interface AgentTurn {
   agentId: string;
   /** The thread the turn ran in; for a legacy row the child thread the activation started. */
   sessionId?: string;
-  /** Monotonic per Agent; absent on a projected legacy row. */
+  /** Monotonic per Sentinel; absent on a projected legacy row. */
   seq?: number;
   origin: AgentTurnOrigin;
   detail: AgentTurnOriginDetail;
   triggerId?: string;
   status: SentinelActivationStatus;
-  /** Unique per Agent: a replayed delivery or a second engine tick is a no-op. */
+  /** Unique per Sentinel: a replayed delivery or a second engine tick is a no-op. */
   idempotencyKey?: string;
   costUsd?: number;
   error?: string;

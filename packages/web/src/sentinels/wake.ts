@@ -1,6 +1,6 @@
 import type { AgentTurn, AgentTurnOrigin } from "./model";
 
-/** The first line of every trigger turn the engine sends into an Agent's thread: `[Turn from <source> · turn <8 hex>]`. */
+/** The first line of every trigger turn the engine sends into a Sentinel's thread: `[Turn from <source> · turn <8 hex>]`. */
 const HEADER = /^\s*\[Turn from (.+?) · turn ([0-9a-f]{8})\]/;
 export interface WakeHeader { source: string; nonce: string; origin: Extract<AgentTurnOrigin, "schedule" | "github"> | undefined }
 

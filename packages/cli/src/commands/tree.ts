@@ -18,13 +18,10 @@ import { registerDoctorCommand } from "./doctor.js";
 import { registerDashboardCommand } from "./dashboard.js";
 import { registerTeamCommand } from "./team.js";
 import { registerDbCommand } from "./db.js";
-import { registerMcpServerCommand } from "./mcp-server.js";
 import { registerWorkflowCommand } from "./workflow.js";
 import { registerApiCommand } from "./api.js";
 import { registerReportsCommand } from "./reports.js";
-import { registerConsoleCommand } from "./console.js";
 import { registerWorkerCommand } from "./worker.js";
-import { registerPluginMovedCommand } from "./plugin-moved.js";
 import { registerConfigCommand } from "./config.js";
 import { registerUpgradeCommand } from "./upgrade.js";
 import { registerWorkbenchCommand } from "./workbench.js";
@@ -51,14 +48,9 @@ export function registerCommandTree(program: Command): void {
   nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
   registerSentinelsCommand(program);
 
-  // `lab` is hidden from the default help: rare developer commands live there.
-  program.command("lab", { hidden: true }).description("Developer commands: console, mcp-server");
-
   // Surfaces and operations.
   registerDashboardCommand(program);
-  registerConsoleCommand(program);
   registerApiCommand(program);
-  registerMcpServerCommand(program);
   registerWorkerCommand(program);
   registerTeamCommand(program);
   registerDoctorCommand(program);
@@ -71,9 +63,6 @@ export function registerCommandTree(program: Command): void {
   registerUsageCommand(program);
   registerAuditLogCommand(program);
   registerWorkbenchCommand(program);
-
-  // The retired `plugin` group: hidden aliases that point at `0 skills extensions`.
-  registerPluginMovedCommand(program);
 
   // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
   registerSkillsCommand(program);

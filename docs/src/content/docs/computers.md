@@ -1,6 +1,6 @@
 ---
 title: Computers
-description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and keep work running on the machine that owns it.
+description: Run 0 on a server or VM, connect to it from the browser or CLI, and keep work running on the machine that owns it.
 ---
 
 A computer owns threads, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
@@ -106,18 +106,17 @@ A browser thread can run its tools on a remote computer while its model requests
 
 If this machine is not signed in to ChatGPT, creating the thread fails with a message that says so. A computer added with `--forward-provider-key` can run threads on its own `OPENAI_API_KEY` through the commands in [Continue the same work](#continue-the-same-work).
 
-Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP calls still use the server's own provider.
+Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI calls still use the server's own provider.
 
-## Use it from the CLI and MCP
+## Use it from the CLI
 
-The CLI and the MCP adapter select the same registered computer. They never use your laptop's provider, filesystem or database for remote targets.
+The CLI selects a registered computer. It never uses your laptop's provider, filesystem or database for remote targets.
 
 ```bash
 0 threads list --engine staging --engines-config /abs/engines.json --format json
-0 lab mcp-server --automations --engine staging --engines-config /abs/engines.json
 ```
 
-Remote calls reject client-side `--workspace`, `--scope`, `--db-path` and `--model`. A remote MCP adapter exposes automation tools only.
+Remote calls reject client-side `--workspace`, `--scope`, `--db-path` and `--model`.
 
 For a direct call to a computer API, use `0 api`:
 
@@ -132,19 +131,19 @@ For a direct call to a computer API, use `0 api`:
 
 ```bash
 0 threads list --engine staging --format json
-0 lab console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
+0 threads send <session-id> "Summarize the retained evidence" --engine staging
 ```
 
-`--chat` attaches to a live thread. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
+Sending to a thread attaches to a live one. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
 
 ## Work lifecycle
 
 - The computer owns thread state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
-- Cancel on the owning computer. Ctrl-C in the foreground CLI sends the request. Losing a proxy or disposing an MCP adapter does not.
+- Cancel on the owning computer. Ctrl-C in the foreground CLI sends the request. Losing a proxy does not.
 - An approval for one computer, thread or request cannot authorize another.
 - Keep the computer process running. There is no crash recovery or detached executor. Stopping the computer ends its in-process work. Saved records and files survive.
 - A remote computer uses its own local or VM executors. Giving a local computer an arbitrary remote executor is not implemented.
 
 ## Next
 
-[Agents](/agents/#automations), [Threads](/threads/), [Server mode and Docker](/server-mode/).
+[Sentinels](/sentinels/#automations), [Threads](/threads/), [Server mode and Docker](/server-mode/).

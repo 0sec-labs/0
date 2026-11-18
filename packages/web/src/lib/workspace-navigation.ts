@@ -6,7 +6,7 @@ import { CapyAgentIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, 
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: VOCAB.mission.Plural, icon: CapyThreadListIcon },
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
-  { to: "/agents", label: "Agents", icon: CapyAgentIcon },
+  { to: "/sentinels", label: "Sentinels", icon: CapyAgentIcon },
   { to: "/skills", label: "Skills", icon: CapySparkleFourIcon },
   { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
@@ -16,7 +16,7 @@ export const WORKSPACE_DESTINATIONS = [
 
 /**
  * The sidebar: "New thread" (an action, not a route) followed by these five destinations, in this order. There is no More menu.
- * Agents are their own sidebar section below these (header, "+" and one row per Agent); automations live inside an Agent.
+ * Sentinels are their own sidebar section below these (header, "+" and one row per Sentinel); automations live inside a Sentinel.
  * Skills is active on /skills* (installed, browse, catalog detail); Extensions on /extensions.
  */
 export const SIDEBAR_DESTINATIONS = ["/findings", "/skills", "/memory", "/computers", "/extensions"] as const;
@@ -42,9 +42,9 @@ export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/onboarding", routes: ["/onboarding", "/setup", "/console/setup", "/console/onboarding"], to: "/chats", keep: "none" },
   { from: "/learning", routes: ["/learning", "/lessons"], to: "/memory", keep: "query" },
   { from: "/runs", routes: ["/runs", "/runs/:scanId", "/dashboard", "/live", "/operations", "/scans", "/scans/:scanId", "/scope", "/engagements", "/engagements/*"], to: "/findings", keep: "none" },
-  { from: "/sentinels", routes: ["/sentinels", "/sentinels/:sentinelId"], to: "/agents", keep: "path" },
+  { from: "/agents", routes: ["/agents", "/agents/:sentinelId"], to: "/sentinels", keep: "path" },
   { from: "/threads", routes: ["/threads", "/threads/:fingerprint"], to: "/findings", keep: "path" },
-  { from: "/automations", routes: ["/automations", "/workflows", "/audits", "/launcher", "/launch"], to: "/agents", keep: "query" },
+  { from: "/automations", routes: ["/automations", "/workflows", "/audits", "/launcher", "/launch"], to: "/sentinels", keep: "query" },
   { from: "/console", routes: ["/console", "/console/*"], to: "/chats", keep: "path" },
   { from: "/workers", routes: ["/workers", "/workers/*"], to: "/computers", keep: "path" },
   { from: "/engines", routes: ["/engines"], to: "/computers", keep: "path" },
@@ -73,8 +73,8 @@ export const PAGE_ROUTES: readonly { readonly path: string; readonly variant: Pa
   { path: "/chats", variant: "full" },
   { path: "/chats/saved/:savedId", variant: "full" },
   { path: "/chats/:sessionId", variant: "full" },
-  { path: "/agents", variant: "list" },
-  { path: "/agents/:sentinelId", variant: "list" },
+  { path: "/sentinels", variant: "list" },
+  { path: "/sentinels/:sentinelId", variant: "list" },
   { path: "/skills", variant: "list" },
   { path: "/skills/catalog/:id", variant: "list" },
   { path: "/memory", variant: "list" },

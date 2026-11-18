@@ -98,7 +98,7 @@ describe("SentinelStore", () => {
     expect(store.getFile(sentinel.id, "reports/2026-01-01.md")).toBeNull();
     store.close();
   });
-  it("deleting a Sentinel removes its files and activation history, and keeps automations and other Agents' history", () => {
+  it("deleting a Sentinel removes its files and activation history, and keeps automations and other Sentinels' history", () => {
     const { path } = open();
     const store = new SentinelStore(path);
     const workflows = new SecurityWorkflowStore(path);

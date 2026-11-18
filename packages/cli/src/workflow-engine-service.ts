@@ -48,7 +48,7 @@ export class WorkflowEngineService {
           } finally { db.close(); }
         },
       },
-      admitRun: () => Promise.reject(new Error("This engine starts work through threads and Agents, not workflow runs.")), createSession: config => this.#createSession(config),
+      admitRun: () => Promise.reject(new Error("This engine starts work through threads and Sentinels, not workflow runs.")), createSession: config => this.#createSession(config),
       capabilities: () => createEngineCapabilityManifest({ operations: [...ENGINE_OPERATIONS], reportFormats: ["json", "md", "html", "sarif", "pdf"] }),
     });
   }

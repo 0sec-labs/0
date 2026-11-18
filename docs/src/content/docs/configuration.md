@@ -113,7 +113,7 @@ Two conversation settings are worth knowing. `titleInstructions` (up to 500 char
 
 ### Ask before running commands
 
-`approvals` is `auto` (default: threads and Agents run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under **Settings → Helpers**, and `--approvals ask|auto` on `0 lab console` overrides it for one run. It is the only place asking first is decided: threads and Agents have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
+`approvals` is `auto` (default: threads and Sentinels run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under **Settings → Helpers**, and `--approvals ask|auto` on `0 -p` overrides it for one run. It is the only place asking first is decided: threads and Sentinels have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
 
 ### Development source updates
 
@@ -186,7 +186,7 @@ The old name still works. 0 copies it to the new name and prints one notice on s
 | `ZERO_WPSCAN_API_TOKEN` | `WPSCAN_API_TOKEN` |
 | `ZERO_SKIP_PROVIDER_BANNER` | `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` |
 
-Renamed flags keep hidden aliases: `--backend` is now `--engine`, `--backends-config` is `--engines-config`, `--session` is `--chat`, and `mcp-server --workflows` is `--automations`. 0 reads `~/.0/backends.json` only when `engines.json` does not exist.
+0 reads `~/.0/backends.json` only when `engines.json` does not exist.
 
 ## Telemetry
 
@@ -324,7 +324,7 @@ Only test systems you own or are authorized to test. A scope file encodes that a
 
 ### Set up scope
 
-Scope enforcement is a built-in extension. It is **on by default**, in every project. Scope is on whenever a scope is set: with no scope nothing is restricted, and the moment you set one (`--scope`, a thread, Agent or automation scope, or a pull request checkout) its hosts, paths and exclusions are enforced.
+Scope enforcement is a built-in extension. It is **on by default**, in every project. Scope is on whenever a scope is set: with no scope nothing is restricted, and the moment you set one (`--scope`, a thread, Sentinel or automation scope, or a pull request checkout) its hosts, paths and exclusions are enforced.
 
 If the scope extension is turned off or fails while a scope is set, commands are **denied**, not allowed. To also require a scope for every live target, enable it explicitly for the project:
 
@@ -392,14 +392,13 @@ A redirect or a linked third-party host does not become in scope because the sta
 | --- | --- |
 | `--scope` | Which hosts may be reached, once a scope is set. |
 | `--model` and your provider key | Which model does the work. |
-| `--engagement-profile conservative` | A quieter testing posture. Not a new scope. |
-| `--rate-limit` | Request pacing. |
+| `ZERO_ENGAGEMENT_PROFILE=conservative` | A quieter testing posture. Not a new scope. |
 
 With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped engagements. `--allow-scanners` shows them without widening the host list.
 
 If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
 
-There is no access setting: a thread or Agent has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Ask before running commands](#ask-before-running-commands)).
+There is no access setting: a thread or Sentinel has shell access, and scope, budget and the sandbox are what limit it. Asking before each command is the global **Ask before running commands** setting (see [Ask before running commands](#ask-before-running-commands)).
 
 ### Strict scope mode
 
@@ -430,11 +429,7 @@ Before you start, agree on destinations, credentials, testing windows, traffic a
 <span id="engagement-posture-profile"></span>
 ### Posture profile
 
-The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `--engagement-profile conservative` is quieter:
-
-```bash
-0 lab mcp-server --scope ./engagement-scope.json --engagement-profile conservative
-```
+The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `ZERO_ENGAGEMENT_PROFILE=conservative` is quieter:
 
 | Behavior | Default | Conservative |
 | --- | --- | --- |
@@ -444,11 +439,9 @@ The default posture paces at 5 requests per second per host and escalates WAF ev
 | Web recon pre-pass | unthrottled | rate-limited |
 | WAF-evasion ladder | on when blocked | off |
 
-The profile lowers the fallback rate. It does **not** cap an explicit `--rate-limit`.
+Turn off WAF evasion on its own with `ZERO_WAF_EVASION=0`. Detection and block reporting still work.
 
-Turn off WAF evasion on its own with `--no-waf-evasion` or `ZERO_WAF_EVASION=0`. Detection and block reporting still work.
-
-Set the same controls in the scope file. The scope file beats environment variables, which beat CLI flags:
+Set the same controls in the scope file. The scope file beats environment variables:
 
 ```json
 {
@@ -480,11 +473,11 @@ When a profile is active, the session emits an `engagement_posture_applied` even
 
 ## Costs and budgets
 
-0 shows estimated model cost on each thread. An Agent has no spending cap. For a single thread, `0 threads send new --cost-ceiling <usd>` stops it once its estimated spend reaches that amount. Provider and infrastructure costs are yours. Set a spending limit with your provider as a separate control.
+0 shows estimated model cost on each thread. A Sentinel has no spending cap. For a single thread, `0 threads send new --cost-ceiling <usd>` stops it once its estimated spend reaches that amount. Provider and infrastructure costs are yours. Set a spending limit with your provider as a separate control.
 
 ### Turn limits
 
-A turn is one model round trip. It can hold several tool calls. Browser app threads have no limit per message; `0 lab console --max-tool-calls <n>` sets one. A larger limit raises the ceiling on work, not the floor.
+A turn is one model round trip. It can hold several tool calls. Browser app threads have no limit per message; `0 -p --max-tool-calls <n>` sets one. A larger limit raises the ceiling on work, not the floor.
 
 `ZERO_MAX_TURNS` limits every shared-runner session. `ZERO_MAX_TURNS_REVIEW` and `ZERO_MAX_TURNS_VERIFY` beat the global value for review and verification sessions. Invalid, zero or negative values are ignored.
 

@@ -37,14 +37,14 @@ export function auditLogPath(options: { q?: string; before?: number | null; limi
   return `/api/console/audit-log?${params}`;
 }
 
-const ACRONYMS = new Map([["mcp", "MCP"], ["github", "GitHub"], ["ok", "OK"], ["sentinel", "agent"], ["workflow", "automation"], ["mission", "thread"], ["session", "thread"], ["worker", "computer"]]);
+const ACRONYMS = new Map([["mcp", "MCP"], ["github", "GitHub"], ["ok", "OK"], ["workflow", "automation"], ["mission", "thread"], ["session", "thread"], ["worker", "computer"]]);
 /** "mcp.create" -> "MCP create", "access.browser_only" -> "Access browser only". */
-const SENTINEL_STATUS_LABEL: Record<string, string> = { archived: "Agent archived", active: "Agent turned on", paused: "Agent paused" };
+const SENTINEL_STATUS_LABEL: Record<string, string> = { archived: "Sentinel archived", active: "Sentinel turned on", paused: "Sentinel paused" };
 export function auditActionLabel(action: string, detail: Record<string, unknown> = {}): string {
   if (action === "finding.triage") return detail.decision === "accepted" ? "Finding accepted" : detail.decision === "suppressed" ? "Finding dismissed" : detail.decision === "new" ? "Finding restored" : "Finding reviewed";
   if (action === "sentinel.update" && typeof detail.status === "string" && SENTINEL_STATUS_LABEL[detail.status]) return SENTINEL_STATUS_LABEL[detail.status]!;
-  if (action === "sentinel.file.edit") return "Agent file edited";
-  if (action === "sentinel.file.delete") return "Agent file deleted";
+  if (action === "sentinel.file.edit") return "Sentinel file edited";
+  if (action === "sentinel.file.delete") return "Sentinel file deleted";
   const words = action.split(/[._-]+/).filter(Boolean).map(word => ACRONYMS.get(word) ?? word);
   const text = words.join(" ");
   return text.charAt(0).toUpperCase() + text.slice(1);

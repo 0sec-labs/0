@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe("command tree", () => {
-  it("registers every new group and keeps the worker alias", () => {
+  it("registers every new group and registers computers", () => {
     const program = new Command();
     registerCommandTree(program);
     const names = program.commands.map(c => c.name());
@@ -43,7 +43,6 @@ describe("command tree", () => {
     expect(nested("models")).toEqual(expect.arrayContaining(["connections", "usage"]));
     expect(nested("config")).toEqual(expect.arrayContaining(["github", "audit-log"]));
     const computers = program.commands.find(c => c.name() === "computers")!;
-    expect(computers.aliases()).toContain("worker");
     expect(computers.commands.map(c => c.name())).toEqual(expect.arrayContaining(["list", "add", "repair", "stop", "hosts"]));
     expect(computers.commands.find(c => c.name() === "add")!.aliases()).toContain("deploy");
     expect(program.commands.find(c => c.name() === "config")!.commands.map(c => c.name())).toEqual(expect.arrayContaining(["get", "set", "reset", "list", "show"]));

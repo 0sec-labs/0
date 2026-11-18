@@ -7,7 +7,7 @@
  */
 export type TelemetrySurface = "cli" | "web";
 
-/** The flags of the web console: `0 --headless` and `0 --port 8080` are `0 web ...` (see command-compat.ts). */
+/** The flags of the web console: `0 --headless` and `0 --port 8080` are `0 web ...` (see command-grammar.ts). */
 export const CONSOLE_FLAGS: ReadonlySet<string> = new Set([
   "--db-path", "--port", "--host", "--asset-dir", "--dev-url", "--team-config", "--engine-token-env", "--engine-workspace", "--engine-scope", "--engine-target",
   "--engine-allow-apply", "--engine-time-cap", "--engine-cost-cap", "--server-mode", "--allowed-host", "--trusted-proxy", "--public-url", "--access-token-env",

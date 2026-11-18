@@ -13,13 +13,13 @@ describe("repositories model", () => {
     expect(repoKey("not a repo")).toBeNull();
     expect(repoKey("")).toBeNull();
   });
-  it("counts each Agent once per repository", () => {
+  it("counts each Sentinel once per repository", () => {
     const usage = sentinelUsage([{ scope: { repos: ["acme/api", "https://github.com/acme/api", "acme/web"] } }, { scope: { repos: ["ACME/api"] } }, { scope: { repos: [] } }]);
     expect(usage.get("acme/api")).toBe(2);
     expect(usage.get("acme/web")).toBe(1);
-    expect(usedByLabel(0, { singular: "Agent", plural: "Agents" })).toBe("Not used by any Agent");
-    expect(usedByLabel(1, { singular: "Agent", plural: "Agents" })).toBe("Used by 1 Agent");
-    expect(usedByLabel(2, { singular: "Agent", plural: "Agents" })).toBe("Used by 2 Agents");
+    expect(usedByLabel(0, { singular: "Sentinel", plural: "Sentinels" })).toBe("Not used by any Sentinel");
+    expect(usedByLabel(1, { singular: "Sentinel", plural: "Sentinels" })).toBe("Used by 1 Sentinel");
+    expect(usedByLabel(2, { singular: "Sentinel", plural: "Sentinels" })).toBe("Used by 2 Sentinels");
   });
   it("searches name, visibility and branch", () => {
     const rows = [row("acme/api"), row("acme/site", { visibility: "public", defaultBranch: "trunk" })];

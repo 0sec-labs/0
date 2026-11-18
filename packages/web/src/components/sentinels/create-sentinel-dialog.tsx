@@ -25,7 +25,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div className="flex min-h-12 items-center justify-between gap-4 border-b-[0.5px] border-border-1 py-1"><span className="text-sm font-medium">{label}</span><div className="flex min-w-0 justify-end">{children}</div></div>;
 }
 
-/** One 448px dialog: start from, avatar, name, Folder, Computer, Model, Create. The agent is created active and the owner lands in its thread. */
+/** One 448px dialog: start from, avatar, name, Folder, Computer, Model, Create. The sentinel is created active and the owner lands in its thread. */
 export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (sentinel: Sentinel) => void }) {
   const presets = useSentinelPresets(open);
   const { create } = useSentinelMutations();

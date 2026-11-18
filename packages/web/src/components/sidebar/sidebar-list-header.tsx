@@ -5,7 +5,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SidebarModeToggle } from "./sidebar-mode-toggle";
 
-/** Section header shared by both lists: 32px, 13px/500 title on the left, then a fixed right-hand group in the same order and positions in both modes: the icon Agents|Threads toggle, a 28px search, a 28px "+" and a 28px "..." menu with Sort by and Density. */
+/** Section header shared by both lists: 32px, 13px/500 title on the left, then a fixed right-hand group in the same order and positions in both modes: the icon Sentinels|Threads toggle, a 28px search, a 28px "+" and a 28px "..." menu with Sort by and Density. */
 export function SidebarListHeader<Sort extends string>({ title, newLabel, onNew, searchLabel, onSearch, searchActive, sortLabel, sortOptions, sort, onSort, density, onDensity }: {
   title: string;
   newLabel: string;

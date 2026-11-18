@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
-import { resolveInvocation } from "./command-compat.js";
+import { resolveInvocation } from "./command-grammar.js";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { homeStateDir } from "@0/engine/shared";
@@ -151,15 +151,12 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return undefined;
   // The host management surface is deliberately available even after a failed VM launch.
   // Decide on the command that will run: `0 --headless` is `web`, `0 config doctor workbench` is `doctor workbench`.
-  const command = resolveInvocation(args).args;
-  if (["api", "workbench", "config", "reports", "web", "console", "team", "doctor", "help", "--help", "-h", "--version", "-v"].some((name) => name === args[0] || name === command[0]) || args.length === 0) return undefined;
+  const command = resolveInvocation(args);
+  if (["api", "config", "web", "doctor", "help", "--help", "-h", "--version", "-v"].some((name) => name === args[0] || name === command[0]) || args.length === 0) return undefined;
   if ((command[0] === "findings" && command[1] === "reports") || (command[0] === "doctor" && command[1] === "workbench")) return undefined;
   if (remoteBackendClientId(args)) return undefined;
   const hostSettings = loadGlobalSettings(home, { requireExecutionProfile: existsSync(workbenchConfigPath(home)) });
   if (hostSettings.executionProfile !== "smolvm") return undefined;
-  if (args[0] === "mcp-server" || (args[0] === "lab" && args[1] === "mcp-server")) {
-    throw new Error("MCP requires bidirectional stdio, which the SmolVM CLI bridge does not support. The selected SmolVM profile is unchanged; host fallback is refused. Use `0 agents ... --automation` commands in SmolVM. MCP currently requires explicitly selected host-local execution; only the operator should choose `0 config doctor workbench disable` if host execution is intended.");
-  }
   const config = loadWorkbenchConfig(home);
   if (!config) throw new Error("SmolVM profile is selected but no workbench is configured. Run 0 config doctor workbench setup --image <approved-archive>.");
   const workspaceRoot = realpathSync(config.workspaceRoot ?? process.cwd());

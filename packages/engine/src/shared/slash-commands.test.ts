@@ -51,7 +51,7 @@ describe("slash registry", () => {
 
   it("uses user vocabulary", () => {
     const text = SLASH_COMMANDS.map((c) => `${c.description} ${c.usage ?? ""}`).join(" ");
-    expect(text).not.toMatch(/mission|sentinel|workspace|engine|project/i);
-    expect(getCommandByName("threads start")?.cli).toBe("threads send");
+    expect(text).not.toMatch(/mission|workspace|engine|project/i);
+    expect(getCommandByName("threads start")?.cli).toBe("threads start");
   });
 });

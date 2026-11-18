@@ -3,7 +3,7 @@ import { agentBadge, agentRow, agentSubtitle, folderMonogram, folderName, resolv
 import { formatRelativeAge } from "../src/lib/relative-time";
 import type { Sentinel } from "../src/sentinels/model";
 
-const agent = (patch: Partial<Sentinel> = {}) => ({ id: "a1", name: "Pen Tester", mission: "Probe the staging app", status: "active", updatedAt: "2026-01-01T00:00:00Z", ...patch }) as Sentinel;
+const sentinel = (patch: Partial<Sentinel> = {}) => ({ id: "a1", name: "Pen Tester", mission: "Probe the staging app", status: "active", updatedAt: "2026-01-01T00:00:00Z", ...patch }) as Sentinel;
 
 describe("age", () => {
   const now = Date.parse("2026-01-10T00:00:00Z");
@@ -27,34 +27,34 @@ describe("list mode", () => {
   });
 });
 
-describe("agent badge and subtitle", () => {
+describe("sentinel badge and subtitle", () => {
   test("badge priority", () => {
-    expect(agentBadge(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }), true)).toBe("needs-you");
-    expect(agentBadge(agent({ attention: { needsYou: false, needsReview: true, pendingDecisions: 0 } }))).toBe("needs-you");
-    expect(agentBadge(agent({ status: "paused" }), true)).toBe("paused");
-    expect(agentBadge(agent(), true)).toBe("running");
-    expect(agentBadge(agent())).toBe("idle");
+    expect(agentBadge(sentinel({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }), true)).toBe("needs-you");
+    expect(agentBadge(sentinel({ attention: { needsYou: false, needsReview: true, pendingDecisions: 0 } }))).toBe("needs-you");
+    expect(agentBadge(sentinel({ status: "paused" }), true)).toBe("paused");
+    expect(agentBadge(sentinel(), true)).toBe("running");
+    expect(agentBadge(sentinel())).toBe("idle");
   });
   test("subtitle falls back to the job line", () => {
-    expect(agentSubtitle(agent())).toEqual({ text: "Probe the staging app", tone: "muted" });
-    expect(agentSubtitle(agent({ status: "paused" }))).toEqual({ text: "Paused. Triggers are off.", tone: "muted" });
-    expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toEqual({ text: "Needs you", tone: "accent" });
-    expect(agentSubtitle(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1, reason: "Approve the scan" } })).text).toBe("Approve the scan");
+    expect(agentSubtitle(sentinel())).toEqual({ text: "Probe the staging app", tone: "muted" });
+    expect(agentSubtitle(sentinel({ status: "paused" }))).toEqual({ text: "Paused. Triggers are off.", tone: "muted" });
+    expect(agentSubtitle(sentinel({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toEqual({ text: "Needs you", tone: "accent" });
+    expect(agentSubtitle(sentinel({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1, reason: "Approve the scan" } })).text).toBe("Approve the scan");
   });
   test("the last thing it said wins over the job line; failed and working show, idle and paused draw no glyph", () => {
-    const talking = agent({ thread: { status: "working", updatedAt: "2026-01-02T00:00:00Z", lastMessage: "Found two outdated packages." } });
+    const talking = sentinel({ thread: { status: "working", updatedAt: "2026-01-02T00:00:00Z", lastMessage: "Found two outdated packages." } });
     expect(agentSubtitle(talking)).toEqual({ text: "Found two outdated packages.", tone: "muted" });
     expect(agentBadge(talking)).toBe("running");
-    expect(agentBadge(agent({ thread: { status: "failed", updatedAt: "" } }))).toBe("failed");
-    expect(agentSubtitle(agent({ status: "paused" })).text).toBe("Paused. Triggers are off.");
+    expect(agentBadge(sentinel({ thread: { status: "failed", updatedAt: "" } }))).toBe("failed");
+    expect(agentSubtitle(sentinel({ status: "paused" })).text).toBe("Paused. Triggers are off.");
     expect(agentRow(talking, Date.parse("2026-01-02T01:00:00Z"))).toMatchObject({ age: "1h", needsYou: false, badge: "running", badgeLabel: "Working" });
-    expect(agentRow(agent({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toMatchObject({ needsYou: true, badge: "needs-you" });
+    expect(agentRow(sentinel({ attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }))).toMatchObject({ needsYou: true, badge: "needs-you" });
   });
   test("row", () => {
-    expect(agentRow(agent(), Date.parse("2026-01-03T00:00:00Z"))).toMatchObject({ href: "/agents/a1", age: "2d", badge: "idle", badgeLabel: "Idle" });
+    expect(agentRow(sentinel(), Date.parse("2026-01-03T00:00:00Z"))).toMatchObject({ href: "/sentinels/a1", age: "2d", badge: "idle", badgeLabel: "Idle" });
   });
   test("sort by name", () => {
-    const list = [agent({ id: "2", name: "b" }), agent({ id: "1", name: "a" })];
+    const list = [sentinel({ id: "2", name: "b" }), sentinel({ id: "1", name: "a" })];
     expect(sortAgents(list, "name").map(item => item.name)).toEqual(["a", "b"]);
     expect(sortAgents(list, "recent").map(item => item.name)).toEqual(["b", "a"]);
   });

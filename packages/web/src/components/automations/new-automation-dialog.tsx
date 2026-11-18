@@ -7,7 +7,7 @@ import { Select } from "@/ui/components/select";
 import { useCreateAutomation } from "@/components/automations/use-automations";
 import type { Sentinel } from "@/sentinels/model";
 
-/** New automation: which Agent owns it. It opens in the Agent's Automations view once created. */
+/** New automation: which Sentinel owns it. It opens in the Sentinel's Automations view once created. */
 export function NewAutomationDialog({ open, onOpenChange, sentinels, sentinelId, onCreated }: {
   open: boolean; onOpenChange: (open: boolean) => void; sentinels: readonly Sentinel[]; sentinelId?: string;
   onCreated: (sentinelId: string, workflowId: string) => void;

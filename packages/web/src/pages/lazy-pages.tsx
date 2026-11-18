@@ -65,7 +65,7 @@ export function routeForPath(pathname: string): RouteName | undefined {
   if (first === "chats") return second === "saved" ? "saved" : "console";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {
-    case "agents": return "sentinels";
+    case "sentinels": return "sentinels";
     case "api-access": return "apiAccess";
     case "team": return "team";
     case "skills": return "skills";

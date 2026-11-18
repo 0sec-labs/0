@@ -5,7 +5,7 @@ const SUFFIX = "0security";
 const TITLES: Array<[RegExp, string]> = [
   [/^\/chats(?:\/|$)/, "Home"],
   [/^\/findings(?:\/|$)/, "Findings"],
-  [/^\/agents(?:\/|$)/, "Agents"],
+  [/^\/sentinels(?:\/|$)/, "Sentinels"],
   [/^\/skills(?:\/|$)/, "Skills"],
   [/^\/extensions(?:\/|$)/, "Extensions"],
   [/^\/(?:settings|project)(?:\/|$)/, "Settings"],

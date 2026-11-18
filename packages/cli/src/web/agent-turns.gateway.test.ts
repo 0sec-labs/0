@@ -56,7 +56,7 @@ describe("agent turns through a real gateway with compaction forced", () => {
         exists: id => { try { gateway.get(id); return true; } catch { return false; } },
         removeQueued: (id, messageId) => gateway.removeQueued(id, messageId),
       },
-      ensureHome: async sentinel => { if (sentinel.homeMissionId) return { id: sentinel.homeMissionId, replaced: false }; const created = gateway.create({ title: `Agent: ${sentinel.name}` }); store.setHomeMission(sentinel.id, created.id); return { id: created.id, replaced: false }; },
+      ensureHome: async sentinel => { if (sentinel.homeMissionId) return { id: sentinel.homeMissionId, replaced: false }; const created = gateway.create({ title: `Sentinel: ${sentinel.name}` }); store.setHomeMission(sentinel.id, created.id); return { id: created.id, replaced: false }; },
     });
     const request = (key: string, at: string) => ({ sentinel: store.get(agent.id)!, origin: "schedule" as const, via: "schedule", trigger: { id: trigger.id, kind: "schedule" as const }, automation, idempotencyKey: key, scheduledFor: at });
     const settled = (turnId: string) => vi.waitFor(() => expect(store.getTurn(turnId)?.status).toBe("completed"), { timeout: 10_000 });

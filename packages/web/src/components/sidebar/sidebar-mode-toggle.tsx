@@ -6,11 +6,11 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useSidebarListMode } from "./use-sidebar-list";
 
 const OPTIONS = [
-  { value: "agents", label: "Agents", Icon: CapyAgentIcon },
+  { value: "agents", label: "Sentinels", Icon: CapyAgentIcon },
   { value: "threads", label: "Threads", Icon: List },
 ] as const;
 
-/** Agents | Threads as two header icon buttons, same size and weight as search, "+" and "...". Only the active one has a background; there is no outer box. Hidden when the server has no Agents. */
+/** Sentinels | Threads as two header icon buttons, same size and weight as search, "+" and "...". Only the active one has a background; there is no outer box. Hidden when the server has no Sentinels. */
 export function SidebarModeToggle() {
   const { mode, setMode, supported } = useSidebarListMode();
   if (!supported) return null;

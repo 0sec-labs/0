@@ -4,7 +4,7 @@ description: Review, triage, verify and export findings in the browser app or fr
 ---
 
 
-Every thread and Agent automation can record findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
+Every thread and Sentinel automation can record findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
 
 ## In the browser app
 

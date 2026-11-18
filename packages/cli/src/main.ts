@@ -105,8 +105,7 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-import { shouldPrintMovedNotice } from "./command-aliases.js";
-import { formatMovedNotice, resolveInvocation } from "./command-compat.js";
+import { resolveInvocation } from "./command-grammar.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
 
@@ -169,14 +168,18 @@ let userArgs = process.argv.slice(2);
     process.argv = [process.argv[0], process.argv[1], ...userArgs];
   }
 }
-// The alias layer: old-old names and the new grammar become the implementation commands, and an old
-// invocation that still works gets one dim `moved:` line (see command-compat.ts).
-{
-  const resolved = resolveInvocation(userArgs);
-  if (resolved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(formatMovedNotice(resolved.notice, process.stderr.isTTY === true));
-  userArgs = resolved.args;
-}
+// The command grammar becomes the implementation commands (see command-grammar.ts).
+userArgs = resolveInvocation(userArgs);
 process.argv = [process.argv[0], process.argv[1], ...userArgs];
+
+/** The headless prompt, `-c` and `--resume` run the console command, which is not part of the command tree. */
+async function runConsole(args: string[]): Promise<void> {
+  process.argv = [process.argv[0], process.argv[1], "console", ...args];
+  const { registerConsoleCommand } = await import("./commands/console.js");
+  const program = new Command().name("0").enablePositionalOptions();
+  registerConsoleCommand(program);
+  program.parseAsync().catch(exitWithCommandError);
+}
 
 /** Run the program for `args`, which become the process arguments commander parses. */
 async function runProgram(args: string[]): Promise<void> {
@@ -189,17 +192,14 @@ if (userArgs.length === 0) {
   // Default browser path avoids loading any other command.
   showWebConsole().catch(exitWithCommandError);
 } else if (userArgs[0] === "-r" || userArgs[0] === "--resume") {
-  // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
-  // saved chat session by id/prefix when a headless prompt is supplied. commander's
-  // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
-  await runProgram(["lab", "console", "--resume", ...userArgs.slice(1)]);
+  // `0 --resume [id]`: resume a saved chat session by id/prefix with a headless prompt.
+  await runConsole(["--resume", ...userArgs.slice(1)]);
 } else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
-  // `0 -c` → `console --continue`: reopen the most recent chat session.
-  await runProgram(["lab", "console", "--continue", ...userArgs.slice(1)]);
+  // `0 -c`: reopen the most recent chat session.
+  await runConsole(["--continue", ...userArgs.slice(1)]);
 } else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
-  // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
-  // query (or read the prompt from piped stdin when no argument is given).
-  await runProgram(["lab", "console", "--print", ...userArgs.slice(1)]);
+  // `0 -p "<prompt>"`: one-shot non-interactive query (or read the prompt from piped stdin).
+  await runConsole(["--print", ...userArgs.slice(1)]);
 } else {
   await runProgram(userArgs);
 }

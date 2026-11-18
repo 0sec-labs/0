@@ -122,7 +122,7 @@ export class SecurityWorkflowStore {
     let input;
     try { input = parseSecurityWorkflowInput(value); } catch (error) { throw new SecurityWorkflowStoreError(error instanceof Error ? error.message : "Invalid workflow.", 400); }
     return this.#db.transaction(() => {
-      if (input.ownerSentinelId && !this.#sentinelExists(input.ownerSentinelId)) throw new SecurityWorkflowStoreError("Owner Agent was not found.", 400);
+      if (input.ownerSentinelId && !this.#sentinelExists(input.ownerSentinelId)) throw new SecurityWorkflowStoreError("Owner Sentinel was not found.", 400);
       const existing = input.id ? this.get(input.id) : null;
       if (input.id && !existing && input.revision !== undefined) throw new SecurityWorkflowStoreError("Workflow not found.", 404);
       if (existing && input.revision !== existing.revision) throw new SecurityWorkflowStoreError("Workflow changed. Reload before saving.", 409);

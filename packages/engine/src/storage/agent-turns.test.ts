@@ -12,7 +12,7 @@ const base = (sentinelId: string, kind: "schedule" | "github-pr" | "manual" = "s
   ({ sentinelId, sentinelVersion: 1, trigger: { kind, ...(kind === "schedule" ? { triggerId: "t1" } : {}) }, status: "running" as const, skills: [], ...extra });
 
 describe("agent turn ledger", () => {
-  it("writes one turn per activation with the origin mapped and a per-Agent sequence", () => {
+  it("writes one turn per activation with the origin mapped and a per-Sentinel sequence", () => {
     const store = new SentinelStore(":memory:");
     const agent = store.create({ name: "A" });
     store.createActivation(base(agent.id, "schedule"), { via: "schedule", idempotencyKey: "k1" });
@@ -72,7 +72,7 @@ describe("agent turn ledger", () => {
     store.close();
   });
 
-  it("deleting the Agent removes its turns and its activations", () => {
+  it("deleting the Sentinel removes its turns and its activations", () => {
     const store = new SentinelStore(":memory:");
     const agent = store.create({ name: "A" });
     store.createActivation(base(agent.id));

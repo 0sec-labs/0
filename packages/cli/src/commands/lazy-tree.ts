@@ -39,16 +39,8 @@ const SECTIONS: Readonly<Record<string, Build>> = {
     missions.registerMissionsCommand(root);
   },
 
-  async agents(root) {
+  async sentinels(root) {
     (await import("./sentinels.js")).registerSentinelsCommand(root);
-  },
-
-  async lab(root) {
-    const [consoleCommand, mcpServer] = await Promise.all([import("./console.js"), import("./mcp-server.js")]);
-    root.command("lab", { hidden: true }).description("Developer commands: console, mcp-server");
-    consoleCommand.registerConsoleCommand(root);
-    mcpServer.registerMcpServerCommand(root);
-    adoptCommands(root, "lab");
   },
 
   async web(root) {
@@ -87,10 +79,6 @@ const SECTIONS: Readonly<Record<string, Build>> = {
     models.registerModelsCommand(root);
     usage.registerUsageCommand(root);
     adoptCommands(root, "models");
-  },
-
-  async plugin(root) {
-    (await import("./plugin-moved.js")).registerPluginMovedCommand(root);
   },
 
   async skills(root) {

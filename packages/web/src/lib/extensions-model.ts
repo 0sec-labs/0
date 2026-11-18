@@ -16,7 +16,7 @@ export interface ExtensionRowDto {
   mcp?: Array<{ server: string; state: "not-connected" | "approved" | "needs-approval"; reason: string }>;
 }
 export interface ImportReportDto { importedAt: string; migrated: Array<{ kind: string; name: string; detail: string }>; notMigrated: Array<{ kind: string; name: string; detail: string }>; notes: string[] }
-/** `scopeDefined` comes from the server (a project scope file, a scope in settings, or an Agent or automation scope). Only an older server leaves it unset, and the page then assumes a scope may exist, so scope shows no switch. */
+/** `scopeDefined` comes from the server (a project scope file, a scope in settings, or a Sentinel or automation scope). Only an older server leaves it unset, and the page then assumes a scope may exist, so scope shows no switch. */
 export interface OverviewDto { rows: ExtensionRowDto[]; importReport: ImportReportDto | null; error?: string; scopeDefined?: boolean }
 
 export interface InstallPromptDto {
@@ -108,7 +108,7 @@ export function promptView(prompt: InstallPromptDto): PromptView {
   return {
     title: `${update ? "Update" : "Install"} ${prompt.name}${prompt.version ? ` ${prompt.version}` : ""}`,
     repoAtCommit: prompt.repoAtCommit, revision: prompt.revision, description: prompt.description, confirmLabel: update ? "Update" : "Install",
-    canDo: prompt.canDo.length ? prompt.canDo : ["Nothing beyond giving the agent text instructions."], warnings,
+    canDo: prompt.canDo.length ? prompt.canDo : ["Nothing beyond giving the sentinel text instructions."], warnings,
     diff: d ? { from: shortRevision(d.fromRevision), added: d.added, removed: d.removed, changed: d.changed, capabilityAdded: d.capabilityDelta.added, capabilityRemoved: d.capabilityDelta.removed, patch: d.patch ?? "", patchTruncated: d.patchTruncated === true,
       hasChanges: d.added.length + d.removed.length + d.changed.length + d.capabilityDelta.added.length + d.capabilityDelta.removed.length > 0 } : null,
   };

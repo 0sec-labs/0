@@ -34,7 +34,7 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
   }
   switch (root) {
     case "findings": return list("Findings", "/findings", "Finding");
-    case "agents": return list(VOCAB.sentinel.Plural, "/agents", VOCAB.sentinel.Singular);
+    case "sentinels": return list(VOCAB.sentinel.Plural, "/sentinels", VOCAB.sentinel.Singular);
     case "skills":
       if (second === "catalog") return [{ label: "Skills", to: "/skills" }, { label: "Browse", to: "/skills?tab=browse" }, { label: label ?? "Skill" }];
       {

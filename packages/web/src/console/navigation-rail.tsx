@@ -179,7 +179,7 @@ export function ConsoleNavigationRail({
           </NavLink>
         ))}
       </SidebarGroup>
-      {/* Both lists stay mounted: the Threads source keeps its queries and polling while Agents is shown. */}
+      {/* Both lists stay mounted: the Threads source keeps its queries and polling while Sentinels is shown. */}
       {list.mode === "agents" && <SentinelSidebarSection />}
       <div id="navigation-chat-history" className={cn("flex min-h-0 flex-1 flex-col", list.mode === "agents" && "hidden")}>
         <div ref={onHistorySlot} className="flex h-full min-h-0 flex-col" />

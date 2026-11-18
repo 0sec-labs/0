@@ -19,13 +19,12 @@ export function nest(parent: Command, group: string, registrars: readonly Regist
   for (const register of registrars) register(target);
 }
 
-/** Commands that moved under another group. The old top-level name keeps working through `command-aliases.ts`. */
+/** Commands registered at the top by their module, then moved under their group. */
 export const NEW_HOME: Readonly<Record<string, string>> = {
   reports: "findings",
   connections: "models", usage: "models",
   "audit-log": "config", team: "config", db: "config", github: "config",
   upgrade: "doctor", workbench: "doctor",
-  console: "lab", "mcp-server": "lab",
 };
 
 /** Move already-registered top-level commands under their new parent, keeping each command object (and handler) as is. `only` limits it to one parent (the lazy loader builds one group at a time). */
@@ -40,7 +39,7 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["findings", "threads", "agents"]],
+  ["Work", ["findings", "threads", "sentinels"]],
   ["Setup", ["skills", "memory", "models", "computers", "config"]],
 ];
 
@@ -68,7 +67,7 @@ export function configureGroupedHelp(program: Command): void {
 
 interface NewFormStub { readonly name: string; readonly args: string; readonly description: string; readonly options?: readonly (readonly [string, string])[] }
 
-/** Visible subcommands that have no implementation command of their own: `command-compat.ts` rewrites them before parsing, so the action only runs on incomplete input. */
+/** Visible subcommands that have no implementation command of their own: `command-grammar.ts` rewrites them before parsing, so the action only runs on incomplete input. */
 const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
   findings: [{ name: "update", args: "<id>", description: "Change a finding's status", options: [["--status <status>", "accepted | suppressed | open | false-positive"], ["--note <text>", "Why (optional)"], ["--reason <text>", "Why; required with false-positive"], ["--db-path <path>", "Path to SQLite database"]] }],
   models: [
@@ -82,9 +81,9 @@ const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
 const NEW_FORM_HELP: Readonly<Record<string, string>> = {
   "threads list": "With an id: show that thread. Then --events, --export, --rename <title>, --set, --clear, --close, --archive or --delete act on it.",
   "threads send": "`send new <prompt>` starts a thread. With an id: --retry, --resume or --decide <decision-id>.",
-  "agents list": "With an id: show that Agent. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
-  "agents run": "--history lists past activations.",
-  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|versions|rollback> ...` manages saved automations.",
+  "sentinels list": "With an id: show that Sentinel. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
+  "sentinels run": "--history lists past activations.",
+  "sentinels set": "--create makes a Sentinel. With an id: --state active|paused|acknowledged|archived|deleted, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|versions|rollback> ...` manages saved automations.",
   "skills list": "With a name: show that skill. --catalog browses the catalog. Extensions: `0 skills extensions list|info|enable|disable|update|remove`; --info, --enable, --disable and --mcp-remove on a name reach them.",
   "skills add": "<src> may be a catalog id, a repository, a folder of skills or a bundle. An extension is <repo>@<full sha>: you see one prompt first. Also: --mcp <url> adds an MCP server as a local extension, --preview checks a folder, --remove <name> removes a skill.",
   "models list": "Also: --usage shows tokens and cost, --recommended the suggested models.",

@@ -15,7 +15,7 @@ const session = (id: string): StoredSession => ({
   messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
 });
 
-describe("Agent runner send adapter", () => {
+describe("Sentinel runner send adapter", () => {
   it("passes the queue mode and the automated mark through to the gateway", async () => {
     const send = vi.fn(async () => ({}));
     await sendToMission({ send } as never, "thread-1", "check deps", undefined, "queue", true);
@@ -28,12 +28,12 @@ describe("Agent runner send adapter", () => {
   });
 });
 
-describe("Agent thread creation", () => {
-  it("applies the Agent's folder with configure, because create does not accept it", async () => {
+describe("Sentinel thread creation", () => {
+  it("applies the Sentinel's folder with configure, because create does not accept it", async () => {
     const create = vi.fn(() => ({ id: "thread-1" }));
     const configure = vi.fn(async () => ({}));
-    expect(createMission({ create, configure } as never, { title: "Agent: Watcher", workspacePath: "/work/app", skillAllowList: [] })).toEqual({ id: "thread-1" });
-    expect(create).toHaveBeenCalledWith({ title: "Agent: Watcher", skillAllowList: [] });
+    expect(createMission({ create, configure } as never, { title: "Sentinel: Watcher", workspacePath: "/work/app", skillAllowList: [] })).toEqual({ id: "thread-1" });
+    expect(create).toHaveBeenCalledWith({ title: "Sentinel: Watcher", skillAllowList: [] });
     expect(configure).toHaveBeenCalledWith("thread-1", { workspacePath: "/work/app" });
     create.mockClear(); configure.mockClear();
     createMission({ create, configure } as never, { title: "No folder" });
@@ -42,7 +42,7 @@ describe("Agent thread creation", () => {
 });
 
 describe("idle archive at boot", () => {
-  it("archives idle threads but not the standing thread of an Agent", () => {
+  it("archives idle threads but not the standing thread of a Sentinel", () => {
     const home = temp();
     const dbPath = join(home, "control.db");
     const store = new SentinelStore(dbPath);

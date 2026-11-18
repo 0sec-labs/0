@@ -5,17 +5,15 @@ import { Check, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProviderIcon } from "@/components/provider-icon";
 
-export const setupPrompt = `Help me use 0security for my task from this coding agent. Use the CLI directly when shell access is available; MCP is optional for clients that require a structured tool connection.
+export const setupPrompt = `Help me use 0security for my task from this coding agent. Use the CLI directly when shell access is available.
 
-Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 config doctor, and 0 config doctor workbench status --json. Choose among scan, findings, threads, agents, skills, memory, models, computers and config for the smallest operation serving my task.
+Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 config doctor, and 0 config doctor workbench status --json. Choose among scan, findings, threads, sentinels, skills, memory, models, computers and config for the smallest operation serving my task.
 
 Reuse an existing browser console. If needed, inspect 0 --help and start it with --no-open --ready-json; use its returned URL for /connections and /models. 0's model connection is separate from this coding agent's model session. I complete OAuth/browser or device approval myself. Never request or expose keys, tokens, or credential files in chat; use existing named credential environment variables or the console's credential inputs.
 
 Choose local execution or a registered remote engine. Preserve client integrations, model connections, workspace grants, and execution profiles; never disable the workbench or switch SmolVM to host execution automatically. Remote workspace, scope, model, and apply permissions belong to that engine; do not configure its provider through this client. For web operations, inspect 0 api --help, the selected engine's handshake/capabilities, and documented API paths; do not copy local credentials or configuration to it.
 
-Discover definitions with 0 agents list --automation --help; inspect 0 agents run --help only when execution is requested. Use 0 threads --help and 0 scan --help for inspection, results, continuation, and cancellation. Setup and discovery do not authorize assessments, automation runs, live-target requests, or patch application. Before authorized execution, resolve and show the target, workspace or scope file, model connection, and limits; live automations also need the host project's scope extension. Inspect exit status and retained evidence before claiming success.
-
-MCP is optional: inspect 0 lab mcp-server --help and the client's actual configuration format, preserving other integrations. Use an absolute executable path if needed. Local stdio requires operator-selected host-local execution; with SmolVM, prefer isolated CLI workflows unless I explicitly choose host execution. Local workflows use --automations --workspace <authorized-absolute-root>, or --automations --scope <absolute-scope-json> for live targets. Remote engines use --automations --engine <registered-id> (optional --engines-config), require workflow-engine capability, and omit local workspace/scope/db-path flags. Expose only needed tools, inspect schemas, and verify discovery without launching work. Connecting does not attach this agent to a browser conversation; disconnect cancels local stdio runs but remote runs persist.
+Discover definitions with 0 sentinels list --help; inspect 0 sentinels run --help only when execution is requested. Use 0 threads --help and 0 scan --help for inspection, results, continuation, and cancellation. Setup and discovery do not authorize assessments, automation runs, live-target requests, or patch application. Before authorized execution, resolve and show the target, workspace or scope file, model connection, and limits; live automations also need the host project's scope extension. Inspect exit status and retained evidence before claiming success.
 
 Summarize readiness, any remaining sign-in or authorization, and the next command for my task.`;
 

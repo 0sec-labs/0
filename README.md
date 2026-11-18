@@ -77,9 +77,9 @@ Only point 0 at systems you own or are authorized to test. See [Scope](https://d
 - **Talk to a security agent** about a folder on your computer or a remote Computer, in a Thread
 - **Review findings** on a board, with source evidence, and export them
 - **Verify fixes**: a finding is marked Verified by or Not verified
-- **Build persistent security agents**: Agents are standing threads that wake on a schedule or on every pull request, with skills, memory and automations written as prompts
+- **Build persistent security agents**: Sentinels are standing threads that wake on a schedule or on every pull request, with skills, memory and automations written as prompts
 - **Keep memory** as plain notes that every thread can read
-- **Extend** it with [extensions and skills](https://docs.0.security/extensions/), or drive it from coding agents over MCP
+- **Extend** it with [extensions and skills](https://docs.0.security/extensions/)
 
 <p align="center">
   <a href="assets/readme-findings.mp4">
@@ -93,7 +93,7 @@ Only point 0 at systems you own or are authorized to test. See [Scope](https://d
 
 - **Open source**: MIT or Apache-2.0, built in the open
 - **Private**: runs on your computer, in your CI or in a container, and only the context you send to your chosen model leaves it
-- **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent over MCP
+- **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent
 - **Evidence first**: every finding links to its source evidence
 - **Verified**: a finding says whether it was verified, and by what
 - **Proven in public**: [disclosed vulnerabilities and upstream fixes](https://0.security/research/#disclosures), including in the Linux kernel
@@ -101,11 +101,10 @@ Only point 0 at systems you own or are authorized to test. See [Scope](https://d
 ## Coding agents
 
 ```bash
-0 agents run <id> --task "Review this pull request" --yes
-0 lab mcp-server --automations --workspace /absolute/path/to/repo
+0 sentinels run <id> --task "Review this pull request" --yes
 ```
 
-See [extensions and MCP](https://docs.0.security/extensions/) and the [command reference](https://docs.0.security/commands/).
+See the [command reference](https://docs.0.security/commands/).
 
 ## Learn more
 

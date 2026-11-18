@@ -2,7 +2,7 @@ import { BackendIdSchema } from "@0/engine/shared";
 
 /** Explicit remote transport selection never grants local code or target execution. Accepts --engine and its deprecated alias --backend. */
 export function remoteBackendClientId(args: readonly string[]): string | undefined {
-  if (!(["automation", "workflow", "runs", "chats", "sessions", "mcp-server"] as readonly string[]).includes(args[0] ?? "")) return undefined;
+  if (!(["automation", "workflow", "runs", "chats", "sessions"] as readonly string[]).includes(args[0] ?? "")) return undefined;
   const engineUrls: Array<string | undefined> = [];
   const tokenEnvs: Array<string | undefined> = [];
   const selections: Array<string | undefined> = [];

@@ -58,7 +58,7 @@ function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: st
 beforeEach(() => { vi.useFakeTimers({ now: T0 }); });
 afterEach(() => { vi.useRealTimers(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-describe("Agent scheduler", () => {
+describe("Sentinel scheduler", () => {
   it("fires a due schedule trigger, links the activation thread to the home thread and enforces the skill allow-list", async () => {
     const f = fixture();
     const { id, automation, triggerId } = await f.armed();
@@ -217,7 +217,7 @@ describe("review gate", () => {
     expect((await f.activations(id)).filter(activation => activation.trigger.kind === "schedule")).toHaveLength(2);
   });
 
-  it("does not run when the Agent is paused", async () => {
+  it("does not run when the Sentinel is paused", async () => {
     const f = fixture();
     const { id, triggerId } = await f.armed();
     await f.call("POST", `${P}/${id}/pause`, {});
@@ -288,10 +288,10 @@ describe("triggers API, ownership and deletion", () => {
     expect(f.store.listTriggers()).toHaveLength(0);
   });
 
-  it("clears ownerSentinelId on hard delete and rejects workflows owned by a missing Agent", async () => {
+  it("clears ownerSentinelId on hard delete and rejects workflows owned by a missing Sentinel", async () => {
     const f = fixture();
     const { id, automation } = await f.armed({}, "sentinel-home");
-    expect(() => f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: "ghost" })).toThrow(/Owner Agent/);
+    expect(() => f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: "ghost" })).toThrow(/Owner Sentinel/);
     const version = (await f.view(id)).version;
     const deleted = await f.call("DELETE", `${P}/${id}?version=${version}`);
     expect(deleted.status).toBe(200);
@@ -377,7 +377,7 @@ describe("GitHub pull request polling", () => {
     await f.service.tick();
     expect(f.missions.send).not.toHaveBeenCalled();
     expect(f.store.listTurns(id)).toEqual([]);
-    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "paused", lastError: "Agent is paused." });
+    expect(f.store.getTrigger(triggerId)).toMatchObject({ lastStatus: "paused", lastError: "Sentinel is paused." });
   });
 
   it("persistent thread: a pull request that arrives while the thread waits on a person is offered again later, not lost", async () => {
@@ -626,7 +626,7 @@ describe("persistent thread delivery (flag on)", () => {
     expect((await f.activations(id))).toHaveLength(0);
   });
 
-  it("never reuses a thread configured with an older scope, model or skills: the gateway pins those at creation, so a changed Agent gets a fresh thread", async () => {
+  it("never reuses a thread configured with an older scope, model or skills: the gateway pins those at creation, so a changed Sentinel gets a fresh thread", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();
     await fire(f, 5); f.emit("mission-1", { type: "turn-complete", stopReason: "end_turn" });
@@ -693,7 +693,7 @@ describe("persistent thread delivery (flag on)", () => {
     expect(turnsOf(f, id)[0]).toMatchObject({ status: "skipped", skippedReason: "The queue is full" });
   });
 
-  it("a failed turn does not stall the next one; three failures in a row turn the trigger off and mark the Agent as needing you", async () => {
+  it("a failed turn does not stall the next one; three failures in a row turn the trigger off and mark the Sentinel as needing you", async () => {
     const f = fixture({ persistent: true });
     const { id, triggerId } = await f.armed();
     for (const minute of [5, 10, 15]) {
@@ -747,7 +747,7 @@ describe("persistent thread delivery (flag on)", () => {
     expect((await f.view(id)).status).toBe("active");
   });
 
-  it("closes turns a stopped engine left open as interrupted, and tells the Agent on its next turn", async () => {
+  it("closes turns a stopped engine left open as interrupted, and tells the Sentinel on its next turn", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();
     // A turn row left by an engine process that no longer exists.
@@ -760,7 +760,7 @@ describe("persistent thread delivery (flag on)", () => {
   });
 });
 
-describe("a person in the Agent's thread", () => {
+describe("a person in the Sentinel's thread", () => {
   const turnsOf = (f: ReturnType<typeof fixture>, id: string) => f.store.listTurns(id).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
   const fire = async (f: ReturnType<typeof fixture>, minutes: number) => { vi.setSystemTime(T0 + minutes * MIN + 1_000); await f.service.tick(); };
   const open = async (f: ReturnType<typeof fixture>, id: string) => (await f.call("POST", `${P}/${id}/thread`, {})).data as { missionId: string };
@@ -804,7 +804,7 @@ describe("a person in the Agent's thread", () => {
     expect(turnsOf(f, id)).toHaveLength(0);
   });
 
-  it("lets a person message a paused Agent and never cancels their turn", async () => {
+  it("lets a person message a paused Sentinel and never cancels their turn", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();
     const { missionId } = await open(f, id);

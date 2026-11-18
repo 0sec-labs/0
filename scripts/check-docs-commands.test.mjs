@@ -22,8 +22,7 @@ function tree() {
   program.command("runs").command("history");
   return program;
 }
-const moved = (args) => (args[0] === "review" ? "`0 scan source`" : undefined);
-const check = (text) => checkInvocation(tree(), text, moved);
+const check = (text) => checkInvocation(tree(), text);
 
 test("extracts fenced lines, prompts, continuations and inline spans", () => {
   const md = [
@@ -48,10 +47,6 @@ test("flags unknown commands, subcommands and options with a suggestion", () => 
   assert.match(check("0 runs nope")[0], /unknown subcommand/);
   assert.match(check("0 scan web --target x --runtime api")[0], /unknown option --runtime.*did you mean/);
   assert.match(check("0 scan web --target x -z")[0], /unknown option -z/);
-});
-
-test("rejects deprecated aliases", () => {
-  assert.match(check("0 review ./repo")[0], /deprecated command `0 review`; use `0 scan source`/);
 });
 
 test("validates enumerated choices but not placeholders", () => {

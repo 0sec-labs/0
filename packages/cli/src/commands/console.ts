@@ -94,7 +94,7 @@ export function resolveConsoleAutonomyMode(opts: {
 }
 
 /**
- * `0 lab console` — scriptable one-shot chat using the shared console engine.
+ * `0 -p`, `0 -c` and `0 --resume` — scriptable one-shot chat using the shared console engine.
  *
  * A command interface where each supplied prompt reaches the engine, which
  * can invoke every 0 tool (recon, web pentest, source/package scan,
@@ -147,7 +147,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       if (opts.print === undefined) {
-        console.log("Interactive conversations are in the browser. Run 0 (no account required). For automation use 0 lab console -p \"your request\" or 0 -p \"your request\".");
+        console.log("Interactive conversations are in the browser. Run 0 (no account required). For automation use 0 -p \"your request\".");
         return;
       }
       let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;

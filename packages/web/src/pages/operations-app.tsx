@@ -99,8 +99,8 @@ export function OperationsApp() {
             {["connections", "models", "settings", "doctor", "tools", "project"].map((route) => (
               <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
             ))}
-            <Route path="/agents" element={<SentinelsPage />} />
-            <Route path="/agents/:sentinelId" element={<SentinelPage />} />
+            <Route path="/sentinels" element={<SentinelsPage />} />
+            <Route path="/sentinels/:sentinelId" element={<SentinelPage />} />
             <Route path="/api-access" element={<FindingsApiAccessPage />} />
             <Route path="/team" element={<TeamSettingsPage />} />
             <Route path="/skills" element={<SkillsPage />} />

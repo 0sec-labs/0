@@ -11,7 +11,7 @@ const ICON_SIZE = { xs: 12, sm: 16, md: 16, lg: 28, xl: 40 } as const;
 export function SentinelAvatar({ sentinel, size = "xs", dot = false, badge, className }: { badge?: AgentBadge; sentinel: Pick<Sentinel, "name" | "avatar" | "status" | "attention"> & { role?: string }; size?: keyof typeof SIZE; dot?: boolean; className?: string }) {
   const status = presentStatus(sentinel);
   const Icon = SENTINEL_ICONS[avatarIconId({ avatar: sentinel.avatar, role: sentinel.role ?? "" }) ?? ""];
-  // The chosen colour tints the tile and colours its glyph; an agent without one stays neutral.
+  // The chosen colour tints the tile and colours its glyph; a sentinel without one stays neutral.
   const color = /^#[0-9a-f]{6}$/i.test(sentinel.avatar.color) ? sentinel.avatar.color : undefined;
   return <span aria-hidden="true" data-avatar-color={color} style={color ? { backgroundColor: `color-mix(in oklab, ${color} 20%, transparent)`, color } : undefined} className={cn("relative inline-flex shrink-0 items-center justify-center bg-secondary font-medium leading-none text-muted-foreground-1", SIZE[size], className)}>
     {Icon ? <Icon size={ICON_SIZE[size]} /> : avatarInitials(sentinel)}
@@ -36,7 +36,7 @@ const BADGE_CLASSES: Record<AgentBadge, string> = {
 };
 /** Small status marker overlapping the avatar's bottom-right corner. */
 export function AvatarBadge({ badge }: { badge: AgentBadge }) {
-  // Idle and paused agents draw no glyph: only working, waiting and failed are worth a mark.
+  // Idle and paused sentinels draw no glyph: only working, waiting and failed are worth a mark.
   if (badge === "idle" || badge === "paused") return null;
   return <span aria-hidden="true" data-badge={badge} className={cn("absolute -right-1 -bottom-1 size-2.5 rounded-full ring-2 ring-chrome", BADGE_CLASSES[badge])} />;
 }

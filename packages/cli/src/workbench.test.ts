@@ -19,7 +19,7 @@ function temporaryHome(): string {
 }
 
 describe("workbench authority boundary", () => {
-  it.each([[], ["api"], ["reports", "import", "report.json", "--db-path", "workspace.db"], ["api", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "TOKEN"], ["web"], ["console"], ["team", "list"], ["--headless", "--ready-json"], ["--port=8080"], ["config", "doctor", "workbench", "status"], ["findings", "list", "--import", "report.json"]].map(args => ({ args })))("keeps browser, team setup and retired entrypoints on the host: %j", async ({ args }) => {
+  it.each([[], ["api"], ["api", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "TOKEN"], ["web"], ["--headless", "--ready-json"], ["--port=8080"], ["config", "doctor", "workbench", "status"], ["findings", "list", "--import", "report.json"]].map(args => ({ args })))("keeps browser, team setup and retired entrypoints on the host: %j", async ({ args }) => {
     const read = vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "smolvm" });
     const launch = vi.spyOn(controller, "runWorkbenchCli");
     await expect(launchConfiguredWorkbench(args)).resolves.toBeUndefined();
@@ -27,34 +27,11 @@ describe("workbench authority boundary", () => {
     expect(launch).not.toHaveBeenCalled();
   });
 
-  it("refuses unsupported MCP stdio before launching a VM or resolving provider credentials", async () => {
-    const selected = { ...DEFAULT_SETTINGS, executionProfile: "smolvm" as const };
-    vi.spyOn(settings, "loadGlobalSettings").mockReturnValue(selected);
-    const status = vi.spyOn(core, "getSmolvmWorkbenchStatus").mockRejectedValue(new Error("VM launch must not be attempted"));
-    const runtime = vi.spyOn(core, "createConsoleRuntime");
-    const launch = vi.spyOn(controller, "runWorkbenchCli");
-    const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--workspace", "/repo"])).rejects.toThrow("MCP requires bidirectional stdio");
-    expect(status).not.toHaveBeenCalled();
-    expect(runtime).not.toHaveBeenCalled();
-    expect(launch).not.toHaveBeenCalled();
-    expect(persist).not.toHaveBeenCalled();
-    expect(selected.executionProfile).toBe("smolvm");
-  });
-
-  it("leaves explicitly local MCP transport in the host without changing the profile", async () => {
-    vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "local" });
-    const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--workspace", "/repo"])).resolves.toBeUndefined();
-    expect(persist).not.toHaveBeenCalled();
-  });
-
   it("routes explicit remote workflow clients without changing local sandbox settings or reading local provider credentials", async () => {
     const settingsRead = vi.spyOn(settings, "loadGlobalSettings");
     const runtime = vi.spyOn(core, "createConsoleRuntime");
     const persist = vi.spyOn(settings, "saveSettings");
     await expect(launchConfiguredWorkbench(["automation", "list", "--engine", "engine-one"])).resolves.toBeUndefined();
-    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--engine", "engine-one"])).resolves.toBeUndefined();
     expect(settingsRead).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled(); expect(persist).not.toHaveBeenCalled();
   });
 

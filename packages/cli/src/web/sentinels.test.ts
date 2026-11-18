@@ -40,7 +40,7 @@ describe("agent API", () => {
     expect((await f.call("POST", "/api/console/sentinel-presets", {})).status).toBe(405);
   });
 
-  it("creates inert Agents, from a preset or from scratch", async () => {
+  it("creates inert Sentinels, from a preset or from scratch", async () => {
     const f = fixture();
     const created = await f.call("POST", P, { preset: "pen-tester", scope: { targets: ["https://staging.example.com"] } });
     expect(created.status).toBe(201);
@@ -56,7 +56,7 @@ describe("agent API", () => {
     expect(((await f.call("GET", `${P}?status=active`)).data as { sentinels: unknown[] }).sentinels).toHaveLength(0);
   });
 
-  it("creates an active Agent from a preset with no triggers or automations, so nothing runs by itself", async () => {
+  it("creates an active Sentinel from a preset with no triggers or automations, so nothing runs by itself", async () => {
     const f = fixture();
     const created = await f.call("POST", P, { preset: "pen-tester", status: "active", scope: { repos: ["/work/app"] } });
     expect(created.status).toBe(201);
@@ -107,7 +107,7 @@ describe("agent API", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(3);
   });
 
-  it("lists an Agent's turns with the activation behind each manual run", async () => {
+  it("lists a Sentinel's turns with the activation behind each manual run", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
     expect((await f.call("GET", `${P}/nope/turns`)).status).toBe(404);
@@ -119,7 +119,7 @@ describe("agent API", () => {
     expect(turns[0]).toMatchObject({ origin: "user", status: "running", sessionId: "mission-2", legacyActivationId: activations[0]!.id });
   });
 
-  it("marks the activation failed when the thread cannot start, lets you run again and refuses archived Agents", async () => {
+  it("marks the activation failed when the thread cannot start, lets you run again and refuses archived Sentinels", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
     f.missions.send.mockRejectedValueOnce(Object.assign(new Error("No model configured."), { statusCode: 409 }));

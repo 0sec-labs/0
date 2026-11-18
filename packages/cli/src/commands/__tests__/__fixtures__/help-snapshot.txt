@@ -1,7 +1,7 @@
 ### 0
 Usage: 0 [options] [command]
 
-Security agents for your repositories. Run 0 to open the console.
+Security sentinels for your repositories. Run 0 to open the console.
 
 Options:
   -h, --help          display help for command
@@ -9,343 +9,14 @@ Options:
 Work:
   findings [options]  Browse findings and change their status
   threads             Start, follow and stop threads
-  agents              Agents and their automations: list, run, change
+  sentinels           Sentinels and their automations: list, run, change
 
 Setup:
   skills              Skills and extensions: list, add
   memory              What 0 remembers across threads
   models              Models and provider connections
-  computers|worker    Remote computers that run 0
+  computers           Remote computers that run 0
   config              Settings, API keys, team and setup checks (config doctor)
-
-### 0 agents
-Usage: 0 agents [options] [command]
-
-Agents and their automations: list, run, change
-
-Options:
-  -h, --help          display help for command
-
-Commands:
-  list [options]      List Agents
-  run [options] <id>  Run an Agent now; starts a thread (needs a running engine)
-  set [options] <id>  Change an Agent's settings
-  help [command]      display help for command
-
-### 0 agents acknowledge (hidden)
-Usage: 0 agents acknowledge [options] <id>
-
-Mark changed scope, model or tools as reviewed
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents activations (hidden)
-Usage: 0 agents activations [options] <id>
-
-List an Agent's recent runs
-
-Options:
-  --limit <n>       Maximum rows (1-200) (default: "50")
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents archive (hidden)
-Usage: 0 agents archive [options] <id>
-
-Archive an Agent; its history stays
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents create (hidden)
-Usage: 0 agents create [options]
-
-Create an Agent from a preset or a JSON definition
-
-Options:
-  --preset <id>     Start from a preset (see `0 agents list --presets`)
-  --name <name>     Name
-  --file <path>     Agent JSON object (overrides preset fields)
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents delete (hidden)
-Usage: 0 agents delete [options] <id>
-
-Delete an Agent; its automations are detached, not deleted
-
-Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents files (hidden)
-Usage: 0 agents files [options] [command]
-
-Read and edit an Agent's instructions and memory files
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 agents files get (hidden)
-Usage: 0 agents files get [options] <id> <path>
-
-Print a file's content
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents files list (hidden)
-Usage: 0 agents files list [options] <id>
-
-List files
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents files put (hidden)
-Usage: 0 agents files put [options] <id> <path>
-
-Create or replace a file from --file or --content
-
-Options:
-  --file <path>     Read content from a local text file
-  --content <text>  Inline content
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents files rm (hidden)
-Usage: 0 agents files rm [options] <id> <path>
-
-Delete a file
-
-Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents list
-Usage: 0 agents list [options]
-
-List Agents
-
-Options:
-  --status <status>  Only active, paused, archived
-  --json             Print machine-readable JSON
-  --db-path <path>   Control database (default: the user database)
-  -h, --help         display help for command
-
-### 0 agents pause (hidden)
-Usage: 0 agents pause [options] <id>
-
-Pause an Agent
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents presets (hidden)
-Usage: 0 agents presets [options]
-
-List Agent presets
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents resume (hidden)
-Usage: 0 agents resume [options] <id>
-
-Resume a paused Agent
-
-Options:
-  --acknowledge     Also acknowledge review of changed scope, model or tools
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents run
-Usage: 0 agents run [options] <id>
-
-Run an Agent now; starts a thread (needs a running engine)
-
-Options:
-  --task <text>     Task for this run
-  --yes             Confirm that this run is authorized
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents set
-Usage: 0 agents set [options] <id>
-
-Change an Agent's settings
-
-Options:
-  --name <name>     Name
-  --mission <text>  One-line purpose
-  --file <path>     Patch JSON object
-  --version <n>     Reviewed version (default: the current one)
-  --state <state>   active, paused, acknowledged, archived or deleted
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents show (hidden)
-Usage: 0 agents show [options] <id>
-
-Show an Agent (full or prefix ID)
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents triggers (hidden)
-Usage: 0 agents triggers [options] [command]
-
-Control what starts an Agent's automations
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 agents triggers add (hidden)
-Usage: 0 agents triggers add [options] <id>
-
-Add a trigger for an automation the Agent owns; disabled unless --enable --yes
-
-Options:
-  --automation <id>       Owned automation to start
-  --kind <kind>           schedule | manual | github-pr
-  --file <path>           Trigger JSON object with schedule or github settings
-  --enable                Enable immediately
-  --yes                   Confirm that an enabled trigger was reviewed
-  --repo <owner/name>     github-pr: repository to watch
-  --base-branch <branch>  github-pr: only pull requests into this branch
-  --comment               github-pr: comment on each pull request with one short summary, edited in
-                          place on later pushes (default: off)
-  --include-forks         github-pr: also review pull requests from forks, marked untrusted
-                          (default: skipped)
-  --json                  Print machine-readable JSON
-  --db-path <path>        Control database (default: the user database)
-  -h, --help              display help for command
-
-### 0 agents triggers check (hidden)
-Usage: 0 agents triggers check [options] <id> <trigger-id>
-
-Poll a pull request trigger now instead of waiting for its next poll
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents triggers disable (hidden)
-Usage: 0 agents triggers disable [options] <id> <trigger-id>
-
-Pause a trigger
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents triggers enable (hidden)
-Usage: 0 agents triggers enable [options] <id> <trigger-id>
-
-Enable a trigger after reviewing it
-
-Options:
-  --yes             Confirm that this trigger was reviewed
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents triggers list (hidden)
-Usage: 0 agents triggers list [options] <id>
-
-List triggers
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents triggers rm (hidden)
-Usage: 0 agents triggers rm [options] <id> <trigger-id>
-
-Delete a trigger
-
-Options:
-  --yes             Confirm deletion
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents webhook (hidden)
-Usage: 0 agents webhook [options] [command]
-
-GitHub webhook for pull request Agents (server mode)
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 agents webhook secret (hidden)
-Usage: 0 agents webhook secret [options] [command]
-
-Manage the webhook secret
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 agents webhook secret rotate (hidden)
-Usage: 0 agents webhook secret rotate [options]
-
-Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
-
-Options:
-  --yes             Confirm; update the secret on GitHub afterwards
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
-
-### 0 agents webhook status (hidden)
-Usage: 0 agents webhook status [options]
-
-Show whether the webhook is set up and the last deliveries
-
-Options:
-  --json            Print machine-readable JSON
-  --db-path <path>  Control database (default: the user database)
-  -h, --help        display help for command
 
 ### 0 api (hidden)
 Usage: 0 api [options] [path]
@@ -362,7 +33,7 @@ Options:
   -h, --help                 display help for command
 
 ### 0 automation (hidden)
-Usage: 0 automation|automations [options] [command]
+Usage: 0 automation [options] [command]
 
 Discover templates and inspect saved automations
 
@@ -386,7 +57,7 @@ Usage: 0 automation create [options]
 Create an automation from a template or a JSON definition
 
 Options:
-  --template <id>    Start from a template (see `0 agents list --automation --templates`)
+  --template <id>    Start from a template (see `0 sentinels list --automation --templates`)
   --file <path>      Definition JSON object
   --name <name>      Name for the new automation
   --target <target>  Target the automation runs against
@@ -451,7 +122,7 @@ Usage: 0 automation rollback [options] <id>
 Restore an earlier revision as a new revision
 
 Options:
-  --revision <n>    Revision to restore (see `0 agents set --automation versions`)
+  --revision <n>    Revision to restore (see `0 sentinels set --automation versions`)
   --json            Print machine-readable JSON
   --db-path <path>  Control database (default: the user database)
   -h, --help        display help for command
@@ -483,7 +154,7 @@ Options:
   -h, --help        display help for command
 
 ### 0 computers
-Usage: 0 computers|worker [options] [command]
+Usage: 0 computers [options] [command]
 
 Remote computers that run 0
 
@@ -1169,102 +840,6 @@ Options:
   --db-path <path>   Path to SQLite database
   -h, --help         display help for command
 
-### 0 lab (hidden)
-Usage: 0 lab [options] [command]
-
-Developer commands: console, mcp-server
-
-Options:
-  -h, --help            display help for command
-
-Commands:
-  console [options]     Run a headless chat prompt; interactive conversations use 0
-  mcp-server [options]  Expose selected target tools or managed automations over MCP stdio
-  help [command]        display help for command
-
-### 0 lab console
-Usage: 0 lab console [options]
-
-Run a headless chat prompt; interactive conversations use 0
-
-Options:
-  --engine-url <url>         Attach directly to a running trusted engine
-  --engine-token-env <name>  Environment variable holding the engine token
-  --format <format>          Output format: text, json, ndjson (default: "text")
-  --target <url>             Engagement target the tools operate against (optional; can be named
-                             in-chat)
-  --scope <file>             Initial policy for the scope extension; defining a scope turns
-                             enforcement on
-  --finding <id>             Focus the chat on one persisted finding
-  --finding-intent <intent>  Finding mode: investigate, verify, or draft_fix
-  --db-path <path>           Persistent findings database (defaults to ZERO_DB_PATH or the local
-                             store)
-  -m, --model <id>           Override the LLM model id (else provider default)
-  --role <role>              Tool set to expose: audit|review|discovery|attack|verify (default audit
-                             = every tool)
-  --approvals <ask|auto>     Ask before running commands, or run them automatically (default auto).
-                             Credential, private-network and sandbox protections apply either way.
-  --max-tool-calls <n>       Optional tool-call round limit per message (unlimited by default)
-  --allow-scanners           Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off
-  --resume [id]              With a headless prompt, reopen a saved chat by id or unique prefix; use
-                             browser history for a picker.
-  --continue                 With a headless prompt, continue the most recent saved console chat.
-  -p, --print [prompt]       Non-interactive: run ONE prompt through the engine, print the result,
-                             and exit. Reads the prompt from the argument or piped stdin. Combine
-                             with --continue/--resume to query a saved session. Also reachable as `0
-                             -p <prompt>`.
-  --engine <id>              Use a registered remote engine
-  --engines-config <path>    Operator engine connection registry JSON file
-  --chat <id>                Send to an existing live engine chat
-  -h, --help                 display help for command
-
-### 0 lab mcp-server
-Usage: 0 lab mcp-server [options]
-
-Expose selected target tools or managed automations over MCP stdio
-
-Options:
-  --target <target>            Target URL for this MCP chat
-  --scan-id <scanId>           Scan ID to associate persisted findings and target updates with
-  --engine-url <url>           Attach directly to a running trusted engine
-  --engine-token-env <name>    Environment variable holding the attached engine token
-  --allow-apply                Permit explicit automation apply requests inside the authorized
-                               workspace (default: false)
-  --workspace <path>           Absolute authorized local root for automation source scans
-  --db-path <path>             Path to SQLite database
-  --timeout <ms>               Default tool timeout in milliseconds (default: "30000")
-  --scope <path>               Path to a 0 scope JSON file. Out-of-scope URLs are refused by every
-                               target tool.
-  --tools <names>              Comma-separated 0 MCP tools to expose (default: live tools, or
-                               automation tools with --automations).
-  --rate-limit <spec>          Per-host request rate-limit spec. Defaults to 5 rps when unset. An
-                               active --engagement-profile caps this: the effective rate is the
-                               minimum of the two, so the profile can only lower it.
-  --allow-scanners             Disable generic-scanner suppression for scoped engagements. (default:
-                               false)
-  --engagement-profile <name>  Engagement hardening posture for authorized enterprise work.
-                               'standard' (default) is the existing behaviour. 'conservative'
-                               applies the quiet posture to this MCP chat: no adaptive WAF-evasion
-                               ladder, full jitter on the per-host token bucket, and a 1 rps/host
-                               ceiling. The profile can only ever make the session quieter — the
-                               effective rate is the minimum of the profile and --rate-limit. The
-                               applied posture is recorded as an `engagement_posture_applied` event
-                               on the scan so it can be handed to the client as evidence. Lower
-                               precedence than the scope file's `engagement` block and
-                               ZERO_ENGAGEMENT_PROFILE.
-  --no-waf-evasion             Disable the adaptive WAF-evasion ladder (default: on). When a
-                               response classifies as blocked, the engine normally retries with
-                               encoding/casing/whitespace-mutated payload variants, which escalates
-                               a routine WAF block into a SOC incident. Detection and reporting of
-                               the block are unaffected. Independent of --engagement-profile; env
-                               form: ZERO_WAF_EVASION=0.
-  --engine <id>                Use a registered remote engine; no local execution fallback
-  --engines-config <path>      Operator engine connection registry JSON file
-  --chat <id>                  Attach automation runs to an existing chat on the selected engine
-  --automations                Expose automation discovery and run lifecycle tools instead of live
-                               tools (default: false)
-  -h, --help                   display help for command
-
 ### 0 memory
 Usage: 0 memory [options] [command]
 
@@ -1542,189 +1117,334 @@ Options:
   --json               Print JSON
   -h, --help           display help for command
 
-### 0 plugin (hidden)
-Usage: 0 plugin [options] [command]
+### 0 sentinels
+Usage: 0 sentinels [options] [command]
 
-Moved: see `0 skills extensions`
+Sentinels and their automations: list, run, change
+
+Options:
+  -h, --help          display help for command
+
+Commands:
+  list [options]      List Sentinels
+  run [options] <id>  Run a Sentinel now; starts a thread (needs a running engine)
+  set [options] <id>  Change a Sentinel's settings
+  help [command]      display help for command
+
+### 0 sentinels acknowledge (hidden)
+Usage: 0 sentinels acknowledge [options] <id>
+
+Mark changed scope, model or tools as reviewed
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels activations (hidden)
+Usage: 0 sentinels activations [options] <id>
+
+List a Sentinel's recent runs
+
+Options:
+  --limit <n>       Maximum rows (1-200) (default: "50")
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels archive (hidden)
+Usage: 0 sentinels archive [options] <id>
+
+Archive a Sentinel; its history stays
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels create (hidden)
+Usage: 0 sentinels create [options]
+
+Create a Sentinel from a preset or a JSON definition
+
+Options:
+  --preset <id>     Start from a preset (see `0 sentinels list --presets`)
+  --name <name>     Name
+  --file <path>     Sentinel JSON object (overrides preset fields)
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels delete (hidden)
+Usage: 0 sentinels delete [options] <id>
+
+Delete a Sentinel; its automations are detached, not deleted
+
+Options:
+  --yes             Confirm deletion
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels files (hidden)
+Usage: 0 sentinels files [options] [command]
+
+Read and edit a Sentinel's instructions and memory files
 
 Options:
   -h, --help      display help for command
 
 Commands:
-  list            Moved: see `0 skills extensions`
-  search          Moved: see `0 skills extensions`
-  browse          Moved: see `0 skills extensions`
-  install         Moved: see `0 skills extensions`
-  enable          Moved: see `0 skills extensions`
-  disable         Moved: see `0 skills extensions`
-  info            Moved: see `0 skills extensions`
-  run             Moved: see `0 skills extensions`
-  init            Moved: see `0 skills extensions`
-  validate        Moved: see `0 skills extensions`
-  submit          Moved: see `0 skills extensions`
-  connectors      Moved: see `0 skills extensions`
-  connect         Moved: see `0 skills extensions`
-  disconnect      Moved: see `0 skills extensions`
-  mcp             Moved: see `0 skills extensions mcp`
   help [command]  display help for command
 
-### 0 plugin browse
-Usage: 0 plugin browse [options]
+### 0 sentinels files get (hidden)
+Usage: 0 sentinels files get [options] <id> <path>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin connect
-Usage: 0 plugin connect [options]
-
-Moved: see `0 skills extensions`
+Print a file's content
 
 Options:
-  -h, --help  display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin connectors
-Usage: 0 plugin connectors [options]
+### 0 sentinels files list (hidden)
+Usage: 0 sentinels files list [options] <id>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin disable
-Usage: 0 plugin disable [options]
-
-Moved: see `0 skills extensions`
+List files
 
 Options:
-  -h, --help  display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin disconnect
-Usage: 0 plugin disconnect [options]
+### 0 sentinels files put (hidden)
+Usage: 0 sentinels files put [options] <id> <path>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin enable
-Usage: 0 plugin enable [options]
-
-Moved: see `0 skills extensions`
+Create or replace a file from --file or --content
 
 Options:
-  -h, --help  display help for command
+  --file <path>     Read content from a local text file
+  --content <text>  Inline content
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin info
-Usage: 0 plugin info [options]
+### 0 sentinels files rm (hidden)
+Usage: 0 sentinels files rm [options] <id> <path>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin init
-Usage: 0 plugin init [options]
-
-Moved: see `0 skills extensions`
+Delete a file
 
 Options:
-  -h, --help  display help for command
+  --yes             Confirm deletion
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin install
-Usage: 0 plugin install [options]
+### 0 sentinels list
+Usage: 0 sentinels list [options]
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin list
-Usage: 0 plugin list [options]
-
-Moved: see `0 skills extensions`
+List Sentinels
 
 Options:
-  -h, --help  display help for command
+  --status <status>  Only active, paused, archived
+  --json             Print machine-readable JSON
+  --db-path <path>   Control database (default: the user database)
+  -h, --help         display help for command
 
-### 0 plugin mcp
-Usage: 0 plugin mcp [options] [command]
+### 0 sentinels pause (hidden)
+Usage: 0 sentinels pause [options] <id>
 
-Moved: see `0 skills extensions mcp`
+Pause a Sentinel
 
 Options:
-  -h, --help  display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels presets (hidden)
+Usage: 0 sentinels presets [options]
+
+List Sentinel presets
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels resume (hidden)
+Usage: 0 sentinels resume [options] <id>
+
+Resume a paused Sentinel
+
+Options:
+  --acknowledge     Also acknowledge review of changed scope, model or tools
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels run
+Usage: 0 sentinels run [options] <id>
+
+Run a Sentinel now; starts a thread (needs a running engine)
+
+Options:
+  --task <text>     Task for this run
+  --yes             Confirm that this run is authorized
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels set
+Usage: 0 sentinels set [options] <id>
+
+Change a Sentinel's settings
+
+Options:
+  --name <name>     Name
+  --mission <text>  One-line purpose
+  --file <path>     Patch JSON object
+  --version <n>     Reviewed version (default: the current one)
+  --state <state>   active, paused, acknowledged, archived or deleted
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels show (hidden)
+Usage: 0 sentinels show [options] <id>
+
+Show a Sentinel (full or prefix ID)
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels triggers (hidden)
+Usage: 0 sentinels triggers [options] [command]
+
+Control what starts a Sentinel's automations
+
+Options:
+  -h, --help      display help for command
 
 Commands:
-  list        Moved: see `0 skills extensions`
-  add         Moved: see `0 skills extensions`
-  test        Moved: see `0 skills extensions`
-  remove      Moved: see `0 skills extensions`
+  help [command]  display help for command
 
-### 0 plugin mcp add
-Usage: 0 plugin mcp add [options]
+### 0 sentinels triggers add (hidden)
+Usage: 0 sentinels triggers add [options] <id>
 
-Moved: see `0 skills extensions`
+Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes
 
 Options:
-  -h, --help  display help for command
+  --automation <id>       Owned automation to start
+  --kind <kind>           schedule | manual | github-pr
+  --file <path>           Trigger JSON object with schedule or github settings
+  --enable                Enable immediately
+  --yes                   Confirm that an enabled trigger was reviewed
+  --repo <owner/name>     github-pr: repository to watch
+  --base-branch <branch>  github-pr: only pull requests into this branch
+  --comment               github-pr: comment on each pull request with one short summary, edited in
+                          place on later pushes (default: off)
+  --include-forks         github-pr: also review pull requests from forks, marked untrusted
+                          (default: skipped)
+  --json                  Print machine-readable JSON
+  --db-path <path>        Control database (default: the user database)
+  -h, --help              display help for command
 
-### 0 plugin mcp list
-Usage: 0 plugin mcp list [options]
+### 0 sentinels triggers check (hidden)
+Usage: 0 sentinels triggers check [options] <id> <trigger-id>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin mcp remove
-Usage: 0 plugin mcp remove [options]
-
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin mcp test
-Usage: 0 plugin mcp test [options]
-
-Moved: see `0 skills extensions`
+Poll a pull request trigger now instead of waiting for its next poll
 
 Options:
-  -h, --help  display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin run
-Usage: 0 plugin run [options]
+### 0 sentinels triggers disable (hidden)
+Usage: 0 sentinels triggers disable [options] <id> <trigger-id>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin search
-Usage: 0 plugin search [options]
-
-Moved: see `0 skills extensions`
+Pause a trigger
 
 Options:
-  -h, --help  display help for command
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
-### 0 plugin submit
-Usage: 0 plugin submit [options]
+### 0 sentinels triggers enable (hidden)
+Usage: 0 sentinels triggers enable [options] <id> <trigger-id>
 
-Moved: see `0 skills extensions`
-
-Options:
-  -h, --help  display help for command
-
-### 0 plugin validate
-Usage: 0 plugin validate [options]
-
-Moved: see `0 skills extensions`
+Enable a trigger after reviewing it
 
 Options:
-  -h, --help  display help for command
+  --yes             Confirm that this trigger was reviewed
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels triggers list (hidden)
+Usage: 0 sentinels triggers list [options] <id>
+
+List triggers
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels triggers rm (hidden)
+Usage: 0 sentinels triggers rm [options] <id> <trigger-id>
+
+Delete a trigger
+
+Options:
+  --yes             Confirm deletion
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels webhook (hidden)
+Usage: 0 sentinels webhook [options] [command]
+
+GitHub webhook for pull request Sentinels (server mode)
+
+Options:
+  -h, --help      display help for command
+
+Commands:
+  help [command]  display help for command
+
+### 0 sentinels webhook secret (hidden)
+Usage: 0 sentinels webhook secret [options] [command]
+
+Manage the webhook secret
+
+Options:
+  -h, --help      display help for command
+
+Commands:
+  help [command]  display help for command
+
+### 0 sentinels webhook secret rotate (hidden)
+Usage: 0 sentinels webhook secret rotate [options]
+
+Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.
+
+Options:
+  --yes             Confirm; update the secret on GitHub afterwards
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
+
+### 0 sentinels webhook status (hidden)
+Usage: 0 sentinels webhook status [options]
+
+Show whether the webhook is set up and the last deliveries
+
+Options:
+  --json            Print machine-readable JSON
+  --db-path <path>  Control database (default: the user database)
+  -h, --help        display help for command
 
 ### 0 skills
 Usage: 0 skills [options] [command]
@@ -2016,6 +1736,7 @@ Options:
 Commands:
   list [options]              List live engine threads
   send [options] <id> <text>  Send a message to a live thread
+  start [options] <prompt>    Create a thread, send the first prompt and print its ID
   stop [options] <id>         Cancel a thread's active work
   help [command]              display help for command
 
@@ -2297,7 +2018,7 @@ Options:
   --format <format>          Output format: json or text (default: "json")
   -h, --help                 display help for command
 
-### 0 threads start (hidden)
+### 0 threads start
 Usage: 0 threads start [options] <prompt>
 
 Create a thread, send the first prompt and print its ID

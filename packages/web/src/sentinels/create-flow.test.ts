@@ -6,8 +6,8 @@ import { parseView, sentinelHref } from "./model";
 
 const json = (body: unknown, status = 201) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-describe("create agent API call", () => {
-  it("posts an active agent with the preset and no automations", async () => {
+describe("create sentinel API call", () => {
+  it("posts an active sentinel with the preset and no automations", async () => {
     const fetch = vi.fn(async () => json({ sentinel: { id: "a1" }, suggestedAutomations: [{ name: "Weekly", trigger: { kind: "schedule", cadence: "weekly" } }] }));
     const request = createRequest(choosePreset(newAgentDraft({ folder: "/work/app" }), { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" } }));
     if (!request.ok) throw new Error(request.error);
@@ -24,10 +24,10 @@ describe("create agent API call", () => {
 });
 
 describe("after creating", () => {
-  it("lands in the agent's own thread; the detail page is a view of it", () => {
-    expect(agentThreadHref("a1")).toBe("/agents/a1");
-    expect(sentinelHref("a1")).toBe("/agents/a1");
-    expect(sentinelHref("a1", "overview")).toBe("/agents/a1?view=overview");
+  it("lands in the sentinel's own thread; the detail page is a view of it", () => {
+    expect(agentThreadHref("a1")).toBe("/sentinels/a1");
+    expect(sentinelHref("a1")).toBe("/sentinels/a1");
+    expect(sentinelHref("a1", "overview")).toBe("/sentinels/a1?view=overview");
     expect(parseView(null)).toBeNull();
     expect(parseView("overview")).toBe("overview");
     expect(parseView("files")).toBe("overview");

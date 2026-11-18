@@ -176,8 +176,8 @@ export function CommandPalette({
     const base: PaletteAction[] = [
       ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
         id: `page-${to.slice(1)}`, group: "Pages", label, icon, href: to,
-        meta: to === "/agents" ? "Agents, their automations and schedules" : `Open ${label.toLowerCase()}`,
-        keywords: [label, to.slice(1), ...(to === "/agents" ? ["automations workflows schedules audit"] : [])],
+        meta: to === "/sentinels" ? "Sentinels, their automations and schedules" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/sentinels" ? ["automations workflows schedules audit"] : [])],
         run: () => {
           const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
           navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
@@ -211,10 +211,10 @@ export function CommandPalette({
     base.push({ id: "whats-new", group: "Actions", label: "What's new", meta: `Release notes · ${LATEST_RELEASE.version}`, icon: CapySparkleFourIcon, keywords: ["whats new release notes changelog version updates"], run: () => openWhatsNew() });
 
     if (sentinelsQuery.supported && sentinelsQuery.data) {
-      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => openNewAgent() });
+      base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyAgentIcon, keywords: [v("new create {sentinel} sentinel watcher preset")], run: () => openNewAgent() });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
-        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyAgentIcon,
-        keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),
+        id: `sentinel-${sentinel.id}`, group: "Sentinels", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyAgentIcon,
+        keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} sentinel")), run: () => navigate(sentinelHref(sentinel.id)),
       });
     }
 
@@ -292,9 +292,9 @@ export function CommandPalette({
       run: () => navigate(row.href),
     });
     for (const workflow of workflowsQuery.data?.definitions ?? []) base.push({
-      id: `workflow-${workflow.id}`, group: "Agents", href: `/agents?workflow=${encodeURIComponent(workflow.id)}`, label: workflow.name, meta: workflow.target || "Automation", icon: CapyAutomationsIcon,
+      id: `workflow-${workflow.id}`, group: "Sentinels", href: `/sentinels?workflow=${encodeURIComponent(workflow.id)}`, label: workflow.name, meta: workflow.target || "Automation", icon: CapyAutomationsIcon,
       keywords: searchKeywords(workflow.id, workflow.target, workflow.instructions, "automation workflow schedules scheduled"),
-      run: () => navigate(`/agents?workflow=${encodeURIComponent(workflow.id)}`),
+      run: () => navigate(`/sentinels?workflow=${encodeURIComponent(workflow.id)}`),
     });
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
       id: `skill-${skill.id}`, group: "Skills", href: `/skills?skill=${encodeURIComponent(skill.id)}`, label: skill.name, meta: skill.scope, icon: skill.scope === "builtin" ? SkillMarkIcon : CapySparkleFourIcon,
@@ -349,7 +349,7 @@ export function CommandPalette({
   const filteredItems = useMemo(() => filterAppSearch(items, deferredQuery, tab), [deferredQuery, items, tab]);
   const inventories = [workflowsQuery, skillsQuery, memoryQuery];
   const inventoryLoading = inventories.some(result => result.isFetching && !result.data) || (sentinelsQuery.isFetching && !sentinelsQuery.data);
-  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "agents", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
+  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "sentinels", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
 
   const orderedItems = useMemo(() => GROUPS.flatMap(group => filteredItems.filter(item => item.group === group)), [filteredItems]);
   const firstResult = orderedItems[0]?.id ?? "";
@@ -463,7 +463,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>{v("Search {missions}, pages and settings")}</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, agents, skills, Memory, computers and settings. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, sentinels, skills, Memory, computers and settings. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

@@ -8,8 +8,8 @@ import { cn } from "../lib/utils.js"
 /** Where a missing entity sends people back to: its section's list page. */
 export const NOT_FOUND_SECTIONS = {
   findings: { to: "/findings", label: "Back to findings", noun: "finding" },
-  sentinels: { to: "/agents", label: "Back to agents", noun: "agent" },
-  automations: { to: "/agents", label: "Back to agents", noun: "automation" },
+  sentinels: { to: "/sentinels", label: "Back to sentinels", noun: "sentinel" },
+  automations: { to: "/sentinels", label: "Back to sentinels", noun: "automation" },
 } as const
 
 export type NotFoundSection = keyof typeof NOT_FOUND_SECTIONS

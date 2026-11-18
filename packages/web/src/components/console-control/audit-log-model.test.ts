@@ -11,8 +11,8 @@ describe("audit log model", () => {
   it("labels actions and times", () => {
     expect(auditActionLabel("mcp.create")).toBe("MCP create");
     expect(auditActionLabel("access.browser_only")).toBe("Access browser only");
-    expect(auditActionLabel("sentinel.create")).toBe("Agent create");
-    expect(auditActionLabel("sentinel.trigger.create")).toBe("Agent trigger create");
+    expect(auditActionLabel("sentinel.create")).toBe("Sentinel create");
+    expect(auditActionLabel("sentinel.trigger.create")).toBe("Sentinel trigger create");
     const now = Date.parse("2026-11-14T10:05:00.000Z");
     expect(auditWhen("2026-11-14T10:00:00.000Z", now)).toEqual({ relative: "5m ago", exact: "2026-11-14 10:00:00 UTC" });
     expect(auditWhen("2026-11-14T10:04:59.000Z", now).relative).toBe("Just now");

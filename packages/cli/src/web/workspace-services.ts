@@ -16,12 +16,12 @@ import type { UpdateManager } from "./update-manager.js";
 import { getSettings } from "../state/settings-store.js";
 import { archiveIdleSessions } from "../state/session-store.js";
 
-/** The Agent runner's send: keeps the `queue` mode so a trigger firing into a busy standing thread waits its turn instead of failing with 409. */
+/** The Sentinel runner's send: keeps the `queue` mode so a trigger firing into a busy standing thread waits its turn instead of failing with 409. */
 export function sendToMission(gateway: Pick<ConsoleGateway, "send">, id: string, text: string, author?: { userId: string; displayName: string }, mode?: "queue", automated?: boolean) {
   return gateway.send(id, { text, ...(mode ? { mode } : {}) }, author, automated ? { automated: true } : undefined);
 }
 
-/** Creates a thread for an Agent. The Agent's folder is not accepted by `create`, so it is applied with `configure` straight afterwards (a first message waits for it). */
+/** Creates a thread for a Sentinel. The Sentinel's folder is not accepted by `create`, so it is applied with `configure` straight afterwards (a first message waits for it). */
 export function createMission(gateway: Pick<ConsoleGateway, "create" | "configure">, input: Record<string, unknown>): { id: string } {
   const { workspacePath, ...rest } = input;
   const session = gateway.create(rest);
@@ -29,7 +29,7 @@ export function createMission(gateway: Pick<ConsoleGateway, "create" | "configur
   return session;
 }
 
-/** Opt-in idle archive that never touches an Agent's standing thread. */
+/** Opt-in idle archive that never touches a Sentinel's standing thread. */
 export function archiveIdleExceptAgentThreads(days: number, dbPath: string | undefined, stateDir: string | undefined): number {
   const store = new SentinelStore(dbPath);
   try {

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** One "New agent" dialog for the whole app: every entry point (sidebar, page, home chip, palette) opens it through here. */
+/** One "New sentinel" dialog for the whole app: every entry point (sidebar, page, home chip, palette) opens it through here. */
 let isOpen = false;
 const listeners = new Set<() => void>();
 const set = (next: boolean) => { if (isOpen === next) return; isOpen = next; listeners.forEach(listener => listener()); };

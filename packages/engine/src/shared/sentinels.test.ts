@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { applySentinelPatch, dropAccessFields, parseSentinelCreate, sentinelReviewFingerprint, type Sentinel } from "./sentinels.js";
 
-describe("Agent access: there is one mode", () => {
+describe("Sentinel access: there is one mode", () => {
   const stored = (extra: Record<string, unknown>) => ({ ...parseSentinelCreate({ name: "A" }), id: "1", homeMissionId: null, owner: "x", version: 1, createdAt: "", updatedAt: "", ...extra }) as unknown as Sentinel;
-  it("a new Agent stores no access fields", () => {
+  it("a new Sentinel stores no access fields", () => {
     const created = parseSentinelCreate({ name: "A" });
     expect(created).not.toHaveProperty("autonomy");
     expect(created).not.toHaveProperty("toolAccess");
@@ -25,7 +25,7 @@ describe("Agent access: there is one mode", () => {
   it("dropAccessFields removes only the retired keys", () => {
     expect(dropAccessFields({ name: "A", autonomy: "observe", toolAccess: "read-only", access: "x", accessLevel: "y" })).toEqual({ name: "A" });
   });
-  it("the review fingerprint keeps the shell-access constant so reviewed Agents stay reviewed", () => {
+  it("the review fingerprint keeps the shell-access constant so reviewed Sentinels stay reviewed", () => {
     const sentinel = parseSentinelCreate({ name: "A" });
     expect(sentinelReviewFingerprint(sentinel)).toContain('"toolAccess":"exec","autonomy":"act"');
   });

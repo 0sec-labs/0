@@ -16,9 +16,9 @@ import type { AgentTurn, Sentinel } from "@/sentinels/model";
 import { SentinelAvatar } from "./sentinel-avatar";
 
 /**
- * The Agent's one thread, as the real conversation: the same transcript and composer every thread has, so a message typed
+ * The Sentinel's one thread, as the real conversation: the same transcript and composer every thread has, so a message typed
  * here goes into the thread and nothing navigates away. Trigger turns show as quiet wake-up lines (see agent-wake-line).
- * The thread is opened (restored after a restart, or created) through the Agent's own endpoint; it is never replaced.
+ * The thread is opened (restored after a restart, or created) through the Sentinel's own endpoint; it is never replaced.
  */
 export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentinel: Sentinel; readOnly: boolean; onViewAgent: () => void }) {
   const api = useBackendApi();
@@ -64,7 +64,7 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
       <span className="ml-auto flex items-center gap-1">
         <CostButton snapshot={snapshot ?? undefined} />
         {!readOnly && !archived && <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" disabled={setPaused.isPending} aria-label={paused ? "Resume" : "Pause"} onClick={toggle}>{paused ? <Play aria-hidden="true" className="size-3" /> : <Pause aria-hidden="true" className="size-3" />}{paused ? "Resume" : "Pause"}</Button>}
-        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onViewAgent}>View agent</Button>
+        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onViewAgent}>View sentinel</Button>
       </span>
     </header>
     {(paused || archived) && <div className="shrink-0 border-b-[0.5px] border-border-1 px-4 py-2 text-xs text-muted-foreground">

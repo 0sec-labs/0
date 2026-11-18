@@ -12,7 +12,7 @@ const planSchema = z.object({
 }).strict();
 const executionSchema = z.object({
   instructions: z.string().trim().max(16_000),
-  allowedAgentTools: z.array(z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/)).max(128).refine(tools => new Set(tools).size === tools.length, "Agent tool names must be unique.").optional(),
+  allowedAgentTools: z.array(z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/)).max(128).refine(tools => new Set(tools).size === tools.length, "Sentinel tool names must be unique.").optional(),
 }).strict();
 export type SecurityWorkflowOperation = "audit" | "verify" | "fix" | "research" | "deep-review";
 export const SECURITY_WORKFLOW_OPERATIONS: readonly SecurityWorkflowOperation[] = ["audit", "verify", "fix", "research", "deep-review"];
@@ -53,7 +53,7 @@ const nodeSchema = z.object({ id: identifier, type: z.enum(["trigger", "audit", 
     }
   }
 }).optional(), fix: z.object({ mode: z.enum(["candidate", "apply"]) }).strict().optional() }).strict();
-/** Step prompt/tool policy. Agent tools only; deterministic checks retain their own gates. */
+/** Step prompt/tool policy. Sentinel tools only; deterministic checks retain their own gates. */
 export interface SecurityWorkflowNodeExecution { instructions: string; /** Undefined inherits; an empty list allows no agent tools. */ allowedAgentTools?: string[] }
 export interface SecurityWorkflowNodeInput { findingId?: string; scanId?: string; dbPath?: string; fromStep?: string; artifactId?: string }
 export interface SecurityWorkflowNode { id: string; type: "trigger" | "report" | SecurityWorkflowOperation; label: string; enabled: boolean; plan?: ScanPlan; execution?: SecurityWorkflowNodeExecution; input?: SecurityWorkflowNodeInput; inputs?: Record<string, unknown>; /** Declarative intent only; apply requires independent host/run permission. */ fix?: { mode: "candidate" | "apply" } }
@@ -74,7 +74,7 @@ export const SecurityWorkflowInputSchema = z.object({
   ownerSentinelId: identifier.nullable().optional(), runIn: identifier.optional(), model: modelSchema.nullable().optional(),
 }).strict().superRefine((workflow, context) => {
   const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
-  if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in an Agent's home mission requires an owner Agent.");
+  if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in a Sentinel's home mission requires an owner Sentinel.");
   const ids = new Set(workflow.nodes.map(node => node.id));
   if (ids.size !== workflow.nodes.length) issue("Workflow node IDs must be unique.");
   const triggers = workflow.nodes.filter(node => node.type === "trigger");

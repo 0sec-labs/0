@@ -17,8 +17,8 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
 function errorMessage(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 16_000); }
 
 /**
- * The records behind Agents' automations (saved definitions, their versions and retained runs) plus the
- * memory routes. It does not execute anything: an Agent fires an automation by prompt (sentinel-runner),
+ * The records behind Sentinels' automations (saved definitions, their versions and retained runs) plus the
+ * memory routes. It does not execute anything: a Sentinel fires an automation by prompt (sentinel-runner),
  * and the scan pipelines and workflow graph runner are gone.
  */
 export class WebWorkflowService {
@@ -48,7 +48,7 @@ export class WebWorkflowService {
       const definition = parseSecurityWorkflowInput(request.definition);
       return { workflow: this.#definitions.save({ ...definition, ...(request.expectedRevision ? { revision: request.expectedRevision } : {}) }) };
     }
-    if (name === "start_run" || name === "cancel_run" || name === "get_run" || name === "get_run_results") throw new WorkflowError("Automations run through Agents; this host does not execute workflow graphs.", 501);
+    if (name === "start_run" || name === "cancel_run" || name === "get_run" || name === "get_run_results") throw new WorkflowError("Automations run through Sentinels; this host does not execute workflow graphs.", 501);
     throw new WorkflowError("Unknown automation lifecycle operation.", 400);
   }
 

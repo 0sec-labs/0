@@ -29,7 +29,7 @@ Run `0 --help` for the full list.
 4. Describe the job, for example "Review this repo for auth bypasses and verify anything you find".
 5. Watch tool activity in the transcript. Findings land in **Findings**.
 
-The sidebar holds **New thread** and your history, **Findings**, **Skills**, **Memory**, **Computers**, **Extensions** and your **Agents**. Press `?` outside a text field for the keyboard shortcuts.
+The sidebar holds **New thread** and your history, **Findings**, **Skills**, **Memory**, **Computers**, **Extensions** and your **Sentinels**. Press `?` outside a text field for the keyboard shortcuts.
 
 The composer can attach images or text files, set a thinking effort for models that support it, and takes slash commands. A message sent while the agent works is queued and goes out when the response ends; **Send now** interrupts instead, and **Stop response** stops. If a model connection drops, the thread reconnects and continues from its last completed tool result.
 
@@ -41,7 +41,7 @@ Type `/` for a menu. Each entry mirrors a CLI command, and anything that changes
 | --- | --- |
 | `/threads start`, `/threads list`, `/threads export` | `0 threads send new`, `0 threads list`, `0 threads list <id> --export` |
 | `/findings list`, `/fix [finding-id]` | `0 findings list`, `0 threads send new` |
-| `/agents list`, `/agents create` | `0 agents list`, `0 agents set --create` |
+| `/sentinels list`, `/sentinels create` | `0 sentinels list`, `0 sentinels set --create` |
 | `/computers list`, `/models list`, `/skills list`, `/memory list` | the same words after `0` |
 | `/config get`, `/doctor` | `0 config get`, `0 config doctor` |
 
@@ -100,12 +100,12 @@ id=$(0 threads send new "Map the login flow" --folder ~/code/app)
 
 ## Headless
 
-`0 -p` (short for `0 lab console --print`) runs one prompt through the same app process and exits.
+`0 -p` runs one prompt through the same app process and exits.
 
 ```bash
 0 -p "Review the selected folder" --scope scope.yaml
-0 lab console --print "Summarize the open findings" --format json
-printf '%s' 'Summarize the selected findings' | 0 lab console --print
+0 -p "Summarize the open findings" --format json
+printf '%s' 'Summarize the selected findings' | 0 -p
 ```
 
 | Option | Effect |
@@ -123,9 +123,9 @@ On a server or in CI, start the app with `0 --headless --ready-json`. It opens n
 
 ## Commands, skills and automations
 
-- **The eight CLI commands** (`findings`, `threads`, `agents`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
+- **The eight CLI commands** (`findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
 - **Skills** are know-how a thread loads when a task needs it: `SKILL.md` folders, which extensions can also supply. See [Skills](/skills/).
-- **Automations** are prompts. An **automation** is a saved prompt plus a trigger (`schedule`, `manual` or `github-pr`; a webhook only speeds up `github-pr`). An **Agent** owns automations. See [Agents](/agents/#automations).
+- **Automations** are prompts. An **automation** is a saved prompt plus a trigger (`schedule`, `manual` or `github-pr`; a webhook only speeds up `github-pr`). A **Sentinel** owns automations. See [Sentinels](/sentinels/#automations).
 - **Verifier gate:** a skill can declare a check that the engine runs itself, so a thread cannot claim Verified without it. See [Findings](/findings/#verified-and-not-verified).
 
 ## Limits

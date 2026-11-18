@@ -188,7 +188,7 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   </div>;
 }
 
-/** What the Agent did, newest first: one line per turn with its cause. Everything happened in its one thread. */
+/** What the Sentinel did, newest first: one line per turn with its cause. Everything happened in its one thread. */
 export function AgentActivity({ sentinel }: { sentinel: Sentinel }) {
   const query = useAgentTurns(sentinel.id);
   if (query.isLoading) return <LoadingState label="Loading activity" />;
@@ -238,7 +238,7 @@ export function SentinelSettings({ sentinel, readOnly, onClose }: { sentinel: Se
     } catch (cause) { setConfirmArchive(false); setError(errorText(cause, "Unable to archive.")); }
   };
   const destroy = async () => {
-    try { await remove.mutateAsync({ id: sentinel.id, version: sentinel.version }); onClose?.(); navigate("/agents"); } catch (cause) { setConfirmDelete(false); setError(errorText(cause, "Unable to delete.")); }
+    try { await remove.mutateAsync({ id: sentinel.id, version: sentinel.version }); onClose?.(); navigate("/sentinels"); } catch (cause) { setConfirmDelete(false); setError(errorText(cause, "Unable to delete.")); }
   };
   return <div className="space-y-8">
     {archived && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm"><span>Archived. It is hidden from the list, does not run and cannot be turned back on.</span></div>}

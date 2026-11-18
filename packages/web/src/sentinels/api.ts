@@ -44,7 +44,7 @@ export function createSentinelClient(webFetch: Fetch) {
     update: (sentinelId: string, version: number, fields: Record<string, unknown>) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}`, body("PATCH", { version, ...fields })).then(data => data.sentinel),
     remove: (sentinelId: string, version: number) => call<{ ok: true }>(`sentinels/${id(sentinelId)}?version=${version}`, { method: "DELETE" }),
     setPaused: (sentinelId: string, paused: boolean, version: number) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/${paused ? "pause" : "resume"}`, body("POST", { version })).then(data => data.sentinel),
-    /** The Agent's one thread: restored after a restart or created if it does not exist. Never replaces a live thread. */
+    /** The Sentinel's one thread: restored after a restart or created if it does not exist. Never replaces a live thread. */
     thread: (sentinelId: string) => call<{ missionId: string; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/thread`, body("POST", {})),
     turns: (sentinelId: string, signal?: AbortSignal) => call<{ turns: AgentTurn[] }>(`sentinels/${id(sentinelId)}/turns?limit=100`, { signal }).then(data => data.turns),
     run: (sentinelId: string, version: number, task?: string) => call<{ missionId?: string; activation: SentinelActivation; sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/run`, body("POST", { approval: SENTINEL_RUN_APPROVAL, version, ...(task?.trim() ? { task: task.trim() } : {}) })),
@@ -92,7 +92,7 @@ export function useSentinelActivations(sentinelId: string) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "activations", sentinelId), queryFn: ({ signal }) => client.activations(sentinelId, signal), refetchInterval: 5_000, retry: false });
 }
-/** The Agent's turns, newest first: what woke it, how it ended and what it cost. Polled while the page is open. */
+/** The Sentinel's turns, newest first: what woke it, how it ended and what it cost. Polled while the page is open. */
 export function useAgentTurns(sentinelId: string, enabled = true) {
   const { client, backendId } = useSentinelClient();
   return useQuery({ queryKey: queryKeys.sentinels(backendId, "turns", sentinelId), queryFn: ({ signal }) => client.turns(sentinelId, signal), enabled: enabled && Boolean(sentinelId), refetchInterval: 4_000, retry: false });

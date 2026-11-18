@@ -24,7 +24,7 @@ function fixture() {
 const call = (svc: ReturnType<typeof createExtensionService>, method: string, path: string, body?: unknown) => handleExtensionRequest(svc, path, method, body);
 
 describe("extension routes", () => {
-  it("tells the page whether a scope is defined: none, a project scope file, or an Agent scope", async () => {
+  it("tells the page whether a scope is defined: none, a project scope file, or a Sentinel scope", async () => {
     const { svc } = fixture();
     const project = mkdtempSync(join(tmpdir(), "ext-route-project-")); dirs.push(project);
     const overview = async (query: string, signals?: () => { agentScopes: number }) =>

@@ -22,7 +22,7 @@ export interface TopLevelCommand {
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   findings: "Browse findings and change their status",
   threads: "Start, follow and stop threads",
-  agents: "Agents and their automations: list, run, change",
+  sentinels: "Sentinels and their automations: list, run, change",
   skills: "Skills and extensions: list, add",
   memory: "What 0 remembers across threads",
   models: "Models and provider connections",
@@ -30,11 +30,11 @@ export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   config: "Settings, API keys, team and setup checks (config doctor)",
 };
 
-/** The only subcommands `--help` shows for each visible command. Everything else stays reachable as a hidden old name (see command-compat.ts). */
+/** The only subcommands `--help` shows for each visible command. Everything else stays registered but hidden (see command-grammar.ts). */
 export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
   findings: ["list", "show", "update"],
-  threads: ["list", "send", "stop"],
-  agents: ["list", "run", "set"],
+  threads: ["list", "send", "start", "stop"],
+  sentinels: ["list", "run", "set"],
   skills: ["list", "add"],
   memory: ["list", "add", "remove"],
   models: ["list", "set", "connect"],
@@ -45,19 +45,17 @@ export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = 
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: "findings", aliases: [], description: GROUP_DESCRIPTIONS["findings"]!, options: true },
   { name: "threads", aliases: [], description: GROUP_DESCRIPTIONS["threads"]! },
-  { name: "agents", aliases: [], description: GROUP_DESCRIPTIONS["agents"]! },
+  { name: "sentinels", aliases: [], description: GROUP_DESCRIPTIONS["sentinels"]! },
   { name: "skills", aliases: [], description: GROUP_DESCRIPTIONS["skills"]! },
   { name: "memory", aliases: [], description: GROUP_DESCRIPTIONS["memory"]! },
   { name: "models", aliases: [], description: GROUP_DESCRIPTIONS["models"]! },
-  { name: "computers", aliases: ["worker"], description: GROUP_DESCRIPTIONS["computers"]! },
+  { name: "computers", aliases: [], description: GROUP_DESCRIPTIONS["computers"]! },
   { name: "config", aliases: [], description: GROUP_DESCRIPTIONS["config"]! },
-  // Old top-level names: hidden, still working for one release (command-compat.ts prints the moved line).
-  { name: "automation", aliases: ["automations"], description: "Discover templates, inspect saved automations, and run an automation", hidden: true },
-  { name: "plugin", aliases: [], description: "Moved: see `0 skills extensions`", hidden: true },
+  // Implementation commands behind the grammar in command-grammar.ts: hidden.
+  { name: "automation", aliases: [], description: "Discover templates, inspect saved automations, and run an automation", hidden: true },
   { name: "doctor", aliases: [], description: "Check local runtime prerequisites and suggest the next command", hidden: true, options: true },
   { name: "web", aliases: [], description: "Run the local browser console and operations workspace", hidden: true, options: true },
   { name: "api", aliases: [], description: "Call a trusted engine API with deterministic JSON output (defaults to its handshake)", hidden: true, options: true, arguments: "[path]" },
-  { name: "lab", aliases: [], description: "Developer commands: console, mcp-server", hidden: true },
 ];
 
 export function findTopLevel(name: string): TopLevelCommand | undefined {

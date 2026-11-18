@@ -21,9 +21,9 @@ const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('
 
 // Every user-facing route in packages/web/src/pages/operations-app.tsx that does
 // not need an id. Keep in sync when routes are added.
-const ROUTES = ['/', '/chats', '/findings', '/agents', '/skills', '/memory', '/computers', '/extensions', '/team', '/api-access', '/models', '/settings', '/doctor'];
+const ROUTES = ['/', '/chats', '/findings', '/sentinels', '/skills', '/memory', '/computers', '/extensions', '/team', '/api-access', '/models', '/settings', '/doctor'];
 // Old paths keep working: each must land on its new home (LEGACY_REDIRECTS in lib/workspace-navigation.ts).
-const REDIRECTS = { '/console': '/chats', '/workers': '/computers', '/engines': '/computers', '/engagements': '/findings', '/scope': '/findings', '/runs': '/findings', '/scans': '/findings', '/automations': '/agents', '/learning': '/memory', '/plugins/skills': '/skills', '/plugins': '/extensions', '/sentinels': '/agents', '/threads': '/findings', '/connections': '/models' };
+const REDIRECTS = { '/console': '/chats', '/workers': '/computers', '/engines': '/computers', '/engagements': '/findings', '/scope': '/findings', '/runs': '/findings', '/scans': '/findings', '/agents': '/sentinels', '/automations': '/sentinels', '/learning': '/memory', '/plugins/skills': '/skills', '/plugins': '/extensions', '/threads': '/findings', '/connections': '/models' };
 // Provider credentials must never leak into an e2e run.
 const SCRUB = /(_API_KEY|_TOKEN|_SECRET|_ACCESS_KEY|^OPENAI|^ANTHROPIC|^AZURE_|^GOOGLE_|^GEMINI|^DEEPSEEK|^OPENROUTER|^QWEN)/;
 

@@ -43,12 +43,12 @@ describe("presentation", () => {
     expect(avatarIconId(make({ avatar: { color: "#000000" } }))).toBeUndefined();
   });
   test("routes and vocabulary", () => {
-    expect(sentinelHref("a b")).toBe("/agents/a%20b");
-    expect(sentinelHref("x", "automations")).toBe("/agents/x?view=automations");
+    expect(sentinelHref("a b")).toBe("/sentinels/a%20b");
+    expect(sentinelHref("x", "automations")).toBe("/sentinels/x?view=automations");
     expect(parseView("bogus")).toBeNull();
     expect(parseView("files")).toBe("overview");
     expect(parseView("settings")).toBe("settings");
-    expect(v("Create {a sentinel}")).toBe("Create an agent");
+    expect(v("Create {a sentinel}")).toBe("Create a sentinel");
   });
 });
 

@@ -3,7 +3,7 @@ title: Skills
 description: Give the agent reusable instructions with standard skill folders.
 ---
 
-A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Extensions](/extensions/) are different: they connect 0 to your tools and services (GitHub, MCP servers, rules like scope), and an extension can come with a skill that explains how to use it. [Automations](/agents/#automations) are prompts an Agent runs on a trigger. The eight CLI commands are fixed entry points, not skills; see [Threads](/threads/#commands-skills-and-automations).
+A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Extensions](/extensions/) are different: they connect 0 to your tools and services (GitHub, MCP servers, rules like scope), and an extension can come with a skill that explains how to use it. [Automations](/sentinels/#automations) are prompts an Agent runs on a trigger. The eight CLI commands are fixed entry points, not skills; see [Threads](/threads/#commands-skills-and-automations).
 
 ## Add a skill
 
@@ -84,5 +84,5 @@ Folder mounting works with local thread execution; mounted skills are not copied
 ## Next steps
 
 - [Security model](/configuration/#security-model): what protects you from third-party code and text.
-- [Agents](/agents/): give a standing agent the skills it should load.
+- [Sentinels](/sentinels/): give a Sentinel the skills it should load.
 - [Extensions](/extensions/): add tools, not only instructions.

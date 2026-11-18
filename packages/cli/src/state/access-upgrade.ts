@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { homeStateDir } from "@0/engine/shared";
 
 /**
- * One-time upgrade note for the move to one mode. Threads and Agents always have shell access;
+ * One-time upgrade note for the move to one mode. Threads and Sentinels always have shell access;
  * limits are scope, budget and the sandbox. The first start after upgrade records how many
- * Agents and threads already existed (one audit entry) and shows ONE dismissible notice next
+ * Sentinels and threads already existed (one audit entry) and shows ONE dismissible notice next
  * to the setting. Nothing stored is rewritten here.
  */
 export interface AccessUpgradeState { recordedAt: string; agents: number; threads: number; dismissed: boolean }

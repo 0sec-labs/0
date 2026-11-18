@@ -15,7 +15,7 @@
 export type SlashGroup =
   | "Threads"
   | "Findings"
-  | "Agents"
+  | "Sentinels"
   | "Automation"
   | "Computers"
   | "Models"
@@ -66,7 +66,7 @@ const cmd = (
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
   // Threads
   cmd("threads start", "Threads", "Start a new thread", {
-    cli: "threads send",
+    cli: "threads start",
     aliases: ["new"],
     legacy: ["new-mission", "new-chat", "threads new", "threads create", "onboard", "launcher", "run", "home"],
   }),
@@ -90,20 +90,19 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     destination: "/findings",
   }),
 
-  // Agents, automation, computers
-  cmd("agents list", "Agents", "Browse your agents", {
-    cli: "agents list",
-    destination: "/agents",
-    legacy: ["agents"],
+  // Sentinels, automation, computers
+  cmd("sentinels list", "Sentinels", "Browse your sentinels", {
+    cli: "sentinels list",
+    destination: "/sentinels",
   }),
-  cmd("agents create", "Agents", "Create an agent", { cli: "agents set --create", destination: "/agents" }),
+  cmd("sentinels create", "Sentinels", "Create a sentinel", { cli: "sentinels set --create", destination: "/sentinels" }),
   cmd("automation list", "Automation", "Browse automations", {
-    cli: "agents list",
+    cli: "sentinels list",
     destination: "/automations",
     legacy: ["automation", "automations"],
   }),
   cmd("automation run", "Automation", "Run an automation (you confirm first)", {
-    cli: "agents run",
+    cli: "sentinels run",
     destination: "/automations",
   }),
   cmd("computers list", "Computers", "Browse your computers", {

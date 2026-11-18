@@ -130,7 +130,7 @@ function inspectOptions(command: Command, extra: { chat?: string; requiredChat?:
   return command.option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
-  const workflow = program.command("automation").alias("automations").description("Discover templates and inspect saved automations");
+  const workflow = program.command("automation").description("Discover templates and inspect saved automations");
   inspectOptions(workflow.command("list").description("List saved automations and available templates").option("--templates", "List only templates"))
     .action(async (options: WorkflowOptions) => withRuntime(options, deps, async runtime => output(deps, options.templates ? await runtime.listTemplates() : { workflows: await runtime.listWorkflows(), templates: await runtime.listTemplates() }, options.format)));
   inspectOptions(workflow.command("show [id]").description("Show a saved automation or template").option("--template <id>", "Show a template definition"))

@@ -45,7 +45,7 @@ export function GitHubWebhookControl() {
   if (!webhookVisible(data)) return null;
   const age = (iso: string) => formatRelativeAge(Date.parse(iso));
   const deliveries = data.deliveries ?? [];
-  return <ControlCard title="GitHub webhook" description="Optional. Pull request Agents check GitHub on a timer; a webhook makes them react within seconds. If it stops working, the timer still runs.">
+  return <ControlCard title="GitHub webhook" description="Optional. Pull request Sentinels check GitHub on a timer; a webhook makes them react within seconds. If it stops working, the timer still runs.">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p role="status" className="min-w-0 text-sm">{data.configured ? statusLine(data, age) : "Not set up."}</p>
       <Badge variant="outline">{data.configured ? "On" : "Off"}</Badge>

@@ -5,7 +5,7 @@ import type { SentinelPreset } from "@/sentinels/model";
 const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" } };
 const withSchedule = { suggestedAutomations: [{ name: "Weekly", trigger: { kind: "schedule", cadence: "weekly" }, runIn: "sentinel-home" }, { name: "Manual", trigger: { kind: "manual" }, runIn: "new-mission" }] } as Pick<SentinelPreset, "suggestedAutomations">;
 
-describe("new agent draft", () => {
+describe("new sentinel draft", () => {
   it("starts blank with the default avatar, this computer and the default model", () => {
     const draft = newAgentDraft({ folder: "/work/app" });
     expect(draft).toMatchObject({ presetId: "", name: "", folder: "/work/app", computerId: "local", model: null, avatar: { color: AGENT_COLORS[0], icon: "agent" } });
@@ -51,14 +51,14 @@ describe("create request", () => {
 });
 
 describe("landing", () => {
-  it("opens the agent's own thread", () => { expect(agentThreadHref("a/b")).toBe("/agents/a%2Fb"); });
+  it("opens the sentinel's own thread", () => { expect(agentThreadHref("a/b")).toBe("/sentinels/a%2Fb"); });
   it("says schedules are off in one line when the preset suggests any", () => {
     const lines = agentFirstMessage({ name: "Pen Tester", mission: "Run scoped tests." }, withSchedule);
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain("weekly");
     expect(lines[1]).toContain("None are on");
   });
-  it("is one line for a blank agent", () => {
+  it("is one line for a blank sentinel", () => {
     expect(agentFirstMessage({ name: "Scout", mission: "" }, undefined)).toEqual(["I am Scout. Tell me what I should do."]);
   });
 });

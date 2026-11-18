@@ -13,10 +13,7 @@ test("external-agent setup discovers the CLI before optional MCP and preserves a
     await build({ entryPoints: [resolve(dashboard, "src/console/agent-onboarding.tsx")], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", alias: { "@": resolve(dashboard, "src") }, loader: { ".svg": "dataurl" }, logLevel: "silent" });
     const { setupPrompt } = await import(pathToFileURL(output).href);
     assert.match(setupPrompt, /^Help me use 0security for my task/);
-    const cli = setupPrompt.indexOf("0 --help");
-    const mcp = setupPrompt.indexOf("0 lab mcp-server --help");
-    assert.ok(cli >= 0 && mcp > cli, "CLI discovery precedes any MCP configuration");
-    for (const command of ["0 --version", "0 config doctor", "0 config doctor workbench status --json", "0 --help", "0 api --help", "0 agents list --automation --help", "0 agents run --help"]) assert.ok(setupPrompt.includes(command), command);
+    for (const command of ["0 --version", "0 config doctor", "0 config doctor workbench status --json", "0 --help", "0 api --help", "0 sentinels list --help", "0 sentinels run --help"]) assert.ok(setupPrompt.includes(command), command);
     for (const page of ["/connections", "/models"]) assert.ok(setupPrompt.includes(page));
     assert.match(setupPrompt, /I complete OAuth\/browser or device approval myself/);
     assert.match(setupPrompt, /Never request or expose keys, tokens, or credential files in chat/);
@@ -24,7 +21,5 @@ test("external-agent setup discovers the CLI before optional MCP and preserves a
     assert.match(setupPrompt, /never disable the workbench or switch SmolVM to host execution automatically/);
     assert.match(setupPrompt, /Setup and discovery do not authorize assessments, automation runs, live-target requests, or patch application/);
     assert.match(setupPrompt, /Remote workspace, scope, model, and apply permissions belong to that engine/);
-    assert.match(setupPrompt, /omit local workspace\/scope\/db-path flags/);
-    assert.match(setupPrompt, /verify discovery without launching work/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

@@ -49,10 +49,6 @@ The first start of this version imports your old data without changing or deleti
 
 ## MCP servers
 
-MCP works in two directions: you can give 0 tools from other MCP servers, and you can let a coding agent drive 0.
-
-### Give 0 more tools
-
 In the browser app, open **Extensions** and press **Add MCP server**. Type the command that starts it or an https URL. It becomes a local extension that goes through the same review as any other: nothing runs until you read the exact command and approve it, and it is saved turned off. Once enabled, it starts only when a thread first uses it, and its tools are pinned. From the command line:
 
 ```sh
@@ -86,30 +82,7 @@ Servers you added before this version (`~/.0/mcp-servers.json`) are imported onc
 
 ### Let a coding agent use 0
 
-An agent with shell access can run 0 directly, with absolute paths and `--format json`; no adapter is needed. Check the exit status and the saved report, not the last line of stdout, and use [Findings](/findings/#verified-and-not-verified) before calling a finding exploitable. `0 --no-open --ready-json` starts the app and prints its URL. 0 uses its own model connection; a coding-agent subscription is not a credential for 0.
-
-`0 lab mcp-server` (a hidden developer command) speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio, so a client that launches local stdio servers can start 0's automations:
-
-```json
-{
-  "mcpServers": {
-    "0": {
-      "command": "0",
-      "args": ["lab", "mcp-server", "--automations", "--workspace", "/absolute/path/to/repo"]
-    }
-  }
-}
-```
-
-stdout carries protocol frames only; logs go to stderr. Active runs the client owns are cancelled on disconnect.
-
-- `--automations` exposes the managed automation tools. Without it, the server exposes live target tools such as `http_request` and `crawl` and needs `--target`. `--tools a,b,c` selects exactly those tools.
-- `--workspace` authorizes local source targets inside that root. Live targets need `--scope` and the enabled `scope` extension. Neither authorizes the other.
-- Applying a patch needs both the host flag `--allow-apply` and `allowApply: true` in the request. Proposing and applying are separate.
-- To use a running computer instead of an embedded one, pass `--engine-url` and `--engine-token-env`, or `--engine <id>` for a registered computer (see [Computers](/computers/)). The computer then supplies its own workspace, scope and model.
-- There is no interactive approval in this server. Limit the tool list, pass `--scope`, and only test systems you are authorized to assess. Switching to host execution with `0 config doctor workbench disable` changes the sandbox boundary; do it yourself, never from a connecting agent.
-
-Run `0 lab mcp-server --help` for every option.
+A coding agent with shell access can run 0 directly, with absolute paths and `--format json`. Check the exit status and the saved report, not the last line of stdout, and use [Findings](/findings/#verified-and-not-verified) before calling a finding exploitable. `0 --no-open --ready-json` starts the app and prints its URL. 0 uses its own model connection; a coding-agent subscription is not a credential for 0.
 
 ## Connect a service
 
@@ -124,7 +97,7 @@ A connection links 0 to a service such as GitHub. Connections belong to extensio
    - **Sign in with GitHub** shows a one-time code to enter at github.com/login/device.
    - **Fine-grained token** opens GitHub's token page with the permissions pull requests need, then you paste the token.
 
-GitHub is built in. It cannot be removed, because pull request Agents, the pull request trigger and the webhook receiver use it, and it updates with the `0` binary. Turning it off pauses pull request Agents and asks you to confirm.
+GitHub is built in. It cannot be removed, because pull request Sentinels, the pull request trigger and the webhook receiver use it, and it updates with the `0` binary. Turning it off pauses pull request Agents and asks you to confirm.
 
 GitHub stores the credential in `gh`'s own store. 0 never reads it and no script ever receives it. The card lists what the connection may do: read pull requests, pull request diffs, repository contents and the repository list, and write comments on pull requests.
 

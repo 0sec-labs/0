@@ -35,10 +35,10 @@ export function SentinelsPage() {
   const [newAutomation, setNewAutomation] = useState(false);
   const automations = useAutomationRows();
   const workflowId = search.get("workflow");
-  // Old `?new=1` links open the one New agent dialog.
+  // Old `?new=1` links open the one New sentinel dialog.
   const asksToCreate = search.get("new") === "1";
   useEffect(() => { if (asksToCreate) { openNewAgent(); setSearch(previous => { const next = new URLSearchParams(previous); next.delete("new"); return next; }, { replace: true }); } }, [asksToCreate, setSearch]);
-  // Old "Set up" links carried the owner in the query; the automation now lives in that Agent's page.
+  // Old "Set up" links carried the owner in the query; the automation now lives in that Sentinel's page.
   const legacyOwner = search.get("owner");
   if (legacyOwner && sentinels.some(item => item.id === legacyOwner)) return <Navigate to={sentinelHref(legacyOwner, "automations")} replace />;
   if (loading || isLoading) return <><LoadingState label="Loading" /></>;
@@ -46,7 +46,7 @@ export function SentinelsPage() {
   if (!supported) return <><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></>;
   const rows = orderSentinels(sentinels);
   const nameOf = new Map(sentinels.map(item => [item.id, item.name]));
-  const hrefFor = (id: string, owner?: string | null) => owner && nameOf.has(owner) ? `${sentinelHref(owner, "automations")}&workflow=${encodeURIComponent(id)}` : `/agents?workflow=${encodeURIComponent(id)}`;
+  const hrefFor = (id: string, owner?: string | null) => owner && nameOf.has(owner) ? `${sentinelHref(owner, "automations")}&workflow=${encodeURIComponent(id)}` : `/sentinels?workflow=${encodeURIComponent(id)}`;
   const owners = new Map(automations.definitions.map(item => [item.id, item.ownerSentinelId]));
   if (workflowId) return <><AutomationEditor workflowId={workflowId} onClose={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("workflow"); return next; })} /></>;
   return <>
@@ -70,7 +70,7 @@ export function SentinelsPage() {
 }
 
 /**
- * One agent: its own thread, the real conversation, full width. "View agent" opens the Profile dialog (`?view=`) on one of
+ * One sentinel: its own thread, the real conversation, full width. "View sentinel" opens the Profile dialog (`?view=`) on one of
  * three tabs: Overview (status, memory and files), Automations (its triggers and schedules) and Settings.
  */
 export function SentinelPage() {
@@ -100,7 +100,7 @@ export function SentinelPage() {
         </header>
         {view && <>
           <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setView(next as SentinelView)}>
-            <TabsList variant="line" aria-label="Agent views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
+            <TabsList variant="line" aria-label="Sentinel views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
           </Tabs></div>
           <div role="region" aria-label={VIEW_LABELS[view]}>
             {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}

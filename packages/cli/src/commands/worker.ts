@@ -30,7 +30,6 @@ export function runComputersList(options: JsonOption & { enginesConfig?: string 
 export function registerWorkerCommand(program: Command): void {
   const worker = program
     .command("computers")
-    .alias("worker")
     .description("Add and manage remote computers");
 
   const list = worker

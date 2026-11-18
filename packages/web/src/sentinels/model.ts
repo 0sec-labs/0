@@ -40,7 +40,7 @@ export interface Sentinel {
   createdAt: string;
   updatedAt: string;
   attention?: SentinelAttention;
-  /** The Agent's one thread as the engine sees it now: working or idle, and the last thing it said. Absent until it has a live thread. */
+  /** The Sentinel's one thread as the engine sees it now: working or idle, and the last thing it said. Absent until it has a live thread. */
   thread?: { status: string; updatedAt: string; lastMessage?: string };
 }
 
@@ -236,8 +236,8 @@ export function avatarInitials(sentinel: Pick<Sentinel, "name" | "avatar">): str
   return ((words[0]?.[0] ?? "S") + (words.length > 1 ? words[words.length - 1]![0]! : "")).toUpperCase();
 }
 
-/** An agent's own page is its thread; `view` opens the detail page on one of three tabs. */
-export const sentinelHref = (id: string, view?: SentinelView) => `/agents/${encodeURIComponent(id)}${view ? `?view=${view}` : ""}`;
+/** A sentinel's own page is its thread; `view` opens the detail page on one of three tabs. */
+export const sentinelHref = (id: string, view?: SentinelView) => `/sentinels/${encodeURIComponent(id)}${view ? `?view=${view}` : ""}`;
 
 export const SENTINEL_VIEWS = ["overview", "automations", "settings"] as const;
 export type SentinelView = (typeof SENTINEL_VIEWS)[number];

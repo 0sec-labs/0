@@ -14,7 +14,7 @@ import { SentinelAvatar } from "./sentinel-avatar";
 
 const SORTS: ReadonlyArray<{ value: AgentSort; label: string }> = [{ value: "recent", label: "Recent" }, { value: "name", label: "Name" }];
 
-/** The Agents list: header, then 52px rows (avatar with status badge, title and age, last activity or job line). */
+/** The Sentinels list: header, then 52px rows (avatar with status badge, title and age, last activity or job line). */
 export function SentinelSidebarSection() {
   const { supported, sentinels, isLoading } = useSentinels();
   const location = useLocation();
@@ -24,7 +24,7 @@ export function SentinelSidebarSection() {
   const [query, setQuery] = useState("");
   if (!supported) return null;
   const now = Date.now();
-  const items = sortAgents(orderSentinels(sentinels), sort).map(agent => ({ agent, row: agentRow(agent, now) })).filter(({ row, agent }) => !searching || !query.trim() || `${row.name} ${agent.mission}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const items = sortAgents(orderSentinels(sentinels), sort).map(sentinel => ({ sentinel, row: agentRow(sentinel, now) })).filter(({ row, sentinel }) => !searching || !query.trim() || `${row.name} ${sentinel.mission}`.toLowerCase().includes(query.trim().toLowerCase()));
   const compact = density === "compact";
   return <>
     <SidebarListHeader title={v("{Sentinels}")} newLabel={v("New {sentinel}")} onNew={openNewAgent} sortLabel="Sort by" sortOptions={SORTS} sort={sort} onSort={setSort} density={density} onDensity={setDensity} searchLabel={v("Search {sentinels}")} searchActive={searching} onSearch={() => { setSearching(!searching); setQuery(""); }} />
@@ -33,10 +33,10 @@ export function SentinelSidebarSection() {
     <SidebarScroll id="navigation-agents" onKeyDown={rowNavigation}>
     <SidebarGroup aria-label={v("{Sentinels}")} className="gap-0 px-0.5 py-0">
       {!isLoading && items.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{v("No {sentinels} yet.")}</p>}
-      {items.map(({ agent, row }) => {
-        const active = location.pathname.endsWith(`/agents/${encodeURIComponent(row.id)}`);
+      {items.map(({ sentinel, row }) => {
+        const active = location.pathname.endsWith(`/sentinels/${encodeURIComponent(row.id)}`);
         return <NavLink key={row.id} to={row.href} data-sidebar-row data-active={active || undefined} aria-label={`${row.name}, ${row.badgeLabel}`} className={sidebarRowClasses(density)}>
-          <SentinelAvatar sentinel={agent} badge={row.badge} size={compact ? "xs" : "md"} />
+          <SentinelAvatar sentinel={sentinel} badge={row.badge} size={compact ? "xs" : "md"} />
           <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <RowTitleLine title={row.name} trailing={row.needsYou ? <RowAge className="text-primary-ink">needs you</RowAge> : <RowAge>{row.age}</RowAge>} />
             {!compact && <RowSubline className={row.subtitle.tone === "accent" ? "text-primary-ink" : undefined}>{row.subtitle.text}</RowSubline>}

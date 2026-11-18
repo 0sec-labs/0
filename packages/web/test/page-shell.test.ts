@@ -14,7 +14,7 @@ const variantOf = (html: string) => /data-page-shell="(\w+)"/.exec(html)?.[1];
 
 describe("page shell", () => {
   test("every concrete route renders inside the shell with the variant its route table row declares", () => {
-    const samples: Record<string, string> = { "/chats/saved/:savedId": "/chats/saved/a", "/chats/:sessionId": "/chats/a", "/agents/:sentinelId": "/agents/a", "/skills/catalog/:id": "/skills/catalog/a", "/findings/:fingerprint": "/findings/a" };
+    const samples: Record<string, string> = { "/chats/saved/:savedId": "/chats/saved/a", "/chats/:sessionId": "/chats/a", "/sentinels/:sentinelId": "/sentinels/a", "/skills/catalog/:id": "/skills/catalog/a", "/findings/:fingerprint": "/findings/a" };
     for (const route of PAGE_ROUTES) {
       const path = samples[route.path] ?? route.path;
       expect(variantOf(render(path)), path).toBe(route.variant);
@@ -22,7 +22,7 @@ describe("page shell", () => {
     }
   });
   test("the variants the owner named", () => {
-    const expected: Record<string, PageVariant> = { "/agents": "list", "/skills": "list", "/memory": "list", "/computers": "list", "/extensions": "list", "/doctor": "list", "/tools": "list", "/project": "list", "/settings": "form", "/chats/x": "full", "/agents/x": "list", "/nowhere": "list" };
+    const expected: Record<string, PageVariant> = { "/sentinels": "list", "/skills": "list", "/memory": "list", "/computers": "list", "/extensions": "list", "/doctor": "list", "/tools": "list", "/project": "list", "/settings": "form", "/chats/x": "full", "/agents/x": "list", "/nowhere": "list" };
     for (const [path, variant] of Object.entries(expected)) expect(variantOf(render(path)), path).toBe(variant);
   });
   test("variants set the width through the shared CSS variables, never a literal", () => {

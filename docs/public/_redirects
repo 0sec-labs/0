@@ -4,16 +4,16 @@
 /app/ /threads/ 301
 /architecture /computers/ 301
 /architecture/ /computers/ 301
-/automations /agents/#automations 301
-/automations/ /agents/#automations 301
+/automations /sentinels/#automations 301
+/automations/ /sentinels/#automations 301
 /benchmark /findings/ 301
 /benchmark/ /findings/ 301
 /budgets /configuration/#costs-and-budgets 301
 /budgets/ /configuration/#costs-and-budgets 301
 /ci/github-action / 301
 /ci/github-action/ / 301
-/cli-changes-0-35 /changelog/#cli-changes-in-035 301
-/cli-changes-0-35/ /changelog/#cli-changes-in-035 301
+/cli-changes-0-35 /changelog/ 301
+/cli-changes-0-35/ /changelog/ 301
 /concepts /#the-words-0-uses 301
 /concepts/ /#the-words-0-uses 301
 /connect-a-service /extensions/#connect-a-service 301
@@ -148,8 +148,8 @@
 /research/dynamic-routing-design/ /findings/ 301
 /research/dynamic-triage-routing /findings/ 301
 /research/dynamic-triage-routing/ /findings/ 301
-/sentinels /agents/ 301
-/sentinels/ /agents/ 301
+/agents /sentinels/ 301
+/agents/ /sentinels/ 301
 
 # Stable installer address: `curl -fsSL https://docs.0.security/install.sh | bash` keeps working if the repository moves again.
 /install.sh https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh 302

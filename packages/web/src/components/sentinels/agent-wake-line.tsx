@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
 
-/** A trigger turn in an Agent's thread: a quiet centered line with its cause, collapsed; expanded it says what arrived and how it ended. */
+/** A trigger turn in a Sentinel's thread: a quiet centered line with its cause, collapsed; expanded it says what arrived and how it ended. */
 export function AgentWakeLine({ header, text }: { header: WakeHeader; text: string }) {
   const turn: AgentTurn | undefined = useAgentTurnsByNonce()?.get(header.nonce);
   const summary = wakeSummary(header, turn);

@@ -1,7 +1,7 @@
 import { SENTINEL_LIMITS, type Sentinel, type SentinelPreset } from "@/sentinels/model";
 
 /**
- * View model of the "New agent" dialog: state, defaults and the create request as plain data, so the component is a
+ * View model of the "New sentinel" dialog: state, defaults and the create request as plain data, so the component is a
  * thin shell. One screen: preset chips, avatar, name, then Folder, Computer and Model rows.
  */
 export interface AgentAvatar { color: string; icon: string }
@@ -13,7 +13,7 @@ export interface AgentDraft {
   nameTouched: boolean;
   avatar: AgentAvatar;
   avatarTouched: boolean;
-  /** Absolute folder path the agent works on; "" means none chosen. */
+  /** Absolute folder path the sentinel works on; "" means none chosen. */
   folder: string;
   /** Backend id; "local" is this computer. */
   computerId: string;
@@ -25,14 +25,14 @@ export interface AgentDraft {
 export const AGENT_COLORS = ["#4f6bed", "#ef4444", "#3b82f6", "#f59e0b", "#6366f1", "#8b5cf6", "#22c55e", "#14b8a6", "#f97316", "#06b6d4", "#ec4899"] as const;
 export const BLANK_AGENT_AVATAR: AgentAvatar = { color: AGENT_COLORS[0], icon: "agent" };
 export const THIS_COMPUTER = "local";
-export const NAME_PLACEHOLDER = "Agent";
+export const NAME_PLACEHOLDER = "Sentinel";
 export const BLANK_PRESET = "";
 
 export function newAgentDraft(defaults: { folder?: string } = {}): AgentDraft {
   return { presetId: BLANK_PRESET, name: "", nameTouched: false, avatar: { ...BLANK_AGENT_AVATAR }, avatarTouched: false, folder: defaults.folder ?? "", computerId: THIS_COMPUTER, model: null };
 }
 
-/** The folder a new agent starts on: the most recently used one. */
+/** The folder a new sentinel starts on: the most recently used one. */
 export const defaultFolder = (recents: readonly string[]): string => recents.find(item => typeof item === "string" && item.startsWith("/")) ?? "";
 
 /**
@@ -57,8 +57,8 @@ export function checkDraft(draft: AgentDraft): DraftCheck {
 }
 
 /**
- * The create request. The agent is created active; it has no automations or triggers (a preset only suggests them),
- * so nothing runs on a schedule, and no money is spent, until the owner turns a schedule on from the agent's page.
+ * The create request. The sentinel is created active; it has no automations or triggers (a preset only suggests them),
+ * so nothing runs on a schedule, and no money is spent, until the owner turns a schedule on from the sentinel's page.
  */
 export function createRequest(draft: AgentDraft): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
   const checked = checkDraft(draft);
@@ -77,13 +77,13 @@ export function createRequest(draft: AgentDraft): { ok: true; body: Record<strin
   };
 }
 
-/** Where the owner lands after creating: the agent's own thread. */
-export const agentThreadHref = (id: string): string => `/agents/${encodeURIComponent(id)}`;
+/** Where the owner lands after creating: the sentinel's own thread. */
+export const agentThreadHref = (id: string): string => `/sentinels/${encodeURIComponent(id)}`;
 
 const CADENCE: Record<string, string> = { hourly: "hourly", daily: "daily", weekly: "weekly" };
-/** The first message in a new agent's thread. A preset adds its job and says its schedules are off. */
-export function agentFirstMessage(agent: Pick<Sentinel, "name" | "mission">, preset: Pick<SentinelPreset, "suggestedAutomations"> | undefined): string[] {
-  const lines = [agent.mission ? `I am ${agent.name}. ${agent.mission}` : `I am ${agent.name}. Tell me what I should do.`];
+/** The first message in a new sentinel's thread. A preset adds its job and says its schedules are off. */
+export function agentFirstMessage(sentinel: Pick<Sentinel, "name" | "mission">, preset: Pick<SentinelPreset, "suggestedAutomations"> | undefined): string[] {
+  const lines = [sentinel.mission ? `I am ${sentinel.name}. ${sentinel.mission}` : `I am ${sentinel.name}. Tell me what I should do.`];
   const scheduled = (preset?.suggestedAutomations ?? []).filter(item => item.trigger.kind === "schedule");
   if (scheduled.length > 0) {
     const cadences = [...new Set(scheduled.map(item => CADENCE[item.trigger.cadence ?? ""] ?? "scheduled"))].join(" and ");

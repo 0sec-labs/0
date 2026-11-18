@@ -1,4 +1,4 @@
-// GitHub webhook receiver for server mode: an accelerator for the Agent `github-pr` trigger.
+// GitHub webhook receiver for server mode: an accelerator for the Sentinel `github-pr` trigger.
 //
 // The route is the ONE anonymous API path in server mode (GitHub cannot sign in), so everything here is
 // defensive. Order of checks, cheapest first and always before any JSON parsing:

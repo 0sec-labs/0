@@ -21,20 +21,20 @@ describe("worker deploy command", () => {
   it("deploys to an SSH host and prints the backend result", async () => {
     mocks.deployWorker.mockResolvedValue({ backendId: "ssh-worker", engine: "http://127.0.0.1:8100/", target: "/tmp/zero-engine/work/target", enginesConfig: "/x/engines.json", tokenEnv: "ZERO_SSH_WORKER_TOKEN" });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    await runCli(["worker", "deploy", "--ssh", "ops@build-1", "--target-git", "https://example.test/repo.git"]);
+    await runCli(["computers", "deploy", "--ssh", "ops@build-1", "--target-git", "https://example.test/repo.git"]);
     expect(mocks.deployWorker).toHaveBeenCalledWith(expect.objectContaining({ ssh: "ops@build-1", targetGit: "https://example.test/repo.git" }));
     expect(JSON.parse(String(write.mock.calls[0]![0])).backendId).toBe("ssh-worker");
     write.mockRestore();
   });
 
   it("rejects a non-numeric engine port before touching the worker", async () => {
-    await expect(runCli(["worker", "deploy", "--engine-port", "abc"])).rejects.toThrow(/--engine-port/);
+    await expect(runCli(["computers", "deploy", "--engine-port", "abc"])).rejects.toThrow(/--engine-port/);
     expect(mocks.deployWorker).not.toHaveBeenCalled();
   });
 
   it("rejects SSH option injection and shell-bearing git URLs before any network call", async () => {
-    await expect(runCli(["worker", "deploy", "--ssh", "-oProxyCommand=touch /tmp/pwned"])).rejects.toThrow(/--ssh/);
-    await expect(runCli(["worker", "deploy", "--ssh", "ops@build-1", "--target-git", "https://x.test/r.git'; rm -rf / #"])).rejects.toThrow(/--target-git/);
+    await expect(runCli(["computers", "deploy", "--ssh", "-oProxyCommand=touch /tmp/pwned"])).rejects.toThrow(/--ssh/);
+    await expect(runCli(["computers", "deploy", "--ssh", "ops@build-1", "--target-git", "https://x.test/r.git'; rm -rf / #"])).rejects.toThrow(/--target-git/);
     expect(mocks.deployWorker).not.toHaveBeenCalled();
   });
 });
@@ -45,7 +45,7 @@ describe("worker repair command", () => {
     mocks.repairWorker.mockResolvedValue(result);
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
-      await runCli(["worker", "repair", "ssh-worker"]);
+      await runCli(["computers", "repair", "ssh-worker"]);
       expect(mocks.repairWorker).toHaveBeenCalledWith("ssh-worker");
       expect(write).toHaveBeenCalledTimes(1);
       expect(JSON.parse(String(write.mock.calls[0]![0]))).toEqual(result);
@@ -57,7 +57,7 @@ describe("worker repair command", () => {
     mocks.repairWorker.mockRejectedValue(new Error("SSH authentication failed"));
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
-      await expect(runCli(["worker", "repair", "ssh-worker"])).rejects.toThrow("SSH authentication failed");
+      await expect(runCli(["computers", "repair", "ssh-worker"])).rejects.toThrow("SSH authentication failed");
       expect(write).not.toHaveBeenCalled();
     } finally { write.mockRestore(); }
   });

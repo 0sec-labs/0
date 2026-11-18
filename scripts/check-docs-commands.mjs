@@ -11,7 +11,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const docsRoot = join(root, "docs/src/content/docs");
-const MOVED_ALLOWED_PAGES = new Set(["docs/src/content/docs/changelog.md", "docs/src/content/docs/commands.md"]);
 const IMPLICIT_FLAGS = new Set(["-h", "--help", "-V", "--version"]);
 const SHELL_FENCES = new Set(["", "bash", "sh", "shell", "zsh", "text", "console", "terminal"]);
 
@@ -101,15 +100,13 @@ function findOption(chain, flag) {
  * Validate one invocation against the tree.
  * @returns {string[]} problems (empty when the example is accurate)
  */
-export function checkInvocation(program, text, moved = () => undefined, rewrite = () => undefined, { allowMoved = false } = {}) {
+export function checkInvocation(program, text, rewrite = () => undefined) {
   const tokens = tokenize(text);
   if (tokens[0] !== "0") return [];
   const problems = [];
   let args = tokens.slice(1);
   if (!args.length || args[0].startsWith("-")) return problems;
-  const replacement = moved(args);
-  if (replacement && !allowMoved) return [`deprecated command \`0 ${args[0]}\`; use ${replacement}`];
-  // The 0.35 grammar (`findings update <id> --status accepted`) is checked as the implementation command it runs.
+  // The command grammar (`findings update <id> --status accepted`) is checked as the implementation command it runs.
   args = rewrite(args) ?? args;
   let command = program;
   const chain = [program];
@@ -193,18 +190,13 @@ async function loadProgram() {
   const registrations = await import(pathToFileURL(resolve(root, "packages/cli/dist/commands/index.js")));
   const program = new Command().name("0");
   registrations.registerCommandTree(program);
-  let moved = () => undefined;
   let rewrite = () => undefined;
   try {
-    // The CLI's own alias layer decides what is deprecated and what the new grammar means.
-    const compat = await import(pathToFileURL(resolve(root, "packages/cli/dist/command-compat.js")));
-    moved = (args) => {
-      const { notice } = compat.resolveInvocation(args);
-      return notice ? notice.replace(/^moved: use /, "") : undefined;
-    };
-    rewrite = (args) => compat.resolveInvocation(args).args;
-  } catch { /* alias layer optional */ }
-  return { program, moved, rewrite };
+    // The CLI's own grammar decides what each form runs.
+    const grammar = await import(pathToFileURL(resolve(root, "packages/cli/dist/command-grammar.js")));
+    rewrite = (args) => grammar.resolveInvocation(args);
+  } catch { /* grammar optional */ }
+  return { program, rewrite };
 }
 
 // ---- links, anchors, env vars, config names -------------------------------
@@ -349,16 +341,13 @@ export function checkConfigNames(files, rootDir = root, has = (n) => sourceHas(n
 
 export async function main() {
   const files = listDocFiles();
-  const { program, moved, rewrite } = await loadProgram();
+  const { program, rewrite } = await loadProgram();
   const problems = [];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const rel = relative(root, file);
-    // The migration page and the generated reference list old names on purpose; a line may opt in with `docs-check: allow-moved`.
-    const fileLines = text.split("\n");
     for (const cmd of extractCommands(text)) {
-      const allowMoved = MOVED_ALLOWED_PAGES.has(rel) || [fileLines[cmd.line - 1], fileLines[cmd.line - 2]].some((line) => (line ?? "").includes("docs-check: allow-moved"));
-      for (const p of checkInvocation(program, cmd.text, moved, rewrite, { allowMoved })) problems.push(`${rel}:${cmd.line}: ${p}\n    > ${cmd.text}`);
+            for (const p of checkInvocation(program, cmd.text, rewrite)) problems.push(`${rel}:${cmd.line}: ${p}\n    > ${cmd.text}`);
     }
     problems.push(...checkLinks(file, text));
   }

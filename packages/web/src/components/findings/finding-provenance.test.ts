@@ -5,8 +5,8 @@ describe("provenanceLabel", () => {
   it("names the scan target and date", () => {
     expect(provenanceLabel({ kind: "scan", target: "https://a.example", startedAt: "2026-03-04T10:00:00Z", scanId: "run-1" })).toMatch(/^From scan https:\/\/a\.example on .*2026/);
   });
-  it("names an Agent and a thread in plain words", () => {
-    expect(provenanceLabel({ kind: "agent", agent: "Reviewer", target: "repo", startedAt: "2026-03-04T10:00:00Z", scanId: "x" })).toBe("From Agent Reviewer");
+  it("names a Sentinel and a thread in plain words", () => {
+    expect(provenanceLabel({ kind: "agent", agent: "Reviewer", target: "repo", startedAt: "2026-03-04T10:00:00Z", scanId: "x" })).toBe("From Sentinel Reviewer");
     expect(provenanceLabel({ kind: "thread", target: "repo", startedAt: "2026-03-04T10:00:00Z", scanId: "console-1" })).toBe("From thread");
   });
   it("says nothing when the source is unknown", () => {

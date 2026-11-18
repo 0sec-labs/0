@@ -12,11 +12,11 @@ export default defineConfig({
     "/agent-loop": "/threads/",
     "/app": "/threads/",
     "/architecture": "/computers/",
-    "/automations": "/agents/#automations",
+    "/automations": "/sentinels/#automations",
     "/benchmark": "/findings/",
     "/budgets": "/configuration/#costs-and-budgets",
     "/ci/github-action": "/",
-    "/cli-changes-0-35": "/changelog/#cli-changes-in-035",
+    "/cli-changes-0-35": "/changelog/",
     "/concepts": "/#the-words-0-uses",
     "/connect-a-service": "/extensions/#connect-a-service",
     "/dependencies": "/",
@@ -84,7 +84,7 @@ export default defineConfig({
     "/research/unsolved-eight-investigation": "/findings/",
     "/research/dynamic-routing-design": "/findings/",
     "/research/dynamic-triage-routing": "/findings/",
-    "/sentinels": "/agents/",
+    "/agents": "/sentinels/",
   },
   // Allow previewing the dev server over Tailscale (dev-only; ignored by the static build).
   vite: {
@@ -204,7 +204,7 @@ export default defineConfig({
           items: [
             { label: "Quickstart", slug: "index" },
             { label: "Threads", slug: "threads" },
-            { label: "Agents", slug: "agents" },
+            { label: "Sentinels", slug: "sentinels" },
             { label: "Skills", slug: "skills" },
             { label: "Extensions", slug: "extensions" },
             { label: "Findings", slug: "findings" },

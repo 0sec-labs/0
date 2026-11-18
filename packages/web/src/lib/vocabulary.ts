@@ -5,7 +5,7 @@
  */
 export const VOCAB = {
   mission: { singular: "thread", plural: "threads", Singular: "Thread", Plural: "Threads" },
-  sentinel: { singular: "agent", plural: "agents", Singular: "Agent", Plural: "Agents" },
+  sentinel: { singular: "sentinel", plural: "sentinels", Singular: "Sentinel", Plural: "Sentinels" },
   computer: { singular: "computer", plural: "computers", Singular: "Computer", Plural: "Computers" },
 } as const;
 

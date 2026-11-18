@@ -9,7 +9,7 @@ import { folderLabel, samePath } from "@/console/workspace-path";
 
 const NO_RECENTS: string[] = [];
 
-/** The folder or repository the agent works on: recent folders first, then a browser on this computer. */
+/** The folder or repository the sentinel works on: recent folders first, then a browser on this computer. */
 export function FolderPicker({ value, onChange }: { value: string; onChange: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const [recents, setRecents] = usePersistentState<string[]>(STORAGE_KEYS.recentWorkspaces, NO_RECENTS);
