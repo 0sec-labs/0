@@ -1,6 +1,6 @@
 ---
 title: Sentinels
-description: Sentinels: standing jobs with a scope and a review gate, plus the prompt-based automations they run and the GitHub pull request trigger.
+description: Standing jobs with a scope and a review gate, plus the prompt-based automations they run and the GitHub pull request trigger.
 ---
 
 A Sentinel is a named standing job with a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a saved prompt plus a trigger: when the trigger fires, the prompt is sent into the Sentinel's thread. A Sentinel owns automations.
