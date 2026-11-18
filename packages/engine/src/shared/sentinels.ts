@@ -73,11 +73,10 @@ const notificationsSchema = z.object({
   on: z.array(z.enum(SENTINEL_NOTIFY_EVENTS)).max(4).default(["finding-high", "needs-you", "run-failed"]),
   quiet: z.boolean().default(false),
 }).strict();
-const memorySchema = z.object({
+/** `autoLearn` was a setting nothing read; stored and submitted values are dropped. */
+const memorySchema = z.preprocess(value => value && typeof value === "object" && !Array.isArray(value) ? (({ autoLearn: _dropped, ...rest }) => rest)(value as Record<string, unknown>) : value, z.object({
   enabled: z.boolean().default(true),
-  /** Learning events from runs become reviewable notes only after approval. */
-  autoLearn: z.boolean().default(false),
-}).strict();
+}).strict());
 
 const base = {
   name: z.string().trim().min(1).max(80),

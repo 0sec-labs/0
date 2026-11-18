@@ -27,7 +27,7 @@ const parseRow = <T>(value: unknown, key: string): T => JSON.parse(String((value
 /** Files from removed features: stored rows stay untouched but are not listed. */
 const HIDDEN_FILES = new Set(["CREW.md"]);
 /** Stored Sentinels may carry removed fields (budget caps, pause reason, an old settings block); they are dropped on read. Rows are never rewritten here. */
-const parseSentinelRow = (value: unknown): Sentinel => { const { crew: _removed, ...sentinel } = parseRow<Sentinel & { crew?: unknown }>(value, "sentinel_json"); return dropAccessFields(sentinel) as unknown as Sentinel; };
+const parseSentinelRow = (value: unknown): Sentinel => { const { crew: _removed, ...sentinel } = parseRow<Sentinel & { crew?: unknown }>(value, "sentinel_json"); const kept = dropAccessFields(sentinel) as unknown as Sentinel & { memory?: { enabled?: boolean; autoLearn?: unknown } }; if (kept.memory && "autoLearn" in kept.memory) { const { autoLearn: _dropped, ...memory } = kept.memory; return { ...kept, memory } as Sentinel; } return kept; };
 const invalid = (error: unknown): never => { throw new SentinelStoreError(error instanceof Error ? error.message : "Invalid Agent.", 400); };
 
 const turnOriginOf = (kind: SentinelActivation["trigger"]["kind"]): Exclude<AgentTurnOrigin, "legacy" | "promote"> => kind === "github-pr" ? "github" : kind === "manual" ? "user" : "schedule";

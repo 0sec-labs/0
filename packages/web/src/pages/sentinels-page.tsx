@@ -72,7 +72,7 @@ export function SentinelsPage() {
 
 /**
  * One agent: its own thread, the real conversation, full width. "View agent" opens the Profile dialog (`?view=`) on one of
- * three tabs: Overview (status, notes and files), Automations (its triggers and schedules) and Settings.
+ * three tabs: Overview (status, memory and files), Automations (its triggers and schedules) and Settings.
  */
 export function SentinelPage() {
   const { sentinelId = "" } = useParams();

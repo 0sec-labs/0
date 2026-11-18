@@ -24,7 +24,7 @@ import { WorkflowGraph } from "@/components/workflow-graph";
 import { WorkflowChat } from "@/components/workflow-chat";
 import { WorkflowDefinitionEditor, advanceWorkflowDraftBase, workflowDraftHasConflict } from "@/components/workflow-definition-editor";
 import { workflowInput } from "@/components/workflow-editing";
-import { WorkflowVersions } from "@/components/learning-panel";
+import { WorkflowVersions } from "@/components/workflow-versions";
 import { CollapsibleSection, FormSection } from "./automation-ui";
 import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, validateAutomationDraft } from "./automation-model";
 import { errorText } from "@/lib/api-error";

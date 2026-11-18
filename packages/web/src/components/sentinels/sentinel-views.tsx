@@ -76,7 +76,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
         {[["Turns", String(week.length)], ["Failed", String(week.filter(item => item.status === "failed").length)], ["Cost", `$${cost.toFixed(2)}`], ["Last turn", last?.startedAt ? ago(last.startedAt) || "now" : "Never"]].map(([label, value]) => <div key={label} className="rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3"><dt className="text-xs text-muted-foreground-1">{label}</dt><dd className="mt-1 text-lg font-medium tabular-nums">{value}</dd></div>)}
       </dl>
     </Section>
-    <Section title="Notes and files"><SentinelFiles sentinelId={sentinel.id} readOnly={readOnly || archived} /></Section>
+    <Section title="Memory and files"><SentinelFiles sentinelId={sentinel.id} readOnly={readOnly || archived} /></Section>
     <Section title="Activity"><AgentActivity sentinel={sentinel} /></Section>
   </div>;
 }
@@ -215,12 +215,12 @@ export function SentinelSettings({ sentinel, readOnly, onClose }: { sentinel: Se
   const { update, remove } = useSentinelMutations();
   const navigate = useNavigate();
   const [form, setForm] = useState<SentinelFormState>(() => formFromSentinel(sentinel));
-  const [memory, setMemory] = useState(sentinel.memory);
+  const [memory, setMemory] = useState({ enabled: sentinel.memory.enabled });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const dirty = JSON.stringify(form) !== JSON.stringify(formFromSentinel(sentinel)) || JSON.stringify(memory) !== JSON.stringify(sentinel.memory);
+  const dirty = JSON.stringify(form) !== JSON.stringify(formFromSentinel(sentinel)) || memory.enabled !== sentinel.memory.enabled;
   const archived = sentinel.status === "archived";
   const save = async () => {
     const parsed = fieldsFromForm(form);
@@ -245,10 +245,10 @@ export function SentinelSettings({ sentinel, readOnly, onClose }: { sentinel: Se
     <SentinelFields form={form} onChange={next => { setForm(next); setSaved(false); }} disabled={readOnly || archived} />
     <Section title="Memory">
       <div className="space-y-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        {([["enabled", "Use notes"], ["autoLearn", "Learn from its work"]] as const).map(([key, label]) => <div key={key} className="flex items-center justify-between gap-4">
-          <p className="text-sm font-medium" id={`sentinel-memory-${key}`}>{label}</p>
-          <Switch aria-labelledby={`sentinel-memory-${key}`} checked={memory[key]} disabled={readOnly || archived} onCheckedChange={value => { setMemory({ ...memory, [key]: value }); setSaved(false); }} />
-        </div>)}
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium" id="sentinel-memory-enabled">Use memory</p>
+          <Switch aria-labelledby="sentinel-memory-enabled" checked={memory.enabled} disabled={readOnly || archived} onCheckedChange={value => { setMemory({ enabled: value }); setSaved(false); }} />
+        </div>
       </div>
     </Section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -266,7 +266,7 @@ export function SentinelSettings({ sentinel, readOnly, onClose }: { sentinel: Se
       confirmLabel="Archive" onConfirm={() => void archive()} />
     <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Delete {sentinel.name}?</DialogTitle><DialogDescription>Its charter, notes and activity history are removed. Threads it started stay.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Delete {sentinel.name}?</DialogTitle><DialogDescription>Its instructions, memory and activity history are removed. Threads it started stay.</DialogDescription></DialogHeader>
         <DialogFooter><Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button><Button type="button" variant="destructive" disabled={remove.isPending} onClick={() => void destroy()}>Delete</Button></DialogFooter>
       </DialogContent>
     </Dialog>

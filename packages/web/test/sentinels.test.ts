@@ -6,7 +6,7 @@ import {
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
 const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
