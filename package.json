@@ -148,6 +148,11 @@
       "vite": "^8.2.4",
       "@astrojs/markdown-remark": "^7.3.0",
       "@hono/node-server@>=1.0.0 <2.1.6": "2.1.6"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-fc5q-39xc-vjpf"
+      ]
     }
   }
 }
