@@ -179,7 +179,8 @@ export async function runHostConsoleWorker(): Promise<void> {
         default: throw new Error("Unsupported host session operation");
       }
       snapshot(); emit({ type: "result", id: frame.id, value });
-    } catch {
+    } catch (error) {
+      if (process.env.ZERO_WORKER_DIAG) process.stderr.write(`[worker-diag] ${frame.type} failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
       emit({ type: "error", id: frame.id, error: "Host session operation failed" });
       if (frame.type === "init") void finish().finally(() => output.end(() => process.exit(1)));
     }

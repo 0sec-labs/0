@@ -91,7 +91,7 @@ export class HostConsoleProcess {
     this.#input = this.#child.stdio[3] as Writable;
     this.#input.on("error", () => { /* Exit handler settles requests; no uncaught EPIPE. */ });
     // Dedicated fd 3/4 carry control. Tool/provider stdout can never be a frame.
-    this.#child.stdout?.resume(); this.#child.stderr?.resume();
+    this.#child.stdout?.resume(); if (process.env.ZERO_WORKER_DIAG) this.#child.stderr?.pipe(process.stderr); else this.#child.stderr?.resume();
     const reader = new HostConsoleFrameReader();
     const output = this.#child.stdio[4] as Readable;
     output.setEncoding("utf8");
