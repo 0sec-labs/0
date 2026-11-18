@@ -42,10 +42,6 @@ export const EXECUTING_TOOLS: Readonly<Record<string, (args: Args) => HookTarget
   pty_session: a => ({ kind: "process", command: str(a["action"]) === "send" ? str(a["input"]) : `pty_session ${str(a["action"])} ${str(a["session_name"])}`, paths: [] }),
   run_scanner: a => ({ kind: "process", command: `${str(a["tool"])} ${json(a)}`, paths: [] }),
   analyze_binary: a => ({ kind: "process", command: json(a), paths: [str(a["binary_path"])].filter(Boolean) }),
-  memsafety_fuzz: a => ({ kind: "process", command: json(a), paths: [] }),
-  npm_dynamic_discovery: a => ({ kind: "process", command: json(a), paths: [] }),
-  weaponize_kernel: a => ({ kind: "process", command: json(a), paths: [] }),
-  cve_adapt: a => ({ kind: "process", command: json(a), paths: [] }),
   str_replace: a => ({ kind: "file-write", command: "str_replace", paths: pathArg(a) }),
   apply_patch: a => ({ kind: "file-write", command: "apply_patch", paths: patchTargets(str(a["patch"]) || str(a["input"]) || json(a)) }),
   create_skill: a => ({ kind: "file-write", command: "create_skill", paths: pathArg(a) }),
@@ -60,8 +56,7 @@ export const EXECUTING_TOOLS: Readonly<Record<string, (args: Args) => HookTarget
 export const NETWORK_TOOLS: ReadonlySet<string> = new Set([
   "http_request", "send_prompt", "crawl", "submit_form", "access_control_probe", "access_control_workflow", "access_control_cleanup", "browser",
   "wp_fingerprint", "discover_api_surface", "surface_sweep", "js_recon", "structural_sqli_probe", "prompt_layer_probe", "auth_boundary_probe",
-  "cloud_s3_probe", "cloud_validate_credentials", "oast_register", "oast_poll", "proxy", "web_search", "intel", "cve_lookup", "ad_attack_paths",
-  "entra_attack_paths", "entra_posture",
+  "cloud_s3_probe", "cloud_validate_credentials", "oast_register", "oast_poll", "proxy", "web_search", "intel",
 ]);
 
 export const DELEGATING_TOOLS: ReadonlySet<string> = new Set(["spawn_agent", "spawn_agents", "spawn_persistent_agent"]);
@@ -69,8 +64,7 @@ export const DELEGATING_TOOLS: ReadonlySet<string> = new Set(["spawn_agent", "sp
 /** No process, file or network effect of their own. Adding a tool here is a reviewed decision. */
 export const INERT_TOOLS: ReadonlySet<string> = new Set([
   "save_finding", "query_findings", "use_loot", "plan", "update_finding", "update_target", "payload_lookup", "mongo_objectid", "list_skills", "load_skill",
-  "read_skill", "done", "ask_operator", "update_todos", "write_todos", "visualize", "memory", "assemble_advisory", "variant_hunt",
-  "assumption_hunt", "generate_fix", "verify_finding", "protocol_conformance", "spec_drift", "safety_eval",
+  "read_skill", "done", "ask_operator", "update_todos", "write_todos", "visualize", "memory",
 ]);
 
 export const classifyTool = (name: string): "executing" | "network" | "delegating" | "inert" | "unclassified" =>

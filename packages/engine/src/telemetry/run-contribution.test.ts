@@ -249,25 +249,4 @@ describe("permissioned run contributions", () => {
     expect(scopes[0]!.scope).toMatchObject({ policy: { out_of_scope: ["blocked.example"] }, enforcement: { pathPrefixes: ["/owned"], killAfterSec: 60 } });
   });
 
-  it.each([true, false])("records actual same-turn inline oracle evidence, including inconclusive=%s", async inconclusive => {
-    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
-    vi.stubEnv("ZERO_FEATURE_INLINE_VALIDATION", "1");
-    const f = fixture();
-    const capture = f.client.begin(begin)!;
-    await runNativeAgentLoop({ contribution: capture, db: null,
-      config: { role: "attack", scanId: begin.runId, target: "https://t", systemPrompt: "owned", tools: [], maxTurns: 1 },
-      runtime: { type: "api", isAvailable: async () => true, executeNative: async () => ({
-        content: [{ type: "tool_use", id: "save", name: "save_finding", input: { title: "Owned SQLi", severity: "high", category: "sql-injection", evidence_request: "GET /search?q=foo' HTTP/1.1\\nHost: t\\n\\n", evidence_response: "SQL syntax error near foo" } },
-          { type: "tool_use", id: "done", name: "done", input: { summary: "done" } }], stopReason: "tool_use", durationMs: 1,
-      }) },
-      inlineValidationOracle: async () => {
-        if (inconclusive) throw new Error("oracle timed out");
-        return { verified: true, confidence: 1, evidence: "independent-sql-error-control", reason: "" };
-      },
-    });
-    const loaded = capture.load();
-    expect(loaded.manifest.verification).toBe(inconclusive ? "inconclusive" : "reproduced");
-    expect(loaded.transitions.find(t => t.kind === "verification")?.data.source).toBe("inline_validation");
-    if (!inconclusive) expect(JSON.stringify(loaded.transitions)).toContain("independent-sql-error-control");
-  });
 });

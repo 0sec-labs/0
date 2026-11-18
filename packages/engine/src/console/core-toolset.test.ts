@@ -93,13 +93,13 @@ describe("core toolset in the console", () => {
   });
 
   it("adds a pack on the turn after a skill that declares it loads", async () => {
-    const runtime = new ScriptedRuntime([call("load_skill", { skill_id: "ad-attack-paths" }), end("done")]);
+    const runtime = new ScriptedRuntime([call("load_skill", { skill_id: "advisory-disclosure" }), end("done")]);
     const session = createConsoleSession({ runtime, refineObjective: false });
     try {
-      const outcome = await session.send("map AD paths");
+      const outcome = await session.send("draft an advisory");
       expect(outcome.toolCalls[0]!.result.success).toBe(true);
-      expect(names(runtime.calls[0]!.tools)).not.toContain("ad_attack_paths");
-      expect(names(runtime.calls[1]!.tools)).toEqual(expect.arrayContaining(["ad_attack_paths", "entra_posture", "intel"]));
+      expect(names(runtime.calls[0]!.tools)).not.toContain("intel");
+      expect(names(runtime.calls[1]!.tools)).toEqual(expect.arrayContaining(["intel", "web_search"]));
       expect(names(runtime.calls[1]!.tools)).not.toContain("proxy");
     } finally { await session.cleanup(); }
   });
@@ -123,7 +123,7 @@ describe("core toolset in the console", () => {
     try {
       const outcome = await session.send("what skills exist");
       expect(outcome.toolCalls[0]!.result.success).toBe(true);
-      expect(JSON.stringify(outcome.toolCalls[0]!.result.output)).toContain("ad-attack-paths");
+      expect(JSON.stringify(outcome.toolCalls[0]!.result.output)).toContain("graphql-introspection");
     } finally { await session.cleanup(); }
   });
 });
