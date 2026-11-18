@@ -3,9 +3,9 @@
  * done; the model cannot. Steps run through a ContainerRunner port, on
  * snapshots of the working tree, never on the live checkout.
  */
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, constants, cpSync, lstatSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { redactLog } from "./redact.js";
 import type { ContainerRunner, StepOutcome } from "./port.js";
 import { LOG_TAIL_BYTES, tailOf, type VerifierResult } from "./result.js";
@@ -24,6 +24,58 @@ export interface RunVerifierInput {
 
 const commandOf = (spec: VerifySpec): string => spec.steps.map((s) => s.run).join(" && ");
 const redactTail = (text: string): string => tailOf(redactLog(tailOf(text, LOG_TAIL_BYTES * 2)));
+
+function isInsideRoot(root: string, candidate: string): boolean {
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  return candidate === root || candidate.startsWith(prefix);
+}
+
+/**
+ * Plant a canary file inside `scratch` without following any symlink from the
+ * untrusted repository snapshot (neither parent directory symlinks nor leaf symlinks).
+ */
+export function plantCanary(scratch: string, relFile: string, content: string): boolean {
+  if (!relFile || relFile.includes("\0") || relFile.includes("\\") || relFile.startsWith("/") || /^[A-Za-z]:/.test(relFile)) {
+    return false;
+  }
+  const segments = relFile.split("/");
+  if (segments.some((p) => p === "" || p === "." || p === "..")) return false;
+
+  const root = realpathSync(scratch);
+  let cur = root;
+  for (const segment of segments.slice(0, -1)) {
+    cur = join(cur, segment);
+    try {
+      const st = lstatSync(cur);
+      if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      return false;
+    }
+  }
+
+  const target = join(root, ...segments);
+  try {
+    const st = lstatSync(target);
+    if (st.isSymbolicLink() || st.isDirectory()) return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+  }
+
+  mkdirSync(dirname(target), { recursive: true });
+  const parentReal = realpathSync(dirname(target));
+  if (!isInsideRoot(root, parentReal)) return false;
+
+  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NOFOLLOW ?? 0);
+  const fd = openSync(target, flags, 0o600);
+  try {
+    if (!isInsideRoot(root, realpathSync(target))) return false;
+    writeFileSync(fd, content, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+  return true;
+}
 
 function counted(step: StepOutcome, metric: string | undefined): number {
   if (metric) {
@@ -64,13 +116,14 @@ export async function runVerifier(input: RunVerifierInput): Promise<VerifierResu
 
   let canary: VerifierResult["canary"] = "n/a";
   if (spec.canary) {
-    const step = spec.steps.find((s) => s.name === spec.canary!.step)!;
+    const step = spec.steps.find((s) => s.name === spec.canary!.step);
+    if (!step) return done("error", "invalid-canary-step", "canary step was not found in spec");
     const scratch = mkdtempSync(join(tmpdir(), "0-verify-canary-"));
     try {
       cpSync(input.afterDir, scratch, { recursive: true, verbatimSymlinks: true });
-      const target = join(scratch, spec.canary.file);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, spec.canary.content);
+      if (!plantCanary(scratch, spec.canary.file, spec.canary.content)) {
+        return done("error", "unsafe-canary-path", "canary path resolves through a symlink or outside the snapshot");
+      }
       const [outcome] = await runSteps(input, scratch, [step]);
       if (!outcome || outcome.infraError) return done("error", "infra-error", redactTail(outcome?.infraError ?? ""));
       if (outcome.timedOut) return done("error", "timeout", redactTail(outcome.output));
