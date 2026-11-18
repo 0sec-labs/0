@@ -1,6 +1,5 @@
 import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
-import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed, withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, isWorkflowHttpMethodAllowed, WORKFLOW_HTTP_METHODS, type WorkflowHttpMethod, type WorkerPolicy, snapshotWorkerPolicy } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
@@ -83,15 +82,13 @@ import { DeferredToolRegistry, LIST_TOOLS_NAME, LOAD_TOOL_NAME, formatToolCatalo
 import { MAX_DRAINS_PER_TURN, clampOutboundBody, decideAddressing, renderInboundBatch, type MessagingRuntime } from "./agent-messaging.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
-import { executeAdAttackPaths, executeEntraAttackPaths, executeEntraPosture, executeAssembleAdvisory, executeCveLookup } from "./tools/security-engines.js";
-import { executeVariantHunt, executeAssumptionHunt, executeGenerateFix, executeVerifyFinding, executeProtocolConformance, executeSpecDrift, executeSafetyEval, executeMemsafetyFuzz, executeNpmDynamicDiscovery, executeWeaponizeKernel, executeCveAdapt } from "./tools/offensive-engines.js";
 import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { getLocalSourceBoundary, withLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { windowFileContent } from "./tools/read-file-window.js";
 import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
-import { TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, CLOUD_TOOL_NAMES, OAST_TOOL_NAMES, BINARY_TOOL_NAMES, OFFENSIVE_SCOPED_TOOL_NAMES, MEMSAFETY_TOOL_NAMES, NPM_DISCOVERY_TOOL_NAMES, KERNEL_WEAPONIZE_TOOL_NAMES, CVE_ADAPT_TOOL_NAMES, LEGACY_DELEGATION_TOOL_NAMES } from "./tools/index.js";
+import { TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, CLOUD_TOOL_NAMES, OAST_TOOL_NAMES, BINARY_TOOL_NAMES, LEGACY_DELEGATION_TOOL_NAMES } from "./tools/index.js";
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
 import { z } from "zod";
@@ -120,11 +117,6 @@ export {
   CLOUD_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
-  OFFENSIVE_SCOPED_TOOL_NAMES,
-  MEMSAFETY_TOOL_NAMES,
-  NPM_DISCOVERY_TOOL_NAMES,
-  KERNEL_WEAPONIZE_TOOL_NAMES,
-  CVE_ADAPT_TOOL_NAMES,
   LEGACY_DELEGATION_TOOL_NAMES,
 };
 
@@ -903,47 +895,6 @@ export class ToolExecutor {
       };
     }
     return { success: true, output: formatLoadResult(registry.load(names)) };
-  }
-
-  /** Exact fixture matching keeps model-supplied ownership claims out of verification. */
-  async verifyAccessControlFinding(finding: Finding, target: string): Promise<OracleResult | undefined> {
-    const request = parseRequest(finding.evidence?.request ?? "", target);
-    if (request.method !== "GET") return undefined;
-    const fixture = this.ctx.accessControlFixtures?.find(f => new URL(f.url).href === new URL(request.url).href);
-    if (!fixture) return undefined;
-    const result = await this.accessControlProbe({
-      url: fixture.url, baseline_identity: fixture.ownerIdentity,
-      compare_identities: fixture.comparisonIdentities,
-      ownership_marker: fixture.ownershipMarker, expect_denied: true,
-    });
-    if (!result.success) return { verified: false, inconclusive: true, confidence: 0, evidence: "", reason: "ownership replay failed: " + result.error };
-    const output = result.output as { broken_count: number; verdict: string };
-    return {
-      verified: output.broken_count > 0,
-      inconclusive: output.verdict === "inconclusive",
-      confidence: output.broken_count > 0 ? 1 : 0,
-      evidence: JSON.stringify(result.output),
-      reason: output.broken_count > 0 ? "" : output.verdict === "inconclusive" ? "ownership replay unavailable or inconclusive" : "restricted owner marker was not exposed to comparison identities",
-    };
-  }
-
-  /** Category validators use the same transport and session as HTTP tools. */
-  async fetchOracleRequest(rawUrl: string, init: RequestInit): Promise<Response> {
-    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
-    // Recorded auth is stale/untrusted; restore it from the opaque identity context.
-    const headers = new Headers(init.headers);
-    const authNames = new Set(["authorization", "cookie", "proxy-authorization", "x-api-key", "x-auth-token"]);
-    for (const identity of this.resolveProbeIdentities()) {
-      for (const name of Object.keys(identity.headers())) authNames.add(name.toLowerCase());
-    }
-    for (const name of authNames) headers.delete(name);
-    for (const [name, value] of Object.entries(this.activeAuthHeaders(url))) headers.set(name, value);
-    const request = applyAttribution(url, { ...init, headers, redirect: "manual" }, this.ctx.attribution, this.ctx.scope)!;
-    if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
-    const res = await this.fetchTarget(url, request);
-    if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
-    this.captureActiveCookies(res, url);
-    return res;
   }
 
   private fetchTarget(
@@ -6304,78 +6255,6 @@ export class ToolExecutor {
   }
 
 
-  // ── Offline / read-only security engines (dev-live-engine-recovery) ──
-  // Thin delegates to the free-function handlers in tools/security-engines.ts,
-  // mirroring the intelTool → executeIntel shape (0#1284).
-  private adAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeAdAttackPaths(this.ctx, args);
-  }
-
-  private entraAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeEntraAttackPaths(this.ctx, args);
-  }
-
-  private entraPostureTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeEntraPosture(this.ctx, args);
-  }
-
-  private assembleAdvisoryTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeAssembleAdvisory(this.ctx, args);
-  }
-
-  private cveLookupTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeCveLookup(this.ctx, args);
-  }
-
-  // ── Phase-2 offensive / active security engines (dev-live-engine-recovery) ──
-  // Thin delegates to the free-function handlers in tools/offensive-engines.ts.
-  // GROUP 1 offline (variant/assumption/fix); GROUP 2 scope-gated (verify /
-  // protocol / spec / safety); GROUP 3 feature-flag + scope gated (memsafety /
-  // npm / kernel / cve). The handlers re-check every gate (defense-in-depth).
-  private variantHuntTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeVariantHunt(this.ctx, args);
-  }
-
-  private assumptionHuntTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeAssumptionHunt(this.ctx, args);
-  }
-
-  private generateFixTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeGenerateFix(this.ctx, args);
-  }
-
-  private verifyFindingTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeVerifyFinding(this.ctx, args);
-  }
-
-  private protocolConformanceTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeProtocolConformance(this.ctx, args);
-  }
-
-  private specDriftTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeSpecDrift(this.ctx, args);
-  }
-
-  private safetyEvalTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeSafetyEval(this.ctx, args);
-  }
-
-  private memsafetyFuzzTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeMemsafetyFuzz(this.ctx, args);
-  }
-
-  private npmDynamicDiscoveryTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeNpmDynamicDiscovery(this.ctx, args);
-  }
-
-  private weaponizeKernelTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeWeaponizeKernel(this.ctx, args);
-  }
-
-  private cveAdaptTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeCveAdapt(this.ctx, args);
-  }
-
   private updateTarget(args: Record<string, unknown>): ToolResult {
     if (args.type) this.ctx.targetInfo.type = args.type as TargetInfo["type"];
     if (args.model) this.ctx.targetInfo.model = args.model as string;
@@ -7410,16 +7289,6 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   // #659 — OAST out-of-band interaction tools, opt-in (default off; inert
   // without a deployed collaborator). Confirm blind SSRF/XSS, OOB RCE/SQLi.
   const oastTools = featureFlags.oastCollaborator ? [...OAST_TOOL_NAMES] : [];
-  // Scope authorization gates tool availability only while its plugin is active.
-  const offensiveScopedTools = authorized ? [...OFFENSIVE_SCOPED_TOOL_NAMES] : [];
-  // Phase-2 GROUP 3: engines that RUN/BUILD untrusted code or weaponize.
-  // Deny-by-default — each needs its named feature flag AND an active scope
-  // (ZERO_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
-  // runtime kernel-VM-artifact check in their handlers on top of this.
-  const memsafetyTools = featureFlags.memsafetyFuzz && authorized ? [...MEMSAFETY_TOOL_NAMES] : [];
-  const npmDiscoveryTools = featureFlags.npmDynamicDiscovery && authorized ? [...NPM_DISCOVERY_TOOL_NAMES] : [];
-  const kernelWeaponizeTools = featureFlags.kernelWeaponize && authorized ? [...KERNEL_WEAPONIZE_TOOL_NAMES] : [];
-  const cveAdaptTools = featureFlags.cveAdapt && authorized ? [...CVE_ADAPT_TOOL_NAMES] : [];
   const networkTools = [
     "http_request",
     "crawl",
@@ -7446,11 +7315,6 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     ...scannerTools,
     ...cloudTools,
     ...oastTools,
-    ...offensiveScopedTools,
-    ...memsafetyTools,
-    ...npmDiscoveryTools,
-    ...kernelWeaponizeTools,
-    ...cveAdaptTools,
     "send_prompt",
     "save_finding",
     "update_finding",
@@ -7497,12 +7361,6 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // `featureFlags.proxy` gate + `"proxy"` to networkTools). Excluded by
     // omission here so it never leaks into the audit/review "everything" set.
     && name !== "proxy"
-    // Feature/resource/sandbox gates remain independent of authorization.
-    && (authorized || !OFFENSIVE_SCOPED_TOOL_NAMES.includes(name))
-    && ((featureFlags.memsafetyFuzz && authorized) || !MEMSAFETY_TOOL_NAMES.includes(name))
-    && ((featureFlags.npmDynamicDiscovery && authorized) || !NPM_DISCOVERY_TOOL_NAMES.includes(name))
-    && ((featureFlags.kernelWeaponize && authorized) || !KERNEL_WEAPONIZE_TOOL_NAMES.includes(name))
-    && ((featureFlags.cveAdapt && authorized) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "memory" && (featureFlags.zeroverse || name !== "analyze_binary"),

@@ -14,7 +14,6 @@ import { type TrustGraphConfig } from "../trust-graph-runtime.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
 import type { ScanCostLedger } from "../cost-ledger.js";
 import type { NoteStore } from "../../notes/index.js";
-import { type InlineOracle, type InlineValidationOutcome } from "../inline-validation.js";
 import type { osecDB } from "../../storage/index.js";
 import type { Finding, AttackResult, TargetInfo } from "../../shared/index.js";
 
@@ -214,13 +213,6 @@ export interface NativeAgentLoopOptions {
   /** Poll for user-injected messages at turn boundaries. */
   getPendingUserMessages?: () => string[];
   /**
-   * Inline-validation oracle override (#554). Defaults to the shared
-   * `verifyOracleByCategory` from triage/oracles. Tests inject a deterministic
-   * stub here so the onFindingSaved hook never touches the network. Only
-   * consulted when `features.inlineValidation` is on.
-   */
-  inlineValidationOracle?: InlineOracle;
-  /**
    * Optional Memory override; supplying one opts into Memory for this run. Otherwise Memory is used only
    * when codebaseLearning is true. ZERO_DISABLE_MEMORY=1/true vetoes either opt-in.
    */
@@ -280,14 +272,6 @@ export interface NativeAgentState {
   errorExit?: { error: string; turn: number; source?: "provider" | "harness" };
   /** Resumable output-cap pause, never a provider failure or completed task. */
   outputCapExit?: { checkpoint: NonNullable<NativeRuntimeResult["checkpoint"]>; continuations: number; message: string };
-  /**
-   * Inline-validation outcomes (#554), one per high/critical finding that the
-   * onFindingSaved hook validated. Empty when `features.inlineValidation` is
-   * off or no high/critical finding was saved. Carries the verdict for
-   * telemetry / test assertions; the per-finding verdict is also stamped on
-   * `finding.inlineValidation` so EGATS and the batch triage can read it.
-   */
-  inlineValidations: InlineValidationOutcome[];
   /**
    * Tool-health roll-up for this run (0#tool-reliability): the deduped set
    * of tool skips / failures (missing binary, buffer limit, wrong lockfile,

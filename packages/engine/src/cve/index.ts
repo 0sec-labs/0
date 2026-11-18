@@ -51,20 +51,6 @@ export {
 } from "./poc-fetcher.js";
 export type { FetchPocOptions } from "./poc-fetcher.js";
 
-export {
-  adaptAndVerify,
-  applyUnifiedDiff,
-  renderAdaptationPrompt,
-} from "./adapt-loop.js";
-export type {
-  AdaptAndVerifyOptions,
-  AdaptationAgent,
-  AdaptationAgentInput,
-  AdaptationResult,
-  AdaptationStatus,
-  AttemptRecord,
-  VerifyKernelFinding,
-} from "./adapt-loop.js";
 
 export type {
   CveArtifactProvider,
@@ -72,3 +58,4 @@ export type {
   FetchedPoc,
   PocCandidate,
 } from "./types.js";
+

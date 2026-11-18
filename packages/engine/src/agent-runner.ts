@@ -11,7 +11,7 @@ import { runNativeAgentLoop } from "./agent/native-loop.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole } from "./agent/tools.js";
 import type { NativeRuntime, RuntimeResult, RuntimeConfig } from "./runtime/types.js";
-import { CLI_RUNTIME_TYPES } from "./shared-analysis.js";
+const CLI_RUNTIME_TYPES = new Set<RuntimeType>(["claude", "codex"]);
 import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";

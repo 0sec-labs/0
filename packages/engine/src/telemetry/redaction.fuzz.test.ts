@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { redactContent } from "./redaction.js";
-import { redactSensitiveHeaders } from "../disclose/template.js";
+import { redactSensitiveHeaders } from "../shared/redact-headers.js";
 
 function rng(seed: number) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 2 ** 32; }; }
 const ALNUM = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

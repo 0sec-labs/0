@@ -20,7 +20,7 @@
  */
 
 import { redactAuthValues } from "../agent/auth-redaction.js";
-import { redactAuthHeaders } from "../disclose/template.js";
+import { redactAuthHeaders } from "../shared/redact-headers.js";
 
 // ---------------------------------------------------------------------------
 // Typed replacement tokens

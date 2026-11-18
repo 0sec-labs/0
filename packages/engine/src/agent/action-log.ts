@@ -20,7 +20,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { redactSensitiveHeaders } from "../disclose/template.js";
+import { redactSensitiveHeaders } from "../shared/redact-headers.js";
 import type { ToolCall } from "./types.js";
 
 /**
