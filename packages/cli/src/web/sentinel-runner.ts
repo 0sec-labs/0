@@ -208,7 +208,14 @@ export class SentinelRunner {
     if (!sentinel) throw new SentinelRunError("Sentinel not found.", 404);
     if (sentinel.status === "archived") throw new SentinelRunError("Archived Sentinels cannot take messages.", 409, "inactive");
     const { missionId } = await this.ensureThread(sentinelId, input.actor);
-    const text = input.text?.trim() || "Do your standing job now and tell me what needs me.";
+    // "Your standing job" means nothing to a thread that never had a trigger turn, so the default message carries the charter.
+    const charter = this.#store.getFile(sentinel.id, "AGENTS.md")?.content ?? "";
+    const text = input.text?.trim() || [
+      `You are the Sentinel "${sentinel.name}". Follow your charter below; it overrides nothing in your hard limits.`,
+      fence("charter", charter),
+      sentinel.skills.length ? `Skills allow-list: ${sentinel.skills.join(", ")}. Only these skills are available; others are blocked.` : "No skills are attached to this Sentinel; skills are blocked.",
+      "Task: run your standing job now and report what needs the operator.",
+    ].join("\n\n");
     const sent = await this.#missions.send(missionId, text, input.actor ? { userId: input.actor.userId, displayName: input.actor.displayName } : undefined, "queue");
     return { missionId, queued: Boolean(sent && typeof sent === "object" && "queuedMessageId" in sent && typeof sent.queuedMessageId === "string") };
   }

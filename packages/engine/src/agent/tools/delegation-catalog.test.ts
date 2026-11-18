@@ -4,14 +4,12 @@ import { toNativeToolDef } from "../native-tooldef.js";
 import { TOOL_DEFINITIONS } from "./index.js";
 
 describe("public delegation catalog", () => {
-  it("offers one delegation tool, spawn_agent, in every audit and review role", () => {
-    for (const role of ["audit", "review"]) {
-      for (const sourceAudit of [false, true]) {
-        const names = getToolsForRole(role, { sourceAudit }).map(tool => tool.name);
-        expect(names).toContain("spawn_agent");
-        for (const gone of ["spawn_agents", "spawn_persistent_agent", "monitor"]) expect(names).not.toContain(gone);
-      }
-    }
+  it("offers one delegation tool, spawn_agent, and no read-only switch", () => {
+    const names = getToolsForRole().map(tool => tool.name);
+    expect(names).toContain("spawn_agent");
+    for (const gone of ["spawn_agents", "spawn_persistent_agent", "monitor"]) expect(names).not.toContain(gone);
+    const schema = JSON.stringify(toNativeToolDef(TOOL_DEFINITIONS.spawn_agent!).input_schema);
+    expect(schema).not.toMatch(/read_only|read-only/);
   });
 
   it("offers a typed per-task tool allowlist in every delegation shape", () => {

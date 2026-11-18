@@ -233,10 +233,10 @@ describe("Skill Registry", () => {
   });
 
   describe("formatJitSkillsInstruction()", () => {
-    it("points agents to list_skills/load_skill without embedding skill bodies", () => {
+    it("points agents to load_skill without embedding skill bodies", () => {
       const instruction = formatJitSkillsInstruction();
 
-      expect(instruction).toContain("list_skills");
+      expect(instruction).not.toContain("list_skills");
       expect(instruction).toContain("load_skill");
       expect(instruction).toContain("sqli-advanced");
       expect(instruction).toContain("Do not load every skill upfront");

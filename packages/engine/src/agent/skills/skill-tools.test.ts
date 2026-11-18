@@ -48,7 +48,7 @@ describe("Skill Tools (#457)", () => {
     try {
       mkdirSync(join(root, "evidence-review"));
       writeFileSync(join(root, "evidence-review", "SKILL.md"), "---\nname: evidence-review\ndescription: Review collected evidence.\n---\nConfirm the evidence supports each finding.");
-      expect(getToolsForRole(role).map((tool) => tool.name)).toContain("load_skill");
+      expect(getToolsForRole().map((tool) => tool.name)).toContain("load_skill");
       const executor = new ToolExecutor(makeCtx({ role, skillDiscoveryOptions: { homeDir: null, mounts: [{ path: root, id: "shared" }] } }));
       const loaded = await executor.execute({ name: "load_skill", arguments: { skill_id: "mount/shared/evidence-review" } });
       expect(loaded.success).toBe(true);

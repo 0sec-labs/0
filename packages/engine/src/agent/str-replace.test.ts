@@ -634,11 +634,7 @@ describe("str_replace folder + role gating ", () => {
     expect(result.error).toMatch(/requires a folder/);
   });
 
-  it("is offered to the verify role only for a source audit", () => {
-    const scoped = getToolsForRole("verify", { sourceAudit: true }).map((t) => t.name);
-    expect(scoped).toContain("str_replace");
-
-    const unscoped = getToolsForRole("verify").map((t) => t.name);
-    expect(unscoped).not.toContain("str_replace");
+  it("is offered to every agent", () => {
+    expect(getToolsForRole().map((t) => t.name)).toContain("str_replace");
   });
 });

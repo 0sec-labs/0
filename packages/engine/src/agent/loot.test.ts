@@ -302,7 +302,7 @@ describe("native loop loot chaining (acceptance)", () => {
       config: {
         role: "attack",
         systemPrompt: "test",
-        tools: getToolsForRole("attack"),
+        tools: getToolsForRole(),
         maxTurns: 6,
         target: "https://example.com",
         scanId: "loot-chain-test",

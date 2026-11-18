@@ -645,61 +645,6 @@ describe("owned worker stop and drain", () => {
       await tree.close();
     });
 
-    it("4. writable checkout ownership is released when the individual worker ends", async () => {
-      vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
-      const tree = new AuditWorkerTree("audit-checkout-release");
-      const workspaceKey = process.cwd();
-      const ctx = { ...context("audit-checkout-release"), workerTree: tree, checkoutKeys: () => [workspaceKey] };
-      const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
-
-      const t1Done = deferred<void>();
-      const t1Released = deferred<void>();
-      const t2Started = deferred<void>();
-      const t2Finish = deferred<void>();
-
-      const origAcquire = tree.acquire.bind(tree);
-      tree.acquire = (id, parentId, meta) => {
-        const lease = origAcquire(id, parentId, meta);
-        const origRel = lease.release;
-        lease.release = () => {
-          origRel();
-          if (meta?.task === "task 1") t1Released.resolve();
-        };
-        return lease;
-      };
-
-      loop.run = async ({ config }) => {
-        if (config.systemPrompt?.includes("task 1")) {
-          t1Done.resolve();
-          return state();
-        } else {
-          t2Started.resolve();
-          await t2Finish.promise;
-          return state();
-        }
-      };
-
-      const batch = executor.execute({
-        name: "spawn_agent",
-        arguments: { tasks: [{ task: "task 1" }, { task: "task 2", read_only: true }] },
-      });
-
-      await t1Done.promise;
-      await t2Started.promise;
-      await t1Released.promise;
-
-      // While task 2 is still running, task 1's writable checkout lock has been released
-      // An external caller should be able to begin a local mutation without error
-      const releaseMutation = tree.beginLocalMutation("external-coordinator", workspaceKey, "write_file");
-      expect(typeof releaseMutation).toBe("function");
-      releaseMutation();
-
-      t2Finish.resolve();
-      await batch;
-      await executor.cleanup();
-      await tree.close();
-    });
-
     it("5. queued tasks behave correctly after an individual stop", async () => {
       vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
       const tree = new AuditWorkerTree("audit-queued-stop");

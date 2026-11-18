@@ -825,6 +825,16 @@ describe("a person in the Sentinel's thread", () => {
     expect(turnsOf(f, id).filter(turn => turn.origin === "schedule")).toHaveLength(0);
   });
 
+  it("a run with no task tells the thread its charter instead of only saying 'your standing job'", async () => {
+    const f = fixture({ persistent: true });
+    const { id } = await f.armed();
+    const run = await f.call("POST", `${P}/${id}/run`, { approval: "launch-authorized-run", version: (await f.view(id)).version });
+    expect(run.status).toBe(202);
+    const text = f.missions.send.mock.calls.at(-1)![1];
+    expect(text).toContain("<charter>");
+    expect(text).toContain("run your standing job now");
+  });
+
   it("matches a trigger turn that could not start by its queued message, not by guessing", async () => {
     const f = fixture({ persistent: true });
     const { id } = await f.armed();

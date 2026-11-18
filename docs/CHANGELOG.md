@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Sub-agents, Sentinel runs and every thread now get the same tools with a shell; one bad skill file no longer breaks `load_skill`; helpers can work in one folder together; a Sentinel run now tells its thread the charter.
+
 ## [0.39.0] - 2026-11-18
 
 This release is a large simplification: Agents become Sentinels, the model gets eight tools, and the scan engines, scope and budgets are gone.

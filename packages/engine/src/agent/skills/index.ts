@@ -12,6 +12,7 @@ import type { VulnClass } from "../prompts.js";
 import { TOOL_PACKS, isKnownPackRef } from "../toolset.js";
 import { parseVerifySpec } from "../../verifier/spec.js";
 import { EMBEDDED_SKILL_YAML } from "./skills.generated.js";
+import { diag } from "../../diagnostics/channel.js";
 
 export type { SkillDefinition, SkillSummary } from "./types.js";
 export { discoverAgentSkills, isAgentSkillAllowed, loadAgentSkill, validateAgentSkillContent } from "./agent-skills.js";
@@ -154,11 +155,18 @@ function walkYamlFiles(dir: string): string[] {
 
 let _registry: Map<string, SkillDefinition> | null = null;
 let _registryDir: string | null = null;
+let _problems: string[] = [];
+
+/** Skill files the last registry load skipped, one message each. Shipped skills must leave this empty. */
+export function skillRegistryProblems(): readonly string[] {
+  return _problems;
+}
 
 /** Clear the cached registry (useful in tests). */
 export function clearSkillRegistry(): void {
   _registry = null;
   _registryDir = null;
+  _problems = [];
 }
 
 // ── Public API ──────────────────────────────────────────────────────
@@ -174,42 +182,35 @@ export function loadSkillRegistry(
   if (_registry && _registryDir === dir) return _registry;
   const yamlFiles = walkYamlFiles(dir);
   const registry = new Map<string, SkillDefinition>();
+  const problems: string[] = [];
+  // One bad or stale skill file must never take every other skill down with it: skip it and say so.
+  const add = (read: () => unknown, where: string): void => {
+    try {
+      const skill = validateSkill(read(), where);
+      if (registry.has(skill.id)) throw new Error(`Duplicate skill ID "${skill.id}" in ${where}`);
+      registry.set(skill.id, skill);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      problems.push(message);
+      diag.warn("skill_skipped", `skipped a skill that failed validation: ${message}`);
+    }
+  };
 
   if (yamlFiles.length > 0) {
     // On-disk path: a source checkout, the test suite (which passes the real
     // src dir), or the node/esbuild bundle where the YAML tree sits beside the
     // loader. Reading the files directly lets a dev edit a skill without
     // regenerating the embedded manifest.
-    for (const filePath of yamlFiles) {
-      const raw = readFileSync(filePath, "utf-8");
-      const parsed = parseYaml(raw);
-      const skill = validateSkill(parsed, filePath);
-
-      if (registry.has(skill.id)) {
-        throw new Error(
-          `Duplicate skill ID "${skill.id}" — found in multiple YAML files`,
-        );
-      }
-      registry.set(skill.id, skill);
-    }
+    for (const filePath of yamlFiles) add(() => parseYaml(readFileSync(filePath, "utf-8")), filePath);
   } else {
     // Compiled-binary path: `bun --compile` bakes imported modules but NOT
     // files read via readdirSync, so the walk above finds nothing inside the
     // /$bunfs virtual tree. Fall back to the build-time embedded manifest
     // (skills.generated.ts) — a real import, so it IS baked into the binary.
-    for (const [relPath, raw] of Object.entries(EMBEDDED_SKILL_YAML)) {
-      const parsed = parseYaml(raw);
-      const skill = validateSkill(parsed, `embedded:${relPath}`);
-
-      if (registry.has(skill.id)) {
-        throw new Error(
-          `Duplicate skill ID "${skill.id}" — found in the embedded manifest`,
-        );
-      }
-      registry.set(skill.id, skill);
-    }
+    for (const [relPath, raw] of Object.entries(EMBEDDED_SKILL_YAML)) add(() => parseYaml(raw), `embedded:${relPath}`);
   }
 
+  _problems = problems;
   _registry = registry;
   _registryDir = dir;
   return registry;
@@ -262,7 +263,7 @@ export function listSkillSummaries(
 
 export function formatJitSkillsInstruction(): string {
   const skillIds = listSkillSummaries().map((skill) => skill.id).join(", ");
-  return `When you need focused methodology mid-run, call list_skills to inspect available just-in-time skills, then call load_skill with one of: ${skillIds}. Do not load every skill upfront; load only the skill that matches your current hypothesis.`;
+  return `When you need focused methodology mid-run, call load_skill with no id to inspect available just-in-time skills, then call load_skill with one of: ${skillIds}. Do not load every skill upfront; load only the skill that matches your current hypothesis.`;
 }
 
 /**

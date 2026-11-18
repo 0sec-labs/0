@@ -59,7 +59,6 @@ import { TOOL_DEFINITIONS } from "./tools/index.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
 import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { resolveBashWallclockCeilingMs, runBashWithWallclock, buildStrReplaceMeta } from "./tools/exec-helpers.js";
-import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool } from "./tools/shell-commands.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 import { citedSourceHasKnownMarker } from "./tools/probe-helpers.js";
 import { mcpHostOf, deferredToolsOf, packToolsOf } from "./tools/context-hosts.js";
@@ -312,19 +311,14 @@ export class ToolExecutor {
           !this.ctx.delegationTools.some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
-      const safeLocal = isCheckoutReadOnlyTool(call.name);
-      if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
       signal?.throwIfAborted();
       assertAuthority?.();
 
       const gated = await this._beforeCommandGate(call);
       if (gated) return gated;
 
-      const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, this.checkoutKeys(), call.name) : undefined;
-      let result: ToolResult;
-      try { result = await this._dispatch(call); } finally { releaseMutation?.(); }
-
-      return result;
+      if (call.name === "bash" || call.name === "str_replace") this._workerTree.recordLocalEffect(this.ctx.scanId, call.name);
+      return await this._dispatch(call);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
@@ -568,15 +562,6 @@ export class ToolExecutor {
       meta: commandMeta,
     };
   }
-
-  private checkoutKeys(): string[] {
-    // Shell and scoped file tools historically use different fallback roots.
-    // Reserve both without changing either tool's authority or cwd semantics.
-    const roots = [this.ctx.scopePath ?? this.ctx.workspaceRoot ?? process.cwd(), this.ctx.scopePath ?? process.cwd()];
-    return [...new Set([...new Set(roots)].map(root => captureWorkspaceIdentity(root)?.repositoryRoot ?? realpathSync(root)))];
-  }
-
-  private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
 
   private async saveFinding(args: Record<string, unknown>): Promise<ToolResult> {
     // 0#283 — refuse empty-PoC findings upstream. Disclose already
@@ -1510,7 +1495,7 @@ export class ToolExecutor {
       return this.listSkills(args);
     }
     if (!this.skillAllowed(skillId)) {
-      return { success: false, output: null, error: `Skill "${skillId}" is not on this run's skill allow-list. Use list_skills to see permitted skills.` };
+      return { success: false, output: null, error: `Skill "${skillId}" is not on this run's skill allow-list. Call load_skill with no skill_id to see permitted skills.` };
     }
 
     // Check for double-load
@@ -1547,7 +1532,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: `Unknown skill ID: "${skillId}". Use list_skills to see available skills.`,
+        error: `Unknown skill ID: "${skillId}". Call load_skill with no skill_id to see available skills.`,
       };
     }
 
@@ -1792,41 +1777,38 @@ export class ToolExecutor {
   }
 
 
-  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[], trackPublication = false): ReturnType<AuditWorkerTree["acquire"]> {
-    const restricted = readOnly || this.isReadOnlyWorker();
-    const keys = guardedKeys ?? this.checkoutKeys();
-    const effectiveTools = this.subagentTools(undefined, restricted).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
-    const writeCapable = !restricted && effectiveTools.some(tool => !isCheckoutReadOnlyTool(tool.name));
-    return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
-      workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
-      ...(trackPublication ? { publication: true } : {}),
-    });
+  private acquireWorker(base: SubagentLifecycleBase, trackPublication = false): ReturnType<AuditWorkerTree["acquire"]> {
+    return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base, ...(trackPublication ? { publication: true } : {}) });
   }
 
 
-  private subagentTools(messaging: MessagingRuntime | undefined, readOnly = this.isReadOnlyWorker()): ToolDefinition[] {
-    const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
-      sourceAudit: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
-    });
+  private subagentTools(messaging: MessagingRuntime | undefined, childId?: string): ToolDefinition[] {
+    const inherited = this.ctx.delegationTools ?? getToolsForRole({ webSearchEnabled: this.ctx.webSearchEnabled });
     return filterWorkflowAgentTools(inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
-      (!readOnly || isCheckoutReadOnlyTool(tool.name)),
+      (tool.name !== "spawn_agent" || childId === undefined || this._workerTree.canDelegate(childId)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL));
   }
 
 
-  /** Validate before allocating workers; a requested list can only narrow admission. */
+  /**
+   * Validate before allocating workers. A requested list can only narrow the available tools, bash is always kept,
+   * and an admission that would leave a child with no tools is an error, never a silent empty set.
+   */
   private admittedSubagentTools(requested: readonly string[] | undefined): string[] | undefined {
     const host = this.ctx.workerPolicy?.allowedTools;
     if (requested === undefined && host === undefined && getWorkflowAuditExecutionPolicy()?.allowedAgentTools === undefined) return undefined;
     const available = new Set(this.subagentTools(undefined).map(tool => tool.name));
+    if (requested?.length === 0) throw new Error("allowed_tools would leave this agent with no tools; omit it to give the agent every tool");
     if (requested !== undefined) for (const name of requested) {
       if (!available.has(name)) throw new Error(`allowed_tools contains unavailable tool "${name}"`);
     }
     // Capture effective host + inherited ceilings before any parked revival.
-    const effective = requested ?? [...available];
-    return [...new Set(host === undefined ? effective : effective.filter(tool => host.includes(tool)))];
+    const effective = requested === undefined ? [...available] : [...new Set([...requested, ...(available.has("bash") ? ["bash"] : [])])];
+    const admitted = [...new Set(host === undefined ? effective : effective.filter(tool => host.includes(tool)))];
+    if (admitted.length === 0) throw new Error("allowed_tools would leave this agent with no tools; omit it to give the agent every tool");
+    return admitted;
   }
 
 
@@ -1848,7 +1830,7 @@ export class ToolExecutor {
   private subagentCompletionInstructions(tools: readonly ToolDefinition[]): string {
     const names = new Set(tools.map(tool => tool.name));
     return [
-      "Use only your provided tools.",
+      names.has("bash") ? "You have a shell: use bash to read files, run commands and inspect the folder." : "Use only your provided tools.",
       names.has("spawn_agent") ? "Delegate independent subtasks when useful." : "",
       names.has("finding") ? "Save evidence-backed findings with finding." : "",
       "Reply in prose with your result when you are finished.",
@@ -2009,7 +1991,7 @@ export class ToolExecutor {
     let lease = admittedLease;
     let childSignal: AbortSignal | undefined;
     try {
-      lease ??= this.acquireWorker(base, false, undefined, allowedTools);
+      lease ??= this.acquireWorker(base);
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
@@ -2071,7 +2053,7 @@ export class ToolExecutor {
             }
           : undefined);
 
-      const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+      const subTools = this.subagentTools(childMessaging, base.agent_id).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
 
       // running — immediately before the agent loop starts
       this.emitWorkerLifecycle({ ...base,
@@ -2246,7 +2228,7 @@ export class ToolExecutor {
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
 
-    const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+    const subTools = this.subagentTools(childMessaging, base.agent_id).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
     const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
@@ -2340,7 +2322,6 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace;
     context?: string;
   }): Promise<ToolResult> {
-    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
     if (!parsed.ok) {
       this.recordToolHealth({
@@ -2377,7 +2358,7 @@ export class ToolExecutor {
         }
       : undefined);
 
-    const lifetime = prepared?.lease ?? this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
+    const lifetime = prepared?.lease ?? this.acquireWorker(base);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
     let currentStatus: SubagentLifecyclePayload["status"] = "queued";
@@ -2488,7 +2469,6 @@ export class ToolExecutor {
     }
     const batch = args.tasks !== undefined;
     if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
-    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return fail("read_only must be a boolean");
     if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
     if (args.context !== undefined && typeof args.context !== "string") return fail("context must be a string");
     const entries = batch ? args.tasks : [args];
@@ -2513,7 +2493,7 @@ export class ToolExecutor {
     const parentMessaging = messagingRuntimeOf(this.ctx);
     if (args.agent_id !== undefined) {
       if (batch || typeof args.agent_id !== "string" || !args.agent_id.trim()) return fail("agent_id requires one task follow-up");
-      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "read_only", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
+      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
         return fail("A follow-up keeps its worker's existing scope and model; provide only agent_id, task and optional wait:false");
       }
       if (!parentMessaging || !this._workerTree.peers(this.ctx.scanId).includes(args.agent_id)) {
@@ -2533,12 +2513,10 @@ export class ToolExecutor {
     subagentConcurrency(); // Reject bad configuration before any worker is registered.
     const leases: Array<{ base: SubagentLifecycleBase; lease: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     try {
-      // No asynchronous work occurs while reserving: all entries share these actual roots.
-      const guardedKeys = this.checkoutKeys();
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys, this.admittedSubagentTools((spec.args.allowed_tools as string[] | undefined))) });
+        leases.push({ base, lease: this.acquireWorker(base) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -2596,7 +2574,7 @@ export class ToolExecutor {
     const maxTurns = this.admittedSubagentMaxTurns((args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40));
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools, true);
+    const lease = this.acquireWorker(base, true);
     try {
     // queued — before any async setup
     this.emitWorkerLifecycle({ ...base, status: "queued" as const });
@@ -2645,7 +2623,6 @@ export class ToolExecutor {
    * wave).
    */
   private async spawnAgents(args: Record<string, unknown>): Promise<ToolResult> {
-    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     if (args.allowed_tools !== undefined || args.allowed_http_methods !== undefined) {
       return { success: false, output: null, error: "Put allowed_tools and allowed_http_methods inside each tasks entry" };
     }
@@ -2673,7 +2650,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; readOnly?: boolean; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -2696,15 +2673,14 @@ export class ToolExecutor {
       try { allowedTools = this.admittedSubagentTools(limits.args.allowedTools); }
       catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const maxTurns = this.admittedSubagentMaxTurns(limits.args.maxTurns);
-      specs.push({ task, maxTurns, allowedTools, allowedHttpMethods: this.admittedSubagentHttpMethods(limits.args.allowedHttpMethods), base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
+      specs.push({ task, maxTurns, allowedTools, allowedHttpMethods: this.admittedSubagentHttpMethods(limits.args.allowedHttpMethods), base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     const publicationGate = this._workerTree.registerPublicationGate(this.ctx.scanId);
     try {
-      const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools, true);
+        spec.lease = this.acquireWorker(spec.base, true);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -3048,29 +3024,10 @@ export class ToolExecutor {
 
 // ── Helper: get tools for a specific agent role ──
 
-export function getToolsForRole(role: string, opts?: { sourceAudit?: boolean; webMode?: boolean; webSearchEnabled?: boolean }): ToolDefinition[] {
-  const authorized = opts?.sourceAudit === true;
-  const webSearchTools = (opts?.webSearchEnabled ?? featureFlags.webSearch) ? ["web_search"] : [];
-  const shellTools = ["bash", ...webSearchTools, "load_skill", "finding"];
-  const fileTools = ["str_replace"];
-  const allEnabledTools = Object.keys(TOOL_DEFINITIONS).filter((name) =>
-    // web_search is feature-gated everywhere else (shellTools honors the flag),
-    // so gate it here too to keep the audit/review "everything" set in line.
-    ((opts?.webSearchEnabled ?? featureFlags.webSearch) || name !== "web_search")
-    && name !== "memory"
-  );
-  const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) => name !== "memory");
-  const roleTools: Record<string, string[]> = {
-    discovery: shellTools,
-    attack: shellTools,
-    verify: authorized ? [...shellTools, ...fileTools] : shellTools,
-    report: ["load_skill"],
-    audit: opts?.sourceAudit ? scopedSourceTools : allEnabledTools,
-    review: opts?.sourceAudit ? scopedSourceTools : allEnabledTools,
-  };
-
-  const toolNames = roleTools[role] ?? allEnabledTools;
-  return filterWorkflowAgentTools(toolNames
-    .map((name) => TOOL_DEFINITIONS[name])
-    .filter((t): t is ToolDefinition => t !== undefined));
+/** The one tool list every thread, child run and sentinel turn gets: all registered tools except `memory`, which the session adds when Memory is on. */
+export function getToolsForRole(opts?: { webSearchEnabled?: boolean }): ToolDefinition[] {
+  const webSearch = opts?.webSearchEnabled ?? featureFlags.webSearch;
+  return filterWorkflowAgentTools(Object.keys(TOOL_DEFINITIONS)
+    .filter((name) => name !== "memory" && (webSearch || name !== "web_search"))
+    .map((name) => TOOL_DEFINITIONS[name]));
 }

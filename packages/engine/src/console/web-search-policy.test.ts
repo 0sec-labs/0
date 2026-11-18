@@ -20,7 +20,7 @@ function runtime(script: NativeRuntimeResult[]) {
 describe("per-chat built-in web search", () => {
   it("defaults new chats and role tools to search on while preserving an explicit chat opt-out", async () => {
     vi.stubEnv("ZERO_FEATURE_WEB_SEARCH", undefined);
-    expect(getToolsForRole("audit").some(tool => tool.name === "web_search")).toBe(true);
+    expect(getToolsForRole().some(tool => tool.name === "web_search")).toBe(true);
     const enabled = createConsoleSession({ runtime: runtime([]), refineObjective: false });
     const disabled = createConsoleSession({ runtime: runtime([]), webSearchEnabled: false, refineObjective: false });
     try {
@@ -62,8 +62,8 @@ describe("per-chat built-in web search", () => {
   });
   it("enables search for only the selected chat without changing the global default", async () => {
     vi.stubEnv("ZERO_FEATURE_WEB_SEARCH", "0");
-    expect(getToolsForRole("audit").some(tool => tool.name === "web_search")).toBe(false);
-    expect(getToolsForRole("audit", { webSearchEnabled: true }).some(tool => tool.name === "web_search")).toBe(true);
+    expect(getToolsForRole().some(tool => tool.name === "web_search")).toBe(false);
+    expect(getToolsForRole({ webSearchEnabled: true }).some(tool => tool.name === "web_search")).toBe(true);
     const enabled = new ToolExecutor(context(true), null);
     await enabled.execute({ name: "web_search", arguments: { query: "documentation" } });
     expect(transport).toHaveBeenCalledOnce();

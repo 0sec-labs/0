@@ -117,11 +117,10 @@ export function buildInitialPrompt(config: NativeAgentConfig): string {
     config.tools.some((tool) => tool.name === "load_skill");
 
   return [
-    `You are a ${config.role} agent for 0, an AI red-teaming toolkit.`,
-    `Target: ${config.target}`,
+    `You are ${/^[aeiou]/i.test(config.role) ? "an" : "a"} ${config.role} agent for 0. Do the task in your instructions.`,
+    ...(config.target ? [`Target: ${config.target}`] : []),
     `Scan ID: ${config.scanId}`,
-    "",
-    "Use your tools to accomplish your task. When you are finished, reply with a summary and no tool call.",
+    "Use your tools, bash first. When you are finished, reply with a summary and no tool call.",
     hasJitSkillTools ? `\n## Just-in-Time Skills\n${formatJitSkillsInstruction()}` : "",
   ].join("\n");
 }
@@ -131,28 +130,10 @@ export function buildContinuePrompt(config: NativeAgentConfig, turnCount: number
   return buildContinueTaskPrompt(config, turnCount) + memory;
 }
 
-function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
-  const scopedSourceAudit =
-    typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
-
-  switch (config.role) {
-    case "discovery":
-    case "attack":
-    case "verify":
-      return turnCount < 2
-        ? "You must use your target interaction tools. Start by sending prompts or HTTP requests to the configured target. Do not just describe what you would do."
-        : "Continue testing. Use your tools — do not just describe what you would do.";
-    case "audit":
-    case "review":
-    default:
-      return turnCount < 2
-        ? scopedSourceAudit
-          ? "You must use your scoped source tools to analyze the target. Start by listing files and reading source. Do not just describe what you would do — actually do it."
-          : "You must use your tools to analyze the target. Start by reading files and running commands. Do not just describe what you would do — actually do it."
-        : scopedSourceAudit
-          ? "Continue your analysis. Use bash (cat -n, rg, ls) when allowed to read, map and trace source, and finding for vulnerabilities."
-          : "Continue your analysis. Use bash to read source code and search for patterns, and finding for any vulnerabilities.";
-  }
+function buildContinueTaskPrompt(_config: NativeAgentConfig, turnCount: number): string {
+  return turnCount < 2
+    ? "You must use your tools. Start by running commands with bash to look at the folder or target. Do not just describe what you would do — actually do it."
+    : "Continue. Use bash to read and test, and finding to record vulnerabilities.";
 }
 
 export type PersistedNativeToolContext = {

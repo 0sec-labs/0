@@ -52,13 +52,13 @@ it("exposes assigned skills independently of automatic JIT methodology", async (
   vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", undefined);
   const executor = new ToolExecutor({ target: value.path, scopePath: value.path, scanId: "methodology-contract", role: "audit",
     findings: [], attackResults: [], targetInfo: {} });
-  const tools = getToolsForRole("audit", { sourceAudit: true }).map(tool => tool.name);
+  const tools = getToolsForRole().map(tool => tool.name);
   expect(tools).toContain("load_skill");
-  expect(tools).not.toContain("bash");
+  expect(tools).toContain("bash");
   const result = await executor.execute({ id: "load", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } });
   expect(result.success).toBe(true);
   expect(JSON.stringify(result.output)).toContain("Inspect transaction isolation before approving the repair.");
   vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", "0");
-  expect(getToolsForRole("audit", { sourceAudit: true }).some(tool => tool.name === "load_skill")).toBe(true);
+  expect(getToolsForRole().some(tool => tool.name === "load_skill")).toBe(true);
   expect((await executor.execute({ id: "again", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } })).success).toBe(true);
 });

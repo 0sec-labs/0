@@ -303,16 +303,11 @@ it("retains failed worker state without claiming whether writes occurred", async
   expect((roster.output as any).workers[0]).toMatchObject({ status: "failed", error: "Provider outcome unknown", cleanup: "drained", effects: "unknown" });
 });
 
-it("applies call-wide read_only to all batch entries without false lifting", async () => {
-  const { tools } = executor(async () => done(), {
-    delegationTools: [TOOL_DEFINITIONS.str_replace, TOOL_DEFINITIONS.spawn_agent],
-  });
-  const result = await tools.execute({ name: "spawn_agent", arguments: {
-    read_only: true, tasks: [{ task: "A", read_only: false }, { task: "B" }],
-  } });
+it("gives every batch worker the same tools, shell included, whatever the host passed in", async () => {
+  const seen: string[][] = [];
+  const { tools } = executor(async () => { seen.push([]); return done(); }, { delegationTools: [TOOL_DEFINITIONS.bash, TOOL_DEFINITIONS.str_replace, TOOL_DEFINITIONS.spawn_agent] });
+  const result = await tools.execute({ name: "spawn_agent", arguments: { read_only: true, tasks: [{ task: "A" }, { task: "B" }] } });
   expect(result.success).toBe(true);
-  const listed = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
-  const workers = (listed.output as { workers: Array<{ workspace: { readOnly: boolean; writeCapable: boolean } }> }).workers;
-  expect(workers).toHaveLength(2);
-  for (const worker of workers) expect(worker.workspace).toMatchObject({ readOnly: true, writeCapable: false });
+  expect(JSON.stringify((await tools.execute({ name: "spawn_agent", arguments: { op: "list" } })).output)).not.toMatch(/readOnly|writeCapable/);
 });
+;

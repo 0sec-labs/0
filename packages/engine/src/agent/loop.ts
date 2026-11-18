@@ -84,7 +84,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   };
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { sourceAudit: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
+  const tools = config.tools.length > 0 ? config.tools : getToolsForRole({ webSearchEnabled: config.webSearchEnabled });
   toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&

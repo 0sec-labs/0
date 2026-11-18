@@ -526,7 +526,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         config: {
           role,
           systemPrompt: agentSystemPrompt,
-          tools: getToolsForRole(role, { sourceAudit: !!scopePath }),
+          tools: getToolsForRole(),
           maxTurns,
           singleAgent: opts.singleAgent,
           reviewDiffBase: opts.reviewDiffBase,
@@ -708,7 +708,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     config: {
       role,
       systemPrompt: agentSystemPrompt,
-      tools: getToolsForRole(role, { sourceAudit: !!scopePath }),
+      tools: getToolsForRole(),
       maxTurns,
       target,
       scanId,

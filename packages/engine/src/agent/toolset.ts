@@ -6,7 +6,7 @@
  * This module only decides what is ADVERTISED. It never grants authority: the
  * set it is applied to has already passed role, scope, feature-flag and access
  * gating (`getToolsForRole`), and every call still passes the same dispatch
- * gates (Read-only refusal, scope, approvals) whichever list the model saw.
+ * gates (scope, approvals) whichever list the model saw.
  */
 import type { ToolDefinition } from "./types.js";
 
@@ -88,8 +88,7 @@ export function resolveToolset(options: { explicit?: string; surfaceDefault: Too
 /** Split an already-authorized tool list into what stays advertised and what only packs can add. */
 /**
  * Offered on top of the core list only when the session has Memory on (the host adds the definition
- * only then). The shell cannot stand in for it: notes live outside the workspace, a read-only thread
- * has no shell, and a sandboxed thread has no access to the notes directory.
+ * only then). The shell cannot stand in for it: notes live outside the workspace, and a sandboxed thread has no access to the notes directory.
  */
 export const SESSION_TOOL_NAMES: readonly string[] = ["memory"];
 

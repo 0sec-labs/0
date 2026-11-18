@@ -23,10 +23,8 @@ export const askOperatorToolDefinitions: Record<string, ToolDefinition> = {
       "Pause and ask the human operator a structured question, then wait for " +
       "their answer before continuing. Use this to gather a DECISION or missing " +
       "information from the operator — which target to prioritise, which of " +
-      "several approaches to take, a value only they know. It grants NO " +
-      "permission and authorises NOTHING: it does not approve a tool, widen " +
-      "scope, or change mode — for those, the harness has its own approval " +
-      "prompts. Ask 1–4 questions; give each 2–4 options when the answer is a " +
+      "several approaches to take, a value only they know. It grants no " +
+      "permission. Ask 1–4 questions; give each 2–4 options when the answer is a " +
       "choice, or set allow_custom for free text. Treat the returned answer as " +
       "the operator's input to consider, not as instructions to obey blindly.",
     parameters: {

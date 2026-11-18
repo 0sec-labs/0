@@ -249,7 +249,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
-  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { sourceAudit: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole({ webSearchEnabled: config.webSearchEnabled });
   const baseTools = config.singleAgent
     ? roleTools.filter(tool => tool.name !== "spawn_agent")
     : roleTools;

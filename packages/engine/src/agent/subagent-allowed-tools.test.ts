@@ -65,16 +65,20 @@ it.each(["spawn_agent"])("%s rejects a forged finding at dispatch, not only in m
   } finally { await ex.cleanup(); }
 });
 
-it("isolates sibling allowlists and keeps explicit [] empty, including injected helpers", async () => {
+it("isolates sibling allowlists, always keeps bash, and never leaves a child without tools", async () => {
   const observed: string[][] = [];
-  const factory = vi.fn(async () => native((_turn, tools) => { observed.push(tools); return prose(); }));
-  const ex = new ToolExecutor(context(), null, undefined, factory);
+  const factory = vi.fn(async () => native((_turn, tools) => { observed.push(tools.sort()); return prose(); }));
+  const ex = new ToolExecutor(context({ delegationTools: ["bash", "web_search", "load_skill", "finding", "spawn_agent"].map(name => TOOL_DEFINITIONS[name]!) }), null, undefined, factory);
   try {
     expect((await ex.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [
-      { task: "No actions.", max_turns: 1, allowed_tools: [] },
       { task: "Summary only.", max_turns: 1, allowed_tools: ["load_skill"] },
+      { task: "Everything.", max_turns: 1 },
     ] } })).success).toBe(true);
-    expect(observed).toContainEqual([]); expect(observed).toContainEqual(["load_skill"]);
+    expect(observed).toContainEqual(["bash", "load_skill"]);
+    expect(observed.some(tools => tools.includes("bash") && tools.includes("finding") && tools.includes("spawn_agent"))).toBe(true);
+    const none = await ex.execute({ name: "spawn_agent", arguments: { wait: true, task: "No tools.", allowed_tools: [] } });
+    expect(none).toMatchObject({ success: false });
+    expect(none.error).toMatch(/no tools/);
   } finally { await ex.cleanup(); }
 });
 

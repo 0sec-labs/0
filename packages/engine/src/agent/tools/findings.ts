@@ -102,7 +102,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       source_original: {
         type: "string",
         description:
-          "For a diff-scoped suggested_replacement, REQUIRED exact current text of the cited source lines, including indentation but without the read_file line-number prefixes. The tool compares these bytes before allowing a GitHub suggestion.",
+          "For a diff-scoped suggested_replacement, REQUIRED exact current text of the cited source lines, including indentation but without line-number prefixes. The tool compares these bytes before allowing a GitHub suggestion.",
       },
       suggested_replacement: {
         type: "string",

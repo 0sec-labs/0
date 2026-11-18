@@ -2,7 +2,7 @@
 // `cp -R` / `mkdir -p` / glob commands that failed on Windows (cmd/PowerShell
 // have no `cp -R`, `mkdir -p`, or `*.json` glob), so core could never build
 // there. Pure Node fs — works on every platform.
-import { cpSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +51,17 @@ const copyYamlTree = (fromRel, toRel) => {
     }
   }
 };
+// Start clean: a skill deleted from src must not linger in dist and break the loader.
+// Only the yaml goes; tsc has just written the compiled loader into the same tree.
+const removeYamlTree = (dirRel) => {
+  if (!existsSync(abs(dirRel))) return;
+  for (const entry of readdirSync(abs(dirRel), { withFileTypes: true })) {
+    const rel = join(dirRel, entry.name);
+    if (entry.isDirectory()) removeYamlTree(rel);
+    else if (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml")) rmSync(abs(rel));
+  }
+};
+removeYamlTree("dist/agent/skills");
 copyYamlTree("src/agent/skills", "dist/agent/skills");
 
 // Attack-template YAMLs: the templates loader (src/templates/loader.ts) looks

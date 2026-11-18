@@ -51,7 +51,7 @@ const SKILL_TOOL_HINT = `
 
 ## Methodology Skills
 
-If you need deeper guidance on a specific technique or vulnerability class, call \`list_skills\` to see available methodology guides, then \`load_skill\` to pull one into your context. Skills provide targeted exploitation playbooks that can help when standard approaches stall.`;
+If you need deeper guidance on a specific technique or vulnerability class, call \`load_skill\` with no id to see the available methodology guides, then with an id to pull one into your context. Skills provide targeted exploitation playbooks that can help when standard approaches stall.`;
 
 // File-editing guidance: str_replace is the single edit tool.
 export const FILE_EDIT_TOOL_HINT = `
