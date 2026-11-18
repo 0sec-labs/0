@@ -1,6 +1,6 @@
 import { useNow } from "@/ui/lib/use-now";
 import { memo, Fragment, useId, useState, type ReactNode } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Markdown } from "./markdown";
 import { MessageClamp } from "./message-clamp";
 import { ToolActivity } from "./tool-activity";
@@ -51,14 +51,13 @@ function TurnWork({ turn, subagents, shimmer, children }: { turn: ReducedTurn; s
         >
           <span className="truncate">
             <ShimmerText active={shimmer}>{label.split(",")[0]}</ShimmerText>
+            {turn.isWorking && !turn.retry && time && <span className="ml-1 tabular-nums">{time}</span>}
             {label.includes(",") ? label.slice(label.indexOf(",")) : ""}
           </span>
-          {turn.isWorking && !turn.retry && time && <span className="ml-1 tabular-nums">{time}</span>}
-          {failedCallCount(turn.toolCalls) > 0 && <X aria-hidden="true" data-turn-work-failed className="size-3 flex-none text-destructive" />}
           {/* Out of flow so the label, not label plus arrow, is what centres between the hairlines (and under the day stamp). */}
           <ChevronRight
             aria-hidden="true"
-            className="absolute top-1/2 left-full ml-1 size-3 flex-none -translate-y-1/2 -rotate-90 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-0 group-data-[open]/work-head:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute top-1/2 left-full ml-1 size-3 flex-none -translate-y-1/2 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-90 [@media(hover:none)]:opacity-100"
           />
         </button>
         <span aria-hidden="true" className={cn(hairline, "origin-left")} />
