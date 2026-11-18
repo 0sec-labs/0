@@ -66,9 +66,9 @@ try {
     assert.equal(result.status, 0, `${args.join(' ')} failed: ${result.stderr}`);
     return JSON.parse(result.stdout);
   };
-  const created = run(['chats', 'create']);
+  const created = run(['threads', 'create']);
   assert.equal(typeof created.id, 'string');
-  assert.ok(run(['chats', 'list']).some(chat => chat.id === created.id), 'CLI cannot see the chat it created');
+  assert.ok(run(['threads', 'list']).some(chat => chat.id === created.id), 'CLI cannot see the chat it created');
 
   // 2. Browser -> same engine: every route renders without errors.
   browser = await chromium.launch({ headless: true });

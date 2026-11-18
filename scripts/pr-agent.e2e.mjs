@@ -150,14 +150,14 @@ try {
   // 1. Two Agents from the real preset: comments on, comments off.
   await setPrs([pr(1, 'a1a1a1a1'), pr(2, 'f1f1f1f1', { isCrossRepository: true }), pr(3, 'd1d1d1d1', { isDraft: true })]);
   const makeAgent = (name, flags) => {
-    const agent = json(['agents', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', name]);
+    const agent = json(['sentinels', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', name]);
     const created = agent.sentinel ?? agent;
-    const definition = json(['agents', 'set', '--automation', 'create', '--template', 'repository-review', '--name', `Review pull requests (${name})`, '--target', workspace]);
+    const definition = json(['sentinels', 'set', '--automation', 'create', '--template', 'repository-review', '--name', `Review pull requests (${name})`, '--target', workspace]);
     const file = join(base, `${created.id}.json`);
     return writeFile(file, JSON.stringify({ ...definition, ownerSentinelId: created.id, runIn: 'new-mission' })).then(() => {
-      json(['agents', 'set', '--automation', 'edit', definition.id, '--file', file]);
-      json(['agents', 'set', created.id, '--state', 'active', '--acknowledge']);
-      const trigger = json(['agents', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main', ...flags]);
+      json(['sentinels', 'set', '--automation', 'edit', definition.id, '--file', file]);
+      json(['sentinels', 'set', created.id, '--state', 'active', '--acknowledge']);
+      const trigger = json(['sentinels', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main', ...flags]);
       assert.equal(trigger.enabled, false, 'a new trigger starts off');
       return { id: created.id, triggerId: trigger.id };
     });
@@ -170,14 +170,14 @@ try {
   assert.equal((await triggerOf(quiet)).github.includeForks, false, 'forks are off by default');
   lap('agentsCreated');
 
-  const check = agent => json(['agents', 'set', agent.id, '--trigger', 'check', agent.triggerId]);
+  const check = agent => json(['sentinels', 'set', agent.id, '--trigger', 'check', agent.triggerId]);
   const activations = async agent => (await api('GET', `/api/console/sentinels/${agent.id}/activations`)).data.activations;
   const settle = async (predicate, what) => {
     for (const end = Date.now() + 40000; Date.now() < end;) { const value = await predicate(); if (value) return value; await wait(100); }
     assert.fail(`timed out waiting for ${what}\n${errors.slice(-2000)}`);
   };
-  const checkUntilIdle = async agent => { await settle(async () => { const result = run(['agents', 'set', agent.id, '--trigger', 'check', agent.triggerId], { allowFail: true }); return result.status === 0; }, 'trigger check'); };
-  for (const agent of agents) json(['agents', 'set', agent.id, '--trigger', 'enable', agent.triggerId, '--yes']);
+  const checkUntilIdle = async agent => { await settle(async () => { const result = run(['sentinels', 'set', agent.id, '--trigger', 'check', agent.triggerId], { allowFail: true }); return result.status === 0; }, 'trigger check'); };
+  for (const agent of agents) json(['sentinels', 'set', agent.id, '--trigger', 'enable', agent.triggerId, '--yes']);
 
   // 2. The first poll only baselines. Nothing starts, nothing is posted.
   for (const agent of agents) await checkUntilIdle(agent);

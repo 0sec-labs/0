@@ -44,10 +44,10 @@ describe("CLI E2E", () => {
     const result = run(["--help"]);
     expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
-    for (const cmd of ["findings", "threads", "agents", "skills", "memory", "models", "computers", "config"]) {
+    for (const cmd of ["findings", "threads", "sentinels", "skills", "memory", "models", "computers", "config"]) {
       expect(result.stdout).toMatch(new RegExp(`^  ${cmd}\\b`, "m"));
     }
-    for (const hidden of ["lab", "web", "doctor", "plugin", "automation", "api"]) expect(result.stdout).not.toMatch(new RegExp(`^  ${hidden}\\b`, "m"));
+    for (const hidden of ["web", "doctor", "automation", "api"]) expect(result.stdout).not.toMatch(new RegExp(`^  ${hidden}\\b`, "m"));
   });
 
   it("allows piped analysis commands without invoking shell operators", async () => {

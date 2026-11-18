@@ -76,7 +76,7 @@ try {
     assert(/\[y\/N\]/.test(yes.text) && /Installed extension pty-smoke/.test(yes.text) && yes.status === 0, `answering y did not install:\n${yes.text}`);
     assert(installed("pty-smoke"), "answering y did not install the extension");
   } else console.log(`Skipping the terminal prompt case on ${process.platform}.`);
-  const old = run(["plugin", "list"]);
+  const old = run(["skills", "extensions", "list"]);
   assert(/scope/.test(old), old);
   console.log(`Extension smoke passed: review, refusal when a thread runs it, install without a terminal, enable, disable, list, old-data import ran from the built CLI without a PATH interpreter.`);
 } finally {

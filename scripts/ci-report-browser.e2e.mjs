@@ -27,11 +27,11 @@ try {
   await writeFile(reportPath,JSON.stringify(report));
   await writeFile(metadataPath,JSON.stringify({schemaVersion:1,repository:'example/fixture',reviewedRevision:'a'.repeat(40),githubEventRevision:'b'.repeat(40),cliVersion:'0 fixture',cliExitCode:0,runId:'123'}));
   // Exercise the published command registration with actual file IO and SQLite.
-  const imported = spawnSync(process.execPath,[cli,'reports','import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
+  const imported = spawnSync(process.execPath,[cli,'findings','list','--import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
   assert.equal(imported.status,0,imported.stderr);
   const result = JSON.parse(imported.stdout.trim());
   assert.equal(result.alreadyImported,false);
-  const again=spawnSync(process.execPath,[cli,'reports','import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
+  const again=spawnSync(process.execPath,[cli,'findings','list','--import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
   assert.equal(again.status,0,again.stderr);assert.equal(JSON.parse(again.stdout.trim()).alreadyImported,true);
   child = spawn(process.execPath,[cli,'--port','0','--db-path',dbPath,'--engines-config',registry,'--asset-dir',join(root,'packages/web/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',data=>{output=(output+data).slice(-32000);});

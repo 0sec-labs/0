@@ -147,20 +147,20 @@ try {
 
   // 2. One Agent with an enabled pull request trigger, baselined against the current open pull requests.
   await setPrs([pr(1, 'a1a1a1a1')]);
-  const agent = json(['agents', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', 'Webhook reviewer']);
+  const agent = json(['sentinels', 'set', '--create', '--preset', 'pr-security-reviewer', '--name', 'Webhook reviewer']);
   const created = agent.sentinel ?? agent;
-  const definition = json(['agents', 'set', '--automation', 'create', '--template', 'repository-review', '--name', 'Review pull requests (webhook)', '--target', workspace]);
+  const definition = json(['sentinels', 'set', '--automation', 'create', '--template', 'repository-review', '--name', 'Review pull requests (webhook)', '--target', workspace]);
   const file = join(base, 'definition.json');
   await writeFile(file, JSON.stringify({ ...definition, ownerSentinelId: created.id, runIn: 'new-mission' }));
-  json(['agents', 'set', '--automation', 'edit', definition.id, '--file', file]);
-  json(['agents', 'set', created.id, '--state', 'active', '--acknowledge']);
-  const trigger = json(['agents', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main']);
-  json(['agents', 'set', created.id, '--trigger', 'enable', trigger.id, '--yes']);
+  json(['sentinels', 'set', '--automation', 'edit', definition.id, '--file', file]);
+  json(['sentinels', 'set', created.id, '--state', 'active', '--acknowledge']);
+  const trigger = json(['sentinels', 'set', created.id, '--trigger', 'add', '--automation', definition.id, '--kind', 'github-pr', '--repo', REPO, '--base-branch', 'main']);
+  json(['sentinels', 'set', created.id, '--trigger', 'enable', trigger.id, '--yes']);
   const settle = async (predicate, what) => {
     for (const end = Date.now() + 40000; Date.now() < end;) { const value = await predicate(); if (value) return value; await wait(100); }
     assert.fail(`timed out waiting for ${what}\n${errors.slice(-2000)}`);
   };
-  await settle(async () => run(['agents', 'set', created.id, '--trigger', 'check', trigger.id], { allowFail: true }).status === 0, 'baseline check');
+  await settle(async () => run(['sentinels', 'set', created.id, '--trigger', 'check', trigger.id], { allowFail: true }).status === 0, 'baseline check');
   const activations = async () => (await api('GET', `/api/console/sentinels/${created.id}/activations`)).data.activations;
   assert.deepEqual(await activations(), [], 'baseline launches nothing');
   lap('agentReady');
@@ -174,7 +174,7 @@ try {
   assert.equal((await api('POST', '/api/console/github/webhook/secret', {})).status, 409, 'create only once');
   const mode = (await stat(join(home, '.0', 'github-webhook-secret.json')).catch(async () => { const found = (await readdir(home, { recursive: true })).find(name => name.endsWith('github-webhook-secret.json')); return stat(join(home, found)); })).mode & 0o777;
   assert.equal(mode, 0o600, 'secret file is 0600');
-  const statusText = run(['agents', 'webhook', 'status']).stdout;
+  const statusText = run(['sentinels', 'webhook', 'status']).stdout;
   assert.ok(!statusText.includes(secret), 'status never prints the secret');
   lap('secret');
 
@@ -194,7 +194,7 @@ try {
   assert.equal((await deliver(sample, { secret, id: first.id })).status, 202, 'replay is acknowledged');
   assert.equal((await deliver(prEvent(4, 'b2b2b2b2', 'synchronize'), { secret })).status, 202, 'a new delivery id for the same head SHA');
   await wait(1500);
-  json(['agents', 'set', created.id, '--trigger', 'check', trigger.id]);
+  json(['sentinels', 'set', created.id, '--trigger', 'check', trigger.id]);
   await wait(1500);
   assert.equal((await activations()).length, 1, 'one head SHA launches once across replay, a second event and the poller');
   assert.equal(modelRequests.length, modelCalls);
@@ -225,13 +225,13 @@ try {
   lap('rejections');
 
   // 7. Rotation: the old secret works for the grace window, the new one works, and the CLI shows the new one once.
-  const rotated = run(['agents', 'webhook', 'secret', 'rotate', '--yes', '--json']);
+  const rotated = run(['sentinels', 'webhook', 'secret', 'rotate', '--yes', '--json']);
   const next = JSON.parse(rotated.stdout).secret;
   assert.match(next, /^[0-9a-f]{64}$/); assert.notEqual(next, secret);
   assert.equal((await deliver(JSON.stringify({ zen: 'old' }), { secret, event: 'ping' })).status, 202, 'old secret inside the grace window');
   assert.equal((await deliver(JSON.stringify({ zen: 'new' }), { secret: next, event: 'ping' })).status, 202);
   assert.equal((await deliver(JSON.stringify({ zen: 'x' }), { secret: 'dd'.repeat(32), event: 'ping' })).status, 401);
-  assert.ok(!run(['agents', 'webhook', 'status']).stdout.includes(next), 'status never prints the new secret');
+  assert.ok(!run(['sentinels', 'webhook', 'status']).stdout.includes(next), 'status never prints the new secret');
   lap('rotation');
 
   // 8. The audit log has the events and neither secret, signature nor payload text.
