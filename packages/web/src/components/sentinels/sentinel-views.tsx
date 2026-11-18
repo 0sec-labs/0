@@ -12,8 +12,8 @@ import { formatRelativeAge } from "@/lib/relative-time";
 import { toast } from "@/ui/components/toast";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { displayTime } from "@/components/workflow-triggers";
-import { useAgentTurns, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
-import { NEEDS_REVIEW_COPY, budgetMeters, draftFromSchedule, triggerRequestFromDraft, type TriggerDraft, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type AgentTurn, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
+import { useAgentTurns, useSentinelAutomations, useSentinelTriggers, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
+import { NEEDS_REVIEW_COPY, draftFromSchedule, triggerRequestFromDraft, type TriggerDraft, describeTrigger, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type AgentTurn, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { addedSuggestions, sentinelHref, suggestedSchedule, type SentinelPresetAutomation } from "@/sentinels/model";
 import { SentinelFiles } from "./sentinel-files";
 import { SentinelFields } from "./sentinel-fields";
@@ -71,7 +71,6 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </Section>
-    <SentinelBudgetCard sentinel={sentinel} />
     <Section title="Last 7 days">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[["Turns", String(week.length)], ["Failed", String(week.filter(item => item.status === "failed").length)], ["Cost", `$${cost.toFixed(2)}`], ["Last turn", last?.startedAt ? ago(last.startedAt) || "now" : "Never"]].map(([label, value]) => <div key={label} className="rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3"><dt className="text-xs text-muted-foreground-1">{label}</dt><dd className="mt-1 text-lg font-medium tabular-nums">{value}</dd></div>)}
@@ -80,23 +79,6 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
     <Section title="Notes and files"><SentinelFiles sentinelId={sentinel.id} readOnly={readOnly || archived} /></Section>
     <Section title="Activity"><AgentActivity sentinel={sentinel} /></Section>
   </div>;
-}
-
-function SentinelBudgetCard({ sentinel }: { sentinel: Sentinel }) {
-  const report = useSentinelBudget(sentinel.id);
-  const meters = report.data ? budgetMeters(report.data) : [];
-  return <Section title="Budget">
-    <div className="space-y-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-      {report.isLoading ? <LoadingState label="Loading budget" /> : report.error ? <p className="text-sm text-muted-foreground-1">Budget usage isn't available right now.</p> : <>
-        {report.data?.pauseReason && <p role="status" className="text-sm">{report.data.pauseReason.message} Resume it to turn its triggers back on.</p>}
-        {meters.map(meter => <div key={meter.key} className="space-y-1">
-          <div className="flex items-baseline justify-between gap-3 text-sm"><span>{meter.label}</span><span className="text-xs text-muted-foreground-1">{meter.used} of {meter.limit}</span></div>
-          <div role="progressbar" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.percent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={meter.percent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${meter.percent}%` }} /></div>
-        </div>)}
-        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}.</p>
-      </>}
-    </div>
-  </Section>;
 }
 
 function TriggerRow({ sentinel, trigger, readOnly, onEnable }: { sentinel: Sentinel; trigger: SentinelTrigger; readOnly: boolean; onEnable: (trigger: SentinelTrigger) => void }) {
@@ -152,7 +134,7 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
     <Dialog open={reviewing !== null} onOpenChange={next => { if (!next) { setReviewing(null); setError(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
-        <p className="text-sm">Each time it fires, {sentinel.name} wakes up and takes a turn in its thread, within its scope and access. Automatic turns count against its cap of {dailyCaps(sentinel.budget)}.</p>
+        <p className="text-sm">Each time it fires, {sentinel.name} wakes up and takes a turn in its thread, within its scope.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="secondary" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>

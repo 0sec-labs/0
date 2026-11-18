@@ -11,7 +11,7 @@ import { AgentTurnsContext } from "@/console/agent-turns-context";
 import { CostButton } from "@/console/panel/cost-popover";
 import { Button } from "@/components/ui/button";
 import { agentComposerPlaceholder } from "@/lib/agent-create-model";
-import { useAgentTurns, useSentinelBudget, useSentinelClient, useSentinelMutations } from "@/sentinels/api";
+import { useAgentTurns, useSentinelClient, useSentinelMutations } from "@/sentinels/api";
 import type { AgentTurn, Sentinel } from "@/sentinels/model";
 import { SentinelAvatar } from "./sentinel-avatar";
 
@@ -28,7 +28,6 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [workerId, setWorkerId] = useState<string | null>(null);
-  const [warned, setWarned] = usePersistentState<Record<string, string>>(STORAGE_KEYS.agentBudgetWarned, {});
   const archived = sentinel.status === "archived";
   const paused = sentinel.status === "paused";
 
@@ -44,10 +43,6 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
   const snapshot = workspace.snapshot;
   const turns = useAgentTurns(sentinel.id);
   const byNonce = useMemo(() => new Map<string, AgentTurn>((turns.data ?? []).map(turn => [turn.id.slice(0, 8), turn])), [turns.data]);
-  const budget = useSentinelBudget(sentinel.id);
-  const day = new Date().toISOString().slice(0, 10);
-  const overBudget = Boolean(budget.data && budget.data.usage.costUsd >= budget.data.budget.dailyUsd);
-  const showWarning = overBudget && warned[sentinel.id] !== day;
   const active = snapshot ? ["working", "waiting"].includes(snapshot.session.status) : false;
 
   const send = () => {
@@ -57,7 +52,6 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
     if (!text && !attachments.length) return;
     // A turn that woke on its own is never interrupted by a person's message: it waits its turn.
     void workspace.send({ text, attachments: attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: active ? "queue" : "send" });
-    if (overBudget) setWarned(previous => ({ ...previous, [sentinel.id]: day }));
   };
   const stop = () => { if (missionId) void workspace.perform(() => api.controlConsoleSession(missionId, "cancel")); };
   const toggle = () => void setPaused.mutateAsync({ id: sentinel.id, paused: !paused, version: sentinel.version }).catch(() => undefined);
@@ -73,9 +67,8 @@ export function AgentConversation({ sentinel, readOnly, onViewAgent }: { sentine
         <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onViewAgent}>View agent</Button>
       </span>
     </header>
-    {(paused || archived || showWarning) && <div className="shrink-0 border-b-[0.5px] border-border-1 px-4 py-2 text-xs text-muted-foreground">
+    {(paused || archived) && <div className="shrink-0 border-b-[0.5px] border-border-1 px-4 py-2 text-xs text-muted-foreground">
       {archived ? "Archived. It does not wake on its own. Its thread stays here."
-        : showWarning ? <span role="status">{`Today's budget is used, so ${paused ? "it stays off" : "automatic turns are off"} until the day rolls over. Your messages still go through and count toward spend.`} <button type="button" className="underline underline-offset-2" onClick={() => setWarned(previous => ({ ...previous, [sentinel.id]: day }))}>Got it</button></span>
         : "Paused. Schedules and triggers are off. You can still talk to it."}
     </div>}
     {error && !snapshot ? <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground"><p>{error}</p><Button size="sm" variant="secondary" onClick={() => setAttempt(count => count + 1)}>Try again</Button></div>

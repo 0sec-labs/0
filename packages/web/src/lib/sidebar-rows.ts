@@ -28,10 +28,10 @@ export const AGENT_BADGE_LABEL: Record<AgentBadge, string> = { running: "Working
 export interface AgentSubtitle { text: string; tone: "muted" | "accent" }
 
 /** Line 2: what needs the operator, why it paused, else the last thing it said (the job line before it has said anything). */
-export function agentSubtitle(agent: Pick<Sentinel, "status" | "attention" | "mission" | "pauseReason"> & { thread?: Sentinel["thread"] }): AgentSubtitle {
+export function agentSubtitle(agent: Pick<Sentinel, "status" | "attention" | "mission"> & { thread?: Sentinel["thread"] }): AgentSubtitle {
   const status = presentStatus(agent);
   if (status.needsYou || status.needsReview) return { text: agent.attention?.reason?.trim() || status.label, tone: "accent" };
-  if (agent.status === "paused") return { text: agent.pauseReason?.message ?? "Paused. Triggers are off.", tone: "muted" };
+  if (agent.status === "paused") return { text: "Paused. Triggers are off.", tone: "muted" };
   return { text: agent.thread?.lastMessage?.trim() || agent.mission.trim(), tone: "muted" };
 }
 

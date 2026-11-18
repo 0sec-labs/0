@@ -5412,7 +5412,7 @@ Create, inspect and control Agents.
 0 agents
 ```
 
-Subcommands: [list](#agents-list) · [run](#agents-run) · [set](#agents-set) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
+Subcommands: [list](#agents-list) · [run](#agents-run) · [set](#agents-set) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [activations](#agents-activations) · [files](#agents-files) · [triggers](#agents-triggers) · [webhook](#agents-webhook).
 
 #### agents list
 
@@ -5490,8 +5490,6 @@ Change a Agent's settings.
 | --- | --- | --- |
 | `--name <name>` | — | Name |
 | `--mission <text>` | — | One-line purpose |
-| `--daily-usd <usd>` | — | Daily budget in USD |
-| `--max-runs <n>` | — | Maximum runs per day |
 | `--file <path>` | — | Patch JSON object |
 | `--version <n>` | — | Reviewed version (default: the current one) |
 | `--state <state>` | — | active, paused, acknowledged, archived or deleted |
@@ -5622,22 +5620,6 @@ List a Agent's recent runs.
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
-#### agents budget
-
-Show a Agent's budget and the last 24 hours of spend.
-
-```text
-0 agents budget [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Control database (default: the user database) |
 
 #### agents files
 

@@ -87,7 +87,7 @@ const NEW_FORM_HELP: Readonly<Record<string, string>> = {
   "threads send": "`send new <prompt>` starts a thread. With an id: --retry, --resume or --decide <decision-id>.",
   "agents list": "With an id: show that Agent. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
   "agents run": "--history lists past activations. --automation runs a saved automation or template.",
-  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --budget, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|triggers|versions|rollback> ...` manages saved automations.",
+  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|triggers|versions|rollback> ...` manages saved automations.",
   "skills list": "With a name: show that skill. --catalog browses the catalog. Extensions: `0 skills extensions list|info|enable|disable|update|remove`; --info, --enable, --disable and --mcp-remove on a name reach them.",
   "skills add": "<src> may be a catalog id, a repository, a folder of skills or a bundle. An extension is <repo>@<full sha>: you see one prompt first. Also: --mcp <url> adds an MCP server as a local extension, --preview checks a folder, --remove <name> removes a skill.",
   "models list": "Also: --usage shows tokens and cost, --recommended the suggested models.",

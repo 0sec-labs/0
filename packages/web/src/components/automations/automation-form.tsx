@@ -117,7 +117,7 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
           <Input aria-label="Scope" autoFocus={!target} value={target} maxLength={4096} disabled={locked} placeholder="https://staging.example.com" onChange={event => { setTargetTouched(true); setTarget(event.target.value); }} className="h-7 w-72 max-w-[50%] shrink-0 text-[13px]" />
         </SettingsCardRow>}
         {ownerId && <SettingsCardRow>
-          <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s budget and memory")}</p></div>
+          <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s memory")}</p></div>
           <Link to={sentinelHref(ownerId, "overview")} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Agent"}</Link>
         </SettingsCardRow>}
         {ownerId && <SettingsCardRow>

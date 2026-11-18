@@ -25,9 +25,5 @@ export function SentinelFields({ form, onChange, disabled = false }: { form: Sen
       <p className="text-sm font-medium" id="sentinel-production-label">Production targets</p>
       <Switch aria-labelledby="sentinel-production-label" checked={form.production} disabled={disabled} onCheckedChange={value => set("production", value)} />
     </div>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Daily budget (USD)" htmlFor="sentinel-daily"><Input id="sentinel-daily" inputMode="decimal" value={form.dailyUsd} disabled={disabled} onChange={event => set("dailyUsd", event.target.value)} /></Field>
-      <Field label="Runs per day" htmlFor="sentinel-runs"><Input id="sentinel-runs" inputMode="numeric" value={form.maxRunsPerDay} disabled={disabled} onChange={event => set("maxRunsPerDay", event.target.value)} /></Field>
-    </div>
   </div>;
 }

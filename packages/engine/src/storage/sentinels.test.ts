@@ -19,7 +19,7 @@ describe("SentinelStore", () => {
     expect(sentinel).toMatchObject({ status: "paused", homeMissionId: null, version: 1, hostId: null, model: null });
     expect(sentinel).not.toHaveProperty("autonomy");
     expect(sentinel.scope.production).toBe(false);
-    expect(sentinel.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
+    expect(sentinel).not.toHaveProperty("budget");
     expect(sentinel).not.toHaveProperty("crew");
     expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "NOTES.md"]);
     expect(store.getFile(sentinel.id, "AGENTS.md")?.content).toContain("Watch deps.");
@@ -30,8 +30,8 @@ describe("SentinelStore", () => {
     expect(status(() => store.create({ name: "" }))).toBe(400);
     expect(status(() => store.create({ name: "x", triggers: [] }))).toBe(400);
     expect(status(() => store.create({ name: "x", crew: {} }))).toBe(400);
-    expect(status(() => store.create({ name: "x", budget: { perRunUsd: 50, dailyUsd: 10 } }))).toBe(400);
-    expect(status(() => store.create({ name: "x", budget: { dailyUsd: 10, dailyTimeCapMs: 1000 } }))).toBe(400);
+    // The removed daily caps are accepted and ignored, so older clients keep working.
+    expect(store.create({ name: "x", budget: { dailyUsd: 10 } })).not.toHaveProperty("budget");
     expect(status(() => store.create({ name: "x", skills: ["a", "a"] }))).toBe(400);
     store.close();
   });
@@ -127,9 +127,9 @@ describe("SentinelStore", () => {
 
   it("patches only the named fields and keeps everything else", () => {
     const store = new SentinelStore(":memory:");
-    const created = store.create({ name: "A", skills: ["x"], status: "active", budget: { dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
+    const created = store.create({ name: "A", skills: ["x"], status: "active", scope: { targets: ["https://a.example"] } });
     const patched = store.update(created.id, { version: 1, name: "B" });
-    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active", budget: { dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
+    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active", scope: { targets: ["https://a.example"] } });
     expect(status(() => store.update(created.id, { version: 2, bogus: 1 }))).toBe(400);
     store.close();
   });

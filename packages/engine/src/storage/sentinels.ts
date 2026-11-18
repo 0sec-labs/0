@@ -4,8 +4,8 @@ import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 import {
   SENTINEL_FILE_DEFAULTS, SENTINEL_MAX_FILES, SENTINEL_MAX_FILE_BYTES, SENTINEL_MAX_SENTINELS, SentinelFilePathSchema,
-  applySentinelPatch, dropAccessFields, normalizeSentinelBudget, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
-  type AgentTurn, type AgentTurnOrigin, type AgentTurnOriginDetail, type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
+  applySentinelPatch, dropAccessFields, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
+  type AgentTurn, type AgentTurnOrigin, type AgentTurnOriginDetail, type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelStatus,
 } from "../shared/sentinels.js";
 import {
   SentinelTriggerCreateSchema, isSentinelTriggerKind, nextSentinelFire,
@@ -26,8 +26,8 @@ interface SkippedTurnInput { agentId: string; origin: Exclude<AgentTurnOrigin, "
 const parseRow = <T>(value: unknown, key: string): T => JSON.parse(String((value as Record<string, unknown>)[key])) as T;
 /** Files from removed features: stored rows stay untouched but are not listed. */
 const HIDDEN_FILES = new Set(["CREW.md"]);
-/** Stored Sentinels from before the budget trim carry per-run and time caps, and older ones a removed settings block (dropped here); reduce them on read. Rows are never rewritten here. */
-const parseSentinelRow = (value: unknown): Sentinel => { const { crew: _removed, ...sentinel } = parseRow<Sentinel & { crew?: unknown }>(value, "sentinel_json"); return { ...dropAccessFields(sentinel) as unknown as Sentinel, budget: normalizeSentinelBudget(sentinel.budget) }; };
+/** Stored Sentinels may carry removed fields (budget caps, pause reason, an old settings block); they are dropped on read. Rows are never rewritten here. */
+const parseSentinelRow = (value: unknown): Sentinel => { const { crew: _removed, ...sentinel } = parseRow<Sentinel & { crew?: unknown }>(value, "sentinel_json"); return dropAccessFields(sentinel) as unknown as Sentinel; };
 const invalid = (error: unknown): never => { throw new SentinelStoreError(error instanceof Error ? error.message : "Invalid Agent.", 400); };
 
 const turnOriginOf = (kind: SentinelActivation["trigger"]["kind"]): Exclude<AgentTurnOrigin, "legacy" | "promote"> => kind === "github-pr" ? "github" : kind === "manual" ? "user" : "schedule";
@@ -133,19 +133,19 @@ export class SentinelStore {
       let next;
       try { next = applySentinelPatch(current, patch); } catch (error) { return invalid(error); }
       if (current.status === "archived" && next.status !== "archived") throw new SentinelStoreError("Archived Agents cannot be resumed; duplicate it instead.", 409);
-      const sentinel: Sentinel = { ...next, id: current.id, homeMissionId: current.homeMissionId, ...(current.reviewedFingerprint ? { reviewedFingerprint: current.reviewedFingerprint } : {}), ...(current.pauseReason && next.status === "paused" ? { pauseReason: current.pauseReason } : {}), owner: current.owner, version: current.version + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
+      const sentinel: Sentinel = { ...next, id: current.id, homeMissionId: current.homeMissionId, ...(current.reviewedFingerprint ? { reviewedFingerprint: current.reviewedFingerprint } : {}), owner: current.owner, version: current.version + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
       this.#write(sentinel, false);
       return sentinel;
     })();
   }
   /** `reason` is recorded only when pausing; any other status change clears a previous reason. `acknowledge` also accepts the current scope/model as reviewed. */
-  setStatus(id: string, status: SentinelStatus, expectedVersion?: number, reason?: SentinelPauseReason, acknowledge = false): Sentinel {
+  setStatus(id: string, status: SentinelStatus, expectedVersion?: number, acknowledge = false): Sentinel {
     return this.#db.transaction(() => {
       const current = this.#require(id);
       if (expectedVersion !== undefined && current.version !== expectedVersion) throw new SentinelStoreError("Agent changed. Reload before changing its status.", 409);
       if (current.status === "archived" && status !== "archived") throw new SentinelStoreError("Archived Agents cannot be resumed; duplicate it instead.", 409);
-      const { pauseReason: _previous, ...rest } = current;
-      const sentinel: Sentinel = { ...rest, status, ...(status === "paused" && reason ? { pauseReason: reason } : {}), ...(acknowledge ? { reviewedFingerprint: sentinelReviewFingerprint(current) } : {}), version: current.version + 1, updatedAt: new Date().toISOString() };
+      const { pauseReason: _previous, ...rest } = current as Sentinel & { pauseReason?: unknown };
+      const sentinel: Sentinel = { ...rest, status, ...(acknowledge ? { reviewedFingerprint: sentinelReviewFingerprint(current) } : {}), version: current.version + 1, updatedAt: new Date().toISOString() };
       this.#write(sentinel, false);
       return sentinel;
     })();
@@ -239,7 +239,7 @@ export class SentinelStore {
    * as the insert, so two firings cannot both take the last slot.
    */
   reserveTurn(input: { agentId: string; origin: Exclude<AgentTurnOrigin, "legacy" | "promote">; detail: AgentTurnOriginDetail; triggerId?: string; sessionId: string; idempotencyKey?: string; coalesce?: { pr: number }; ownerPid: number; nowIso: string },
-    caps: { sinceIso: string; maxRuns: number; dailyUsd: number }): { duplicate: AgentTurn } | { skipped: AgentTurn } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } | { turn: AgentTurn; ledger: { runs: number; costUsd: number }; superseded: AgentTurn[] } {
+  ): { duplicate: AgentTurn } | { skipped: AgentTurn } | { turn: AgentTurn; superseded: AgentTurn[] } {
     return this.#db.transaction(() => {
       this.#require(input.agentId);
       if (input.idempotencyKey) {
@@ -255,20 +255,16 @@ export class SentinelStore {
       } else if (queued.length) {
         return { skipped: this.#recordSkipped({ agentId: input.agentId, origin: input.origin, detail: input.detail, ...(input.triggerId ? { triggerId: input.triggerId } : {}), sessionId: input.sessionId, reason: "Still working on the previous one", nowIso: input.nowIso }) };
       }
-      const ledger = this.ledger(input.agentId, caps.sinceIso);
-      if (ledger.runs >= caps.maxRuns) return { breach: "runs" as const, ledger };
-      if (ledger.costUsd >= caps.dailyUsd) return { breach: "budget" as const, ledger };
       for (const turn of superseded) this.#db.prepare("UPDATE agent_turns SET status = 'skipped', skipped_reason = ?, error = ?, finished_at = ? WHERE id = ?").run("Superseded by a newer commit", "Superseded by a newer commit", input.nowIso, turn.id);
       const turn = this.#insertTurn({
         id: randomUUID(), agentId: input.agentId, sessionId: input.sessionId, origin: input.origin, detail: input.detail, status: "queued", ownerPid: input.ownerPid, queuedAt: input.nowIso,
         ...(input.triggerId ? { triggerId: input.triggerId } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       })!;
-      return { turn, ledger, superseded: superseded.map(old => ({ ...old, status: "skipped" as const })) };
+      return { turn, superseded: superseded.map(old => ({ ...old, status: "skipped" as const })) };
     })();
   }
   /**
-   * A person's message in the Agent's own thread, recorded as a turn that has already started. It never goes through the caps:
-   * the turn limit is for trigger turns, and a person is never refused. Its cost still counts toward the day's spend.
+   * A person's message in the Agent's own thread, recorded as a turn that has already started. A person is never refused or queued behind a limit.
    */
   recordUserTurn(input: { agentId: string; sessionId: string; userId?: string; nowIso: string; ownerPid: number; note?: string }): AgentTurn {
     return this.#db.transaction(() => {
@@ -335,18 +331,6 @@ export class SentinelStore {
     const when = (turn: AgentTurn) => turn.startedAt ?? turn.queuedAt ?? "";
     return [...rows, ...legacy].sort((a, b) => when(b).localeCompare(when(a))).slice(0, bounded);
   }
-  /**
-   * Checks the rolling-window caps and records the activation in one transaction. Two launches that both see one slot left
-   * cannot both take it: the second sees the first one's row and gets the breach instead.
-   */
-  reserveActivation(input: Omit<SentinelActivation, "id" | "startedAt">, caps: { sinceIso: string; maxRuns: number; dailyUsd: number }, meta: { idempotencyKey?: string; via?: string } = {}): { activation: SentinelActivation; ledger: { runs: number; costUsd: number } } | { breach: "runs" | "budget"; ledger: { runs: number; costUsd: number } } {
-    return this.#db.transaction(() => {
-      const ledger = this.ledger(input.sentinelId, caps.sinceIso);
-      if (ledger.runs >= caps.maxRuns) return { breach: "runs" as const, ledger };
-      if (ledger.costUsd >= caps.dailyUsd) return { breach: "budget" as const, ledger };
-      return { activation: this.createActivation(input, meta), ledger };
-    })();
-  }
   getActivation(id: string): SentinelActivation | null {
     const found = this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE id = ?").all(id)[0];
     return found ? parseRow<SentinelActivation>(found, "activation_json") : null;
@@ -368,20 +352,6 @@ export class SentinelStore {
   }
   listRunningActivations(): SentinelActivation[] {
     return this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE status = 'running' ORDER BY started_at LIMIT 500").all().map(value => parseRow<SentinelActivation>(value, "activation_json"));
-  }
-  /**
-   * Rolling-window ledger (skipped ones excluded): turns started and USD spent since `sinceIso`. Reads activations plus
-   * ledger turns that have no activation behind them, so a dual-written row is never counted twice.
-   */
-  ledger(sentinelId: string, sinceIso: string): { runs: number; costUsd: number } {
-    let runs = 0; let costUsd = 0;
-    for (const value of this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)) {
-      const activation = parseRow<SentinelActivation>(value, "activation_json");
-      runs += 1; costUsd += activation.costUsd ?? 0;
-    }
-    // A person's message costs money but is not an automatic turn: it never counts toward the turn cap.
-    const own = this.#db.prepare("SELECT COALESCE(SUM(CASE WHEN origin = 'user' THEN 0 ELSE 1 END), 0) AS n, COALESCE(SUM(cost_usd), 0) AS cost FROM agent_turns WHERE agent_id = ? AND legacy_activation_id IS NULL AND COALESCE(started_at, queued_at) >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number; cost: number };
-    return { runs: runs + Number(own.n), costUsd: costUsd + Number(own.cost) };
   }
   countActivationsSince(sentinelId: string, sinceIso: string): number {
     return Number((this.#db.prepare("SELECT COUNT(*) AS n FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number }).n);

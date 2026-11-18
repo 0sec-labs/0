@@ -38,7 +38,7 @@ describe("command tree", () => {
     const program = new Command();
     registerCommandTree(program);
     const find = (...path: string[]) => path.reduce<Command | undefined>((parent, name) => parent?.commands.find(c => c.name() === name || c.aliases().includes(name)), program);
-    for (const path of [["automations", "create"], ["automation", "delete"], ["automation", "triggers", "enable"], ["agents", "run"], ["agents", "files", "put"], ["agents", "triggers", "add"], ["agents", "budget"]]) expect(find(...path), path.join(" ")).toBeDefined();
+    for (const path of [["automations", "create"], ["automation", "delete"], ["automation", "triggers", "enable"], ["agents", "run"], ["agents", "files", "put"], ["agents", "triggers", "add"]]) expect(find(...path), path.join(" ")).toBeDefined();
   });
 });
 
@@ -82,12 +82,12 @@ describe("embedded (no running engine)", () => {
     expect(JSON.parse((await run("agents", "list", ...db)).out)).toHaveLength(1);
     expect((await run("agents", "show", prefix, "--db-path", dbPath)).out).toContain("Nightly");
 
-    const set = await run("agents", "set", prefix, "--daily-usd", "3", ...db);
+    const set = await run("agents", "set", prefix, "--mission", "Watch the lockfile", ...db);
     expect(set.code).toBe(0);
-    expect(JSON.parse(set.out).budget.dailyUsd).toBe(3);
+    expect(JSON.parse(set.out).mission).toBe("Watch the lockfile");
     // There is one mode: the retired access flags are accepted, ignored, and never stored or shown.
     for (const flags of [["--access", "read-only"], ["--access", "root"], ["--autonomy", "bogus"], ["--tool-access", "read-only"], ["--yolo"]]) {
-      const result = await run("agents", "set", prefix, "--daily-usd", "3", ...flags, ...db);
+      const result = await run("agents", "set", prefix, "--mission", "Watch the lockfile", ...flags, ...db);
       expect(result.code).toBe(0);
       expect(JSON.parse(result.out)).not.toHaveProperty("autonomy");
       expect(JSON.parse(result.out)).not.toHaveProperty("accessLevel");
@@ -98,8 +98,6 @@ describe("embedded (no running engine)", () => {
     expect((await harness(options => openConsoleClient(options), home).run("agents", "set", prefix, ...db)).code).toBe(2);
 
     expect((await run("agents", "pause", prefix, ...db)).code).toBe(0);
-    const budget = JSON.parse((await run("agents", "budget", prefix, ...db)).out);
-    expect(budget.budget.dailyUsd).toBe(3);
     expect(JSON.parse((await run("agents", "activations", prefix, ...db)).out)).toEqual([]);
 
     const put = await run("agents", "files", "put", prefix, "reports/note.md", "--content", "hello", ...db);

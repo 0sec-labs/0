@@ -22,7 +22,6 @@ const STYLE_ALLOWED: Record<string, string> = {
   "components/console-control/connections-control.tsx": "Drag-and-drop transform and progress bar width are runtime values.",
   "components/appearance/theme-gallery.tsx": "Preview tiles paint the colors of the theme being previewed.",
   "components/sentinels/avatar-picker.tsx": "Colour swatches paint the avatar colour being offered.",
-  "components/sentinels/sentinel-views.tsx": "Meter fill width is a runtime percentage.",
   "components/console-control/extra-settings-pages.tsx": "Meter fill width is a runtime percentage.",
   "console/viz/chart-view.tsx": "Series colors come from the chart palette per datum.",
   "console/viz/graph-view.tsx": "Node and edge colors come from severity per datum.",
