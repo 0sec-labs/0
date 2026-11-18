@@ -90,11 +90,7 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       // The legacy client uses the non-streaming wire; the pi runtime streams SSE.
       // Both are served below from the same scripted content.
       const names = (body.tools ?? []).map((tool) => tool.name);
-      assert.ok(names.includes("done"), "agent completion tool was not advertised");
-      if (!review) {
-        // Discovery advertises HTTP tools; shell-first attack must also run.
-        assert.equal(names.includes("http_request"), counters.modelRequests === 1, "scan did not run discovery then attack");
-      }
+      assert.ok(names.includes("bash"), "the shell tool was not advertised");
       if (rejectAuth) {
         counters.authErrors++;
         sendJson(response, 401, { type: "error", error: { type: "authentication_error", message: "0-cli-smoke deterministic credential rejection" }, request_id: "req_0_cli_smoke_auth" });
@@ -102,8 +98,7 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       }
       let content;
       if (review && counters.modelRequests === 1) {
-        assert.ok(names.includes("read_file"), "review source reader was not advertised");
-        content = files.map((file, index) => ({ type: "tool_use", id: `toolu_smoke_read_${index}`, name: "read_file", input: { path: join(target, file) } }));
+        content = files.map((file, index) => ({ type: "tool_use", id: `toolu_smoke_read_${index}`, name: "bash", input: { command: `cat ${join(target, file)}` } }));
       } else {
         if (review) {
           const receipts = body.messages.flatMap((message) => Array.isArray(message.content) ? message.content : [])
@@ -117,11 +112,11 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
           counters.sourceReceipts = receipts.length;
         }
         counters.doneResponses++;
-        content = [{ type: "tool_use", id: `toolu_smoke_done_${counters.modelRequests}`, name: "done", input: { summary: "Local bootstrap fixture completed; no findings and no target requests." } }];
+        content = [{ type: "text", text: "Local bootstrap fixture completed; no findings and no target requests." }];
       }
       const message = {
         id: `msg_0_cli_smoke_${counters.modelRequests}`, type: "message", role: "assistant", model,
-        content, stop_reason: "tool_use", stop_sequence: null,
+        content, stop_reason: content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn", stop_sequence: null,
         usage: { input_tokens: 32, output_tokens: 16 },
       };
       if (body.stream === true) sendStream(response, message);

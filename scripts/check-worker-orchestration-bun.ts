@@ -57,11 +57,11 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
     if (actor === "CHILD_290_WRITER") {
       if (n === 0) return call("str_replace", { path: file, old_string: "original", new_string: "written" });
       if (n === 1) return call("bash", { command: `while true; do printf x >> '${sentinel}'; sleep 0.05; done`, timeout: 120 });
-      return call("done", { summary: "Actual tool outcome observed" });
+      return done();
     }
     if (actor === "CHILD_290_READONLY") {
       if (n === 0) return call("str_replace", { path: file, old_string: "written", new_string: "FORBIDDEN" });
-      return call("done", { summary: "Actual tool outcome observed" });
+      return done();
     }
     if (actor === "CHILD_290_FAILURE") {
       if (n === 0) return call("str_replace", { path: file, old_string: "written", new_string: "failure-written" });
@@ -92,7 +92,7 @@ try {
   const runtime = createNativeApiRuntime({ type: "api", timeout: 10000, provider: "openai", model: "gpt-worker-fixture", env: {
     OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
   } });
-  session = createHostConsoleSession({ config: { runtime, role: "attack", tools: ["spawn_agent", "str_replace", "bash", "done"].map(name => TOOL_DEFINITIONS[name]), scanId: "offline-orchestration", workspaceRoot: checkout,
+  session = createHostConsoleSession({ config: { runtime, role: "attack", tools: ["spawn_agent", "str_replace", "bash"].map(name => TOOL_DEFINITIONS[name]), scanId: "offline-orchestration", workspaceRoot: checkout,
     agentMessaging: { selfId: "offline-orchestration", selfRole: "parent", projectPath: checkout, homeDir: root, siblingChannelEnabled: false, operatorChannelEnabled: false },
     codebaseLearning: false, refineObjective: false, autonomyMode: "changes", maxToolIterations: 12 },
     dbPath: join(root, "fixture.db"), executionEnvironment: { ZERO_0VERSE_MCP: "0", ZERO_DISABLE_HUNT_MEMORY: "1", ZERO_NO_TELEMETRY: "1" },

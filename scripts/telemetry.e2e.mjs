@@ -79,7 +79,7 @@ const fakeProvider = createHttpServer(async (req, res) => {
   providerRequests.push(req.url);
   const first = !(body.messages ?? []).some(message => Array.isArray(message.content) && message.content.some(block => block.type === 'tool_result'));
   const content = first
-    ? files.map((file, index) => ({ type: 'tool_use', id: `toolu_e2e_read_${index}`, name: 'read_file', input: { path: join(target, file) } }))
+    ? files.map((file, index) => ({ type: 'tool_use', id: `toolu_e2e_read_${index}`, name: 'bash', input: { command: `cat ${join(target, file)}` } }))
     : [{ type: 'text', text: 'Read the fixture files; nothing to report.' }];
   const stopReason = first ? 'tool_use' : 'end_turn';
   const message = { id: `msg_e2e_${providerRequests.length}`, type: 'message', role: 'assistant', model: MODEL, content, stop_reason: stopReason, stop_sequence: null, usage: { input_tokens: 32, output_tokens: 16 } };
