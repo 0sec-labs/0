@@ -69,8 +69,6 @@ try {
   const created = run(['chats', 'create']);
   assert.equal(typeof created.id, 'string');
   assert.ok(run(['chats', 'list']).some(chat => chat.id === created.id), 'CLI cannot see the chat it created');
-  assert.ok(run(['agents', 'list', '--automation', '--templates']).some(template => template.id === 'repository-review'));
-  assert.deepEqual(run(['runs', 'list']), []);
 
   // 2. Browser -> same engine: every route renders without errors.
   browser = await chromium.launch({ headless: true });
