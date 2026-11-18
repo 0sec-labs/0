@@ -62,19 +62,6 @@ env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL=<model-id> \
 
 Agents need a model that supports tool calling.
 
-<span id="multi-model-role-routing"></span>
-## Role models
-
-0 can use different models for different jobs. The roles are `discovery`, `attack`, `verify`, `report`, `audit` and `review`.
-
-In the browser, open **Models → Advanced**:
-
-- **Use one model for everything** sends every role to the main model.
-- **Pick models per task automatically** lets 0 choose among models your connection can reach.
-- Each role has its own model select. **Auto** follows the main model or the automatic choice.
-
-Role models stay on the parent's connection. Child agents use the same provider, endpoint and credentials, and do not inherit a failover chain. Choose models that same account serves. Connecting a second provider does not make roles cross accounts. Role changes apply after the current step finishes. Role routing is not failover and does not add an independent verification stage on its own.
-
 ## Custom and local providers
 
 <span id="custom-ai-providers-including-9router"></span>
@@ -205,7 +192,7 @@ env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
   0 -p "Review https://example.com"
 ```
 
-Pin when you need a predictable bill, especially with Azure deployment names. `ZERO_FORCE_PROVIDER` is a benchmark override; setting it to a different value than `ZERO_SELECTED_PROVIDER` is an error.
+Pin when you need a predictable bill, especially with Azure deployment names.
 
 <span id="model-routing"></span>
 ### Routing by model name
@@ -280,7 +267,7 @@ The control requests access; it does not grant it. Reports keep the requested pr
 Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`, as in the [Azure OpenAI](#azure-openai) example, and leave `ZERO_LLM_FALLBACK` unset.
 
 - Setting a provider's variables alone does not guarantee all traffic goes there. Ambient priority and [failover](#failover) can pick other routes.
-- Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
+- Other lookups still leave: the GitHub API and web search.
 
 ## Manage connections from a shell
 
@@ -302,5 +289,5 @@ Keys saved under **Providers** on the Models page are stored in plaintext at `~/
 ## Limits
 
 - Billing, model access and rate limits belong to your provider account.
-- Shown prices are estimates. Unknown prices are unknown, not zero, so a cost ceiling cannot bound that model. See [Costs and budgets](/configuration/#costs-and-budgets).
+- Shown prices are estimates. Unknown prices are unknown, not zero.
 - A model connection does not authorize a target.

@@ -1,10 +1,6 @@
-# Extension architecture (step 2 of the build plan)
+# Extension architecture
 
-> **Language decision 2026-11-16.** Skills are instructions the model loads (no code). Extensions are what gives 0 a connection or ability: connectors (GitHub, later Slack, Jira, PagerDuty), MCP servers and rules. An extension may come with a skill that explains how to use it; bundling skills into an extension is an optional companion, not the definition. The text below keeps its original wording.
-
-Implements the store, manifest reader, installer, install prompt and importer from
-`one-extension-system.md`. The owner naming decision applies: user-facing text says
-**extension**; code under `packages/engine/src/plugins/extensions/` keeps the folder name.
+Skills are instructions the model loads (no code). Extensions give 0 a connection or ability: connectors, MCP servers and rules. User-facing text says **extension**; code under `packages/engine/src/plugins/extensions/` keeps the folder name.
 
 ## Modules and dependencies
 
@@ -72,7 +68,7 @@ reaches the extension code only through the `@0/engine` barrel.
    declared as env names), imports skills that have scripts or env as installed, unapproved and disabled (plain
    SKILL.md text is enabled with no approved env), and `--force` adds nothing twice (stable import keys).
 8. **One store for built-in enablement.** `state.json` `builtins`; `plugins/builtin.ts` is a view of
-   `core/builtins.ts`, not a second registry (see command-hook-architecture.md).
+   `core/builtins.ts`, not a second registry.
 9. **State changes are locked, audited first, ordered.** `update` holds `.state.lock` (stale after 30 s or a dead
    owner), appends the audit line BEFORE writing state and aborts if the append fails, and `remove` writes state
    before deleting folders.
@@ -104,9 +100,8 @@ depth. Built-in enablement is global, not per project. Sealing resets approvals 
 | --- | --- | --- |
 | `ExtensionSource` / `SourceResolver` | git commit, local folder (built-ins are in the registry array) | installer |
 | `ExtensionStore` | `FsExtensionStore`; tests may use any fake | installer, runtime, importer |
-| `Installer` | `ExtensionInstaller` | CLI now, Extensions page (step 3) |
+| `Installer` | `ExtensionInstaller` | CLI, Extensions page |
 | `Importer` | `LegacyImporter` | CLI, startup |
 
-Built-in extensions are rows in `core/builtins.ts`, the one registry. Step 5
-replaces the `github` placeholder. `state.json` keys: `extensions` (was `plugins`; read once and rewritten), `builtins`,
+Built-in extensions are rows in `core/builtins.ts`, the one registry. `state.json` keys: `extensions` (was `plugins`; read once and rewritten), `builtins`,
 `seals`, `migrations`, `import`.

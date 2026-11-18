@@ -43,10 +43,6 @@ An extension is installed disabled; enabling asks you to approve the exact revis
 
 A repository's `.0/` or `.claude/` folder (settings, `.mcp.json`, skills) never installs or enables an extension or MCP server. On first open the app shows what the repo asks for, with the install prompt for each; ignored means nothing runs. A plain `SKILL.md` is still read as instructions.
 
-## From earlier versions
-
-The first start of this version imports your old data without changing or deleting it: installed GitHub plugins and model-authored plugins appear as disabled entries marked "could not migrate" (the executable `plugin.js` format is gone; re-express them as scripts or MCP servers), custom MCP servers become local extensions that need approval, token-only service connections become connector extensions. See `0 skills extensions import` for the report. The old plugin commands print where each one went.
-
 ## MCP servers
 
 In the browser app, open **Extensions** and press **Add MCP server**. Type the command that starts it or an https URL. It becomes a local extension that goes through the same review as any other: nothing runs until you read the exact command and approve it, and it is saved turned off. Once enabled, it starts only when a thread first uses it, and its tools are pinned. From the command line:
@@ -65,27 +61,16 @@ Secrets are not typed on the command line: an extension declares the variable na
 
 An extension can bundle MCP servers, so installing one is a single, reviewed step. Declare them in `extension.json` under `"0": { "mcp": { ... } }`, or ship a Claude-style `.mcp.json`. The shape is the same as `.mcp.json`: a `command` and `args` for a local server, or a `url` (with `"type": "http"` or `"sse"`) for a remote one, plus the names of environment variables the server needs under `env` and an optional one-line `description`. Values are never stored in the extension. The install prompt lists every server, command, argument, URL and variable name, and changing any of them asks again.
 
-- **Lazy.** Nothing starts when a thread opens. The tool list holds one entry per server (its name and one line), which you can see with `list_tools`. When the model needs a server it calls `load_tool` on that entry; the server starts, its tools are checked, and they become callable on the next turn. Tool schemas never sit in every prompt, so the default tool list stays small and identical from turn to turn.
 - **Commands and network.** Starting a local server is a `process` command and connecting to a URL is a `network` command, so both go through `beforeCommand` with your "Ask before running commands" setting. A deny keeps the server from starting. Local servers run in the extension's folder with only the variable names they declared (plus a small base set); model provider keys are not passed unless declared and approved.
 - **Pinned tools.** The first time a server connects, 0 asks you to approve its tools. It records a sha256 of each tool's name, description, input schema and annotations. On every later connection the hashes are compared. If any tool is changed, new or removed, the whole server is blocked, nothing from it is advertised or callable, and the thread shows one line such as `changed: echo; blocked until you approve them again`. Approve again in the thread when asked, or review it on the Extensions page, which shows Changed, New and Removed. With nobody to ask (no approval channel), it stays blocked.
-- **Readable approval.** The approval prompt is plain text built from checked data: control and bidirectional characters are removed, tool names that are not valid tool names are not shown, and text is clamped. For a tool that changed, it shows the description you approved next to the new one and what changed in its inputs (added, removed or retyped parameters, required set), so you are not approving a hash blind.
-- **Pinned for the whole session.** A server that announces `tools/list_changed` is blocked until its list is reviewed again, with the same prompt. If its process exits, it is marked not ready and starts (and is reviewed) again the next time it is loaded. A call that gets no answer within 60 seconds shuts the server down. Before each call the tool is checked against your approval again.
-- **Its own names.** An extension's server ids start with `x-` (for example `x-github-github`), so a server from an extension can never answer to the name of one you added yourself. If an id is already used by your own server, the extension's server is refused.
 - **Pinned packages.** A server started with `npx`, `bunx`, `pnpm dlx`, `npm exec`, `uvx`, `uv tool run`, `pipx run` or `pip install` downloads code every time it starts, so the arguments must pin an exact version: `pkg@1.2.3`, `pkg==1.2.3` or a full git commit. Otherwise it is refused with a message that says what to change. The install prompt lists what will be fetched and from where.
 - **Remote servers.** HTTPS only (plain `http` only to `localhost`, `127.0.0.1` or `[::1]`). The host name is resolved, and a name that points to a private, loopback, link-local or cloud-metadata address is refused, before connecting and before each request. Redirects are refused. 0 declares no sampling, elicitation or roots capability, so a server cannot ask the model or you for anything.
 - **Secrets.** A server receives a connector's stored token only for a variable name that its extension declared and you approved (the connector's `env`), filled from the connection store, never from the model's environment. The value is masked if the server echoes it back. Commands that change approvals or connections refuse to run from inside a server, or from any thread.
-- **Untrusted results.** A tool's output is labelled as untrusted data and is cut at 32 KB; the response is limited to 256 KB and 64 blocks before any text is read. The label carries a random code that changes on every call, and anything in the output that looks like the label (any case, full-width or look-alike letters, hidden characters) is removed. Descriptions of a tool's parameters are cleaned and clamped the same way. A tool description is the server's own text and is shown to the model as such; it is never part of the system prompt and cannot change approvals or rules.
 
 `0 skills extensions info <name>` lists the extension's servers and, for each tool, the approved hash and the hash last seen.
 
-Servers you added before this version (`~/.0/mcp-servers.json`) are imported once as local extensions that need approval; the old file is kept and no longer read.
-
-### Let a coding agent use 0
-
-A coding agent with shell access can run 0 directly, with absolute paths and `--format json`. Check the exit status and the saved report, not the last line of stdout, and use [Findings](/findings/#verified-and-not-verified) before calling a finding exploitable. `0 --no-open --ready-json` starts the app and prints its URL. 0 uses its own model connection; a coding-agent subscription is not a credential for 0.
 
 ## Connect a service
-
 
 A connection links 0 to a service such as GitHub. Connections belong to extensions: GitHub ships built in, and other services come as connector extensions you install.
 
@@ -97,7 +82,7 @@ A connection links 0 to a service such as GitHub. Connections belong to extensio
    - **Sign in with GitHub** shows a one-time code to enter at github.com/login/device.
    - **Fine-grained token** opens GitHub's token page with the permissions pull requests need, then you paste the token.
 
-GitHub is built in. It cannot be removed, because pull request Sentinels, the pull request trigger and the webhook receiver use it, and it updates with the `0` binary. Turning it off pauses pull request Agents and asks you to confirm.
+GitHub is built in. It cannot be removed, because pull request Sentinels use it, and it updates with the `0` binary. Turning it off pauses pull request Sentinels and asks you to confirm.
 
 GitHub stores the credential in `gh`'s own store. 0 never reads it and no script ever receives it. The card lists what the connection may do: read pull requests, pull request diffs, repository contents and the repository list, and write comments on pull requests.
 
@@ -106,8 +91,6 @@ GitHub stores the credential in `gh`'s own store. 0 never reads it and no script
 Install the connector extension (`0 skills add <source>` or **Add extension**). The install prompt shows the connector's declared read and write list, the hosts it may reach and the variable its token fills. After you approve it, its card appears on **Extensions** with one **Connect** button. Paste the token, 0 checks it against the connector's declared health URL when it has one, and stores it on this computer in `~/.0/extensions/connections.json` (readable only by you).
 
 A script in the extension receives the token only when the extension declared that variable name and you approved the prompt. When the bash tool runs a command that names a file inside an enabled extension's folder, the declared and approved variables (the stored token included) are added to the command's environment, and the value is masked in the output. An extension whose approval does not cover a variable it declares does not run. MCP servers of the extension get the token the same way. Model provider keys and every other secret stay out. **Disconnect** deletes the stored token.
-
-If you used service plugins before, token-only connections (such as Slack or Linear) are imported once as connector extensions that need approval. The old token is not copied: connect again to fill the new slot. Services that need a URL or identifiers as well (such as Jira or Elastic) are listed in the import report and keep working where they are.
 
 ### Connector reference
 

@@ -4,7 +4,7 @@ description: Review, triage, verify and export findings in the browser app or fr
 ---
 
 
-Every thread and Sentinel automation can record findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
+Every thread and Sentinel can record findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
 
 ## In the browser app
 
@@ -39,7 +39,6 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 | `--status` | `discovered`, `verified`, `confirmed`, `scored`, `reported`, `fixed`, `false-positive` |
 | `--triage` | `new`, `accepted`, `suppressed` |
 | `--category` | An attack category |
-| `--scan <id>` | One run |
 | `--limit <n>` | Default 50 |
 
 `show` and `update` act on one database. Point them at a different one with `--db-path`:
@@ -52,7 +51,7 @@ Export findings without opening the browser:
 
 ```bash
 0 findings list 3f2a 91bc --format sarif -o findings.sarif
-0 findings list --scan <id> --format md -o report.md
+0 findings list --format md -o report.md
 ```
 
 Formats are `json`, `md` and `sarif`. Without `-o` the report goes to stdout. The browser app also exports HTML and PDF.
@@ -99,7 +98,7 @@ In the browser app, open a finding under **Findings**. The detail panel offers *
 
 `0 findings list --format json|md|sarif -o <file>` exports saved findings (without `-o`, output goes to stdout). In the browser app, use **Export finding** or **More actions**.
 
-A full report carries evidence, proof-of-concept steps and descriptions that can quote source code or secrets. Check it before you pass it to someone else. SARIF output works with `github/codeql-action/upload-sarif`. To bring a report into the browser app, use `0 findings list --import ./report.json --db-path <db>`. Imported findings are marked **discovered** and **unverified**.
+A full report carries evidence, proof-of-concept steps and descriptions that can quote source code or secrets. Check it before you pass it to someone else. To bring a report into the browser app, use `0 findings list --import ./report.json --db-path <db>`. Imported findings are marked **discovered** and **unverified**.
 
 ## Limits
 

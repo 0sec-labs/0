@@ -8,8 +8,8 @@
 /automations/ /sentinels/#automations 301
 /benchmark /findings/ 301
 /benchmark/ /findings/ 301
-/budgets /configuration/#costs-and-budgets 301
-/budgets/ /configuration/#costs-and-budgets 301
+/budgets /configuration/#cost-estimates 301
+/budgets/ /configuration/#cost-estimates 301
 /ci/github-action / 301
 /ci/github-action/ / 301
 /cli-changes-0-35 /changelog/ 301
@@ -76,8 +76,8 @@
 /research/typescript-rust-boundary/ /findings/ 301
 /research/xbow-analysis /findings/ 301
 /research/xbow-analysis/ /findings/ 301
-/research/shell-first https://github.com/0sec-labs/0security/blob/main/docs/design/shell-first.md 301
-/research/shell-first/ https://github.com/0sec-labs/0security/blob/main/docs/design/shell-first.md 301
+/research/shell-first / 301
+/research/shell-first/ / 301
 /getting-started / 301
 /getting-started/ / 301
 /quickstart / 301
@@ -106,8 +106,8 @@
 /engine-connections/ /computers/ 301
 /team-workspaces /server-mode/#teams 301
 /team-workspaces/ /server-mode/#teams 301
-/budget-management /configuration/#costs-and-budgets 301
-/budget-management/ /configuration/#costs-and-budgets 301
+/budget-management /configuration/#cost-estimates 301
+/budget-management/ /configuration/#cost-estimates 301
 /improvement-plane / 301
 /improvement-plane/ / 301
 /learning /threads/#memory 301

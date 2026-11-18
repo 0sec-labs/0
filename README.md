@@ -92,11 +92,10 @@ Only point 0 at systems you own or are authorized to test.
 ## Why 0?
 
 - **Open source**: MIT or Apache-2.0, built in the open
-- **Private**: runs on your computer, in your CI or in a container, and only the context you send to your chosen model leaves it
-- **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent
+- **Private**: runs on your computer or in a container, and only the context you send to your chosen model leaves it
+- **Flexible**: any provider key or local OpenAI-compatible server, from the CLI or a coding agent
 - **Evidence first**: every finding links to its source evidence
 - **Verified**: a finding says whether it was verified, and by what
-- **Proven in public**: [disclosed vulnerabilities and upstream fixes](https://0.security/research/#disclosures), including in the Linux kernel
 
 ## Coding agents
 
@@ -110,7 +109,7 @@ See the [command reference](https://docs.0.security/commands/).
 
 - [Documentation](https://docs.0.security/)
 - [Models and providers](https://docs.0.security/models/)
-- [Extensions and MCP](https://docs.0.security/extensions/)
+- [Extensions](https://docs.0.security/extensions/)
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
 - [Enterprise](https://0.security/enterprise/)
@@ -132,4 +131,4 @@ Start with the [contributing guide](.github/CONTRIBUTING.md). Run `pnpm install`
 
 ## License
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE). [Public disclosures and upstream fixes](https://0.security/research/#disclosures).
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE).

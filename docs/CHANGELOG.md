@@ -12,69 +12,17 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
-### Added
+### Removed
 
-- `0 computers remove <id>` takes a remote computer out of the list from the terminal, as the Computers page already could. Files on the computer stay.
+- The scan pipelines and `0 scan`, the kernel, identity, research, disclosure, improvement, review, verification and triage engines, `lab`, workflow graphs and steps, learning, todos and plans, scope, budgets, the MCP server mode, the benchmarks and the GitHub Action. The old code is kept on the `archive/security-engine` branch.
+- The legacy command names. `--runtime`, `--depth`, `--module`, `--task-model`, `--single-model` and the `ZERO_*` variables of the removed engines no longer do anything.
+- The daily spending and turn caps of Sentinels.
 
 ### Changed
 
-- Agents are now called Sentinels; `0 agents` is now `0 sentinels`, and `/agents` is now `/sentinels`.
-- The legacy command names, the hidden `lab` group and `lab mcp-server` are removed. `0 -p`, `0 -c` and `0 --resume` stay.
-- One word for what an agent remembers: Memory. The agent settings say "Use memory" (the unused "Learn from its work" switch is gone), the agent files page is "Memory and files", the delete dialog and the docs say instructions and memory instead of charter and notes, and the agent's first file is described as its instructions.
-- Agents no longer have a daily spending or turn cap. Nothing stops or pauses an agent because of what it costs; its thread shows the cost so far, like any thread. `0 agents budget` and `--daily-usd` / `--max-runs` are gone, and the Budget card and the over-budget notice are removed from the agent page. Older agents that carry a cap load normally and the cap is ignored.
-- An agent's page is now its real thread. It opens the same conversation every thread has, so what you type goes into the agent's thread and the page no longer jumps to a new thread. When a schedule or a pull request wakes the agent, the transcript shows a quiet line such as "Schedule, Woke on schedule, worked for 54s" that you can open to see what arrived and how it ended, with a red x if it failed. Pause and Resume sit in the header; a paused agent still answers you. In the sidebar an agent shows its last message and a mark only when it is working, waiting on you or failed. View agent opens a dialog with Overview (status, budget, notes and files, activity), Automations, where each schedule shows its real fields (how often, time, day, timezone), and Settings. The Run now dialog is gone.
-- An agent is now one thread that keeps going. Schedules and pull request triggers send their work into the agent's own thread instead of starting a new thread each time, and a message you send to the agent goes into the same thread (Run now is a message). Your messages are recorded as the agent's turns, count toward its spend, and are never refused by the daily turn limit or by pause: pausing an agent turns its triggers off but you can still talk to it. Set ZERO_AGENTS_PERSISTENT_THREAD=0 to go back to a new thread per firing.
-- The default accent is neutral again; blue is an option in Appearance.
-- Creating an agent is one small dialog: pick a starting point (Blank or one of the ten presets), the avatar (a glyph and one of 11 colours), a name, the Folder it works on, the Computer and the Model, then Create agent. The agent is created active and you land in its own thread, with its first message and the composer ready; a preset's suggested schedules stay off until you turn them on in Automations. Agent pages now open the thread; View agent shows Overview (status, budget, threads, files), Automations and Settings. The sidebar +, the Agents page, the command palette and a new Create an agent chip on the home screen all open the same dialog.
-- Agents use one robot-head glyph in the same line style as the other sidebar icons (the Agents toggle, the Agents entry in the rail, the New agent button, the empty state and the command palette) instead of a generic bot, a shield or the automations clock; new agents default to it.
-- The "Set up your coding agent" chip shows the Claude, OpenAI, Cursor and OpenCode marks again, small and muted, after the label.
-- The backdrops use less CPU while idle (Contours about 6% to 2.5% of a core, Dither flow, Ink and School about a third less in headless Chromium): Contours redraws at 5 frames a second on a coarser grid, Dither flow, School, Ink and Glyph run at 8 to 15 frames a second with the same look, noise is computed in batches with no per-frame allocation, and any backdrop halves its frame rate by itself when frames keep running slow or the battery is at 20% or less and unplugged.
-- Findings state tabs (All, Needs review, Fix ready, Closed) show counts with an accent badge on Needs review, the command palette uses 40px rows in a 720 by 520 panel, and the Shortcuts list now includes the J, K and X keys on Findings and says keys can't be changed yet.
-- The thread view reads like Capy: replies are 13px text in a 660px column, the composer is 712px wide, time stamps appear only after a 30 minute gap, "Worked" rows show a red x when a call failed, and a thread waiting on you says "Needs you" in the accent colour.
-- The default look follows Capy's visual system: 3/6/8/12px radii, 0.8px control borders, 14px icons, 100ms colour-only control feedback with no press dim, and one-icon suggestion chips. Tokens are listed in docs/design/tokens.md.
-- Pages open faster. Hovering or focusing a link or a finding row for 50 ms now loads its page code and first data, loading skeletons stay on screen for at least half a second once they appear (nothing shows for the first 250 ms), renaming a thread shows the new title at once and restores the old one if saving fails, and the app ships only the Latin font files (171 KB instead of 289 KB) with the main one preloaded.
-- The Agents | Threads switch is a small icon toggle on the list header, in line with search, new and options, and old or automated threads sit in collapsed Settled and Automations shelves at the end of the Threads list.
-- Built-in skills now show the 0security mark in Settings > Skills and the command palette, instead of a different icon per category. Skills from extensions keep the puzzle icon, your own skills their initials, and GitHub skills their publisher.
-- The original Dither background is back and is the default again: dots only in the top part of the screen, fading out downward, drawn on a small canvas that covers just that band and runs at 6 frames per second, pausing when the tab is hidden or off screen. The full-screen scene is now Dither flow in the Background list. A saved Dither choice shows the original Dither; pick Dither flow to keep the full-screen one.
-- The Computers page add flow drops the words Deploy, SSH host and target repository, says what the first add takes, shows a Reconnect button on a disconnected computer, and names the computer in its Stop menu item.
-
-
-### Removed
-
-- Scope: removed; Threads and Sentinels run in their folder and sandbox.
-- 0 is now a product for threads, Agents, Computers, Memory, Skills, Extensions and Findings, and a lot of the older security engine is gone. The scan pipelines and the `0 scan` command (including `scan fix`, `scan verify` and `scan disclose`), the kernel, identity, research, disclosure, improvement, review, verification and triage engines, the `0 lab research`, `0 lab improve` and `0 lab runs` commands, workflow graphs and steps, learning, and the benchmarks are removed. The old code is kept on the `archive/security-engine` branch.
-- The model now has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. The web probing, browser, proxy, cloud, callback, binary and scanner tools and the file read, list, search and patch tools are gone; use the shell or an extension.
-- `0 agents run --automation`, `--template` and the other workflow options are gone. An Agent's automation is now a saved prompt plus a trigger, and `0 agents run <id> --task <text>` sends a message into the Agent's thread. The GitHub Action no longer matches the CLI, since it ran `0 scan`.
-- The CLI now has eight visible commands: `findings`, `threads`, `agents`, `skills`, `memory`, `models`, `computers` and `config`. The `--runtime`, `--depth`, `--cost-ceiling` (on `scan`), `--module`, `--task-model` and `--single-model` flags went with `scan`. `ZERO_EMIT_RESULT_LINE`, `ZERO_KERNEL_VERIFY`, `ZERO_STATIC` and the other variables of the removed engines no longer do anything.
-- The Verified by and Not verified check on a fix stays, and `0 findings` still lists, shows, updates and exports findings.
-- The preview strip on the Appearance page is gone. Changes apply to the console right away, and the Background tiles still show a real frame.
-- The long data-collection paragraph is gone from Settings. The two switches stay, and `ZERO_NO_TELEMETRY=1` still turns both off.
-
-### Fixed
-
-- A message you send now appears in the thread the moment you send it, not only once the model starts thinking. This holds for follow-ups, for messages sent while a reply is running (shown as queued) and for messages with images. If the send fails, the message goes back to the composer.
-- An agent's schedule that fires while its own thread is busy now waits its turn instead of failing with "already processing a turn", and a scheduled message that cannot start no longer holds up the ones behind it.
-- Deleting an agent now also removes its activity history, as the delete dialog says.
-- An agent's own thread is no longer hidden by the automatic archive of idle threads.
-- A scheduled turn that waited behind another is charged only for its own cost, so the daily budget no longer counts the earlier turn twice.
-- Two agent starts at the same moment can no longer both take the last slot of the daily limit.
-
-- A thread's first reply no longer disappears behind the collapsed "Worked" divider when the model thought before answering and the history was reopened. The day stamp and the "Worked" label now line up, and the context meter shows a token count instead of an empty ring that looked like a stuck spinner when the model's context size is unknown.
-
-- `0 scan` now says what is wrong with a target instead of "unknown command" or a clean result: a folder that does not exist (`No such folder`), an unsupported package source such as `pip:` (with the `pypi:` form to use), an unknown kind of target, a web address that refuses the connection or cannot be found (no scan is started), and a package that is not on npm, PyPI or crates.io.
-- `0 scan verify` skips a PoC that only has notes, with a message that says so, instead of failing the replay runner with exit 3.
-- `0 scan fix` now prints where the patch was written and the estimated model cost, accepts `--cost-ceiling` and says when it stopped at it, and `--finding-id` takes the `fp:` fingerprint that `0 findings` prints. A scan that stops at its cost ceiling now says how much was spent and to raise `--cost-ceiling`.
-- The web Findings page now lists every finding: results of `0 scan` runs (one database per run) appear next to findings from threads and Agents, de-duplicated by fingerprint. Moving a finding on the board, accepting or dismissing it, notes, impact assessments and exports are saved in the database that holds it, and a finding's detail says where it came from (a scan and its date, an Agent, a thread). `0 findings` uses the same merged view. Older runs beyond 300 databases or 2 GB are skipped, newest kept.
-- Model calls now recover after a broken connection for real. The earlier fix never took effect on Node 24 and later, or in the compiled binary, so after a TLS `bad_record_mac` every call failed until you restarted the console. Each recovery now uses a new connection pool with no TLS session reuse, and `/healthz` shows the last failure code and whether a session was reused.
-- The thread list now says "Can’t reach this computer" instead of "No threads yet" while the engine is unreachable, so a restart no longer looks like lost threads.
-- `0 computers add` now says what to do when the repository has not been bundled yet (`pnpm run build:bundle`), and finds the files to copy from `ZERO_WORKER_ASSETS` or next to the program when it runs as an installed binary. Before, it stopped with an unexplained "run pnpm build".
-- Adding a computer now explains the common SSH problems in plain words: an unknown computer identity (with `--trust-new-host` and a matching checkbox on the Computers page to trust it the first time), a refused sign-in, a refused connection and an unreachable name. The Computers page shows that message instead of "Worker deployment failed", and `0 computers add` prints what it is doing while it works.
-- A thread started on another computer without a ChatGPT sign-in on this one, or on a computer without a model key, now says what is missing instead of `RuntimeConfig.provider=... has no configured credentials`.
-- Setting up a suggested automation on an Agent now adds the suggested schedule (hourly, daily or weekly) switched off for you to review, and two suggestions that use one template are no longer both marked Added after the first.
-- `0 findings show`, `accept`, `suppress`, `update` and `export` now find findings from `0 scan` runs. They looked only in the shared database, so an ID printed by `0 findings` was reported as not found and `0 findings list --format sarif` exported nothing.
-- When the computer behind the console stops answering without closing the connection, the page now shows Reconnecting after about a minute and recovers when it answers again. Before, it looked frozen with no notice.
-- A thread now keeps your prompt the moment a turn starts. Before, stopping or crashing the console during a turn lost the prompt and left an empty thread.
-- Restarting the console while a thread is open no longer sends the tab to Home with "That thread isn't available here." The tab stays on the thread, which shows your prompt and a Retry button.
+- The model has eight tools: a shell, file edit, findings, skills, memory, web search and sub-agents. The other tools are gone; use the shell or an extension.
+- Agents are now Sentinels (`0 sentinels`, `/sentinels`). A Sentinel is one thread that keeps going: schedules and pull request triggers send their work into it. A Sentinel's automation is a saved prompt plus a trigger.
+- The CLI has eight visible commands: `findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers` and `config`. `0 computers remove <id>` is new.
 
 ## [0.38.0] - 2026-11-16
 

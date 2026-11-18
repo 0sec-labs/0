@@ -33,12 +33,6 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
 | `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
 
-### Commands, skills and workflows
-
-The eight commands are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors them (`/threads list` is `0 threads list`). Skills are instructions a thread loads (see [Skills](/skills/)). A Sentinel is a standing thread with prompt-based automations and triggers (see [Sentinels](/sentinels/#automations)). See [Threads](/threads/#commands-skills-and-automations).
-
-`0 api` is a hidden developer command.
-
 ## Invocation and safety
 
 Run commands as `0 <command>`. Check your release with `0 --version` and
@@ -59,8 +53,6 @@ a handler may resolve configuration or require an explicit value. Inverse
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Provider authentication, target authentication, filesystem access, and execution isolation have independent controls.
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
-- Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
-- Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
 
 ## Replacements for moved commands
 
@@ -139,13 +131,11 @@ Check this machine and the engine. `config doctor upgrade`, `config doctor workb
 
 ### web
 
-Open the local browser workspace for threads, scans and findings.
+Open the local browser workspace for threads and findings.
 
 ```text
 0 web [options]
 ```
-
-Guide: [Read the workflow](/threads/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -178,8 +168,6 @@ Call an admitted HTTP API on a running engine without sending a model prompt.
 ```text
 0 api [options] [path]
 ```
-
-Guide: [Control a running web backend](/computers/).
 
 Select either `--engine <id>` from an operator-managed registry, or both
 `--engine-url <url>` and `--engine-token-env <name>` for direct attachment.
@@ -277,8 +265,6 @@ Check local runtime prerequisites and suggest the next command
 0 doctor [options]
 ```
 
-Guide: [Read the workflow](/#troubleshooting).
-
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--discard-reports` | — | Delete crash reports waiting for review on this computer |
@@ -292,8 +278,6 @@ Inspect, export, and import the two-level console configuration
 ```text
 0 config
 ```
-
-Guide: [Read the workflow](/configuration/).
 
 Subcommands: [get](#config-get) · [set](#config-set) · [doctor](#config-doctor) · [show](#config-show) · [list](#config-list) · [reset](#config-reset) · [export](#config-export) · [import](#config-import) · [audit-log](#config-audit-log) · [team](#config-team) · [db](#config-db) · [github](#config-github).
 
@@ -657,8 +641,6 @@ the browser; Docker is not required to run the workbench.
 0 doctor workbench
 ```
 
-Guide: [Execution profile and grants](/configuration/#execution-profile).
-
 Subcommands: [run-agent](#doctor-workbench-run-agent) · [console-agent](#doctor-workbench-console-agent) · [setup](#doctor-workbench-setup) · [status](#doctor-workbench-status) · [providers](#doctor-workbench-providers) · [configure](#doctor-workbench-configure) · [disable](#doctor-workbench-disable).
 
 #### doctor workbench run-agent
@@ -767,8 +749,6 @@ Fetch and install the latest release binary for 0 (re-runs install.sh).
 0 doctor upgrade [options]
 ```
 
-Guide: [Update checks](/configuration/#update-checks).
-
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
@@ -785,8 +765,6 @@ Browse and manage persisted findings
 ```
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
-
-Guide: [Read the workflow](/findings/).
 
 Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
 
@@ -999,8 +977,6 @@ Triage findings and manage learned FP memories
 0 findings triage
 ```
 
-Guide: [Findings](/findings/).
-
 Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
 
 #### findings triage memory
@@ -1087,8 +1063,6 @@ Manage the local findings database.
 ```text
 0 config db
 ```
-
-Guide: [Read the workflow](/#troubleshooting).
 
 Subcommands: [repair](#config-db-repair) · [reset](#config-db-reset).
 
@@ -1265,8 +1239,6 @@ Every command works with the app running or on its own, and takes `--json`. Addi
 0 skills catalog --search handoff
 0 skills add mattpocock~skills~handoff --yes
 ```
-
-Guide: [Read the workflow](/skills/).
 
 Subcommands: [list](#skills-list) · [add](#skills-add) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [extensions](#skills-extensions) · [remove](#skills-remove).
 
@@ -1685,8 +1657,6 @@ Memory is what 0 remembers across threads: short plain notes per folder or every
 0 memory export --to AGENTS.md
 ```
 
-Guide: Read the workflow.
-
 Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [proposed](#memory-proposed) · [export](#memory-export) · [import](#memory-import).
 
 #### memory list
@@ -1875,13 +1845,11 @@ Add the notes from an export file
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Engine database to import older memories from |
 
-## Workflow execution
-
-These are the older automation commands. Current work goes through [Sentinels](/sentinels/#automations).
+## Automations
 
 ### automation
 
-Discover reusable definitions and execute them through the shared workflow runtime.
+Saved automations.
 
 ```text
 0 automation
@@ -1892,7 +1860,7 @@ Subcommands: [list](#automation-list) · [show](#automation-show) · [create](#a
 
 #### automation list
 
-List saved workflows and templates without starting an assessment.
+List saved automations and templates.
 
 ```text
 0 automation list [options]
@@ -1910,7 +1878,7 @@ List saved workflows and templates without starting an assessment.
 
 #### automation show
 
-Inspect one saved workflow or select a template with `--template`.
+Inspect one saved automation or select a template with `--template`.
 
 ```text
 0 automation show [options] [id]
@@ -2304,14 +2272,6 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
-
-## Reference sources
-
-Registration entry point: `packages/cli/src/index.ts`. Command implementations
-are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
-handler behavior and prerequisites beyond the registered flags.
-
-## Team workspace setup
 
 #### threads start
 
@@ -3080,12 +3040,6 @@ Create the secret, or replace it; the old one keeps working for 5 minutes. Print
 | `--yes` | — | Confirm; update the secret on GitHub afterwards |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
-
-## Reference sources
-
-Registration entry point: `packages/cli/src/index.ts`. Command implementations
-are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
-handler behavior and prerequisites beyond the registered flags.
 
 ## Team workspace setup
 

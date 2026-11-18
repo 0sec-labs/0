@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Settings, environment variables, costs, telemetry, updates and the security model.
+description: Settings, environment variables, telemetry, updates and the security model.
 ---
 
 Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models](/models/).
@@ -113,11 +113,11 @@ Two conversation settings are worth knowing. `titleInstructions` (up to 500 char
 
 ### Ask before running commands
 
-`approvals` is `auto` (default: threads and Sentinels run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under **Settings → Helpers**, and `--approvals ask|auto` on `0 -p` overrides it for one run. It is the only place asking first is decided: threads and Sentinels have one mode (shell access) and follow this setting. Older stored access values load as that mode. Reset all leaves it alone. Asking and scope share one decision point: a scope denial is final and is never turned into a prompt. Scope is on whenever a scope is set.
+`approvals` is `auto` (default: threads and Sentinels run commands without asking) or `ask` (each command or change is put to you first). It is **Ask before running commands** under **Settings → Helpers**, and `--approvals ask|auto` on `0 -p` overrides it for one run. It is the only place asking first is decided: threads and Sentinels have one mode (shell access) and follow this setting. Reset all leaves it alone.
 
 ### Development source updates
 
-Enable **Development source updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed computer code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See Self-improvement.
+Enable **Development source updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed computer code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`.
 
 ## Environment variables
 
@@ -154,19 +154,13 @@ Auth errors (401, 403) are never retried. The run fails with the provider error 
 | `ZERO_SUBAGENT_CONCURRENCY` | `32` | Helpers running at once per batch. |
 | `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth. |
 
-Values are positive integers. Restart the computer after changing them. Provider rate limits and the shared budget still apply.
+Values are positive integers. Restart the computer after changing them. Provider rate limits still apply.
 
 These limits also exist as settings: `subagentConcurrency` (1-128, default 32), `subagentMaxDepth` (1-16, default 8) and `subagentFanOut` (1-4096, default 1024). The `ZERO_SUBAGENT_*` variables win over them, and a project can only lower them.
 
 ### Feature gates
 
-Opt-in verification features read `ZERO_FEATURE_*` variables:
-
-```bash
-env ZERO_FEATURE_CONSENSUS_VERIFY=1 ZERO_FEATURE_REACHABILITY_GATE=1 ZERO_FEATURE_POV_GATE=1 0
-```
-
-Other gates: `ZERO_FEATURE_MULTIMODAL` and `ZERO_FEATURE_WEB_SEARCH`. Enabling a gate does not supply its credentials or tools. Check the execution records before you accept a finding that a gate produced.
+`ZERO_FEATURE_MULTIMODAL` and `ZERO_FEATURE_WEB_SEARCH` turn those features on or off. Enabling a gate does not supply its credentials or tools.
 
 ### Dashboard
 
@@ -183,10 +177,7 @@ The old name still works. 0 copies it to the new name and prints one notice on s
 | Deprecated | Use |
 | --- | --- |
 | `ZERO_CHATGPT_AUTH_FILE` | `ZERO_CODEX_AUTH_JSON_PATH` |
-| `ZERO_WPSCAN_API_TOKEN` | `WPSCAN_API_TOKEN` |
 | `ZERO_SKIP_PROVIDER_BANNER` | `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` |
-
-0 reads `~/.0/backends.json` only when `engines.json` does not exist.
 
 ## Telemetry
 
@@ -310,29 +301,17 @@ The installer is the same `install.sh` used for a fresh install. Repeated attemp
 
 The card never offers a button that cannot work. Docker images are replaced, never changed in place (`docker pull ghcr.io/0sec-labs/0security:latest`, then recreate the container); a source checkout updates with `git pull` and a rebuild; an npm install must move to the standalone binary; a binary in a read-only folder or on Windows shows `0 config doctor upgrade`.
 
-Copies older than this feature cannot be updated from the console, and nothing can reach them remotely. Update them once with `0 config doctor upgrade` or the install one-liner on the [Quickstart](/#update); every later update then works from the card.
-
 `ZERO_UPDATE_ORIGIN` points the check and the installer at a mirror or a test server that serves `/latest`, `/install.sh` and `/releases/download/<tag>/<asset>`. It is not set normally.
 
-The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day. Copies older than 0.29 only check when `ZERO_UPDATE_CHECK=1` is set; update those with the installer, or with the upgrade command that older versions have.
+The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day.
 
 ## Execution boundary
 
 The default shell executor runs on your host. It is not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
 
-## Costs and budgets
+## Cost estimates
 
-0 shows estimated model cost on each thread. A Sentinel has no spending cap. For a single thread, `0 threads send new --cost-ceiling <usd>` stops it once its estimated spend reaches that amount. Provider and infrastructure costs are yours. Set a spending limit with your provider as a separate control.
-
-### Turn limits
-
-A turn is one model round trip. It can hold several tool calls. Browser app threads have no limit per message; `0 -p --max-tool-calls <n>` sets one. A larger limit raises the ceiling on work, not the floor.
-
-`ZERO_MAX_TURNS` limits every shared-runner session. `ZERO_MAX_TURNS_REVIEW` and `ZERO_MAX_TURNS_VERIFY` beat the global value for review and verification sessions. Invalid, zero or negative values are ignored.
-
-Near the end of a session the agent gets two one-time warnings, at 85% of the limit and three turns before it. `ZERO_FEATURE_BUDGET_WARNINGS=0` turns the warnings off. It does not remove the limit.
-
-### Cost estimates
+0 shows estimated model cost on each thread. Provider and infrastructure costs are yours; set a spending limit with your provider.
 
 The estimator prices input, output, cached-input and cache-write tokens from a bundled rate table. An unknown model price is unknown, not zero.
 

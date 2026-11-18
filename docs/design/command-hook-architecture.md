@@ -1,7 +1,5 @@
 # Command hook architecture (`beforeCommand`)
 
-Status: implemented (step 1 of `one-extension-system.md`).
-
 ## Modules
 
 ```

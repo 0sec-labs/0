@@ -89,8 +89,6 @@ Create `engines.json` in `~/.0/`, or pass another file with `--engines-config`:
 
 The file holds the name of the environment variable, never the token. The limit is 32 computers and 64 KiB. Add `expectedEngineId` to pin the computer identity across restarts. Without it, the first identity accepted is pinned for the life of the connection service, and a different identity is rejected.
 
-Older versions used `backends.json`, `--backend` and `--backends-config`. 0 reads `engines.json` first, falls back to an existing `backends.json` only if `engines.json` is missing, and writes only `engines.json`.
-
 Start the browser app with the registry and pick the computer in the selector:
 
 ```bash

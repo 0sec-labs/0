@@ -1,9 +1,6 @@
 # Architecture
 
-One page on how the repo is layered and how to keep it that way. The user-facing
-vocabulary lives in the docs site ([Concepts](../src/content/docs/concepts.md),
-published at `/concepts/`); the public overview is
-[architecture.md](../src/content/docs/architecture.md).
+One page on how the repo is layered and how to keep it that way.
 
 ## Packages
 
@@ -20,7 +17,7 @@ published at `/concepts/`); the public overview is
         |
         v
    packages/engine (@0/engine)  <------- cli and web depend on this too
-   scanner, agents, storage, shared types, templates
+   agents, storage, shared types, templates
 ```
 
 Allowed edges: `cli -> engine`, `cli -> bench` (the `bench` command only),
@@ -54,21 +51,15 @@ tested in `scripts/check-architecture.test.mjs`.
 ## Command tree
 
 `packages/cli/src/commands/tree.ts` is the only place that decides where a
-command lives (top level or nested under a noun group such as `scan`,
-`findings`, `runs`, `research`, `improve`, `plugin`). Command modules export a
+command lives (top level or nested under a noun group such as `findings`
+or `sentinels`). Command modules export a
 `registerXCommand(parent, name?)` function and never know their own path.
 `packages/cli/src/index.ts` and `scripts/sync-cli-docs.mjs` both call
 `registerCommandTree`, so the CLI and its generated reference cannot drift.
 
-## Vocabulary
-
-Scan, finding, automation, run, chat, plugin and engine are defined in
-[Concepts](../src/content/docs/concepts.md). Use those terms in code, CLI help
-and docs.
-
 ## Tools
 
-The default model-visible tool list is a small core with skill-provided packs; see
+The model-visible tool list is eight tools; see
 [Tool philosophy](tool-philosophy.md) and [Core toolset](core-toolset.md).
 
 ## Where tests live
@@ -93,17 +84,3 @@ The default model-visible tool list is a small core with skill-provided packs; s
    keep the command a thin adapter.
 4. Add a test under `src/commands/__tests__/`, then run `pnpm docs:sync` so the
    CLI reference is regenerated, and `pnpm docs:check`.
-
-## Adding a plugin kind
-
-Plugins are validated by the engine and managed by the CLI.
-
-1. Define the kind in the engine: executable kinds (`tool`, `skill`, `agent`)
-   are declared in `packages/engine/src/plugins/executable.ts`; the manifest
-   shape is `packages/engine/src/plugins/plugin-manifest.schema.json`.
-2. Teach the CLI to install and list it: `packages/cli/src/state/plugin-service.ts`,
-   the `plugin` command (`packages/cli/src/commands/plugin.ts`) and the authoring
-   helpers (`packages/cli/src/commands/plugin-author.ts`).
-3. If the browser surfaces it, update
-   `packages/web/src/components/console-control/plugins-control.tsx`.
-4. Document it in the [Plugins](../src/content/docs/plugins.md) page.

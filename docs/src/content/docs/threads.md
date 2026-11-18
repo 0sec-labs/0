@@ -1,6 +1,6 @@
 ---
 title: Threads
-description: Run a job in the browser app, from the terminal or headless, and keep what the agent learned.
+description: Run a job in the browser app, from the terminal or headless.
 ---
 
 A thread is a conversation with the agent. You describe a job in plain words; the agent plans it, reads files, runs commands and records findings. Threads are saved, can be resumed and can be archived.
@@ -49,10 +49,9 @@ Chat-only commands are `/help`, `/status`, `/tools`, `/explain [topic]`, `/feedb
 
 ### Limits and approvals
 
-A thread has one mode: the agent has shell access and runs commands as your user in the folder you chose. What limits it is its budget (cost ceiling and time cap), the optional sandbox and one global setting, **Ask before running commands** under **Settings → Helpers** (off by default). When it is on, each command or change is put to you first. See [Configuration](/configuration/#ask-before-running-commands).
+A thread has one mode: the agent has shell access and runs commands as your user in the folder you chose. What limits it is the optional sandbox and one global setting, **Ask before running commands** under **Settings → Helpers** (off by default). When it is on, each command or change is put to you first. See [Configuration](/configuration/#ask-before-running-commands).
 
-The agent also has a `web_search` tool (Parallel's anonymous hosted search, with DuckDuckGo as a fallback; no key needed). Results are links and snippets, not a sign that a page was read in full. `ZERO_FEATURE_WEB_SEARCH=0` turns it off by default. It can clone a public HTTPS repository to review it;
-
+The agent also has a `web_search` tool (Parallel's anonymous hosted search, with DuckDuckGo as a fallback; no key needed). Results are links and snippets, not a sign that a page was read in full. `ZERO_FEATURE_WEB_SEARCH=0` turns it off by default. 
 `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded, because whoever wrote the target controls that text. Your own instructions live under **Settings → Instructions**: a global `~/.0/AGENTS.md` and one file per folder, each up to 32,000 characters.
 
 ### Saved threads
@@ -61,26 +60,15 @@ A saved thread opens at `/chats/saved/<id>` read-only, with its transcript and p
 
 ## Memory
 
-**Memory** is what 0 remembers across threads: short plain notes about a folder or about your team's decisions, such as an accepted or rejected fix, a convention, how to run the tests, or something to avoid. A note is one or two sentences, either for one folder or for everywhere. Open **Memory** to list, search, add, edit and forget notes, filter by folder, export or import them, or turn Memory off for new threads.
+**Memory** is what 0 remembers across threads: short plain notes such as an accepted or rejected fix, a convention, how to run the tests, or something to avoid. Open **Memory** to list, search, add, edit and forget notes, or turn Memory off for new threads.
 
-At the start of each turn the model reads the notes for the folder and the global ones, newest first, up to a budget of about 2,000 tokens. When notes do not fit, the model is told "N notes not shown", and `0 memory list` and the Memory page say how many were left out and why. The notes are labelled as untrusted context: they never override system rules or your request, and the model checks them against the code. The model has one `memory` tool with three actions: `remember`, `update` (replace the text of a note by id) and `forget`. A repository cannot supply notes: nothing is read from the repository.
+At the start of each turn the model reads the notes, newest first, up to about 2,000 tokens. The notes are labelled as untrusted context: they never override system rules or your request. The model has one `memory` tool with three actions: `remember`, `update` and `forget`. A repository cannot supply notes.
 
-Who may write what depends on what the thread has read:
+- **You** commit immediately: "remember that ...", `0 memory add` and the Add button save at once.
+- **0** commits a note it chose to keep, unless the thread has read untrusted content (web pages, repository files, shell output, extension results). Then the note goes to the **Proposed** inbox on the Memory page until you accept it.
+- **Secrets**: a note that looks like a key, token or password is refused.
 
-- **You** commit immediately. Typing "remember that ..." in a thread, `0 memory add` and the Add button on the Memory page all save the note at once.
-- **0, in a clean thread**, commits a note it chose to keep. Once a thread has read untrusted content (web pages, the browser, HTTP responses, repository files, shell output, MCP or extension results, sub-agent output), a note 0 remembers goes to the **Proposed** inbox instead. Proposals are not shown to any thread and never reach the scan verifier until you accept them. In that state `update` and `forget` are refused.
-- **Review**: the Memory page shows a Proposed section at the top (Accept, Edit then accept, Reject) and a dot on the Memory sidebar item. From the terminal use `0 memory proposed list`, `0 memory proposed accept <id>` and `0 memory proposed reject <id>`.
-- **Limits**: 0 may save 5 notes per thread and 20 per day. A note close to an existing one is not duplicated; the tool returns the existing id so the model can update it.
-- **Secrets**: a note that looks like a key, token, password, private key or other high-entropy secret is refused ("Not saved: looks like a secret"), whoever writes it. Zero-width, direction-changing and control characters are removed, and text that hides characters this way is refused.
-- **Verification**: only `avoid` notes you wrote or accepted are shown to the verifier, as untrusted context. Notes 0 wrote on its own, proposals and imported notes are not.
-
-Every note records where it came from: who wrote it (`user`, `model` or `import`), the thread, whether that thread had read untrusted content, and when. Notes are keyed by the repository, not the path: the normalised `origin` remote (for example `github.com/acme/app`), falling back to the real path, so worktrees (`app-wt-*`) and clones share notes. Notes saved under the older path-keyed folders are still read.
-
-Notes are plain Markdown in the computer's private state: `~/.0/memory/MEMORY.md` for global notes and `~/.0/memory/<folder-hash>/MEMORY.md` for each folder. Nothing is written into your repository. You can edit these files by hand or search them with `grep`. 0 records when a note was last shown at most once a day, and never ranks by it. `ZERO_DISABLE_MEMORY=1` turns Memory off. Memory is not available inside an isolated workbench.
-
-To share what a team decided, export it: `0 memory export --to AGENTS.md` adds a "Notes from 0 memory" section (only notes you wrote or accepted, for the current folder) between two marker comments, prints the lines it added, and leaves the rest of the file alone. Review it with `git diff` and commit it like any other change. The export goes one way: 0 never imports notes from a repository file automatically.
-
-From the terminal: `0 memory list`, `0 memory add "<note>"`, `0 memory remove <id>`, `0 memory clear --yes`, `0 memory proposed list|accept|reject`, `0 memory export -o <file>` (JSON for 0), `0 memory export --to AGENTS.md` and `0 memory import <file>` (imported notes are never trusted by the scan verifier). The first time Memory opens after an update, 0 copies the older stores (source lessons, hunt memory, triage memories and lessons) into notes once, and records what it did in `~/.0/memory/import-report.json`. The older files are left in place.
+Notes are plain Markdown in `~/.0/memory/MEMORY.md`. Nothing is written into your repository. `ZERO_DISABLE_MEMORY=1` turns Memory off. From the terminal: `0 memory list`, `0 memory add "<note>"`, `0 memory remove <id>`.
 
 ## From the terminal
 
@@ -96,7 +84,7 @@ id=$(0 threads send new "Map the login flow" --folder ~/code/app)
 0 threads list "$id" --delete --yes
 ```
 
-`send new` creates the thread and runs one turn. `--wait` blocks until the turn ends, prints the reply with tokens and estimated cost, and exits 1 if the turn errored. `--cost-ceiling <usd>` stops the thread once its estimated spend reaches that amount. Every `0 threads` command needs a running app; without one it prints `No console running. Start one with: 0 --headless` and exits non-zero.
+`send new` creates the thread and runs one turn. `--wait` blocks until the turn ends, prints the reply with tokens and estimated cost, and exits 1 if the turn errored. Every `0 threads` command needs a running app; without one it prints `No console running. Start one with: 0 --headless` and exits non-zero.
 
 ## Headless
 
@@ -120,11 +108,11 @@ A task that needs a human decision cannot finish headless; open it in the browse
 
 On a server or in CI, start the app with `0 --headless --ready-json`. It opens no browser and serves the API only. To drive a running app from scripts, `0 api` calls its backend HTTP API with the normal authentication and approval checks. Keep the token in an environment variable, for example `--engine-token-env ZERO_AGENT_TOKEN`, never on the command line.
 
-## Commands, skills and automations
+## Commands and skills
 
 - **The eight CLI commands** (`findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
 - **Skills** are know-how a thread loads when a task needs it: `SKILL.md` folders, which extensions can also supply. See [Skills](/skills/).
-- **Automations** are prompts. An **automation** is a saved prompt plus a trigger (`schedule`, `manual` or `github-pr`; a webhook only speeds up `github-pr`). A **Sentinel** owns automations. See [Sentinels](/sentinels/#automations).
+- **Sentinels** are standing threads that wake on a schedule or a pull request. See [Sentinels](/sentinels/).
 - **Verifier gate:** a skill can declare a check that the engine runs itself, so a thread cannot claim Verified without it. See [Findings](/findings/#verified-and-not-verified).
 
 ## Limits
