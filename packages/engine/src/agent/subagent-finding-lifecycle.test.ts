@@ -33,11 +33,8 @@ function createHarness(
     targetInfo: {},
     autonomyMode: "yolo",
     delegationTools: [
-      TOOL_DEFINITIONS.save_finding,
-      TOOL_DEFINITIONS.update_finding,
+      TOOL_DEFINITIONS.finding,
       TOOL_DEFINITIONS.spawn_agent,
-      TOOL_DEFINITIONS.spawn_agents,
-      TOOL_DEFINITIONS.done,
     ],
     agentMessaging: {
       selfId: "Main",
@@ -55,7 +52,7 @@ function createHarness(
     const currentAgentIndex = agentCount++;
     const calls = childCallsFactory
       ? [...childCallsFactory(currentAgentIndex)]
-      : [{ name: "done", input: { summary: "No-op subagent complete" } }];
+      : [];
 
     return {
       type: "api",
@@ -65,8 +62,8 @@ function createHarness(
         const call = calls.shift();
         if (!call) {
           return {
-            content: [{ type: "tool_use", id: `done-${Date.now()}`, name: "done", input: { summary: "Finished" } }],
-            stopReason: "tool_use",
+            content: [{ type: "text", text: "Finished" }],
+            stopReason: "end_turn",
             durationMs: 0,
           };
         }
@@ -94,7 +91,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("1. parent finding followed by identical child finding: one SQLite row and one parent-memory entry", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "SQL Injection in User Search",
             severity: "critical",
@@ -104,12 +101,11 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "HTTP/1.1 200 OK\r\n\r\nadmin",
           },
         },
-        { name: "done", input: { summary: "Audit complete" } },
       ]);
 
       // Parent saves first
       const parentSave = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "SQL Injection in User Search",
           severity: "critical",
@@ -143,7 +139,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("2. parent finding followed by fuzzy duplicate with matching evidence: one canonical finding", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             // "SQL Injection in /api/users.php" vs "SQL Injection in /api/users" is Levenshtein 4 <= 5
             title: "SQL Injection in /api/users.php",
@@ -154,11 +150,10 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "admin",
           },
         },
-        { name: "done", input: { summary: "Complete" } },
       ]);
 
       const parentSave = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "SQL Injection in /api/users",
           severity: "critical",
@@ -187,7 +182,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("3. two children independently discover the same finding: one canonical finding", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "Cross-Site Scripting in Guestbook",
             severity: "high",
@@ -197,12 +192,12 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "<script>alert(1)</script>",
           },
         },
-        { name: "done", input: { summary: "Worker done" } },
       ]);
 
       const spawnResult = await tools.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: {
+          wait: true,
           tasks: [
             { task: "Worker 1: Audit guestbook POST parameters" },
             { task: "Worker 2: Audit guestbook stored messages" },
@@ -220,7 +215,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("4. similar titles with different endpoints: remain separate", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "SQL Injection in /api/orders",
             severity: "high",
@@ -230,11 +225,10 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "orders data",
           },
         },
-        { name: "done", input: { summary: "Orders audit complete" } },
       ]);
 
       await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "SQL Injection in /api/users",
           severity: "high",
@@ -262,7 +256,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("5. different categories: remain separate", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "Vulnerability in profile endpoint",
             severity: "high",
@@ -272,11 +266,10 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "saved",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ]);
 
       await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "Vulnerability in profile endpoint",
           severity: "high",
@@ -301,7 +294,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("6. different HTTP methods: remain separate", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "CSRF in profile endpoint",
             severity: "medium",
@@ -311,11 +304,10 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "ok",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ]);
 
       await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "CSRF in profile endpoint",
           severity: "medium",
@@ -339,7 +331,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("7. empty evidence must not fuzzy-merge unrelated findings", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "SQL Injection in search",
             severity: "high",
@@ -347,11 +339,10 @@ describe("Delegated finding lifecycle integrity", () => {
             description: "No evidence provided",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ]);
 
       await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "SQL Injection in orders",
           severity: "high",
@@ -373,7 +364,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("8. finding already in SQLite but absent from parent memory: no duplicate insertion", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "SSRF in Webhook Delivery",
             severity: "critical",
@@ -383,7 +374,6 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "ami-id",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ]);
 
       // Seed SQLite directly with a finding from another scan session
@@ -425,7 +415,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("9. finding in parent memory but not SQLite: no duplicate memory entry", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "Prototype Pollution in Merge",
             severity: "high",
@@ -435,7 +425,6 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "polluted",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ], {
         // Explicitly disable DB persistence on root context
         persistFindings: false,
@@ -469,7 +458,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("10. distinct child findings in one batch: all retained", async () => {
       const { tools, db, context } = createHarness((index) => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: `Batch Finding ${index}`,
             severity: "medium",
@@ -479,12 +468,12 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: `data ${index}`,
           },
         },
-        { name: "done", input: { summary: "Worker complete" } },
       ]);
 
       const result = await tools.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: {
+          wait: true,
           tasks: [
             { task: "Audit endpoint 0" },
             { task: "Audit endpoint 1" },
@@ -500,23 +489,22 @@ describe("Delegated finding lifecycle integrity", () => {
     });
   });
 
-  describe("Defect B: Delegated update_finding", () => {
+  describe("Defect B: Delegated finding update", () => {
     it("1. child updates a parent-owned finding to confirmed: parent memory and SQLite both change", async () => {
       let findingIdToUpdate = "";
       const { tools, db, context } = createHarness(() => [
         {
-          name: "update_finding",
+          name: "finding",
           input: {
-            finding_id: findingIdToUpdate,
+            id: findingIdToUpdate,
             status: "confirmed",
           },
         },
-        { name: "done", input: { summary: "Verification complete" } },
       ]);
 
       // Parent saves finding initially in "discovered" status
       const saveRes = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "SQL Injection in Login",
           severity: "critical",
@@ -550,17 +538,16 @@ describe("Delegated finding lifecycle integrity", () => {
       let findingIdToUpdate = "";
       const { tools, db, context } = createHarness(() => [
         {
-          name: "update_finding",
+          name: "finding",
           input: {
-            finding_id: findingIdToUpdate,
+            id: findingIdToUpdate,
             status: "false-positive",
           },
         },
-        { name: "done", input: { summary: "Verification ruled out vulnerability" } },
       ]);
 
       const saveRes = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "Suspected XSS in Comments",
           severity: "medium",
@@ -597,9 +584,9 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const result = await child.execute({
-          name: "update_finding",
+          name: "finding",
           arguments: {
-            finding_id: "00000000-0000-0000-0000-000000000000",
+            id: "00000000-0000-0000-0000-000000000000",
             status: "confirmed",
           },
         });
@@ -624,9 +611,9 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const result = await child.execute({
-          name: "update_finding",
+          name: "finding",
           arguments: {
-            finding_id: "nonexistent-id",
+            id: "nonexistent-id",
             status: "confirmed",
           },
         });
@@ -642,7 +629,7 @@ describe("Delegated finding lifecycle integrity", () => {
       const { tools, db, context } = createHarness();
 
       const saveRes = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "Direct Parent Finding",
           severity: "low",
@@ -655,8 +642,8 @@ describe("Delegated finding lifecycle integrity", () => {
       const findingId = context.findings[0].id;
 
       const updateRes = await tools.execute({
-        name: "update_finding",
-        arguments: { finding_id: findingId, status: "confirmed" },
+        name: "finding",
+        arguments: { id: findingId, status: "confirmed" },
       });
 
       expect(updateRes.success).toBe(true);
@@ -668,7 +655,7 @@ describe("Delegated finding lifecycle integrity", () => {
       const { tools, db, context } = createHarness();
 
       const saveRes = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "DB Error Finding",
           severity: "low",
@@ -685,8 +672,8 @@ describe("Delegated finding lifecycle integrity", () => {
       });
 
       const updateRes = await tools.execute({
-        name: "update_finding",
-        arguments: { finding_id: findingId, status: "confirmed" },
+        name: "finding",
+        arguments: { id: findingId, status: "confirmed" },
       });
 
       expect(updateRes.success).toBe(false);
@@ -722,8 +709,8 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const res = await child.execute({
-          name: "update_finding",
-          arguments: { finding_id: "child-local-1", status: "confirmed" },
+          name: "finding",
+          arguments: { id: "child-local-1", status: "confirmed" },
         });
 
         expect(res.success).toBe(true);
@@ -761,8 +748,8 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const res = await child.execute({
-          name: "update_finding",
-          arguments: { finding_id: "child-local-fail", status: "confirmed" },
+          name: "finding",
+          arguments: { id: "child-local-fail", status: "confirmed" },
         });
 
         expect(res.success).toBe(false);
@@ -784,7 +771,7 @@ describe("Delegated finding lifecycle integrity", () => {
         if (agentIndex === 0) {
           return [
             {
-              name: "save_finding",
+              name: "finding",
               input: {
                 title: "Blind SQL Injection in /api/auth",
                 severity: "critical",
@@ -794,25 +781,23 @@ describe("Delegated finding lifecycle integrity", () => {
                 evidence_response: "5000ms delay",
               },
             },
-            { name: "done", input: { summary: "Discovery done" } },
           ];
         } else {
           return [
             {
-              name: "update_finding",
+              name: "finding",
               input: {
-                finding_id: parentFindingId,
+                id: parentFindingId,
                 status: "confirmed",
               },
             },
-            { name: "done", input: { summary: "Verification done" } },
           ];
         }
       });
 
       // 1. Parent saves initial finding
       const parentSave = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "Blind SQL Injection in /api/auth",
           severity: "critical",
@@ -862,7 +847,7 @@ describe("Delegated finding lifecycle integrity", () => {
     it("rejects delegated finding persistence when deduplication lookup fails, avoiding duplicate insertion", async () => {
       const { tools, db, context } = createHarness(() => [
         {
-          name: "save_finding",
+          name: "finding",
           input: {
             title: "Command Injection in Export",
             severity: "critical",
@@ -872,7 +857,6 @@ describe("Delegated finding lifecycle integrity", () => {
             evidence_response: "uid=0",
           },
         },
-        { name: "done", input: { summary: "Done" } },
       ]);
 
       vi.spyOn(db, "listFindings").mockImplementationOnce(() => {
@@ -894,7 +878,7 @@ describe("Delegated finding lifecycle integrity", () => {
       const { tools, db, context } = createHarness();
 
       const saveRes = await tools.execute({
-        name: "save_finding",
+        name: "finding",
         arguments: {
           title: "Memory Safety Bug in Buffer",
           severity: "high",
@@ -914,8 +898,8 @@ describe("Delegated finding lifecycle integrity", () => {
       });
 
       const updateRes = await tools.execute({
-        name: "update_finding",
-        arguments: { finding_id: findingId, status: "confirmed" },
+        name: "finding",
+        arguments: { id: findingId, status: "confirmed" },
       });
 
       expect(updateRes.success).toBe(false);
@@ -945,8 +929,8 @@ describe("Delegated finding lifecycle integrity", () => {
       expect(db.getFinding("phantom-unpersisted-id")).toBeUndefined();
 
       const updateRes = await tools.execute({
-        name: "update_finding",
-        arguments: { finding_id: "phantom-unpersisted-id", status: "confirmed" },
+        name: "finding",
+        arguments: { id: "phantom-unpersisted-id", status: "confirmed" },
       });
 
       expect(updateRes.success).toBe(false);
@@ -971,8 +955,8 @@ describe("Delegated finding lifecycle integrity", () => {
       });
 
       const updateRes = await tools.execute({
-        name: "update_finding",
-        arguments: { finding_id: "local-only-id", status: "confirmed" },
+        name: "finding",
+        arguments: { id: "local-only-id", status: "confirmed" },
       });
 
       expect(updateRes.success).toBe(true);
@@ -1033,7 +1017,7 @@ describe("Delegated finding lifecycle integrity", () => {
       try {
         // 1. Grandchild saves a finding
         const saveRes = await grandchildTools.execute({
-          name: "save_finding",
+          name: "finding",
           arguments: {
             title: "Nested RCE in Worker Pipeline",
             severity: "critical",
@@ -1060,8 +1044,8 @@ describe("Delegated finding lifecycle integrity", () => {
 
         // 2. Grandchild updates the finding status to confirmed
         const updateRes = await grandchildTools.execute({
-          name: "update_finding",
-          arguments: { finding_id: canonicalId, status: "confirmed" },
+          name: "finding",
+          arguments: { id: canonicalId, status: "confirmed" },
         });
         expect(updateRes.success).toBe(true);
 
@@ -1092,7 +1076,7 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const res = await child.execute({
-          name: "save_finding",
+          name: "finding",
           arguments: {
             title: "Unconfirmed Finding",
             severity: "high",
@@ -1123,7 +1107,7 @@ describe("Delegated finding lifecycle integrity", () => {
       const child = new ToolExecutor(childContext);
       try {
         const res = await child.execute({
-          name: "save_finding",
+          name: "finding",
           arguments: {
             title: "Corrupted Callback Finding",
             severity: "high",
@@ -1237,7 +1221,7 @@ describe("Delegated finding lifecycle integrity", () => {
         const tools = new ToolExecutor(context, db);
         try {
           const saveRes = await tools.execute({
-            name: "save_finding",
+            name: "finding",
             arguments: {
               title: "SQL Injection in User Profile",
               severity: "high",
@@ -1257,7 +1241,7 @@ describe("Delegated finding lifecycle integrity", () => {
           // 4. Now test an incoming finding matching the 500th most recent record (within the window)
           const withinWindowTarget = "sql-injection-500";
           const dupeRes = await tools.execute({
-            name: "save_finding",
+            name: "finding",
             arguments: {
               title: "Distinct SQL Injection on Endpoint 500",
               severity: "high",

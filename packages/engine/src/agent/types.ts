@@ -1,7 +1,7 @@
 import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import type { WorkspaceIdentity } from "./workspace-identity.js";
 import type { ApprovalsChoice } from "../shared/approvals.js";
-import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "../shared/index.js";
+import type { Finding, AttackResult, TargetInfo, AuthConfig } from "../shared/index.js";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { ScopeEnforcementState } from "../scope/activation.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
@@ -9,13 +9,8 @@ import type { AttributionConfig } from "../scope/attribution.js";
 import type { EngagementPosture } from "../scope/engagement-profile.js";
 import type { EnforcementTracker } from "../scope/enforcement.js";
 import type { LootLedger } from "./loot.js";
-import type { TaskLedger } from "./task-ledger.js";
-import type { OastCollaborator } from "../oast/types.js";
-import type { SessionEngine } from "./session.js";
-import type { WafDetector } from "../scope/waf-detect.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
 import type { ToolHealthTracker } from "./tool-health.js";
-import type { TodoTracker } from "./todos.js";
 
 // ── Agent Roles ──
 
@@ -127,14 +122,10 @@ export interface ToolResultMeta {
     tabs: Array<{ pageId: string; tab: string; url: string }>;
   };
   /**
-   * Which card the UI should draw. `command` → bash/run_command; `edit` →
-   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents);
-   * `code` → js_eval / python_eval (the code block + its output).
-   * `image` → an inline screenshot (browser tool).
+   * Which card the UI should draw. `command` → bash; `edit` → str_replace;
+   * `web` → web_search; `image` → an inline screenshot.
    */
-  kind?: "command" | "edit" | "web" | "task" | "code" | "image" | "visual";
-  /** A validated inline visualization (kind: "visual"); display-only, never sent to the model. */
-  visual?: import("../shared/visualization.js").Visualization;
+  kind?: "command" | "edit" | "web" | "task" | "code" | "image";
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -221,16 +212,6 @@ export interface ToolResultMeta {
     brief?: string;
     /** True → `[isolated]` suffix (dedicated worktree). */
     isolated?: boolean;
-  }>;
-  /**
-   * Phase/checkbox plan snapshot, reusing the todos model verbatim so the CLI
-   * can pass it straight into `buildTodoTreeRows` with no adaptation.
-   */
-  todos?: Array<{
-    id: string;
-    content: string;
-    status: "pending" | "in_progress" | "completed";
-    group?: string;
   }>;
   // ── code card (js_eval / python_eval) ──
   /** Highlighter language for the code block. */
@@ -369,20 +350,6 @@ export interface AgentConfig {
   dbPath?: string;
   authConfig?: AuthConfig;
   /**
-   * Resolved named identities for access-control testing (0#564).
-   * Passed through to the `ToolContext` so the prompt + `access_control_probe`
-   * can enumerate principals. The active identity's `auth` is mirrored into
-   * `authConfig` for back-compat with the env-var / fallback paths.
-   */
-  identities?: NamedIdentity[];
-  accessControlFixtures?: import("../shared/index.js").AccessControlFixture[];
-  /**
-   * Stateful per-identity HTTP session engine (0#564). Built once per
-   * scan and shared across discovery/attack/verify phases so cookies persist.
-   * Passed straight through to the `ToolContext`.
-   */
-  session?: SessionEngine;
-  /**
    * Programmatic engagement scope (0#215). When set, every URL the
    * agent touches — http_request, submit_form, browser navigate, crawl,
    * shellExec URL extraction, wp_fingerprint, web_search inputs — is
@@ -408,13 +375,6 @@ export interface AgentConfig {
    * tallied into the report's `enforcement_summary` block.
    */
   enforcement?: EnforcementTracker;
-  /**
-   * WAF detection + adaptive evasion aggregator (0#568). When omitted
-   * but an engagement scope (`scope`/`enforcement`) is configured, one is
-   * created automatically so authorized engagements get WAF fingerprinting +
-   * adaptive evasion. Pass `null` to disable explicitly.
-   */
-  wafDetector?: WafDetector | null;
   /**
    * Generic-scanner-traffic suppression opt-out (0#217). When
    * scope is loaded the agent refuses to spawn `sqlmap`, `wpscan`,
@@ -601,22 +561,6 @@ export interface ToolContext {
   persistFindings?: boolean;
   authConfig?: AuthConfig;
   /**
-   * Resolved named identities for access-control testing (0#564).
-   * Present when the scan configured ≥1 identity (via `identities` or the
-   * legacy `auth` shim). Used by the prompt builder and `access_control_probe`
-   * to enumerate the principals it can replay requests as.
-   */
-  identities?: NamedIdentity[];
-  accessControlFixtures?: import("../shared/index.js").AccessControlFixture[];
-  /**
-   * Stateful per-identity HTTP session engine (0#564). When present, the
-   * HTTP tools (`http_request`/`crawl`/`submit_form`) act as `session.activeLabel`,
-   * persist captured `Set-Cookie` across turns, and re-auth on 401/403. When
-   * absent, tools fall back to the stateless `buildAuthHeaders(authConfig)`
-   * path — behaviour identical to pre-#564 single-credential scans.
-   */
-  session?: SessionEngine;
-  /**
    * See `AgentConfig.scope`. When present, every URL-touching tool
    * runs `policy.match()` before egress and refuses out-of-scope URLs
    * with `ToolResult.error`.
@@ -633,16 +577,6 @@ export interface ToolContext {
    * increments the in-scope / out-of-scope counters at the verdict sites.
    */
   enforcement?: EnforcementTracker;
-  /**
-   * WAF detection + adaptive evasion aggregator (0#568). When set, the
-   * `http_request` chokepoint fingerprints each response for known WAF
-   * vendors; on a detected block it runs a bounded adaptive-evasion campaign
-   * (re-encoding / casing / jitter) through the same rate-limited fetch path
-   * and records every attempt as evidence. Created for authorized engagements
-   * (when `scope` or `enforcement` is configured); undefined otherwise so the
-   * default scan path is unchanged.
-   */
-  wafDetector?: WafDetector;
   /**
    * See `AgentConfig.allowScanners`. Opt-out for the scanner-binary
    * suppression gate (0#217). Only consulted when `scope` is set.
@@ -667,7 +601,7 @@ export interface ToolContext {
    */
   loadedSkills?: Set<string>;
   /**
-   * Typed loot / foothold ledger (0#567). When set, `save_finding`
+   * Typed loot / foothold ledger (0#567). When set, `finding`
    * harvests reusable artifacts (credentials, tokens, cookies, hashes,
    * endpoints, paths) from the finding's evidence into it, and the `use_loot`
    * tool reads from it so the agent can replay a captured artifact in a
@@ -678,16 +612,6 @@ export interface ToolContext {
    */
   loot?: LootLedger;
   /**
-   * Typed TODO / plan ledger. When set, the `plan` tool reads and mutates it,
-   * and the agent loop re-injects a compact plan block re-rendered from this
-   * structured state each turn (so the plan survives context compaction). The
-   * ledger's open tasks are also the anchor set for task-drift detection
-   * (`agent/drift.ts`). Created only when `features.agentPlan` is on;
-   * undefined otherwise, in which case `plan` returns a graceful
-   * "not enabled" result rather than an error.
-   */
-  plan?: TaskLedger;
-  /**
    * The agent turn currently executing. Kept fresh by the loop so tools can
    * stamp turn numbers on state they create (the plan ledger records the turn
    * a task was added and last touched, which is what makes a stale task
@@ -695,18 +619,6 @@ export interface ToolContext {
    * fall back to 0.
    */
   currentTurn?: number;
-  /**
-   * Hosted OAST interaction collaborator (0#659). When set, the
-   * `oast_register` / `oast_poll` tools mint unique interaction handles and
-   * poll for DNS/HTTP/LDAP callbacks to confirm blind/out-of-band classes
-   * (blind SSRF/XSS, OOB RCE/SQLi, XXE-OOB, JNDI) via correlation-token
-   * matching. A verified handle can then be supplied to `save_finding`, which
-   * persists the callback as a verified finding. Created only when
-   * `features.oastCollaborator` is on AND a collaborator server is configured
-   * (ZERO_OAST_URL); undefined otherwise, in which case the OAST tools return
-   * a graceful "not deployed" result.
-   */
-  oast?: OastCollaborator;
   /**
    * Captured canonical workspace root for trust/enablement decisions. Used
    * by root-model and child-agent loops to evaluate workspace trust
@@ -752,16 +664,6 @@ export interface ToolContext {
    * call.
    */
   toolHealth?: ToolHealthTracker;
-  /**
-   * Structured full-state plan tracker for the `update_todos` / `write_todos`
-   * tools (TodoWrite shape). When present, the handler REPLACES the plan on
-   * each write and the tracker fans a snapshot out on the event bus as `todos`
-   * so the TUI can repaint its live task tree. Absent for callers that don't
-   * care — the executor then creates its own private tracker so the tool always
-   * works; only the shared run-level snapshot is unavailable. It authorizes
-   * nothing and grants no capability: it records only the declared plan.
-   */
-  todos?: TodoTracker;
 }
 
 // ── Dispatch Mode (0#232) ──

@@ -1,4 +1,3 @@
-import { nativeToolBatches } from "../native-tool-batches.js";
 import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../../runtime/request-admission.js";
 import { assertWorkspaceIdentity } from "../workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../../workflow-execution-policy.js";
@@ -8,19 +7,13 @@ import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import type { NativeMessage, NativeContentBlock, NativeToolDef } from "../../runtime/types.js";
 import { resolve } from "node:path";
-import { resolveIdentities } from "../../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolContext } from "../types.js";
 import { toNativeToolDef } from "../native-tooldef.js";
-import { SessionEngine } from "../session.js";
-import { WafDetector } from "../../scope/waf-detect.js";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS } from "../tools.js";
 import { ToolHealthTracker } from "../tool-health.js";
-import { TodoTracker, buildTodosPayload } from "../todos.js";
 import { features } from "../features.js";
 import { LootLedger } from "../loot.js";
-import { TaskLedger } from "../task-ledger.js";
 import { DriftMonitor } from "../drift.js";
-import { createCollaborator } from "../../oast/index.js";
 import { maybeCreateTrustGraphSession } from "../trust-graph-runtime.js";
 import { createShadowJournal, type ShadowJournal } from "../journal/shadow.js";
 import { analyticsPipeline } from "../../telemetry/analytics-pipeline.js";
@@ -40,8 +33,7 @@ import { createThreadGuard, memoryContext, memoryDisabledByEnv, openMemory, runM
 import { toolCallPreview } from "../tool-preview.js";
 import { newCorrelationId, buildToolCallLogEntry, buildToolCallsPayload, type ToolCallLogEntry } from "../action-log.js";
 import { registerSignalCleanup } from "../signal-cleanup.js";
-import type { Finding } from "../../shared/index.js";
-import { externalMemoryPath, shouldHarvestLoot, summarizeReasoning, isTransientLlmError, isContextWindowError, NATIVE_REQUEST_PREFLIGHT_BYTES, isInformativeDoneText, resolveDoneSummary, compactMessagesForRequestPreflight, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT, isRecoverableOutputCap, toolFailureText } from "./helpers.js";
+import { externalMemoryPath, shouldHarvestLoot, summarizeReasoning, isTransientLlmError, isContextWindowError, NATIVE_REQUEST_PREFLIGHT_BYTES, compactMessagesForRequestPreflight, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT, isRecoverableOutputCap, toolFailureText } from "./helpers.js";
 import { type NativeAgentLoopOptions, type NativeAgentState } from "./types.js";
 import { resolveCompactionThresholds, ContextSummaryReceiptError, type CompactMessagesResult, compactMessagesWithLLM, dropOldestMessages, generateProgressSummary } from "./compaction.js";
 import { LoopDetector, PLAYBOOK_MARKER, messagesContainText, BUDGET_WARNING_SOFT, BUDGET_WARNING_HARD, computeBudgetWarningTurns } from "./loop-detector.js";
@@ -67,7 +59,6 @@ export async function runNativeAgentLoop(
   const enrollment = opts.contribution ?? parent ?? getConfiguredRunContributionClient();
   const secrets = enrollment ? [
     ...authSecretValues(opts.config.authConfig),
-    ...(opts.config.identities ?? []).flatMap(identity => authSecretValues(identity.auth)),
   ] : [];
   let capture = opts.contribution ?? parent;
   if (!capture) {
@@ -153,16 +144,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // 0#567 — loot / foothold ledger. Created only when the feature is on;
-  // threaded through ToolContext so save_finding harvests into it and use_loot
+  // threaded through ToolContext so finding harvests into it and use_loot
   // reads from it. The loop below also harvests from evidence-bearing tool
   // results and re-injects a compact "known footholds" block each turn.
   const loot = features.lootLedger ? new LootLedger() : undefined;
-
-  // Typed TODO / plan ledger. Threaded through ToolContext so the `plan` tool
-  // reads and mutates it; the loop below re-injects a compact plan block
-  // re-rendered from the structured state (which is what makes the plan
-  // survive compaction) and feeds its open tasks to the drift monitor.
-  const plan = features.agentPlan ? new TaskLedger() : undefined;
 
   // Task-drift monitor. Deterministic, no LLM call — see agent/drift.ts.
   //
@@ -184,12 +169,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       })
     : undefined;
 
-  // 0#659 — hosted OAST interaction collaborator. Built only when the
-  // feature is on AND a collaborator server is configured (ZERO_OAST_URL);
-  // `createCollaborator` returns undefined otherwise, in which case the
-  // oast_register / oast_poll tools return a graceful "not deployed" result.
-  const oast = features.oastCollaborator ? createCollaborator() : undefined;
-
   // 0#771 (extends #687, connects #786 + #780) — durable cross-scan
   // credential store wiring. OPT-IN: `config.trustGraph` is undefined by default,
   // in which case `maybeCreateTrustGraphSession` returns undefined and every
@@ -202,15 +181,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // it is in scope for the loop; it is assigned after `shadowJournal` is created
   // (the default journal sink for credential_shared entries).
   let trustGraph: ReturnType<typeof maybeCreateTrustGraphSession>;
-
-  // Stateful access-control session (0#564). Reconcile the legacy singular
-  // `authConfig` with the multi-identity `identities` list, then build (or
-  // reuse) a SessionEngine so HTTP tools persist cookies across turns and the
-  // access_control_probe can replay as each principal. No identities → no
-  // session → stateless behaviour unchanged.
-  const identities = config.identities ?? resolveIdentities({ auth: config.authConfig });
-  const session =
-    config.session ?? (identities.length > 0 ? new SessionEngine(identities) : undefined);
 
   const toolCtx: ToolContext = {
     target: config.target,
@@ -231,30 +201,17 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     persistDelegatedFinding: config.persistDelegatedFinding,
     updateDelegatedFinding: config.updateDelegatedFinding,
     authConfig: config.authConfig,
-    identities,
-    accessControlFixtures: config.accessControlFixtures,
-    session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
     enforcement: config.enforcement,
     agentMessaging: config.agentMessaging,
     workerTree: config.workerTree,
     workerFindings: config.workerTree ? config.workerFindings : undefined,
-    // WAF detection + adaptive evasion (0#568). Auto-enabled for
-    // authorized engagements (scope/enforcement configured) unless the caller
-    // passed `wafDetector: null` to opt out.
-    wafDetector:
-      config.wafDetector === null
-        ? undefined
-        : (config.wafDetector ??
-          (config.scope || config.enforcement ? new WafDetector() : undefined)),
     webSearchEnabled: config.webSearchEnabled,
     allowScanners: config.allowScanners,
     attribution: config.attribution,
     engagement: config.engagement,
     loot,
-    plan,
-    oast,
     // Thread the shared cost ledger + ceiling onto the tool context so the
     // spawn_agent / spawn_agents handlers can charge spawned subagents against
     // the SAME scan-wide ledger and ceiling as this session (closing the
@@ -275,15 +232,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           ...(event.remedy ? { remedy: event.remedy } : {}),
           count: event.count,
         });
-      },
-    }),
-    // Structured full-state plan tracker (TodoWrite shape). One per run, shared
-    // across the scan so the end-of-run snapshot reflects the final plan; every
-    // plan CHANGE fans out on the bus as `todos` so the TUI repaints its live
-    // task tree. Additive and authority-free — records only the declared plan.
-    todos: new TodoTracker({
-      emit: (snap) => {
-        eventBus.emit("todos", { ...buildTodosPayload(snap), scan_id: config.scanId });
       },
     }),
   };
@@ -309,9 +257,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
-  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners, webSearchEnabled: config.webSearchEnabled });
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
   const baseTools = config.singleAgent
-    ? roleTools.filter(tool => tool.name !== "spawn_agent" && tool.name !== "spawn_agents" && tool.name !== "spawn_persistent_agent")
+    ? roleTools.filter(tool => tool.name !== "spawn_agent")
     : roleTools;
 
   // ── Memory in scoped source work ──
@@ -496,9 +444,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     killSwitchTriggered: false,
   };
   // Restored conversation history is context, not a new completion observation.
-  let latestAssistantText = "";
   let outputCapContinuations = 0;
-  // Early-stop tracking: has the agent called save_finding at least once?
+  // Early-stop tracking: has the agent called finding at least once?
   let saveFindingCalled = false;
   // Collect tool names used for the attempt summary (deduped)
   const toolsUsedSet = new Set<string>();
@@ -535,11 +482,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // away. -1 sentinels force a first injection as soon as loot exists.
   let lastInjectedLootRevision = -1;
   let lastLootInjectionTurn = -1;
-
-  // Plan-injection cadence, same sentinels and same contract as the loot pair
-  // above: -1 forces a first injection as soon as the agent records any task.
-  let lastInjectedPlanRevision = -1;
-  let lastPlanInjectionTurn = -1;
 
   // JIT skill tracking (#458): share the recentToolResultTexts buffer and
   // a persistent loadedSkills set with the ToolContext so skill tools can
@@ -876,7 +818,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   async function publishSavedFinding(
     call: ToolCall, toolResult: ToolResult,
   ): Promise<void> {
-      if (call.name === "save_finding" && toolResult.success) {
+      if (call.name === "finding" && !call.arguments?.id && toolResult.success) {
         const f = toolResult.output as Record<string, unknown> | undefined;
         const input = call.arguments ?? {};
         const confidence =
@@ -936,7 +878,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // newly-harvested value whose hash matches a prior scan's credential
         // from a DIFFERENT source target emits a `credential_shared` entry via
         // `trustGraph.noteHarvest` (see the harvest block below). It hangs off
-        // the durable store rather than save_finding because the reuse signal is
+        // the durable store rather than finding because the reuse signal is
         // the recovered VALUE, not the finding shape. No-op when trustGraph is
         // not opted in, so this single-target finding path is unchanged.
 
@@ -1483,7 +1425,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
-    if (isInformativeDoneText(textContent)) latestAssistantText = textContent.trim();
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -1562,9 +1503,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         if (db) persistSession(db, state, config, "running");
         continue;
       }
-      // Only allow early exit if the agent has done meaningful work:
-      // - At least 4 turns (read files, ran commands, analyzed code)
-      // - OR explicitly called the done tool (handled below in tool execution)
+      // A reply with text and no tool calls ends the run, as in Pi: the loop
+      // runs until the model answers without calling a tool.
       // `textContent.trim()` is load-bearing: an empty-text end_turn is not a
       // conclusion. It used to be impossible to hit on the Responses path
       // because the reasoning summary was flattened into `content`, so the
@@ -1573,8 +1513,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // silent turn silent — and marking it `done` with an empty summary would
       // report `status: "success"` alongside the "reached max turns" fallback
       // string from the tail of this function. Nudge the agent instead.
-      const minTurns = Math.min(4, config.maxTurns ?? 4);
-      if (state.done || (state.turnCount >= minTurns && result.stopReason === "end_turn" && textContent.trim())) {
+      if (state.done || (result.stopReason === "end_turn" && textContent.trim())) {
         // A steer can arrive while the final response is in flight. Honor it
         // before retiring this worker, without extending its turn budget.
         if (!turnLimitReached() && injectPendingUserMessages?.()) { state.done = false; continue; }
@@ -1616,9 +1555,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // text blocks to the tool-results user message below so the agent sees the
     // confirmed/unconfirmed verdict on its NEXT turn.
 
-    // Only independent local reads overlap. Stateful tools remain ordered barriers,
-    // and driver authority is checked serially. Receipts retain model call order.
-    for (const batch of nativeToolBatches(toolUseBlocks, true)) {
+    // Calls run one at a time, in model order, and driver authority is checked serially.
+    for (const batch of toolUseBlocks.map((block) => [block])) {
       const pending = batch.map((block) => {
         const call: ToolCall = { name: block.name, arguments: block.input };
         toolCalls.push(call);
@@ -1768,17 +1706,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // Bus event: finding_ingested — fires whenever the agent successfully
         // saves a finding so downstream sinks (cloud relay, dashboard) see the
         // finding at creation time rather than waiting for the final report.
-        // `input.confidence` is the hybrid value the `save_finding` tool
+        // `input.confidence` is the hybrid value the `finding` tool
         // stamped back onto the call args (LLM self-report clamped UP to a
         // PoC-status floor — see agent/finding-confidence.ts), not the raw
         // LLM-reported number.
         await publishSavedFinding(call, toolResult);
-
-        // Check if agent called done
-        if (block.name === "done" && toolResult.success) {
-          state.done = true;
-          state.summary = resolveDoneSummary((toolResult.output as { summary?: string }).summary, latestAssistantText);
-        }
 
         // Preserve tool output exactly as returned when serializing model context.
         const resultContent = toolResult.success
@@ -1787,7 +1719,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // 0#567 — harvest reusable footholds from evidence-bearing tool
         // results into the loot ledger. Done on the raw output and only for tools whose
         // output reflects target data — never our own trusted bookkeeping
-        // results (save_finding / query_findings / use_loot / done). Best-effort:
+        // results (finding). Best-effort:
         // a harvest failure must never abort the agent loop.
         if (loot && toolResult.success && shouldHarvestLoot(block.name)) {
           try {
@@ -1992,43 +1924,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     }
 
-    // ── Plan (TODO ledger) injection ──
-    // Same mechanism and the same reason as the loot block above: the plan is
-    // re-rendered from STRUCTURED STATE, so `compactMessagesWithLLM` summarizing
-    // away or dropping the message that carried it costs nothing — the next
-    // injection reproduces it exactly. A plan that lived only in the transcript
-    // would not survive, which is precisely the failure the external-memory
-    // scratchpad has today.
-    //
-    // Throttled on the same revision-or-interval rule, but with a longer
-    // interval: unlike loot (where a credential captured at turn 12 must stay
-    // in the recent window), an unchanged plan re-pushed every third turn is
-    // pure repetition. Revision changes still inject immediately, so a plan the
-    // agent is actively maintaining is always current in context.
-    const PLAN_REINJECT_INTERVAL = 6;
-    if (
-      plan
-      && plan.size > 0
-      && (plan.revision !== lastInjectedPlanRevision
-        || state.turnCount - lastPlanInjectionTurn >= PLAN_REINJECT_INTERVAL)
-    ) {
-      const planText = plan.render();
-      if (planText) {
-        state.messages.push({
-          role: "user",
-          content: [{ type: "text", text: planText }],
-        });
-        lastInjectedPlanRevision = plan.revision;
-        lastPlanInjectionTurn = state.turnCount;
-        onEvent?.("plan_injected", {
-          turn: state.turnCount,
-          open: plan.open().length,
-          total: plan.size,
-          revision: plan.revision,
-        });
-      }
-    }
-
     // ── Task-drift detection ──
     // Deliberately placed alongside loop detection because the two are
     // complementary halves of "the agent has stopped making progress":
@@ -2037,7 +1932,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // the other's failure mode. Deterministic and free — see agent/drift.ts for
     // the signal and, importantly, for what it cannot see.
     if (driftMonitor) {
-      driftMonitor.record(toolCalls, plan?.openText() ?? "");
+      driftMonitor.record(toolCalls, "");
       const driftWarning = driftMonitor.detect();
       if (driftWarning) {
         state.messages.push({
@@ -2083,7 +1978,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Track tool usage for early-stop logic
     for (const call of toolCalls) {
       toolsUsedSet.add(call.name);
-      if (call.name === "save_finding") {
+      if (call.name === "finding") {
         saveFindingCalled = true;
       }
     }
@@ -2110,7 +2005,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       && !state.done
     ) {
       state.earlyStopNoProgress = true;
-      state.attemptSummary = `Used tools: ${[...toolsUsedSet].join(", ")}. Ran ${state.turnCount} turns without calling save_finding.`;
+      state.attemptSummary = `Used tools: ${[...toolsUsedSet].join(", ")}. Ran ${state.turnCount} turns without calling finding.`;
       state.summary = `Early stop at turn ${state.turnCount}/${config.maxTurns}: no findings — retry recommended.`;
 
       // Generate LLM-based structured progress summary for the retry
@@ -2293,36 +2188,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           byCategory: toolHealth.byCategory,
           missing: toolHealth.missing,
           line: toolHealth.line,
-        },
-        timestamp: Date.now(),
-      });
-    }
-  } catch {
-    // Reporting is best-effort; never fail a completed run over it.
-  }
-
-  // Structured full-state plan (TodoWrite shape): attach the final snapshot to
-  // the returned state and log it once so the plan the model ended on is part
-  // of the run record. Non-blocking / fail-soft — a plan is working state, and
-  // never worth failing a completed run over.
-  try {
-    const todos = executor.todosSnapshot();
-    state.todos = todos;
-    if (todos.progress.total > 0 && db) {
-      db.logEvent({
-        scanId: config.scanId,
-        stage: "attack",
-        eventType: "todos_summary",
-        payload: {
-          done: todos.progress.done,
-          total: todos.progress.total,
-          line: todos.summaryLine,
-          revision: todos.revision,
-          groups: todos.groups.map((g) => ({
-            group: g.group,
-            done: g.done,
-            total: g.total,
-          })),
         },
         timestamp: Date.now(),
       });

@@ -982,23 +982,6 @@ describe("dashboard — web console API", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
   });
 
-  it("requires control-token authentication for live browser listings and streams", async () => {
-    const headers = { "x-0-control-token": await getControlToken() };
-    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
-    const id = JSON.parse(created.body).session.id;
-    const base = `/api/console/sessions/${id}/browser/views`;
-    for (const url of [base, `${base}/foreign/stream`]) {
-      const denied = await invokeHandler(makeRequest({ method: "GET", url }));
-      expect(denied.statusCode).toBe(403);
-    }
-    const listed = await invokeHandler(makeRequest({ method: "GET", url: base, headers }));
-    expect(listed.statusCode).toBe(200); expect(JSON.parse(listed.body)).toEqual({ views: [] });
-    const foreign = await invokeHandler(makeRequest({ method: "GET", url: `${base}/foreign/stream`, headers }));
-    expect(foreign.statusCode).toBe(404);
-    const queryToken = await invokeHandler(makeRequest({ method: "GET", url: `${base}?token=secret`, headers }));
-    expect(queryToken.statusCode).toBe(400);
-  });
-
   it("authenticates private save-as and rejects arbitrary snapshot destination input", async () => {
     const { ConsoleGateway } = await import("../../web/console-gateway.js");
     const { TeamAuth } = await import("../../web/team-auth.js");

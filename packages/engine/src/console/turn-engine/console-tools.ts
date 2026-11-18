@@ -1,6 +1,5 @@
 import type { NativeToolDef } from "../../runtime/types.js";
 import { TOOL_DEFINITIONS } from "../../agent/tools.js";
-import { LEGACY_DELEGATION_TOOL_NAMES } from "../../agent/tools/system.js";
 import type { ToolCall, ToolDefinition, ToolResult } from "../../agent/types.js";
 
 /** Serialize a tool result into the string content of a `tool_result` block. */
@@ -58,7 +57,7 @@ export const WORKFLOW_AUTHORING_TOOLS: NativeToolDef[] = [{
       inputs: { type: "object", description: "Bounded JSON operation options and evidence bindings. Never put authorization, credentials, allowApply, or shell scope overrides here." },
       execution: { type: "object", description: "Optional executable-step policy; never accepted on trigger or report nodes", additionalProperties: false, properties: {
         instructions: { type: "string", maxLength: 16000, description: "Stage instructions executed only after the operator explicitly runs this workflow; may be empty for a tools-only restriction" },
-        allowedAgentTools: { type: "array", maxItems: 128, uniqueItems: true, description: "Exact core agent tool names. Omitted inherits available tools; an empty array disables agent tool calls. Deterministic pipeline checks are separate.", items: { type: "string", minLength: 1, maxLength: 128, enum: Object.values(TOOL_DEFINITIONS).map(tool => tool.name).filter(name => !LEGACY_DELEGATION_TOOL_NAMES.has(name)) } },
+        allowedAgentTools: { type: "array", maxItems: 128, uniqueItems: true, description: "Exact core agent tool names. Omitted inherits available tools; an empty array disables agent tool calls. Deterministic pipeline checks are separate.", items: { type: "string", minLength: 1, maxLength: 128, enum: Object.values(TOOL_DEFINITIONS).map(tool => tool.name) } },
       }, required: ["instructions"] },
       plan: { type: "object", properties: { goal: { type: "string", enum: ["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"] }, depth: { type: "string", enum: ["quick", "default", "deep"] }, runCount: { type: "integer", minimum: 1, maximum: 16 }, executionMode: { type: "string", enum: ["sequential", "parallel"] }, timeCapMs: { type: "integer", minimum: 1, maximum: 86400000 }, costCapUsd: { type: "number", exclusiveMinimum: 0, maximum: 1000 } }, required: ["goal", "depth", "runCount", "executionMode", "timeCapMs", "costCapUsd"], additionalProperties: false },
     }, required: ["id", "type", "label", "enabled"] } },

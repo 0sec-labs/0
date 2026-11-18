@@ -30,7 +30,7 @@ import {
   type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
-  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type Visualization,
+  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding,
   turnEndingKind,
 } from "@0/engine/shared";
 import { createLocalConsoleSession } from "../console-session.js";
@@ -2027,13 +2027,8 @@ export class ConsoleGateway {
     return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: "changes", messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
-  /** Emits `tool-result`; a successful `visualize` also emits an additive `visual` event (spec kept out of the tool-result copy). */
   #emitToolResult(managed: ManagedSession, call: ToolCall, result: ToolResult): void {
-    const visual = call.name === "visualize" && result.success ? result.meta?.visual : undefined;
-    const published = visual ? { ...result, meta: { ...result.meta, visual: undefined } } : result;
-    const wire = this.#withCallId(call);
-    this.#emit(managed, { type: "tool-result", call: wire, result: json(published) });
-    if (visual) this.#emit(managed, { type: "visual", call: { ...wire, arguments: {} }, visual: json(visual) as unknown as Visualization });
+    this.#emit(managed, { type: "tool-result", call: this.#withCallId(call), result: json(result) });
   }
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();

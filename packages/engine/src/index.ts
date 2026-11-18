@@ -605,53 +605,6 @@ export type {
   ConversationTitleSource,
 } from "./console/index.js";
 
-// ── Recon mode: domain surface enumeration (0#769) ──
-// Given a domain, probes well-known OpenAPI/Swagger + MCP endpoints and emits
-// a deduped, structured asset inventory consumable as discovered_assets.
-export {
-  runRecon,
-} from "./recon/recon.js";
-export type {
-  ReconAsset,
-  ReconResult,
-  ReconOptions,
-} from "./recon/recon.js";
-// Active subdomain brute-force (0#924) — OFF by default, scope-gated +
-// time-boxed; merges into runRecon's subdomain assets when enabled.
-export {
-  DEFAULT_CONCURRENCY,
-} from "./recon/active-subdomains.js";
-
-// Target-neutral research control plane. Existing engines remain native and
-// opt in through adapters; the common runner owns stage order and evidence.
-// JS-driven endpoint + secret discovery (0#927) — scope-gated,
-// deny-by-default; mines a site's JS bundles for endpoints + redacted secrets.
-export {
-  runJsRecon,
-} from "./recon/js-recon.js";
-export type {
-  JsReconResult,
-} from "./recon/js-recon.js";
-export type {
-  FetchTextResult,
-} from "./recon/js-artifacts.js";
-// Extract JS chunk URLs from a page's HTML (resolves relative, dedupes,
-// .js/.mjs only) — feeds runJsRecon's scriptUrls from a single page fetch.
-export { enumerateJsChunkUrls } from "./recon/stack-fingerprint.js";
-// Live cloud-surface probes (0#925) — read-only, gated behind the
-// ZERO_FEATURE_CLOUD_SURFACE flag AND an engagement ScopePolicy.
-export {
-  probeS3Bucket,
-  classifyTakeover,
-  bucketInScope,
-  validateAwsCredentials,
-} from "./agent/cloud-surface.js";
-export type {
-  BucketProbeResult,
-  TakeoverVerdict,
-  CredentialValidationResult,
-} from "./agent/cloud-surface.js";
-
 // Protocol-conformance capability (issue #972) — Tier-1 HTTP spec-vs-impl
 // differential: LLM hypothesizes divergences, a deterministic oracle confirms.
 export {
@@ -703,8 +656,6 @@ export * from "./notes/index.js";
 export * from "./report-export.js";
 
 
-
-export { listBrowserViews, subscribeBrowserView } from "./agent/browser-live.js";
 
 export { sanitizedEnv } from "./agent/sanitized-env.js";
 

@@ -38,12 +38,11 @@ export const DEFERRED_TOOLS_MIN = 12;
  * definitions after applying the caller's role, scope, and feature gates.
  */
 export const IMMEDIATE_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "http_request",
-  "save_finding", "query_findings", "update_finding",
-  "read_file", "list_files", "search_files", "str_replace", "apply_patch",
-  "bash", "browser",
-  "list_skills", "load_skill",
-  "ask_operator", "update_todos", "visualize", "done",
+  "finding",
+  "str_replace",
+  "bash",
+  "load_skill",
+  "ask_operator",
 ]);
 
 /**

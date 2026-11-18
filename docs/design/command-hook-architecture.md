@@ -45,9 +45,7 @@ cli or web. `hooks/before-command.ts` has no runtime imports.
 ## One entry for every executing tool
 
 `ToolExecutor.execute()` runs `runBeforeCommand` before dispatching any tool listed as executing in
-`agent/command-hook.ts`: bash, python_exec / python_eval / js_eval (kind `bash`), run_command, monitor (start and
-send), pty_session, run_scanner and the other engines that start programs (kind `process`), str_replace, apply_patch
-and the skill writers (`file-write`), read_file / list_files / search_files (`file-read`). Subagents use their own
+`agent/command-hook.ts`: bash (kind `bash`) and str_replace (`file-write`). Subagents use their own
 executor, so their calls reach the hook too. Repository acquisition is a bash command and now runs after the hook,
 not before it. The console session projects the same kinds, command text, cwd and paths, and passes the thread's
 http_audit path prefixes (it never did before).
@@ -106,6 +104,6 @@ agent runs as the same OS user with bash. **This is a layer, not a boundary.** T
   `console/turn-engine/session.ts`). They are defence in depth behind the hook, not a second policy.
 - The sandbox choice selects an executor; it is not a per-command decision and does not use the hook.
 - Writes outside the workspace are classified `file-write` but only approvals decides them.
-- Network tools (http_request, browser, ...) keep their own scope gates in the engine path; only the console also
+- Network tools (web_search, and any extension or MCP tool) keep their own scope gates in the engine path; only the console also
   puts them through the hook as kind `network`.
 - The protected-paths analysis is textual (see above) and not a boundary.

@@ -328,11 +328,11 @@ describe("pathEscapeReason", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────
-// Tool integration — `save_finding` returns validation_failed and the
+// Tool integration — `finding` returns validation_failed and the
 // agent's retry on the same turn succeeds. No real LLM calls.
 // ────────────────────────────────────────────────────────────────────
 
-describe("save_finding validation integration", () => {
+describe("finding validation integration", () => {
   let workspace: string;
   let ctx: ToolContext;
   let executor: ToolExecutor;
@@ -356,7 +356,7 @@ describe("save_finding validation integration", () => {
 
   it("rejects malformed CVE with structured validation_failed result", async () => {
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Some finding",
         severity: "high",
@@ -380,7 +380,7 @@ describe("save_finding validation integration", () => {
   it("agent self-corrects within the same turn — second call succeeds", async () => {
     // Call 1: malformed CVE → validation_failed
     const bad = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "SQLi in /users",
         severity: "high",
@@ -395,7 +395,7 @@ describe("save_finding validation integration", () => {
 
     // Call 2: agent reads the error, uppercases the CVE, re-submits
     const good = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "SQLi in /users",
         severity: "high",
@@ -412,7 +412,7 @@ describe("save_finding validation integration", () => {
 
   it("rejects evidence path with parent-dir traversal", async () => {
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Path-leak finding",
         severity: "medium",
@@ -433,7 +433,7 @@ describe("save_finding validation integration", () => {
 
   it("happy path: no CVE/CWE/CVSS at all still saves cleanly", async () => {
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Generic finding",
         severity: "low",

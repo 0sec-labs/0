@@ -21,7 +21,6 @@ import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js"
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation } from "./team-web.js";
-import { handleBrowserLiveRequest } from "./browser-live-routes.js";
 import { MAX_SNAPSHOT_WINDOW, MAX_EVENTS_WAIT_SECONDS, parseSnapshotWindow, parseMessagePage, summarizeConsoleWorker } from "./console-snapshot-window.js";
 import { openSharedDb, evictSharedDb } from "./shared-db.js";
 import { findingsServiceFor } from "./findings-service.js";
@@ -226,18 +225,6 @@ export async function handleWebConsoleApiRequest(
     if (parts[0] !== "sessions" || !parts[1]) return false;
     const id = parts[1];
     const action = parts[2];
-    if (action === "browser" && parts[3] === "views" && (parts.length === 4 || (parts.length === 6 && parts[5] === "stream"))) {
-      gateway.get(id);
-      if (team?.auth.enabled) {
-        const sessionId = getSessionId(req);
-        if (!sessionId || !team.collaboration) throw new WebRequestError("Sign in to this workspace.", 403);
-        // Match the existing conversation ownership/membership checks before exposing pixels.
-        if (!team.collaboration.hasConversation(id)) team.collaboration.register(id, sessionId);
-        team.collaboration.snapshot(id, sessionId);
-      }
-      await handleBrowserLiveRequest(req, res, requestUrl, id, parts[4]);
-      return true;
-    }
     if (!action && method === "GET") {
       const window = badRequest(() => parseSnapshotWindow(requestUrl.searchParams));
       json(res, 200, { snapshot: window ? gateway.getWindowed(id, window) : gateway.get(id) });

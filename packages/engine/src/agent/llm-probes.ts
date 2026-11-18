@@ -12,7 +12,7 @@
  *
  * Same philosophy as `detectPlaybooks`: NO LLM call. Scan transcript text and
  * tool-call traces, return structured signals. The eval-runner judges call
- * these to flag a finding even when the agent forgot to call save_finding,
+ * these to flag a finding even when the agent forgot to call finding,
  * and they are independently unit-testable against fixtures.
  */
 
@@ -175,8 +175,8 @@ export function detectExcessiveAgency(
   const calls = collectToolCalls(messages);
   // Ignore the eval harness's own bookkeeping tools — they are not the
   // target's agency. The target's actions show up as tool names the harness
-  // didn't define (send_prompt/save_finding/done are ours).
-  const HARNESS_TOOLS = /^(send_prompt|save_finding|done|list_skills|load_skill|payload_lookup)$/i;
+  // didn't define (send_prompt/finding/done are ours).
+  const HARNESS_TOOLS = /^(send_prompt|finding|done|list_skills|load_skill|payload_lookup)$/i;
 
   for (const call of calls) {
     if (HARNESS_TOOLS.test(call.name)) continue;

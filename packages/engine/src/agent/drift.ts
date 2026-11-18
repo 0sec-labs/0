@@ -75,7 +75,7 @@
  *    is not a bug in the tokenizer — a real pivot and a real derail are
  *    lexically indistinguishable. The mitigations are structural, not clever:
  *    the streak requirement (a single exploratory turn never fires), the
- *    `plan`/`save_finding` reset (an agent recording progress is by definition
+ *    `plan`/`finding` reset (an agent recording progress is by definition
  *    on-task, whatever the words say), and an intervention that is advisory —
  *    the message explicitly tells the agent that if the new direction is right,
  *    the correct response is to ADD it to the plan, not to abandon it. A false
@@ -146,10 +146,8 @@ const NOISE_TERMS = new Set([
  * agent is not saving findings.
  */
 const PROGRESS_TOOLS = new Set([
-  "plan",
-  "save_finding",
-  "update_finding",
-  "done",
+  "finding",
+  "finding",
 ]);
 
 /**
@@ -159,11 +157,8 @@ const PROGRESS_TOOLS = new Set([
  * `query_findings`, and counting them as drift would punish legitimate lookup.
  */
 const NEUTRAL_TOOLS = new Set([
-  "query_findings",
-  "use_loot",
   "list_skills",
   "load_skill",
-  "oast_poll",
 ]);
 
 /** Tokens shorter than this are dropped. 3 keeps `xss`, `lfi`, `jwt`, `ssh`. */

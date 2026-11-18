@@ -128,7 +128,7 @@ const LOOP_WARNING =
 
 /** Soft warning injected at ~85% of the turn budget. */
 export const BUDGET_WARNING_SOFT =
-  "[0 budget] Preserve credible findings with `save_finding` and retain the evidence and current plan for a clean handoff.";
+  "[0 budget] Preserve credible findings with `finding` and retain the evidence and current plan for a clean handoff.";
 
 /** Hard warning injected at `maxTurns − 3`. */
 export const BUDGET_WARNING_HARD =

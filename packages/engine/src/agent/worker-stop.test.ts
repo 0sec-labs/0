@@ -36,7 +36,7 @@ function deferred<T = void>() {
 
 function context(scanId: string): ToolContext {
   return { scanId, target: "https://target.test", findings: [], attackResults: [], targetInfo: {},
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent] };
+    delegationTools: [TOOL_DEFINITIONS.load_skill, TOOL_DEFINITIONS.spawn_agent] };
 }
 
 function spawnedAgentId(output: unknown): string {
@@ -137,70 +137,6 @@ describe("owned worker stop and drain", () => {
     expect(() => tree.acquire("after-close", "audit")).toThrow(/closed/);
   });
 
-  it("waits for real child-loop cleanup and rejects findings returned after cancellation", async () => {
-    const started = deferred<AbortSignal>();
-    const cleanup = deferred();
-    const ctx = context("audit-stop");
-    const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
-    loop.run = async ({ signal }) => {
-      started.resolve(signal!);
-      await new Promise<void>((resolve) => signal!.addEventListener("abort", () => resolve(), { once: true }));
-      await cleanup.promise;
-      return state([{ id: "late-finding" } as ToolContext["findings"][number]]);
-    };
-    const spawned = await executor.execute({ name: "spawn_persistent_agent", arguments: { task: "wait for stop" } });
-    const id = spawnedAgentId(spawned.output);
-    const signal = await started.promise;
-    let stopped = false;
-    const stop = executor.stopPersistentAgent(id).then((found) => { stopped = true; return found; });
-    try {
-      expect(signal.aborted).toBe(true);
-      await Promise.resolve();
-      expect(stopped).toBe(false);
-      cleanup.resolve();
-      expect(await stop).toBe(true);
-      expect(ctx.findings).toEqual([]);
-      expect(await executor.stopPersistentAgent("foreign-worker")).toBe(false);
-    } finally {
-      cleanup.resolve();
-      await stop;
-      await executor.cleanup();
-    }
-  });
-
-  it("does not dispose a detached descendant when its spawning invocation completes", async () => {
-    const grandchildStarted = deferred<AbortSignal>();
-    const parentFinished = deferred();
-    const executor = new ToolExecutor(context("audit-descendants"), null, undefined, async () => runtime());
-    loop.run = async (options) => {
-      if (options.config.systemPrompt.includes("outer task")) {
-        const borrowed = new ToolExecutor({
-          ...context(options.config.scanId),
-          workerTree: options.config.workerTree,
-          workerFindings: options.config.workerFindings,
-        }, null, undefined, async () => runtime());
-        await borrowed.execute({ name: "spawn_persistent_agent", arguments: { task: "inner task" } });
-        await grandchildStarted.promise;
-        await borrowed.cleanup();
-        parentFinished.resolve();
-        return state();
-      }
-      grandchildStarted.resolve(options.signal!);
-      await new Promise<void>((resolve) => options.signal!.addEventListener("abort", () => resolve(), { once: true }));
-      return state();
-    };
-    const spawned = await executor.execute({ name: "spawn_persistent_agent", arguments: { task: "outer task" } });
-    try {
-      await parentFinished.promise;
-      const signal = await grandchildStarted.promise;
-      expect(signal.aborted).toBe(false);
-      await executor.stopPersistentAgent(spawnedAgentId(spawned.output));
-      expect(signal.aborted).toBe(true);
-    } finally {
-      await executor.cleanup();
-    }
-  });
-
   it("drains queued work through ordered publication without losing already completed findings", async () => {
     vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
     const running = deferred();
@@ -219,7 +155,7 @@ describe("owned worker stop and drain", () => {
       return state([{ id: "late-second" } as ToolContext["findings"][number]]);
     };
     const batch = executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: { tasks: [{ task: "first" }, { task: "second" }, { task: "queued" }] },
     });
     await running.promise;
@@ -239,33 +175,6 @@ describe("owned worker stop and drain", () => {
       await batch;
       await stop;
       await executor.cleanup();
-    }
-  });
-
-  it("stops workers through ConsoleSession without clearing or disabling the conversation", async () => {
-    const started = deferred();
-    loop.run = async ({ signal }) => {
-      started.resolve();
-      await new Promise<void>((resolve) => signal!.addEventListener("abort", () => resolve(), { once: true }));
-      return state();
-    };
-    const session = createConsoleSession({
-      runtime: runtime([
-        { content: [{ type: "tool_use", id: "spawn", name: "spawn_persistent_agent", input: { task: "stay available" } }], stopReason: "tool_use", durationMs: 0 },
-        endTurn("Worker started."),
-        endTurn("The conversation continues."),
-      ]),
-     
-    });
-    try {
-      await session.send("Start a worker.");
-      await started.promise;
-      const history = structuredClone(session.messages);
-      await session.stopPersistentAgents();
-      expect(session.messages).toEqual(history);
-      expect((await session.send("Continue here.")).assistantText).toBe("The conversation continues.");
-    } finally {
-      await session.cleanup();
     }
   });
 
@@ -297,7 +206,7 @@ describe("owned worker stop and drain", () => {
     try {
       const result = await executor.execute(
         {
-          name: "spawn_agents",
+          name: "spawn_agent",
           arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
         },
         { signal: controller.signal },
@@ -378,7 +287,7 @@ describe("owned worker stop and drain", () => {
 
     const execution = executor.execute(
       {
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "first" }, { task: "second" }, { task: "third" }] },
       },
       { signal: controller.signal },
@@ -471,7 +380,7 @@ describe("owned worker stop and drain", () => {
 
     const execution = executor.execute(
       {
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "t1" }, { task: "t2" }, { task: "t3" }] },
       },
       { signal: controller.signal },
@@ -530,7 +439,7 @@ describe("owned worker stop and drain", () => {
     const unsubscribe = eventBus.subscribe({ emit(type, payload) {
       if (type === "subagent_lifecycle") events.push(payload as SubagentLifecyclePayload);
     } });
-    const batch = executor.execute({ name: "spawn_agents", arguments: {
+    const batch = executor.execute({ name: "spawn_agent", arguments: {
       tasks: [{ task: "running" }, { task: "initializing" }, { task: "queued" }],
     } }, { signal: controller.signal });
     let stop: Promise<void> | undefined;
@@ -591,7 +500,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -656,7 +565,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -711,7 +620,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -771,7 +680,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2", read_only: true }] },
       });
 
@@ -809,7 +718,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
       });
 
@@ -850,7 +759,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
       });
 
@@ -891,7 +800,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -934,7 +843,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const result = await executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -966,7 +875,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 
@@ -1024,7 +933,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
       });
 
@@ -1084,7 +993,7 @@ describe("owned worker stop and drain", () => {
       };
 
       const batch = executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }] },
       });
 

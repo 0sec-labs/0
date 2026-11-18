@@ -77,7 +77,7 @@ content: |
   `ssh`'s `-o ProxyCommand=…`. Look for `argv` arrays where an untrusted string
   lands in a position that the tool will parse as an option.
 
-  ### Phase 4: Confirm before save_finding (mandatory)
+  ### Phase 4: Confirm before finding (mandatory)
   A real, savable command-injection needs a concrete trigger path:
   - the exact source → sink dataflow (file:line for each hop),
   - the metachar/flag that breaks out and why the surrounding quoting/escaping

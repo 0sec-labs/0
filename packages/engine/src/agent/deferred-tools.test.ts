@@ -155,27 +155,27 @@ describe("partitionToolDefinitions", () => {
 
   it("keeps common operations and defers specialist schemas in a large catalog", () => {
     const tools = [
-      def("bash"), def("http_request"), def("read_file"), def("done"),
+      def("bash"), def("finding"), def("str_replace"), def("ask_operator"),
       ...Array.from({ length: DEFERRED_TOOLS_MIN }, (_, i) => def(`probe_${i}`)),
-      def("run_command"), def("create_schedule"),
+      def("web_search"), def("create_schedule"),
     ];
     const { immediate, deferred } = partitionToolDefinitions(tools);
-    expect(immediate.map(t => t.name)).toEqual(["bash", "http_request", "read_file", "done"]);
+    expect(immediate.map(t => t.name)).toEqual(["bash", "finding", "str_replace", "ask_operator"]);
     expect(deferred.map(t => t.name)).toEqual(tools.slice(4).map(t => t.name));
     expect(deferred[0]).toBe(tools[4]);
     expect(tools).toHaveLength(DEFERRED_TOOLS_MIN + 6);
   });
 
   it("keeps task-specific tools discoverable and loadable without advertising their schemas", () => {
-    const specialists = [def("send_prompt"), def("use_loot"), def("read_skill")];
+    const specialists = [...Array.from({ length: DEFERRED_TOOLS_MIN }, (_, i) => def(`probe_${i}`)), def("web_search"), def("spawn_agent"), def("memory")];
     const tools = [...Array.from(IMMEDIATE_TOOL_NAMES, name => def(name)), ...specialists];
     const { immediate, deferred } = partitionToolDefinitions(tools);
     for (const tool of specialists) expect(immediate).not.toContain(tool);
     expect(deferred).toEqual(specialists);
     const registry = new DeferredToolRegistry();
     registry.seed(deferred);
-    expect(registry.catalogEntries().map(tool => tool.name)).toEqual(["read_skill", "send_prompt", "use_loot"]);
-    expect(registry.load(specialists.map(tool => tool.name))).toEqual({ loaded: ["send_prompt", "use_loot", "read_skill"], unknown: [] });
+    expect(registry.catalogEntries().map(tool => tool.name)).toEqual(specialists.map(tool => tool.name).sort());
+    expect(registry.load(specialists.map(tool => tool.name))).toEqual({ loaded: specialists.map(tool => tool.name), unknown: [] });
     expect(registry.loadedDefinitions()).toEqual(specialists);
   });
 

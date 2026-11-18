@@ -7,9 +7,7 @@ import type { ScopePolicy } from "../../scope/scope.js";
 import type { AttributionConfig } from "../../scope/attribution.js";
 import type { EngagementPosture } from "../../scope/engagement-profile.js";
 import type { EnforcementTracker } from "../../scope/enforcement.js";
-import { WafDetector } from "../../scope/waf-detect.js";
 import type { ToolHealthSummary } from "../tool-health.js";
-import type { TodoSnapshot } from "../todos.js";
 import { type TrustGraphConfig } from "../trust-graph-runtime.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
 import type { ScanCostLedger } from "../cost-ledger.js";
@@ -55,21 +53,6 @@ export interface NativeAgentConfig {
   retryCount?: number;
   /** Authentication credentials to inject into tool context */
   authConfig?: AuthConfig;
-  /**
-   * Resolved named identities for access-control testing (0#564). When
-   * present, the loop builds a stateful per-identity `SessionEngine` and
-   * threads it onto the ToolContext so cookies persist and access_control_probe
-   * can replay as each principal. Reconciled from the legacy `authConfig` when
-   * omitted.
-   */
-  identities?: import("../../shared/index.js").NamedIdentity[];
-  accessControlFixtures?: import("../../shared/index.js").AccessControlFixture[];
-  /**
-   * Pre-built session engine (0#564). Normally left unset — the loop
-   * constructs one from `identities`/`authConfig`. Provided only when a caller
-   * wants cookie state to persist across multiple loop invocations.
-   */
-  session?: import("../session.js").SessionEngine;
   /**
    * Per-host token-bucket rate limiter (#214). Threaded into the
    * ToolContext so every fetch chokepoint paces against it.
@@ -119,13 +102,6 @@ export interface NativeAgentConfig {
    * counters. Undefined for non-http_audit scans.
    */
   enforcement?: EnforcementTracker;
-  /**
-   * WAF detection + adaptive evasion aggregator (0#568). When omitted
-   * but the scan carries an engagement scope (`scope`/`enforcement` set), one
-   * is created automatically so authorized engagements get WAF fingerprinting
-   * and adaptive evasion by default. Pass `null` to disable explicitly.
-   */
-  wafDetector?: WafDetector | null;
   /**
    * Generic-scanner-traffic suppression opt-out (0#217). Defaults
    * to false. Only consulted when `scope` is set.
@@ -207,7 +183,7 @@ export interface NativeAgentLoopOptions {
   ) => void;
   /** Visible tool snapshots before/after execution, without token-level floods. */
   onToolUpdate?: NativeAgentLoopOptions["onTurn"];
-  /** Called only after a new finding has passed save_finding validation. */
+  /** Called only after a new finding has passed finding validation. */
   onFindingSaved?: (finding: Finding) => void | Promise<void>;
   onEvent?: (eventType: string, payload: Record<string, unknown>) => void;
   /** Poll for user-injected messages at turn boundaries. */
@@ -237,7 +213,7 @@ export interface NativeAgentState {
    * actual input spend.
    */
   totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens?: number };
-  /** Set to true when the loop stopped early because no save_finding was called by the halfway point. */
+  /** Set to true when the loop stopped early because no finding was called by the halfway point. */
   earlyStopNoProgress: boolean;
   /** Brief description of tools/approaches used before the early stop (for retry context). */
   attemptSummary: string;
@@ -279,12 +255,4 @@ export interface NativeAgentState {
    * "N tool issues (missing: semgrep; …)". `total: 0` when nothing degraded.
    */
   toolHealth?: ToolHealthSummary;
-  /**
-   * Final structured full-state plan for this run (TodoWrite shape): the last
-   * plan the model declared via `update_todos`, with per-phase groups and
-   * overall done/total counts. Empty (`progress.total: 0`) when the model never
-   * declared a plan. Live updates fan out on the event bus as `todos`; this is
-   * the end-of-run snapshot attached to the returned state.
-   */
-  todos?: TodoSnapshot;
 }

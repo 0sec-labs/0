@@ -128,7 +128,7 @@ describe("EGATS specialist routing", () => {
     return { calls, events, result };
   }
 
-  it("routes a named class with its methodology skill and existing specialist tools", async () => {
+  it("routes a named class with its methodology skill and the shared branch tools", async () => {
     process.env[FLAG] = "1";
     const { calls, events } = await runRoot("SQLi via username param on POST /login");
 
@@ -140,8 +140,8 @@ describe("EGATS specialist routing", () => {
 
     expect(calls).toHaveLength(1);
     const { toolNames } = calls[0]!;
-    expect(toolNames).toContain("http_request"); // class-tuned extra tool
-    expect(toolNames).toContain("save_finding");
+    expect(toolNames).toContain("bash"); // shared branch tool
+    expect(toolNames).toContain("finding");
   });
 
   it("falls back to the generic branch agent for an ambiguous hypothesis", async () => {
@@ -152,7 +152,7 @@ describe("EGATS specialist routing", () => {
 
     expect(events.find((e) => e.type === "egats_specialist")).toBeUndefined();
     const { toolNames } = calls[0]!;
-    expect(toolNames).not.toContain("http_request");
+    expect(toolNames).toContain("bash");
   });
 
   it("respects the feature flag — no specialist routing when disabled", async () => {
@@ -177,8 +177,8 @@ describe("native-loop specialist skill preload", () => {
       async executeNative(system: string): Promise<NativeRuntimeResult> {
         systems.push(system);
         return {
-          content: [{ type: "tool_use", id: "tc1", name: "done", input: { summary: "ok" } }],
-          stopReason: "tool_use",
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
           durationMs: 1,
         };
       },

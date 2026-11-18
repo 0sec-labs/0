@@ -3,7 +3,6 @@ name: "WordPress Deep Exploitation"
 description: "WordPress-specific attack surface: plugins, themes, REST API, xmlrpc, wp-cron, misconfigs"
 summary: "Probe WordPress plugins, themes, REST API and xmlrpc for exploitable weaknesses."
 category: "Web"
-tools: [web-probe]
 version: 1
 applicable_roles: [attack, audit]
 tags: [wordpress, wp, cms, plugins, themes, xmlrpc, wp-json, wpscan, php]
@@ -35,8 +34,6 @@ content: |
   - `curl -s TARGET/ | grep -oP 'ver=[\d.]+'` — asset version query strings leak WP + plugin versions
   - `curl -s TARGET/wp-content/plugins/` — directory listing if enabled (gold mine)
   - Probe individual plugin readmes: `curl -s TARGET/wp-content/plugins/SLUG/readme.txt | grep -i "stable tag"`
-
-  **If wp_fingerprint tool is available**, call it first — it returns structured (plugin, version, CVE, exploit_hints) data.
 
   ### Step 2: User Enumeration
   - REST API: `curl -s TARGET/wp-json/wp/v2/users` — returns usernames and slugs (often enabled by default)

@@ -9,9 +9,8 @@ import { InlineImage, transcriptToolImages } from "./inline-image";
 import { MessageToolbar } from "./message-toolbar";
 import { cn } from "@/lib/utils";
 import { useDisplaySettings } from "@/lib/display-settings";
-import { VisualBlock } from "./visual-block";
 import { ArtifactCard } from "./artifact-card";
-import { clampDisabled, failedCallCount, formatElapsed, hideFromWorkLog, messageLink, retryLabel, turnArtifacts, workedLabel } from "./transcript-actions";
+import { clampDisabled, failedCallCount, formatElapsed, messageLink, retryLabel, turnArtifacts, workedLabel } from "./transcript-actions";
 import type { ReducedTurn } from "./transcript";
 
 const hairline =
@@ -92,7 +91,7 @@ export const TurnTimeline = memo(function TurnTimeline({
 }: {
   turn: ReducedTurn;
   streaming: boolean;
-  /** Adds text to the composer draft (visual references and message replies). */
+  /** Adds text to the composer draft (message replies). */
   onReference?: (text: string) => void;
   /** The newest turn: its final answer is never clamped. */
   latestTurn?: boolean;
@@ -114,9 +113,7 @@ export const TurnTimeline = memo(function TurnTimeline({
   const latestToolIndex = segments.findLastIndex((segment) => segment.type === "tools");
   const callsById = new Map(turn.toolCalls.map((call) => [call.id, call]));
   // Everything up to the last reasoning/tool segment is work; the trailing assistant text is the answer.
-  // Visuals are never work: they render inline, after the work log and in order within the answer.
-  const lastWork = segments.findLastIndex((segment) => segment.type !== "assistant" && segment.type !== "visual");
-  const visualsById = new Map((turn.visuals ?? []).map((visual) => [visual.id, visual]));
+  const lastWork = segments.findLastIndex((segment) => segment.type !== "assistant");
   const render = (segment: (typeof segments)[number], index: number) => {
     if (segment.type === "assistant")
       return (
@@ -131,10 +128,6 @@ export const TurnTimeline = memo(function TurnTimeline({
           <Markdown text={segment.text} streaming={streaming && index === segments.length - 1} />
         </MessageClamp>
       );
-    if (segment.type === "visual") {
-      const visual = visualsById.get(segment.visualId);
-      return visual ? <VisualBlock key={segment.visualId} visual={visual} onReference={onReference} /> : null;
-    }
     if (segment.type === "reasoning")
       return (
         <ToolActivity
@@ -145,10 +138,9 @@ export const TurnTimeline = memo(function TurnTimeline({
           shimmerReasoning={reasoningTail && index === segments.length - 1}
         />
       );
-    const hasVisuals = Boolean(turn.visuals?.length);
     const calls = segment.toolIds.flatMap((id) => {
       const call = callsById.get(id);
-      return call && !hideFromWorkLog(call, hasVisuals) ? [call] : [];
+      return call ? [call] : [];
     });
     if (!calls.length) return null;
     return (
@@ -172,7 +164,7 @@ export const TurnTimeline = memo(function TurnTimeline({
   const answerText = answer.flatMap((segment) => (segment.type === "assistant" ? [segment.text] : [])).join("\n\n");
   const workRows = segments
     .slice(0, lastWork + 1)
-    .flatMap((segment, index) => (segment.type === "visual" ? [] : [render(segment, index)]))
+    .map((segment, index) => render(segment, index))
     .filter(Boolean);
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -182,9 +174,6 @@ export const TurnTimeline = memo(function TurnTimeline({
           {workRows}
         </TurnWork>
       )}
-      {segments
-        .slice(0, lastWork + 1)
-        .flatMap((segment, index) => (segment.type === "visual" ? [render(segment, index)] : []))}
       {answer.length > 0 && (
         <div data-slot="agent-message" className="group/rail relative min-w-0 pt-7">
           {!streaming && answerText && (

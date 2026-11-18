@@ -10,7 +10,7 @@
  * the dashboard, and (worst) cloud-side dedup keys.
  *
  * This module is the boundary check. Call `validateFindingDraft()` from any
- * tool that persists a finding (today: `save_finding` in `tools.ts`). On
+ * tool that persists a finding (today: `finding` in `tools.ts`). On
  * failure, the caller returns the structured `ValidationError[]` to the agent
  * as a tool result with a `"validation_failed"` discriminator — same shape as
  * `flag-validator` / the empty-PoC gate — so the agent can fix and re-submit
@@ -35,7 +35,7 @@ import type { ImpactAssessment } from "../shared/index.js";
 // ────────────────────────────────────────────────────────────────────
 
 /**
- * Shape of a finding the agent submits via `save_finding` (or any future
+ * Shape of a finding the agent submits via `finding` (or any future
  * report-creation tool). Intentionally narrow — we only validate the
  * structurally checkable fields. Anything else on the wire (free-form
  * severity, prose, etc.) is passed through; validating it requires semantic
@@ -68,7 +68,7 @@ export interface FindingDraft {
   /**
    * Optional business-impact assessment (0#1103). When the LLM supplied
    * evidence-grounded reachability / blast-radius / weaponizability facts,
-   * these fields are populated inline by the model at save_finding time
+   * these fields are populated inline by the model at finding time
    * rather than by a separate report-time LLM call. Structurally validated
    * in the saveFinding handler — no special validation here.
    */

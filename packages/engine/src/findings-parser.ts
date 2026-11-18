@@ -46,7 +46,7 @@ export interface FileRefProbe {
 
 /**
  * Existence + line-count probe for a cited file reference, shared by the CLI
- * findings parser (`validateFileRef`) and the native `save_finding` tool so
+ * findings parser (`validateFileRef`) and the native `finding` tool so
  * both annotation paths agree on what a "fabricated location" is.
  *
  * NEVER throws. `existsSync` is true for directories, so the previous
@@ -121,7 +121,7 @@ export const SUGGESTION_MAX_LENGTH = 20_000;
  * — a half-function inside a ```suggestion block applies as broken code.
  * Fenced / unified-diff content is dropped for the same reason: a line
  * starting with ``` or `@@ ` renders broken inside a GitHub suggestion
- * block. All three annotation paths (CLI parser, save_finding, cloud sink)
+ * block. All three annotation paths (CLI parser, finding, cloud sink)
  * gate on this one predicate.
  */
 export function isSuggestionAcceptable(suggestion: string): boolean {

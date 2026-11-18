@@ -7,7 +7,6 @@ import { FindingActionsProvider, type FindingActions } from "./views/finding-act
 import { FindingDetailView } from "./views/finding-detail";
 import { FindingsView } from "./views/findings";
 import { OverviewView } from "./views/overview";
-import { VisualsView } from "./views/visuals";
 import { PreviewView } from "./views/preview";
 import { PanelActionsProvider, ToolsView, type PanelActions } from "./views/tools";
 import type { PanelViewComponent } from "./types";
@@ -48,7 +47,6 @@ export const panelViewComponents: PanelViewComponents = {
   finding: scoped(FindingDetailView),
   evidence: scoped(EvidenceView),
   browser: scoped(BrowserView),
-  visuals: scoped(VisualsView),
   preview: scoped(PreviewView),
   agents: scoped(AgentsView),
   agent: scoped(AgentDetailView),

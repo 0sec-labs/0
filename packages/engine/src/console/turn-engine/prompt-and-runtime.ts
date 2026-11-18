@@ -1,7 +1,6 @@
 import type { ApiRuntime } from "../../runtime/native-api.js";
 import type { RuntimeConfig } from "../../runtime/types.js";
 import { getScopeEnforcementState } from "../../scope/activation.js";
-import { VISUALIZE_TOOL_HINT } from "../../agent/prompts.js";
 import { type ConsoleAutonomyInput } from "./types.js";
 import { createNativeApiRuntime } from "../../runtime/native-api.js";
 import { executionPolicy, legacyAskedFirst, type ApprovalsChoice } from "../../shared/approvals.js";
@@ -54,8 +53,6 @@ export function buildConsoleSystemPrompt(opts: {
    * that handoff preserves conversation/scope/refusals. Only set when the
    * operator has opted in via allowDevSourceUpdates. */
   developmentSourceRoot?: string;
-  /** False when spawn_agent is not offered (core toolset): the delegation guidance is left out. */
-  delegation?: boolean;
 }): string {
   const approvals = opts.approvals ?? (legacyAskedFirst(opts.autonomyMode) ? "ask" : "auto");
   const asksFirst = approvals === "ask";
@@ -114,7 +111,7 @@ export function buildConsoleSystemPrompt(opts: {
     "  factual and unchanged. The personality is in how you talk to the operator,",
     "  never in the evidence — do not let tone dress up, discount, or reshape a result.",
     "",
-    ...(opts.delegation === false ? [] : [
+    ...[
       "When substantial work has multiple useful, independent slices, proactively",
       "delegate through spawn_agent. Use its tasks array for batches rather than serial",
       "one-at-a-time delegation; do not wait for the operator to ask for parallelism.",
@@ -139,8 +136,9 @@ export function buildConsoleSystemPrompt(opts: {
       "cancellation. If delegation is unavailable or refused, continue only through",
       "remaining authorized capabilities; do not evade the restriction.",
       "",
-    ]),
-    ...VISUALIZE_TOOL_HINT.trim().split("\n"),
+    ],
+    "The 0 CLI manages threads, agents, skills, memory and findings through bash; run `0 --help`.",
+    "Inside this thread use spawn_agent for sub-tasks.",
     "",
     "For finding summaries, use compact structured sections: finding and status;",
     "observed evidence; business impact and prerequisites; severity and confidence;",
@@ -169,7 +167,7 @@ export function buildConsoleSystemPrompt(opts: {
     opts.target ? `Current target: ${opts.target}` : executionPolicy(approvals).publicNetwork
       ? "No target is selected. Use absolute public URLs for network tools; ask for context only when the requested tool actually needs a default target."
       : "No target is set yet; ask the operator for one when a tool needs it.",
-    "An operator message consisting only of an HTTP(S) URL or hostname selects the current target without resetting the session. update_target records discovered profile information; it does not authorize new targets.",
+    "An operator message consisting only of an HTTP(S) URL or hostname selects the current target without resetting the session. Selecting a target does not authorize it; scope and approvals still apply.",
     `Session id: ${opts.scanId}`,
     ...(opts.developmentSourceRoot
       ? [

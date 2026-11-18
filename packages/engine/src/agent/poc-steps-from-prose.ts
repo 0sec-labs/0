@@ -1,6 +1,6 @@
 // 0#179 — agent-side `pocSteps` emission from prose evidence.
 //
-// Today the agent's `save_finding` tool writes three free-text strings
+// Today the agent's `finding` tool writes three free-text strings
 // (`request`, `response`, `analysis`). Cloud and renderer code (0#170,
 // 0#171, 0-cloud#168) prefer the structured `Finding.pocSteps`
 // graph but the agent rarely supplies it. This module is a best-effort

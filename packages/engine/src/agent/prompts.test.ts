@@ -10,22 +10,6 @@ import {
 } from "./prompts.js";
 
 describe("shellPentestPrompt", () => {
-  it("includes explicit browser-first XSS guidance when browser support exists", () => {
-    const prompt = shellPentestPrompt("http://target.test", undefined, { hasBrowser: true });
-
-    expect(prompt).toContain("## Browser tool (Playwright)");
-    expect(prompt).toContain("### XSS browser flow");
-    expect(prompt).toContain("Never save an XSS finding without browser evidence");
-    expect(prompt).toContain("do NOT save an XSS unless browser evidence proves execution");
-  });
-
-  it("does not mention browser-specific XSS flow when browser support is unavailable", () => {
-    const prompt = shellPentestPrompt("http://target.test");
-
-    expect(prompt).not.toContain("## Browser tool (Playwright)");
-    expect(prompt).not.toContain("### XSS browser flow");
-  });
-
   it("includes efficiency-discipline guardrails against bundle paralysis and auth neglect", () => {
     // Guards the anti-paralysis guidance landed in 0.7.10 after real scans
     // showed the attack agent spending 6-8 turns re-grepping a single
@@ -113,11 +97,11 @@ describe("scoped source prompts", () => {
     const blind = blindVerifyPrompt("src/index.ts", "input", "high", "/scope");
 
     for (const prompt of [research, verify, blind]) {
-      expect(prompt).toContain("read_file");
-      expect(prompt).toContain("search_files");
+      expect(prompt).toContain("cat -n");
+      expect(prompt).not.toContain("read_file");
+      expect(prompt).not.toContain("search_files");
       expect(prompt).not.toContain("run_command");
     }
-    expect(research).toContain("list_files");
     const perFile = researchPromptSingleFile("/scope", "src/index.ts", [], [], "npm:example@1.0.0");
     for (const prompt of [research, perFile]) {
       expect(prompt).toContain("verification_spec");
@@ -125,20 +109,5 @@ describe("scoped source prompts", () => {
       expect(prompt).toContain("file-missing-pattern");
     }
 
-  });
-});
-
-describe("shellPentestPrompt — OAST blind/out-of-band guidance", () => {
-  it("steers blind candidates through oast_register / oast_poll before timing fallback", () => {
-    const prompt = shellPentestPrompt("https://target.test");
-
-    expect(prompt).toContain("oast_register");
-    expect(prompt).toContain("oast_poll");
-    expect(prompt).toContain("oast_handle_id");
-    expect(prompt).toContain("token-matched callback");
-    expect(prompt).toContain("OOB RCE");
-    expect(prompt).toContain("OOB SQLi");
-    expect(prompt).toContain("XXE-OOB");
-    expect(prompt).toContain("JNDI/log4shell");
   });
 });

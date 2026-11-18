@@ -4,7 +4,7 @@ import { type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPr
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } from "../../runtime/types.js";
 import type { McpToolHost } from "../../agent/mcp-host.js";
 import type { ExtensionRunPort } from "../../agent/types.js";
-import { LearningStore, type osecDB } from "../../storage/index.js";
+import { type osecDB } from "../../storage/index.js";
 import type { NoteStore } from "../../notes/index.js";
 import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
 import { ScopePolicy } from "../../scope/scope.js";
@@ -158,7 +158,7 @@ export interface ConsoleScopeResolution {
 
 /**
  * Request payload passed to `ConsoleSessionConfig.requestLocalScope` when a
- * filesystem-scoped tool call (read_file/list_files/search_files/…) is issued
+ * filesystem-scoped tool call (read_file/str_replace/…) is issued
  * with no local scope covering the path it wants to touch. The local-scope
  * analogue of {@link ConsoleScopeRequest}: the operator approves an in-memory,
  * session-only directory subtree, or the callback returns null to deny.
@@ -351,7 +351,7 @@ export interface ConsoleSessionConfig {
   target?: string;
   /**
    * Role whose tool set the console exposes. Defaults to `"audit"`, which maps
-   * to the full "everything" registry (recon, web, source, patch, run_command,
+   * to the full "everything" registry (web search, source, patch, shell,
    * …) — the cockpit wants every tool in one place.
    */
   role?: AgentRole;
@@ -360,7 +360,7 @@ export interface ConsoleSessionConfig {
   /** Stable id for this console session (telemetry / future persistence). */
   scanId?: string;
   /**
-   * Optional persistent findings database. When supplied, save_finding writes to
+   * Optional persistent findings database. When supplied, finding writes to
    * it and query_findings can inspect prior scans/sessions; when absent, the
    * console keeps its historical in-memory-only behavior.
    */
@@ -431,7 +431,7 @@ export interface ConsoleSessionConfig {
   requestScope?: (req: ConsoleScopeRequest) => Promise<ConsoleScopeResolution | null>;
   /**
    * Callback invoked when a filesystem-scoped tool
-   * (read_file/list_files/search_files/apply_patch/run_command/analyze_binary)
+   * (read_file/str_replace)
    * is issued and no in-memory local scope covers the path it wants to touch.
    * The local-filesystem analogue of {@link requestScope}: return a
    * {@link ConsoleLocalScopeResolution} to approve an in-memory directory

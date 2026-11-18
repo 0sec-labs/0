@@ -31,12 +31,6 @@ describe("savedTranscriptSnapshot", () => {
     expect(turns.every((turn) => !turn.isWorking)).toBe(true);
   });
 
-  it("turns a visualize call into an inline visual", () => {
-    const visual = { role: "assistant", content: [{ type: "tool_use", id: "v1", name: "visualize", input: { kind: "table", title: "Hosts", summary: "s", spec: { kind: "table", columns: ["a"], rows: [["1"]] } } }] } as unknown as ConsolePublicMessage;
-    const turns = reduceConversation(savedTranscriptSnapshot("s1", page([text("user", "show"), visual])));
-    expect(turns[0]!.visuals?.map((item) => item.id)).toContain("v1");
-  });
-
   it("is an idle, read-only session addressed by the saved id", () => {
     const snapshot = savedTranscriptSnapshot("s1", page([text("user", "hi")]));
     expect(snapshot.session).toMatchObject({ id: "s1", savedId: "s1", status: "ready", title: "API scan", messageCount: 1 });

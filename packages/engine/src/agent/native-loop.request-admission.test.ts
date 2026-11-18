@@ -12,9 +12,9 @@ it("compacts a locally rejected unsent request before missing-usage checks, mete
         summaries++; return { content: [{ type: "text", text: "Completed three recorded planning steps. Preserve tenant isolation and continue from the current investigation. ".repeat(3) }], stopReason: "end_turn", durationMs: 0, usage };
       }
       planners++;
-      if (planners <= 3) return { content: [{ type: "tool_use", id: `plan${planners}`, name: "update_todos", input: { todos: [{ content: `Step ${planners}`, status: "pending" }] } }], stopReason: "tool_use", durationMs: 0, usage };
+      if (planners <= 3) return { content: [{ type: "tool_use", id: `plan${planners}`, name: "bash", input: { command: `yes "planning step ${planners} recorded evidence" | head -n 150` } }], stopReason: "tool_use", durationMs: 0, usage };
       if (planners === 4) return { content: [], stopReason: "error", durationMs: 0, error: "LOCAL_REQUEST_ADMISSION_LIMIT: input exceeds gateway byte limit before dispatch" };
-      return { content: [{ type: "tool_use", id: "done", name: "done", input: { summary: "Finished after bounded compaction" } }], stopReason: "tool_use", durationMs: 0, usage };
+      return { content: [{ type: "text", text: "Finished after bounded compaction" }], stopReason: "end_turn", durationMs: 0, usage };
     } };
   const events: string[] = [];
   const state = await runNativeAgentLoop({ config: { role: "discovery", systemPrompt: "Investigate", tools: [], maxTurns: 8,
@@ -25,8 +25,8 @@ it("compacts a locally rejected unsent request before missing-usage checks, mete
 });
 it("retains recent native reasoning and tool-call ordering verbatim during the reused compactor", async () => {
   const raw = { provider: "openai", model: "auto", wireApi: "responses" as const,
-    output: [{ type: "reasoning", encrypted_content: "opaque-fixture" }, { type: "function_call", call_id: "last", name: "read_file", arguments: "{}" }] };
-  const tail: NativeMessage[] = [{ role: "assistant", content: [{ type: "tool_use", id: "last", name: "read_file", input: {} }], providerRaw: raw },
+    output: [{ type: "reasoning", encrypted_content: "opaque-fixture" }, { type: "function_call", call_id: "last", name: "bash", arguments: "{}" }] };
+  const tail: NativeMessage[] = [{ role: "assistant", content: [{ type: "tool_use", id: "last", name: "bash", input: {} }], providerRaw: raw },
     { role: "user", content: [{ type: "tool_result", tool_use_id: "last", content: "Recorded source evidence" }] }];
   const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: "Initial scope" }] },
     ...Array.from({ length: 6 }, (_, i): NativeMessage => ({ role: i % 2 ? "user" : "assistant", content: [{ type: "text", text: "Earlier observation" }] })), ...tail];
@@ -61,10 +61,10 @@ it("terminates an unsendable opening request without inventing unpriced provider
 });
 it("keeps a native call and its result when an extra user warning follows", async () => {
   const raw = { provider: "openai", model: "auto", wireApi: "responses" as const,
-    output: [{ type: "reasoning", encrypted_content: "retain-verbatim" }, { type: "function_call", call_id: "recent", name: "read_file", arguments: "{}" }] };
+    output: [{ type: "reasoning", encrypted_content: "retain-verbatim" }, { type: "function_call", call_id: "recent", name: "bash", arguments: "{}" }] };
   const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: "Initial scope" }] },
     ...Array.from({ length: 4 }, (_, i): NativeMessage => ({ role: i % 2 ? "user" : "assistant", content: [{ type: "text", text: "Old recorded observation" }] })),
-    { role: "assistant", providerRaw: raw, content: [{ type: "tool_use", id: "recent", name: "read_file", input: {} }] },
+    { role: "assistant", providerRaw: raw, content: [{ type: "tool_use", id: "recent", name: "bash", input: {} }] },
     { role: "user", content: [{ type: "tool_result", tool_use_id: "recent", content: "Exact latest source result" }] },
     { role: "user", content: [{ type: "text", text: "Keep within the approved budget" }] }];
   const runtime: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async () => ({

@@ -7,9 +7,8 @@ up"). The evidence and the per-tool table are in
 
 ## Principles
 
-1. **Small core.** The model sees about ten tools by default: `bash`, file
-   read/list/search/edit/patch, `save_finding`, `update_finding`, `ask_operator`,
-   `load_skill`, `done`. Every extra schema costs tokens on every turn and makes
+1. **Small core.** The model sees eight tools by default: `bash`, `str_replace`, `finding`,
+   `ask_operator`, `load_skill`, `web_search`, `spawn_agent` and `memory`. Every extra schema costs tokens on every turn and makes
    the model pick worse.
 2. **Shell first.** The model already knows `curl`, `jq`, `git`, `python3`. A
    capability that a shell command can express is not a tool.
@@ -46,7 +45,7 @@ up"). The evidence and the per-tool table are in
    declare packs; folder skills from a repository cannot.
 4. Run `node packages/engine/scripts/generate-skills-manifest.mjs` and the tests
    `src/console/core-toolset.test.ts` and `src/agent/skills`.
-5. Do not rename or delete an old tool name. Add it to `TOOL_ALIASES` so stored
+5. Do not rename an old tool name that stored sessions still use. Add it to `TOOL_ALIASES` so stored
    sessions and workflows keep dispatching.
 
 ## Switching the list

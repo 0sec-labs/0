@@ -14,9 +14,8 @@
  * (that was tried, regressed, and is disabled by default; see
  * `agent/features.ts`). There is no new search layer here. A `LootLedger` is a
  * typed, deduped store that the EXISTING single agent loop writes to (from
- * `save_finding` and from evidence-bearing tool results) and reads from (a
- * compact "known footholds" block re-injected each turn, plus a `use_loot`
- * tool that returns full artifact values on demand). The ledger survives
+ * `finding` and from evidence-bearing tool results) and reads from (a
+ * compact "known footholds" block re-injected each turn). The ledger survives
  * compaction because it is re-rendered from structured state rather than
  * relying on the original tool-result message surviving in the window.
  *
@@ -53,7 +52,7 @@ export interface LootItem {
   kind: LootKind;
   /** The full artifact value (e.g. `admin:hunter2`, a JWT, `/etc/passwd`). */
   value: string;
-  /** Where it came from: a tool name (`http_request`), `save_finding`, etc. */
+  /** Where it came from: a tool name (`http_request`), `finding`, etc. */
   source: string;
   /** Short human-readable note — usually the label/key the value sat behind. */
   context?: string;
@@ -70,7 +69,7 @@ export interface LootInput {
   turn?: number;
 }
 
-/** Filter passed to {@link LootLedger.query} / the `use_loot` tool. */
+/** Filter passed to {@link LootLedger.query}. */
 export interface LootQuery {
   kind?: LootKind;
   /** Case-insensitive substring matched against id, value, and context. */
@@ -309,7 +308,7 @@ export class LootLedger {
 
   /**
    * Harvest from a saved finding's evidence (0#567 — "populated by
-   * save_finding"). Pulls from the request / response / analysis / description
+   * finding"). Pulls from the request / response / analysis / description
    * blobs and labels the source so the injected block reads sensibly.
    */
   harvestFromFinding(
@@ -327,7 +326,7 @@ export class LootLedger {
       finding.description,
     ].filter((s): s is string => typeof s === "string" && s.length > 0);
     if (parts.length === 0) return [];
-    const source = `save_finding${finding.category ? `:${finding.category}` : ""}`;
+    const source = `finding${finding.category ? `:${finding.category}` : ""}`;
     return this.harvest(parts.join("\n"), source, turn);
   }
 
@@ -336,7 +335,7 @@ export class LootLedger {
     return this.items;
   }
 
-  /** Filtered view, for the `use_loot` tool. */
+  /** Filtered view. */
   query(q: LootQuery = {}): LootItem[] {
     const search = q.search?.trim().toLowerCase();
     return this.items.filter((it) => {
@@ -353,7 +352,7 @@ export class LootLedger {
   /**
    * Compact "known footholds" block injected into the agent's context. Values
    * that fit are shown in full so the model can reuse them directly; long ones
-   * are previewed and the agent is told to `use_loot` for the full value. Pass
+   * are previewed (the full value is in the earlier tool output). Pass
    * a `limit` to cap how many are rendered (most-recent-first).
    */
   render(opts: { limit?: number } = {}): string {
@@ -377,12 +376,12 @@ export class LootLedger {
       "## Known footholds (loot ledger)",
       "Artifacts captured earlier this scan. REUSE them to chain to higher impact —",
       "e.g. authenticate with a leaked credential, replay a session cookie, hit a",
-      "discovered endpoint, or crack a captured hash. Call `use_loot` to fetch the",
-      "full value of any item shown truncated below.",
+      "discovered endpoint, or crack a captured hash. Long values are shortened",
+      "below; the full value is in the earlier tool output.",
     ].join("\n");
 
     const footer =
-      omitted > 0 ? `\n…and ${omitted} more (call use_loot to list all).` : "";
+      omitted > 0 ? `\n…and ${omitted} more.` : "";
 
     return `${header}\n${lines.join("\n")}${footer}`;
   }

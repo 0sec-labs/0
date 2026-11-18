@@ -65,8 +65,8 @@ function recordingRuntime(): { runtime: NativeRuntime; seenMessages: NativeMessa
       // Snapshot the messages the loop seeded itself with on the first call.
       seenMessages.push(JSON.parse(JSON.stringify(messages)) as NativeMessage[]);
       return {
-        content: [{ type: "tool_use", id: "tc-done", name: "done", input: { summary: "ok" } }],
-        stopReason: "tool_use",
+        content: [{ type: "text", text: "ok" }],
+        stopReason: "end_turn",
         durationMs: 1,
       };
     },

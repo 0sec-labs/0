@@ -27,7 +27,6 @@ const EXPECTED_SKILL_IDS = [
   "blind-exploitation",
   "jwt-attacks",
   "crypto-misuse",
-  "visualize",
   "race-condition",
   "deserialization-chains",
   "request-smuggling",
@@ -198,7 +197,7 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(17);
+      expect(reviewSkills.length).toBe(16);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         "advisory-disclosure",
@@ -217,7 +216,6 @@ describe("Skill Registry", () => {
         "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",
-        "visualize",
         "workflow-hardening",
       ]);
     });

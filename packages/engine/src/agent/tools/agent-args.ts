@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { ImpactAssessmentSchema } from "../../shared/index.js";
 import type { OperatorQuestion, OperatorQuestionOption, OperatorQuestionRequest } from "../types.js";
-import { todoInputSchema, MAX_TODOS } from "../todos.js";
 import { z } from "zod";
 
 export const memoryArgsSchema = z.object({
@@ -133,52 +132,14 @@ export function buildOperatorQuestionRequest(
   return { ok: true, request: { requestId: idFactory(), questions } };
 }
 
-export const oastProtocolCheckpointSchema = z.enum(["dns", "http", "smtp", "ldap"]);
-export const oastInteractionCheckpointSchema = z.object({
-  protocol: oastProtocolCheckpointSchema,
-  timestamp: z.string(),
-  queryName: z.string(),
-  path: z.string().optional(),
-  method: z.string().optional(),
-  remoteAddress: z.string().optional(),
-  raw: z.string().optional(),
-}).strict();
-
 /** Data-only handoff ABI. Authority fields are required, never defaulted. */
 export const toolExecutorCheckpointSchema = z.object({
   credentialTarget: z.string(),
-  rejectedDecoyFlags: z.array(z.string()),
   scopedAuditGrants: z.array(z.string()),
   scopedAuditDenials: z.array(z.string()),
   assignedAgentNames: z.array(z.string()),
-  oastHandles: z.array(z.object({
-    id: z.string(),
-    handle: z.object({
-      id: z.string(), token: z.string(), host: z.string(),
-      httpUrl: z.string(), dnsHost: z.string(), createdAt: z.string(),
-    }).strict(),
-  }).strict()),
-  oastCandidates: z.array(z.object({ id: z.string(), candidate: z.string() }).strict()),
-  oastVerified: z.array(z.object({
-    id: z.string(),
-    oastClass: z.enum(["blind-ssrf", "blind-xss", "jndi", "oob-rce", "oob-sqli", "xxe-oob"]),
-    verdict: z.object({
-      verified: z.boolean(), confidence: z.number().min(0).max(1),
-      protocol: oastProtocolCheckpointSchema.nullable(),
-      evidence: z.string(), reason: z.string(),
-      interaction: oastInteractionCheckpointSchema.nullable(),
-    }).strict(),
-  }).strict()),
-  startedAt: z.number().finite().nonnegative(),
-  sourceFilesRead: z.array(z.string()),
-  totalNonDoneToolCalls: z.number().int().nonnegative(),
-  doneRejections: z.number().int().nonnegative(),
   msgDrainTurn: z.number().int().min(-1),
   msgDrainCount: z.number().int().nonnegative(),
-  todos: z.object({
-    items: z.array(todoInputSchema.required({ status: true }).extend({ id: z.string() }).strict()).max(MAX_TODOS),
-    revision: z.number().int().nonnegative(),
-  }).strict(),
   toolHealth: z.array(z.object({
     tool: z.string(),
     category: z.enum(["missing-binary", "buffer-limit", "wrong-lockfile", "policy-denied", "scope-denied", "error"]),
@@ -186,7 +147,7 @@ export const toolExecutorCheckpointSchema = z.object({
     count: z.number().int().positive(),
     firstSeen: z.number().finite(), lastSeen: z.number().finite(),
   }).strict()),
-}).strict();
+}).strip();
 
 export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
 

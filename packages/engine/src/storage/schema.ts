@@ -180,7 +180,7 @@ export const findings = sqliteTable(
     /**
      * JSON-stringified Finding["reviewAnnotation"] — the scoped source
      * reference (`path` + line range, optional suggestion / knownMarker)
-     * the agent cited at save_finding time. NULL when the finding carries
+     * the agent cited at finding time. NULL when the finding carries
      * no workspace-contained source location. Additive: every reader must
      * keep working when it is absent.
      */

@@ -11,43 +11,15 @@
  * This barrel changes only when a NEW DOMAIN is added, not per-tool.
  */
 import { reconDispatch } from "./recon.js";
-import { browserDispatch } from "./browser.js";
 import { findingsDispatch } from "./findings.js";
 import { systemDispatch } from "./system.js";
-import { accessControlDispatch } from "./access-control.js";
-import { exploitDispatch } from "./exploit.js";
-import { intelDispatch } from "./intel.js";
 import { skillsDispatch } from "./skills.js";
-import { scannerDispatch } from "./scanner.js";
-import { detectionDispatch } from "./detections.js";
-import { cloudDispatch } from "./cloud.js";
-import { oastDispatch } from "./oast.js";
-import { pythonDispatch } from "./python.js";
-import { binaryDispatch } from "./binary.js";
 import { askOperatorDispatch } from "./ask-operator.js";
-import { todosDispatch } from "./todos.js";
-import { visualizeDispatch } from "./visualize.js";
-import { evalDispatch } from "./eval.js";
-import { proxyDispatch } from "./proxy.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
-  ...browserDispatch,
   ...findingsDispatch,
   ...systemDispatch,
-  ...accessControlDispatch,
-  ...exploitDispatch,
-  ...intelDispatch,
   ...skillsDispatch,
-  ...scannerDispatch,
-  ...detectionDispatch,
-  ...cloudDispatch,
-  ...oastDispatch,
-  ...pythonDispatch,
-  ...binaryDispatch,
   ...askOperatorDispatch,
-  ...todosDispatch,
-  ...visualizeDispatch,
-  ...evalDispatch,
-  ...proxyDispatch,
 };

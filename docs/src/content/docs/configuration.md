@@ -394,7 +394,7 @@ A redirect or a linked third-party host does not become in scope because the sta
 | `--model` and your provider key | Which model does the work. |
 | `ZERO_ENGAGEMENT_PROFILE=conservative` | A quieter testing posture. Not a new scope. |
 
-With scope on, generic scanner wrappers (sqlmap, nikto and similar) are hidden on scoped engagements. `--allow-scanners` shows them without widening the host list.
+With scope on, the shell refuses generic scanners (sqlmap, nikto and similar) on scoped engagements. `--allow-scanners` lifts that refusal without widening the host list.
 
 If an engagement needs a hard boundary for all traffic, enforce it outside the process, for example with a firewall.
 

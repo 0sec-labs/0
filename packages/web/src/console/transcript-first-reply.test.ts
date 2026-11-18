@@ -29,7 +29,7 @@ function snapshot(events: DesktopConsoleEvent[]): ConsoleSessionSnapshot {
 /** The turn's closing answer is whatever follows the last reasoning/tool segment; it must not be hidden in the work log. */
 function answerOf(turn: ReturnType<typeof reduceConversation>[number]) {
   const segments = turn.segments ?? [];
-  const lastWork = segments.findLastIndex((s) => s.type !== "assistant" && s.type !== "visual");
+  const lastWork = segments.findLastIndex((s) => s.type !== "assistant");
   return segments.slice(lastWork + 1).flatMap((s) => (s.type === "assistant" ? [s.text] : []));
 }
 

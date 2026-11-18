@@ -41,16 +41,14 @@ it("retains a tool executor's folder boundary after async context exit and block
   const f = fixture();
   const executor = withLocalSourceBoundary(f.folder, () => new ToolExecutor(f.ctx, null));
   await withScopeEnforcement(f.disabled, async () => {
-    const inside = await executor.execute({ name: "read_file", arguments: { path: "inside.ts" } });
+    const inside = await executor.execute({ name: "load_skill", arguments: {} });
     expect(inside.success).toBe(true);
-    for (const name of ["read_file", "list_files", "search_files"]) {
-      const denied = await executor.execute({ name, arguments: { path: "../outside.ts", query: "SECRET" } });
-      expect(denied.success).toBe(false); expect(JSON.stringify(denied.output)).not.toContain("OUTSIDE_SECRET");
-    }
-    const command = await executor.execute({ name: "run_command", arguments: { command: "cat ../outside.ts" } });
+    const denied = await executor.execute({ name: "str_replace", arguments: { path: "../outside.ts", old_string: "", new_string: "x" } });
+    expect(denied.success).toBe(false); expect(JSON.stringify(denied.output)).not.toContain("OUTSIDE_SECRET");
+    const command = await executor.execute({ name: "bash", arguments: { command: "cat ../outside.ts" } });
     expect(command.success).toBe(false); expect(command.error).toContain("not available in a scoped source audit");
     executor.configureWorkspace(f.root);
-    expect((await executor.execute({ name: "read_file", arguments: { path: "outside.ts" } })).success).toBe(false);
+    expect((await executor.execute({ name: "str_replace", arguments: { path: "outside.ts", old_string: "", new_string: "x" } })).success).toBe(false);
     expect(isScopeEnforcementEnabled()).toBe(false);
   });
 });

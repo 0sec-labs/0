@@ -6,7 +6,7 @@ import { BlockList, connect, isIP, type Socket } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ScopePolicy } from "../scope/scope.js";
-import { superviseChild } from "./scanner-tools.js";
+import { superviseChild } from "./supervise-child.js";
 import { sanitizedEnv } from "./sanitized-env.js";
 import { shellTokens } from "./shell-tokens.js";
 import { formatTruncated } from "./output-truncation.js";

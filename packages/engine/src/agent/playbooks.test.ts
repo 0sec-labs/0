@@ -23,14 +23,13 @@ describe("PLAYBOOKS — XBEN-054 HTTP method tampering hint", () => {
 });
 
 describe("PLAYBOOKS — XBEN-010 JSFuck XSS hint", () => {
-  it("xss playbook references JSFuck and the payload lookup helper", () => {
+  it("xss playbook references JSFuck and the exact-output validator hint", () => {
     const xss = PLAYBOOKS.xss;
     expect(xss).toBeDefined();
     expect(xss).toContain("JSFuck");
-    expect(xss).toContain("payload_lookup");
-    expect(xss).toContain("jsfuck_xss");
     expect(xss).toContain("exact-output validator");
     expect(xss).toContain("XBEN-010");
+    expect(xss).not.toContain("payload_lookup");
   });
 
   it("xss hint mentions the six allowed characters", () => {

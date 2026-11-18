@@ -60,7 +60,7 @@ content: |
   assert it `startsWith(baseDir + sep)`. If that's missing or done before
   decoding, it's bypassable.
 
-  ### Phase 4: Confirm before save_finding
+  ### Phase 4: Confirm before finding
   - Show the untrusted path component → sink (file:line), and that the resolved
     path escapes the base. For write, name the file you'd overwrite and the RCE/
     impact it yields.

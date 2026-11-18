@@ -77,23 +77,6 @@ export const features = {
   get progressHandoff(): boolean { return env("ZERO_FEATURE_PROGRESS_HANDOFF", true); },
   /** Allow the agent to search the web for CVE details, docs, and technique references */
   get webSearch(): boolean { return env("ZERO_FEATURE_WEB_SEARCH", true); },
-  /** Interactive PTY sessions for exploits requiring interactivity (reverse shells, DB clients, SSH) */
-  get ptySession(): boolean { return env("ZERO_FEATURE_PTY_SESSION", false); },
-  /**
-   * Persistent, COMPUTE-ONLY Python REPL (`python_exec`, Phase-0). A framed
-   * python3 kernel keeps state across calls for payload/parse/crypto/encode
-   * work; networking is blocked at the socket source whenever an engagement is
-   * active. Default OFF — opt in via ZERO_FEATURE_PYTHON_EXEC=1. Getter so
-   * the CLI `--features` flag (set after this module is imported) is honored at
-   * tool-dispatch time.
-   */
-  get pythonExec(): boolean { return env("ZERO_FEATURE_PYTHON_EXEC", false); },
-  /**
-   * Expose the path-confined `analyze_binary` bridge to 0verse. Default OFF:
-   * a model may request a long-running binary analysis only after an operator
-   * opts in with ZERO_FEATURE_ZEROVERSE=1.
-   */
-  get zeroverse(): boolean { return env("ZERO_FEATURE_ZEROVERSE", false); },
   /**
    * EGATS specialist routing (#557, HPTSA-inspired). When ON, an EGATS branch
    * whose hypothesis names a concrete vuln class (SQLi/XSS/SSRF/SSTI/IDOR/
@@ -201,61 +184,6 @@ export const features = {
    */
   get inlineValidation(): boolean {
     return env("ZERO_FEATURE_INLINE_VALIDATION", false);
-  },
-  /**
-   * WordPress plugin/theme fingerprinter + OSV CVE lookup.
-   * Exposes the `wp_fingerprint` tool to the attack agent. On by default —
-   * disable with ZERO_FEATURE_WP_FINGERPRINT=0 (`--features` only enables
-   * flags, so it cannot turn this one off).
-   * WordPress detection is cheap and the resulting plugin/CVE hints are
-   * broadly useful on real web targets, so the default is ON. See
-   * packages/engine/src/agent/wp-fingerprint.ts for the implementation.
-   *
-   * Implemented as a getter so the CLI `--features` flag — which sets the env
-   * var inside the command action, AFTER this module has been imported — is
-   * still honored at tool-dispatch time.
-   */
-  get wpFingerprint(): boolean {
-    return env("ZERO_FEATURE_WP_FINGERPRINT", true);
-  },
-
-  /**
-   * MongoDB ObjectID forge tool. Exposes the `mongo_objectid` tool to the
-   * attack agent so it can compute valid 24-char hex ObjectIds with arbitrary
-   * timestamps + counters (e.g. forge the "first user" ObjectId in an IDOR
-   * challenge by setting timestamp = appStartTimestamp and counter = 0).
-   *
-   * Default ON — this is a pure-computation utility with no network or
-   * filesystem side effects, so there's no reason to gate it off. Disable
-   * via ZERO_FEATURE_MONGO_OBJECTID_FORGE=0 or `--no-mongo-objectid-forge`
-   * for ablation. Implemented as a getter so the CLI `--features` flag
-   * (which sets the env var inside the command action, AFTER this module
-   * has been imported) is still honored at tool-dispatch time. Matches
-   * the wpFingerprint pattern above. See packages/engine/src/agent/objectid-forge.ts.
-   */
-  get mongoObjectIdForge(): boolean {
-    return env("ZERO_FEATURE_MONGO_OBJECTID_FORGE", true);
-  },
-
-  /**
-   * Live cloud-surface testing (0#925). Exposes `cloud_s3_probe` and
-   * `cloud_validate_credentials` to the attack agent so it can test S3 buckets
-   * for public access + orphaned-bucket takeover and safely validate harvested
-   * AWS credentials (read-only). All probes are anonymous or read/verify-only —
-   * no writes, no data exfiltration beyond minimal proof.
-   *
-   * Default OFF (opt-in via ZERO_FEATURE_CLOUD_SURFACE=1). Probing a target
-   * org's bucket-name space or validating its harvested credentials is recon
-   * AGAINST THAT ORG, so it is deny-by-default at two layers: this enablement
-   * flag, AND an engagement-scope check in the tool handlers (a configured
-   * ScopePolicy that authorizes the bucket endpoint — see cloud-surface.ts
-   * `bucketInScope`). The read-only action allowlist (`assertReadOnlyAction`)
-   * stays on top of both. Getter so the CLI `--features` flag (set AFTER this
-   * module loads) is honored at dispatch time — matches the wpFingerprint /
-   * mongoObjectIdForge pattern above. See packages/engine/src/agent/cloud-surface.ts.
-   */
-  get cloudSurface(): boolean {
-    return env("ZERO_FEATURE_CLOUD_SURFACE", false);
   },
 
 
@@ -462,7 +390,7 @@ export const features = {
    *
    * Strix's `base_agent.py:186-211` injects a soft warning at 85% of the
    * turn budget and a sharper warning at `maxTurns − 3` so the model gets
-   * a clean signal to call `done` (or `save_finding`+`done`) instead of
+   * a clean signal to call `done` (or `finding`+`done`) instead of
    * being cut off mid-thought when the hard turn limit triggers. Each
    * warning fires AT MOST ONCE per run; the small turn-state field
    * `budgetWarningsFired` lives on the loop's local closure.
@@ -578,7 +506,7 @@ export const features = {
    *
    * When ON, the attack/discovery/verify agents maintain a typed `LootLedger`
    * (credential | token | path | endpoint | hash | cookie) populated from
-   * `save_finding` evidence AND from evidence-bearing tool results
+   * `finding` evidence AND from evidence-bearing tool results
    * (http_request / crawl / submit_form / send_prompt / browser / read_file /
    * bash). A compact "known footholds" block is re-injected into the agent's
    * context each turn (re-rendered from structured state, so it survives
@@ -599,32 +527,6 @@ export const features = {
    */
   get lootLedger(): boolean {
     return env("ZERO_FEATURE_LOOT_LEDGER", true);
-  },
-
-  /**
-   * Typed TODO / plan ledger (`packages/engine/src/agent/task-ledger.ts`).
-   *
-   * When ON, the agent gets a `plan` tool that maintains a typed, validated
-   * task list (add / start / complete / drop / note / list), and the loop
-   * re-injects a compact plan block re-rendered from that structured state —
-   * so the plan survives `compactMessagesWithLLM` eating the message that
-   * carried it. Prior art: Tencent Xuanwu's Atuin moved 68.7% → 84.0% on
-   * CyberGym holding the model fixed, and agent-maintained TODO lists are a
-   * named component of that harness design.
-   *
-   * Default ON, on the same reasoning as `lootLedger` above: it is additive
-   * (one tool schema plus a size-capped block), it is structured state
-   * re-rendered per turn rather than a new search or reasoning layer, and the
-   * failure mode of an unused tool is a few hundred wasted schema tokens
-   * rather than wrong behavior. Note for whoever publishes benchmark numbers
-   * next: this DOES change the default tool list, so re-baseline before
-   * quoting a figure across this change. Disable via ZERO_FEATURE_AGENT_PLAN=0
-   * or `--features no-agent-plan` for ablation. Getter so the CLI `--features`
-   * flag (which sets the env var AFTER this module is imported) is honored at
-   * tool-dispatch time.
-   */
-  get agentPlan(): boolean {
-    return env("ZERO_FEATURE_AGENT_PLAN", false);
   },
 
   /**
@@ -652,24 +554,6 @@ export const features = {
    */
   get driftDetection(): boolean {
     return env("ZERO_FEATURE_DRIFT_DETECTION", false);
-  },
-
-  /**
-   * OAST out-of-band interaction collaborator + oracle (#659).
-   *
-   * When ON, the attack/verify agents get `oast_register` / `oast_poll` to
-   * confirm blind/out-of-band classes (blind SSRF/XSS, OOB RCE/SQLi, XXE-OOB,
-   * JNDI) via a hosted DNS+HTTP callback server we control, with
-   * correlation-token matching. A confirmed callback is disclosure-grade
-   * evidence and feeds the loot ledger.
-   *
-   * Default OFF — the tools are inert without a deployed collaborator. Enable
-   * with ZERO_FEATURE_OAST=1 AND point ZERO_OAST_URL at the self-hosted
-   * collaborator server (see packages/engine/src/oast/server.ts). Getter (not a
-   * const) so the CLI `--features` flag is honored at tool-dispatch time.
-   */
-  get oastCollaborator(): boolean {
-    return env("ZERO_FEATURE_OAST", false);
   },
 
   /**

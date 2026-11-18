@@ -740,7 +740,7 @@ export interface Finding {
   /**
    * Structured source location for CI review annotations. Populated only when
    * the agent cites an exact workspace-contained path and line range at
-   * save_finding time. Consumers must still intersect this with the provider's
+   * finding time. Consumers must still intersect this with the provider's
    * changed-line map before posting an inline comment.
    */
   reviewAnnotation?: {

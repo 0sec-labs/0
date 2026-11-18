@@ -18,9 +18,9 @@ const ch = (...codes: number[]) => String.fromCodePoint(...codes);
 describe("taint", () => {
   it("taints on any tool that reads outside content and fails closed on unknown tools", () => {
     for (const name of ["http_request", "browser", "web_search", "read_file", "search_files", "bash", "mcp__github__get_issue", "spawn_agent", "some_new_tool"]) expect(isUntrustedTool(name)).toBe(true);
-    for (const name of ["memory", "ask_operator", "update_todos", "plan"]) expect(isUntrustedTool(name)).toBe(false);
+    for (const name of ["memory", "ask_operator", "load_skill"]) expect(isUntrustedTool(name)).toBe(false);
     const guard = createThreadGuard("t1");
-    guard.sawTool("memory"); guard.sawTool("update_todos");
+    guard.sawTool("memory"); guard.sawTool("load_skill");
     expect(guard.tainted).toBe(false); expect(modelNoteStatus(guard)).toBe("live");
     guard.sawTool("read_file");
     expect(guard.tainted).toBe(true); expect(modelNoteStatus(guard)).toBe("proposed");

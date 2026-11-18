@@ -15,7 +15,7 @@ import type { ToolContext, ToolCall, ScopedAuditEscalationRequest } from "./type
 // (a real temp dir stands in for the scoped source root) and drive `execute`
 // directly. No session, no runtime, no DB.
 //
-// `apply_patch` is the tool from the live bug report and is NOT in
+// `str_replace` is the tool from the live bug report and is NOT in
 // SCOPED_SOURCE_AUDIT_TOOLS, so it is the natural probe. When the gate lets it
 // through, its handler returns a DIFFERENT error (missing `patch` arg / needs a
 // scope) — never the gate's "not available in a scoped source audit" message —
@@ -35,7 +35,7 @@ function baseCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   } as ToolContext;
 }
 
-const patchCall: ToolCall = { name: "apply_patch", arguments: {} };
+const patchCall: ToolCall = { name: "str_replace", arguments: {} };
 
 describe("scoped source-audit escalation gate", () => {
   it("rechecks host authority after asynchronous admission before applying a patch", async () => {
@@ -50,8 +50,8 @@ describe("scoped source-audit escalation gate", () => {
     }), null);
     try {
       const result = executor.execute({
-        name: "apply_patch",
-        arguments: { patch: "*** Begin Patch\n*** Add File: effect.txt\n+effect\n*** End Patch" },
+        name: "str_replace",
+        arguments: { path: "effect.txt", old_string: "", new_string: "effect\n" },
       }, { assertAuthority: () => { if (!authorized) throw new Error("Fixture authority revoked"); } });
       await waiting;
       authorized = false;
@@ -75,7 +75,7 @@ describe("scoped source-audit escalation gate", () => {
       // Gate opened: we reach the handler, which rejects the empty patch arg —
       // NOT the scoped-audit block message.
       expect(result.error).not.toMatch(BLOCK_MSG);
-      expect(result.error).toMatch(/patch/i);
+      expect(result.error).toMatch(/path/i);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -168,10 +168,10 @@ describe("scoped source-audit escalation gate", () => {
         baseCtx({ scopePath: root, approvals: "ask", escalateScopedAudit: escalate }),
         null,
       );
-      // read_file is allow-listed → runs directly, callback untouched.
-      const result = await exec.execute({ name: "read_file", arguments: { path: "nope.txt" } });
+      // load_skill is allow-listed → runs directly, callback untouched.
+      const result = await exec.execute({ name: "load_skill", arguments: {} });
       expect(escalate).not.toHaveBeenCalled();
-      expect(result.error).not.toMatch(BLOCK_MSG);
+      expect(result.error ?? "").not.toMatch(BLOCK_MSG);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

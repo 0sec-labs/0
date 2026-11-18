@@ -19,7 +19,7 @@ export function isLifecycleNotice(text: string): boolean {
 /** A turn that only carries hidden setup records (no prompt, no output) must not render or replace the empty state. */
 export function isInertTurn(turn: ReducedTurn): boolean {
   if (turn.user.text || turn.user.attachments?.length) return false;
-  if (turn.assistantText || turn.reasoningText || turn.toolCalls.length || turn.visuals?.length) return false;
+  if (turn.assistantText || turn.reasoningText || turn.toolCalls.length) return false;
   if (turn.error || turn.stopReason || turn.isWorking) return false;
   if (turn.decisions.some(decision => !decision.resolved || !isRoutineDecision(decision))) return false;
   return turn.notices.every(isLifecycleNotice);

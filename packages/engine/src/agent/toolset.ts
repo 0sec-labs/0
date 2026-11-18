@@ -13,24 +13,17 @@ import type { ToolDefinition } from "./types.js";
 export type Toolset = "core" | "full";
 
 /**
- * The model-visible default. One shell, file read/search/edit, findings, a way
- * to ask the operator, skills (which carry know-how and may load packs), done.
- * `list_files` and `search_files` stay because they are the Read-only
- * exploration path: Read-only refuses the shell, so without them it could not
- * look around a repository.
+ * The model-visible default: a shell, file read and edit, findings, a way to ask the
+ * operator, skills, web search and visual cards. `memory` is added per session.
  */
 export const CORE_TOOL_NAMES: readonly string[] = [
   "bash",
-  "read_file",
-  "list_files",
-  "search_files",
   "str_replace",
-  "apply_patch",
-  "save_finding",
-  "update_finding",
+  "finding",
   "ask_operator",
   "load_skill",
-  "done",
+  "web_search",
+  "spawn_agent",
 ];
 
 /**
@@ -38,38 +31,14 @@ export const CORE_TOOL_NAMES: readonly string[] = [
  * skill declares them (`tools: [pack]` in skill frontmatter). A pack holds the
  * canonical name for each capability; the aliases below stay dispatchable.
  */
-export const TOOL_PACKS: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  "web-probe": ["http_request", "crawl", "submit_form", "send_prompt", "discover_api_surface", "surface_sweep", "js_recon", "wp_fingerprint", "mongo_objectid", "payload_lookup", "update_target"],
-  browser: ["browser"],
-  "access-control": ["access_control_probe", "access_control_workflow", "access_control_cleanup", "auth_boundary_probe"],
-  probes: ["structural_sqli_probe", "prompt_layer_probe"],
-  scanners: ["run_scanner"],
-  cloud: ["cloud_s3_probe", "cloud_validate_credentials"],
-  oast: ["oast_register", "oast_poll"],
-  proxy: ["proxy"],
-  binary: ["analyze_binary"],
-  intel: ["intel", "web_search"],
-  delegation: ["spawn_agent", "spawn_persistent_agent", "monitor"],
-  ledger: ["query_findings", "use_loot", "plan"],
-  planning: ["update_todos", "visualize"],
-  "skill-authoring": ["read_skill", "create_skill", "save_skill", "copy_skill"],
-});
+export const TOOL_PACKS: Readonly<Record<string, readonly string[]>> = Object.freeze({});
 
 /**
  * Old name -> canonical name. Aliases stay registered and dispatchable so stored
  * sessions, saved workflows and skills keep working, but they are never
  * advertised by a pack or by the core list.
  */
-export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
-  run_command: "bash",
-  pty_session: "bash",
-  python_exec: "bash",
-  python_eval: "bash",
-  js_eval: "bash",
-  spawn_agents: "spawn_agent",
-  write_todos: "update_todos",
-  list_skills: "load_skill",
-});
+export const TOOL_ALIASES: Readonly<Record<string, string>> = Object.freeze({});
 
 export function canonicalToolName(name: string): string {
   return TOOL_ALIASES[name] ?? name;

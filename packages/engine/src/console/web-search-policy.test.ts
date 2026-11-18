@@ -69,13 +69,6 @@ describe("per-chat built-in web search", () => {
     expect(transport).toHaveBeenCalledOnce();
     await enabled.cleanup();
   });
-  it("does not disable target HTTP tools or mutate target authorization", async () => {
-    const ctx = context(false); const target = ctx.target;
-    const executor = new ToolExecutor(ctx, null);
-    await executor.execute({ name: "http_request", arguments: { url: target, method: "GET" } });
-    expect(transport).toHaveBeenCalledOnce(); expect(ctx.target).toBe(target); expect(ctx.scope).toBeUndefined();
-    await executor.cleanup();
-  });
   it("hides search, rejects a guessed planner call, and supports idle reconfiguration/checkpoints", async () => {
     const model = runtime([{ content: [{ type: "tool_use", id: "guess", name: "web_search", input: { query: "documentation" } }], stopReason: "tool_use", durationMs: 0 }, end()]);
     const session = createConsoleSession({ runtime: model, webSearchEnabled: false, refineObjective: false });

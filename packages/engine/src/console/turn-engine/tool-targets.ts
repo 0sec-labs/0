@@ -65,14 +65,12 @@ export function isDangerousLocalRoot(dir: string): boolean {
 
 /**
  * The concrete path a filesystem-scoped tool wants to touch, pulled from its
- * arguments. read_file/list_files/search_files use `path`; run_command uses
- * `cwd`; apply_patch carries its targets inside the patch envelope and
- * analyze_binary uses `binary_path`. When nothing path-like is present we fall
+ * arguments. read_file and str_replace use `path`. When nothing path-like is present we fall
  * back to "." so the operator is still asked about a concrete directory.
  */
 export function extractLocalPath(call: ToolCall): string {
   const args = (call.arguments ?? {}) as Record<string, unknown>;
-  for (const key of ["path", "cwd", "binary_path"]) {
+  for (const key of ["path", "cwd"]) {
     const value = args[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
@@ -229,17 +227,12 @@ export function pathBelongsToEngagement(requestedPath: string, scopePath: string
  * Tools whose arguments are (or contain) a shell command line — the payload
  * class the schemeless extraction below understands, and the ONLY class the
  * unresolved-target escalation in `maybeResolveScope` applies to. Structured
- * tools (`http_request`, `crawl`, `read_file`, …) keep their previous
+ * tools (`read_file`, `web_search`, …) keep their previous
  * behaviour exactly: explicit `http(s)://` extraction plus the session-target
  * fallback.
- *
- * `python_exec` is deliberately NOT here: its payload is Python, not shell.
- * Shell target extraction cannot establish its network destinations.
  */
 const SHELL_PAYLOAD_TOOLS: Record<string, true> = {
   bash: true,
-  run_command: true,
-  pty_session: true,
 };
 
 /**
@@ -640,7 +633,7 @@ interface ToolTargets {
  *
  * Structured (non-shell) tools behave exactly as before: explicit `http(s)://`
  * URLs, plus the session target as a fallback when nothing was found — correct
- * for `crawl`/`surface_sweep`/… which really do operate on the session target.
+ * for tools that really do operate on the session target.
  *
  * Shell-payload tools additionally get schemeless extraction, and deliberately
  * DROP the session-target fallback: substituting the session target for a shell

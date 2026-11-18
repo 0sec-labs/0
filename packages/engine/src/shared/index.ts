@@ -27,7 +27,6 @@ export * from "./work-records.js";
 export * from "./finding-priority.js";
 
 export * from "./access-milestone.js";
-export * from "./visualization.js";
 export * from "./share-safe.js";
 export * from "./removed-runtimes.js";
 export * from "./agent-session.js";

@@ -126,7 +126,7 @@ export function registerConsoleCommand(program: Command): void {
     .addOption(new Option("--tool-access <level>").hideHelp())
     .addOption(new Option("--yolo").hideHelp())
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
-    .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
+    .option("--allow-scanners", "Disable generic-scanner suppression in the shell for scoped engagements.")
     .option("--resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
     .option("--continue", "With a headless prompt, continue the most recent saved console chat.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
@@ -463,10 +463,7 @@ async function runMachineTurn(session: ConsoleSession, text: string, format: str
   const outcome = await session.send(text, {
     onAssistantDelta: value => emit("assistant-delta", value),
     onToolStart: value => emit("tool-start", value),
-    onToolResult: (call, result) => {
-      emit("tool-result", { call, result: call.name === "visualize" && result.meta?.visual ? { ...result, meta: { ...result.meta, visual: undefined } } : result });
-      if (call.name === "visualize" && result.success && result.meta?.visual) emit("visual", { call, visual: result.meta.visual });
-    },
+    onToolResult: (call, result) => emit("tool-result", { call, result }),
     onNotice: value => emit("notice", value),
   });
   process.stdout.write(`${JSON.stringify({ type: "result", outcome })}\n`);

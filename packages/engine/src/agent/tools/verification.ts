@@ -4,7 +4,7 @@ import type { Finding, SourceVerificationSummary, PocStep, VerificationSpec, Ver
 import { pocStepActionSchema, pocStepExpectSchema } from "../../shared/index.js";
 import type { ToolResult } from "../types.js";
 import { evaluateVerificationSpec } from "../../verification-spec/spec.js";
-import { validateFindingDraft, type FindingDraft, type ValidationError } from "../finding-validator.js";
+import { type ValidationError } from "../finding-validator.js";
 
 // ── PoC step graph helpers (0#170) ──
 
@@ -440,98 +440,7 @@ export function buildValidationFailureResult(
       errors,
     },
     error:
-      `save_finding rejected: ${errors.length} structural validation error(s). ` +
+      `finding rejected: ${errors.length} structural validation error(s). ` +
       `Fix the offending field(s) and re-submit:\n${lines.join("\n")}`,
   };
-}
-
-// ── `done`-tool coverage gate (#audit-laziness) ──
-//
-// Real-world bug: a sub-agent auditing @vercel/og emitted `done` after
-// exactly one tool call (`read_file: package.json`), in 11 seconds, with
-// 0 findings — the same shape repeated across @vercel/postgres,
-// @vercel/kv, @vercel/blob, @vercel/edge-config, @auth0/nextjs-auth0.
-// The agent's own summary said it had only looked at the manifest. We
-// reject those `done` calls and tell the model to actually inspect the
-// source.
-//
-// The gate only fires for `audit` / `review` roles — attack / discovery /
-// verify sub-agents have very different shapes (network probes, not
-// source reads) and would false-positive on this heuristic.
-
-export const SOURCE_FILE_RE = /\.(ts|tsx|js|mjs|cjs|jsx|py|rs|go|java|rb|php|c|h|cpp|hpp)$/i;
-
-/**
- * Reasons a `done` call may be rejected by the coverage gate. Returned
- * to the model as a tool_result error so it knows what to do next.
- */
-export interface CoverageGateInput {
-  /** Distinct source files the agent has successfully read this session. */
-  sourceFilesRead: number;
-  /** Total non-`done` tool calls (success or failure) this session. */
-  totalToolCalls: number;
-  /** Milliseconds since the ToolExecutor was constructed. */
-  elapsedMs: number;
-  /** How many times `done` has already been rejected this session. */
-  priorRejections: number;
-}
-
-export interface CoverageGateDecision {
-  pass: boolean;
-  reason?: string;
-}
-
-/**
- * Decide whether a `done` call from an audit / review sub-agent has done
- * enough work to be allowed through. Pure function so the policy is
- * unit-testable without spinning up a ToolExecutor.
- *
- * Default thresholds (override via env):
- *   - `ZERO_AUDIT_MIN_COVERAGE_FILES` (default 3): minimum distinct
- *     source files read.
- *   - `ZERO_AUDIT_DONE_GATE=0`: disable the gate entirely.
- *
- * Pass conditions (any of):
- *   1. At least N distinct source files read.
- *   2. Has been running > 60s with >= 5 tool calls (long enough that
- *      `done` likely follows a genuine investigation, not a 1-call bail).
- *   3. The agent has already been rejected twice — accept the third call
- *      so we never deadlock a legitimately-empty audit.
- */
-export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.ProcessEnv = process.env): CoverageGateDecision {
-  // Operator-tunable kill switch.
-  if (env["ZERO_AUDIT_DONE_GATE"] === "0" || env["ZERO_AUDIT_DONE_GATE"] === "false") {
-    return { pass: true };
-  }
-
-  // After two prior rejections, always pass — the agent has seen the
-  // message twice and refuses to do more. Don't deadlock.
-  if (input.priorRejections >= 2) {
-    return { pass: true };
-  }
-
-  const minFiles = (() => {
-    const raw = env["ZERO_AUDIT_MIN_COVERAGE_FILES"];
-    const n = raw === undefined ? NaN : Number.parseInt(raw, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 3;
-  })();
-
-  if (input.sourceFilesRead >= minFiles) return { pass: true };
-  if (input.elapsedMs > 60_000 && input.totalToolCalls >= 5) return { pass: true };
-
-  // Build a model-facing rejection that names the specific deficit.
-  const parts: string[] = [];
-  parts.push(
-    `done rejected: only ${input.sourceFilesRead} distinct source file(s) inspected `
-      + `(threshold: ${minFiles}), ${input.totalToolCalls} total tool calls, `
-      + `elapsed ${Math.round(input.elapsedMs / 1000)}s.`,
-  );
-  parts.push(
-    "You have not actually audited the source yet — declaring the audit "
-      + "complete now produces a 0-finding scan that misses real vulnerabilities. "
-      + "Use list_files to map the tree, search_files with literal identifiers to "
-      + "trace the public API, then read the relevant source files. "
-      + "Then call `done` again.",
-  );
-  return { pass: false, reason: parts.join(" ") };
 }

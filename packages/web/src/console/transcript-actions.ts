@@ -1,4 +1,3 @@
-import { VISUALIZE_TOOL } from "./visuals";
 import { toolCallStatus } from "./tool-call-status";
 import { needsModelSourceReconnect, needsProviderSignIn } from "./provider-error";
 import type { ReducedTurn, ToolCallState } from "./transcript";
@@ -62,11 +61,6 @@ export function workedLabel(input: {
  */
 export function clampDisabled(input: { latestTurn: boolean; isLastAssistantSegment: boolean }): boolean {
   return input.latestTurn && input.isLastAssistantSegment;
-}
-
-/** Successful `visualize` calls render inline as a card, so their work row would only repeat it. */
-export function hideFromWorkLog(call: ToolCallState, hasVisuals: boolean): boolean {
-  return hasVisuals && call.name === VISUALIZE_TOOL && toolCallStatus(call) === "Done";
 }
 
 /** Policy, approval and scope refusals are not transient: resending the same message cannot succeed. */
@@ -179,7 +173,7 @@ export function turnArtifacts(turn: Pick<ReducedTurn, "toolCalls">): TurnArtifac
   for (const call of turn.toolCalls) {
     if (toolCallStatus(call) !== "Done") continue;
     const result = unwrapReceipt(call.result);
-    if (call.name === "save_finding" && result && typeof result === "object") {
+    if (/^(finding|save_finding|update_finding)$/.test(call.name) && result && typeof result === "object") {
       const id = (result as Record<string, unknown>).findingId;
       const args = parse(call.arguments);
       const title = args && typeof args === "object" ? (args as Record<string, unknown>).title : undefined;

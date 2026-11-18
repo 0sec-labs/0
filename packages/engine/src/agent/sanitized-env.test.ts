@@ -161,3 +161,12 @@ describe("agent session marker", () => {
     expect(allowlistedChildEnv({ ZERO_AGENT_SESSION: "" }, { PATH: "/bin" }).ZERO_AGENT_SESSION).toBe("1");
   });
 });
+
+describe("0 CLI discovery from a shell child", () => {
+  it("passes HOME and ZERO_DB_PATH so `0` inside bash finds the running console", () => {
+    const env = sanitizedEnv({ PATH: "/bin", HOME: "/home/u", ZERO_DB_PATH: "/home/u/.0/0.db", ANTHROPIC_API_KEY: "sk-ant-x" });
+    expect(env.HOME).toBe("/home/u");
+    expect(env.ZERO_DB_PATH).toBe("/home/u/.0/0.db");
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+});

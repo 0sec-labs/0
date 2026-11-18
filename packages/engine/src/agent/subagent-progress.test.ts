@@ -49,7 +49,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     findings: [],
     attackResults: [],
     targetInfo: {},
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent],
+    delegationTools: [TOOL_DEFINITIONS.load_skill, TOOL_DEFINITIONS.spawn_agent],
     ...overrides,
   };
 }
@@ -238,32 +238,6 @@ describe("buildSubagentMessage (full per-turn transcript for the focus view)", (
     expect(String(bounded.tools?.[0].result.output)).toContain("final verdict");
   });
 
-  it("renders the done result as the worker's answer, not a hidden control-tool result", () => {
-    const result = buildSubagentMessage(base, 4, "", [
-      { name: "done", arguments: { summary: "Reviewed the parser; no verified findings." } },
-    ], [{ success: true, output: { summary: "Reviewed the parser; no verified findings." } }], 4);
-    expect(result.assistant).toBe("Reviewed the parser; no verified findings.");
-    expect(result.tools).toBeUndefined();
-  });
-  it("keeps a rejected done call visible without promoting its requested summary to an answer", () => {
-    const calls = [
-      { name: "report_status", arguments: { status: "Checking parser" } },
-      { name: "done", arguments: { summary: "Everything is safe" } },
-      { name: "read_file", arguments: { path: "parser.ts" } },
-    ];
-    const started = buildSubagentMessage(base, 2, "Still investigating.", calls, [
-      { success: true, output: "ok" },
-    ], 1, { partial: true });
-    const finished = buildSubagentMessage(base, 2, "Still investigating.", calls, [
-      { success: true, output: "ok" },
-      { success: false, output: null, error: "Source coverage incomplete" },
-      { success: true, output: "Parser implementation" },
-    ], 2);
-    expect(started.tools?.map((tool) => [tool.callIndex, tool.running])).toEqual([[1, true], [2, true]]);
-    expect(finished.tools?.map((tool) => [tool.callIndex, tool.result.success])).toEqual([[1, false], [2, true]]);
-    expect(finished.tools?.[0].result.error).toBe("Source coverage incomplete");
-    expect(finished.assistant).toBe("Still investigating.");
-  });
 
   it("distinguishes a running tool from a failed tool until its result arrives", () => {
     const call = { name: "bash", arguments: { command: "inspect source" } };
@@ -299,7 +273,7 @@ describe("spawn_agent / spawn_agents — progress events on the bus", () => {
       // Simulate a child that ran three turns.
       opts.onTurn(1, [{ name: "bash", arguments: { command: "a" } }], []);
       opts.onTurn(2, [{ name: "bash", arguments: { command: "b" } }], []);
-      opts.onTurn(3, [{ name: "save_finding", arguments: {} }], []);
+      opts.onTurn(3, [{ name: "finding", arguments: {} }], []);
       return fakeState({ turns: 3 });
     };
     const { progress, unsubscribe } = collect();
@@ -336,8 +310,9 @@ describe("spawn_agent / spawn_agents — progress events on the bus", () => {
     try {
       const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
       await executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: {
+          wait: true,
           tasks: [{ task: "alpha" }, { task: "beta" }, { task: "gamma" }, { task: "delta" }],
         },
       });

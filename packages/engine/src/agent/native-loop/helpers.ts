@@ -14,22 +14,15 @@ export function externalMemoryPath(scanId?: string): string {
 
 // ── Loot harvesting (0#567) ──
 // Tools whose result text reflects target data worth mining for footholds.
-// Network, file, browser, and MCP tools surface target data; shell tools are
+// File and MCP tools surface target data; shell tools are
 // included because they routinely shell out to curl / cat and surface the same kind of
 // credentials, tokens, and paths. Our own trusted bookkeeping tools
-// (save_finding / query_findings / use_loot / done) are deliberately excluded
-// — save_finding harvests via its own evidence path in the executor.
+// (finding / query_findings / done) are deliberately excluded
+// — finding harvests via its own evidence path in the executor.
 export function shouldHarvestLoot(toolName: string): boolean {
   return (
-    ["http_request", "crawl", "read_file", "send_prompt", "submit_form", "browser"].includes(toolName) ||
     toolName.startsWith("mcp__") ||
-    toolName === "bash" ||
-    toolName === "run_command" ||
-    // js_eval / python_eval shell out to node / python3 (which routinely curl,
-    // read files, and print tokens/paths), exactly like bash — mine their
-    // output for footholds too.
-    toolName === "js_eval" ||
-    toolName === "python_eval"
+    toolName === "bash"
   );
 }
 
@@ -113,16 +106,6 @@ export function isContextWindowError(errorMsg: string): boolean {
  * this check, so retain 25% headroom rather than aiming at the hard limit.
  */
 export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
-
-/** A generic completion signal must not replace this invocation's actual assistant prose. */
-export function isInformativeDoneText(text: string): boolean {
-  return !!text.trim() && !/^task completed[.!]?$/i.test(text.trim());
-}
-export function resolveDoneSummary(summary: unknown, assistantText: string): string {
-  if (typeof summary === "string" && isInformativeDoneText(summary)) return summary.trim();
-  if (isInformativeDoneText(assistantText)) return assistantText.trim();
-  return typeof summary === "string" && summary.trim() ? summary.trim() : "Task completed";
-}
 
 export function estimateNativeRequestBytes(
   systemPrompt: string,

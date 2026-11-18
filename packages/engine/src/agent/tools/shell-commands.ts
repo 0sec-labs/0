@@ -1,115 +1,31 @@
-// Shell command parsing, auth injection into HTTP-egress commands and dependency-audit lockfile resolution.
+// Scoped-source tool allowlist, HTTP-egress detection and auth injection into shell commands.
 // Extracted verbatim from ../tools.ts; the public API is re-exported there.
-import { existsSync } from "node:fs";
-import { spawnSync, spawn } from "node:child_process";
-import { resolve, join } from "node:path";
 import type { ScopePolicy } from "../../scope/scope.js";
 import { LIST_TOOLS_NAME, LOAD_TOOL_NAME } from "../deferred-tools.js";
-
-// ── Tool Registry ──
-
-
-// Block dangerous shell chars. Piping is handled manually without invoking a shell.
-export const DISALLOWED_SHELL_CHARS = /[;&<>`$\n\r]/;
-// Package managers used by dependency-audit lockfile reconciliation.
-export const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn"]);
 
 // A scoped source audit processes attacker-controlled package contents. Do not
 // offer generic process, network, or write capability inside that trust boundary.
 // agent-runner routes these roles through the tool-mediated API loop; this list
-// supplies only scope-canonicalized source browsing, fixed intel, and findings.
+// supplies only scope-canonicalized source browsing, and findings.
 export const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Deferred controls disclose definitions only; actual calls still pass this gate.
   [LIST_TOOLS_NAME]: true,
   [LOAD_TOOL_NAME]: true,
-  read_file: true,
-  list_files: true,
-  search_files: true,
-  intel: true,
   // Methodology reads return bounded registry text, never execute its contents.
-  list_skills: true,
   load_skill: true,
-  // Source review consumes methodology; editing the workspace skill library is
-  // a separate authoring task and is not part of this audit surface.
-  query_findings: true,
-  save_finding: true,
-  update_finding: true,
-  done: true,
+  finding: true,
   memory: true,
   // Delegation shares the audit's scope, tool capabilities, budget and worker tree.
   spawn_agent: true,
-  spawn_agents: true,
-  spawn_persistent_agent: true,
   report_status: true,
   send_message: true,
   check_messages: true,
-  // Structured full-state plan (TodoWrite shape). Mutates only the run's plan
-  // tracker, authorizes nothing, grants no capability — safe inside the scoped
-  // source-audit trust boundary.
-  update_todos: true,
-  // Display-only validated visual; no I/O, no authority.
-  visualize: true,
-  // Explicitly opt-in; the handler confines the path, strips credentials, and
-  // leaves dynamic target execution disabled unless 0verse itself is configured.
-  analyze_binary: true,
-  // Effectful security engines (ad_attack_paths, entra_*, assemble_advisory,
-  // cve_lookup, variant_hunt, assumption_hunt, generate_fix) are NOT in this set.
-  // They spawn sub-analyses / run lenses / make network calls (entra_posture,
-  // cve_lookup), so exposing them inside the ATTACKER-CONTROLLED scoped source
-  // boundary would widen the trust surface. They remain in TOOL_REGISTRY_ORDER
-  // and so are available to the trusted (non-scoped) audit/review role via
-  // `allEnabledTools` — just never inside a hostile scope.
 };
 
 // Source-audit authority may include opt-in executable analysis; read-only
 // delegation must never inherit that launcher or count it as mutation-free.
 export function isCheckoutReadOnlyTool(name: string): boolean {
-  return name !== "analyze_binary" && Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
-}
-
-/**
- * Check whether `command` contains disallowed shell operator characters
- * OUTSIDE of single- or double-quoted strings. Characters inside quotes
- * are treated as literal data — this is safe because `run_command` never
- * invokes a shell; it tokenizes the command itself (see `tokenizeCommand`)
- * and passes arguments directly to `spawnSync`, so quoted content can
- * never be interpreted as shell metacharacters.
- *
- * This allows patterns like:
- *   rg -F 'xfs_rtgroup_put(rtg);' fs/xfs/xfs_ioctl.c
- *   grep -F "foo$bar" file.txt
- * while still blocking unquoted shell injection like:
- *   ls; rm -rf /
- *   echo $HOME
- */
-export function containsUnquotedShellChars(command: string): boolean {
-  let quote: "'" | '"' | null = null;
-  let escaping = false;
-
-  for (const ch of command) {
-    if (escaping) {
-      escaping = false;
-      continue;
-    }
-    if (ch === "\\") {
-      escaping = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-    // Outside quotes — check for disallowed shell chars
-    if (DISALLOWED_SHELL_CHARS.test(ch)) {
-      return true;
-    }
-  }
-
-  return false;
+  return Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
 }
 
 /**
@@ -161,8 +77,7 @@ export function splitOnTopLevelPipes(command: string): string[] {
 
 // ── Auth injection in shell commands (0#282) ──────────────────
 //
-// Surfaced by the 2026-05-07 control-flow audit: `http_request`/`crawl`/
-// `submit_form` inject auth headers automatically, but `shellExec` only
+// Surfaced by the 2026-05-07 control-flow audit: the former HTTP tools injected auth headers automatically, but `shellExec` only
 // EXPOSES `$AUTH_HEADER` / `$AUTH_VALUE` / `$AUTH_CURL_FLAG` env vars and
 // trusts the agent to interpolate them. After conversation compaction
 // the model loses this affordance and sends unauthenticated curls for
@@ -173,7 +88,7 @@ export function splitOnTopLevelPipes(command: string): string[] {
 // prepend the env-var indirection ($AUTH_CURL_FLAG / $AUTH_HEADER) into
 // curl/wget invocations whose URL is in scope and which don't already
 // include explicit auth. Python `requests`/`urllib`/`httpx` invocations
-// are detected and refused with a hint pointing to `http_request`.
+// are detected and refused with a hint to set the header explicitly or use curl.
 //
 // Env-var indirection is deliberate: the actual token NEVER appears in
 // the rendered command, so transcripts/logs don't leak it.
@@ -207,7 +122,7 @@ export type AuthInjectResult =
 /**
  * http_audit bash-egress SSRF gate (FROZEN CONTRACT). The bash subprocess
  * bypasses node's fetch — and therefore the host/path scope checks the
- * `http_request`/`crawl`/`submit_form` tools enforce. In http_audit mode we
+ * the fetch-based tools enforce. In http_audit mode we
  * must guarantee the host+path allowlist holds for ALL egress, so we refuse
  * any raw HTTP-egress command (curl/wget/python http libs) that does not
  * carry an explicit, in-scope, in-path http(s) URL we can verify up front.
@@ -365,8 +280,8 @@ export function rewriteSegmentForAuth(
 
   // Python: refuse unless the call already has `headers=` / `auth=` /
   // explicit Authorization header. Detection is cheap text-search; the
-  // refusal message points the agent at `http_request` which handles
-  // auth injection structurally.
+  // refusal message points the agent at explicit headers or curl, which gets
+  // auth injected.
   if (
     /python(?:3)?$/.test(exeBase) &&
     /(requests\.|urllib\.request\.|httpx\.)/.test(segment)
@@ -376,8 +291,8 @@ export function rewriteSegmentForAuth(
       kind: "refuse",
       reason:
         "Python HTTP requests in shell mode must include explicit auth headers; " +
-        "use the http_request tool for auto-auth, or add " +
-        "`headers={'Authorization': 'Basic ...'}` to your call.",
+        "add `headers={'Authorization': 'Basic ...'}` to your call, " +
+        "or use curl so auth is injected for you.",
     };
   }
 
@@ -401,7 +316,7 @@ export function injectAuthIntoBashCommand(
   // hides the `requests.` token inside a single-quoted block, and our
   // segment splitter doesn't track quoting beyond `splitOnTopLevelPipes`.
   // If the command both invokes a python interpreter and references a
-  // requests-flavour HTTP call, refuse with the http_request hint —
+  // requests-flavour HTTP call, refuse with the explicit-header hint —
   // unless explicit auth is already present (`headers=` / Authorization).
   if (
     /\bpython(?:3)?\b/.test(command) &&
@@ -412,8 +327,8 @@ export function injectAuthIntoBashCommand(
       kind: "refuse",
       reason:
         "Python HTTP requests in shell mode must include explicit auth headers; " +
-        "use the http_request tool for auto-auth, or add " +
-        "`headers={'Authorization': 'Basic ...'}` to your call.",
+        "add `headers={'Authorization': 'Basic ...'}` to your call, " +
+        "or use curl so auth is injected for you.",
     };
   }
 
@@ -456,147 +371,4 @@ export function injectAuthIntoBashCommand(
 
   if (!anyRewrite) return { kind: "unchanged" };
   return { kind: "rewrite", command: rewritten.join("|") };
-}
-
-export function tokenizeCommand(command: string): string[] {
-  const tokens: string[] = [];
-  let current = "";
-  let quote: "'" | '"' | null = null;
-  let escaping = false;
-
-  for (const ch of command) {
-    if (escaping) {
-      current += ch;
-      escaping = false;
-      continue;
-    }
-
-    if (ch === "\\") {
-      escaping = true;
-      continue;
-    }
-
-    if (quote) {
-      if (ch === quote) {
-        quote = null;
-      } else {
-        current += ch;
-      }
-      continue;
-    }
-
-    if (ch === "'" || ch === "\"") {
-      quote = ch;
-      continue;
-    }
-
-    if (/\s/.test(ch)) {
-      if (current) {
-        tokens.push(current);
-        current = "";
-      }
-      continue;
-    }
-
-    current += ch;
-  }
-
-  if (escaping || quote) {
-    throw new Error("Command contains unmatched quotes or escapes");
-  }
-
-  if (current) {
-    tokens.push(current);
-  }
-
-  return tokens;
-}
-
-// ── Dependency-audit lockfile detection (0#tool-reliability) ──────────────
-//
-// `npm audit` requires a package-lock.json and ENOLOCKs ("requires an existing
-// lockfile") on a pnpm/yarn repo. We detect the package manager from the
-// lockfile present in the audit cwd and run the MATCHING audit instead, so an
-// agent that reflexively reaches for `npm audit` still gets a real result.
-
-export type DetectedPackageManager = "pnpm" | "yarn" | "npm";
-
-/** Lockfile → owning package manager, in detection-precedence order. */
-export const LOCKFILE_TO_PM: Array<{ file: string; pm: DetectedPackageManager }> = [
-  { file: "pnpm-lock.yaml", pm: "pnpm" },
-  { file: "yarn.lock", pm: "yarn" },
-  { file: "package-lock.json", pm: "npm" },
-  { file: "npm-shrinkwrap.json", pm: "npm" },
-];
-
-/**
- * Detect the package manager owning `cwd` by the lockfile present. Returns null
- * when no recognized lockfile exists (⇒ no dependency audit is runnable).
- * Pure + exported for unit testing.
- */
-export function detectPackageManager(cwd: string): DetectedPackageManager | null {
-  for (const { file, pm } of LOCKFILE_TO_PM) {
-    try {
-      if (existsSync(join(cwd, file))) return pm;
-    } catch {
-      // Unreadable dir entry — treat as absent and keep scanning.
-    }
-  }
-  return null;
-}
-
-export type DependencyAuditResolution =
-  | { kind: "not-audit" }
-  | { kind: "run"; tokens: string[]; note?: string; redirectedFrom?: DetectedPackageManager }
-  | { kind: "skip"; requested: DetectedPackageManager; message: string; remedy: string };
-
-/**
- * Given already-tokenized command segments and the resolved audit cwd, decide
- * how a package-manager `audit` invocation should run:
- *   - `not-audit`  — not a `<pm> audit` command; run unchanged.
- *   - `run`        — run these tokens; `redirectedFrom` set when we swapped the
- *                    requested PM for the one the lockfile actually belongs to.
- *   - `skip`       — no lockfile for any PM in cwd; audit can't run. Non-fatal.
- *
- * Only rewrites the executable (tokens[0]); every other token (flags like
- * `--json`, `--audit-level`) is preserved. Single-segment pipelines only —
- * a piped audit (`npm audit | jq`) is left untouched (kind "not-audit").
- * Pure + exported for unit testing.
- */
-export function resolveDependencyAuditCommand(
-  segments: string[][],
-  cwd: string,
-): DependencyAuditResolution {
-  if (segments.length !== 1) return { kind: "not-audit" };
-  const tokens = segments[0];
-  const exe = tokens[0];
-  const sub = tokens[1];
-  if (!PACKAGE_MANAGERS.has(exe) || sub !== "audit") return { kind: "not-audit" };
-
-  const requested = exe as DetectedPackageManager;
-  const detected = detectPackageManager(cwd);
-
-  if (!detected) {
-    return {
-      kind: "skip",
-      requested,
-      message: `no ${requested} lockfile found in the audit directory — skipping dependency audit.`,
-      remedy:
-        "run the audit where a lockfile (pnpm-lock.yaml / yarn.lock / package-lock.json) exists, or generate one first.",
-    };
-  }
-
-  if (detected === requested) {
-    return { kind: "run", tokens };
-  }
-
-  // Mismatch: requested one PM, lockfile belongs to another. Swap the
-  // executable so the audit actually runs against the present lockfile.
-  const rewritten = [detected, ...tokens.slice(1)];
-  return {
-    kind: "run",
-    tokens: rewritten,
-    redirectedFrom: requested,
-    note: `[note: '${requested} audit' redirected to '${detected} audit' — the repo carries a ${detected} lockfile, not a ${requested} one.]`,
-  };
 }

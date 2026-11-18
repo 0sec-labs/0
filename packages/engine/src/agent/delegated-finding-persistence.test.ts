@@ -16,21 +16,20 @@ function fixture(overrides: Partial<ToolContext> = {}) {
   db.createScan({ target: "https://fixture.test", depth: "default", format: "json" }, "root");
   const context = { target: "https://fixture.test", scanId: "root", role: "attack", consoleSession: true,
     findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo",
-    delegationTools: [TOOL_DEFINITIONS.save_finding, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.done],
+    delegationTools: [TOOL_DEFINITIONS.finding, TOOL_DEFINITIONS.spawn_agent],
     agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: true, operatorChannelEnabled: false, projectPath: home, homeDir: home }, ...overrides,
   } as ToolContext;
   let sequence = 0;
   const factory = async (): Promise<NativeRuntime> => {
     const nested = sequence++ === 0;
     const calls = [
-      { name: "save_finding", input: { title: nested ? "Child finding" : "Grandchild finding", severity: "high", category: "xss", description: "Synthetic evidence", evidence_request: nested ? "GET /fixture" : "GET /fixture/nested", evidence_response: "<script>synthetic</script>" } },
+      { name: "finding", input: { title: nested ? "Child finding" : "Grandchild finding", severity: "high", category: "xss", description: "Synthetic evidence", evidence_request: nested ? "GET /fixture" : "GET /fixture/nested", evidence_response: "<script>synthetic</script>" } },
       ...(nested ? [{ name: "spawn_agent", input: { task: "Inspect nested evidence", wait: false } }] : []),
-      { name: "done", input: { summary: "Synthetic review complete" } },
     ];
     return { type: "api", isAvailable: async () => true, forkForSubagent: factory,
       executeNative: async (): Promise<NativeRuntimeResult> => {
         const call = calls.shift();
-        if (!call) throw new Error("Unexpected model call");
+        if (!call) return { content: [{ type: "text", text: "Finished" }], stopReason: "end_turn", durationMs: 0 };
         return { content: [{ type: "tool_use", id: `call-${calls.length}`, ...call }], stopReason: "tool_use", durationMs: 0 };
       },
     };
@@ -97,7 +96,7 @@ it("returns a save failure without retaining an unsaved duplicate, allowing retr
   const child = new ToolExecutor(childContext);
   try {
     vi.spyOn(db, "saveFinding").mockImplementationOnce(() => { throw new Error("Synthetic database write failure"); });
-    const call = { name: "save_finding", arguments: { title: "Retry finding", severity: "high", category: "xss", evidence_request: "GET /fixture", evidence_response: "Synthetic evidence" } };
+    const call = { name: "finding", arguments: { title: "Retry finding", severity: "high", category: "xss", evidence_request: "GET /fixture", evidence_response: "Synthetic evidence" } };
     expect(await child.execute(call)).toMatchObject({ success: false, error: "Synthetic database write failure" });
     expect(childContext.findings).toEqual([]);
     expect(db.getFindings("root")).toEqual([]);

@@ -1,5 +1,4 @@
 import type { Finding } from "./types.js";
-import type { Visualization } from "./visualization.js";
 import type { VerifierResult } from "../verifier/result.js";
 
 /**
@@ -202,8 +201,6 @@ export type DesktopConsoleEventPayload =
   | { type: "reasoning-delta"; text: string }
   | { type: "tool-start"; call: DesktopConsoleToolCall }
   | { type: "tool-result"; call: DesktopConsoleToolCall; result: unknown }
-  /** Additive: a validated inline visualization from the `visualize` tool (`call.arguments` is blanked; the spec lives in `visual`). Clients that do not know it must ignore it. */
-  | { type: "visual"; call: DesktopConsoleToolCall; visual: Visualization }
   | { type: "usage"; usage: DesktopConsoleUsage }
   | { type: "notice"; text: string }
   /** Additive: a provider rate limit or transient error is being waited out. Older clients ignore it. */

@@ -8,7 +8,7 @@ import { createConsoleSession, DEFAULT_MAX_TOOL_ITERATIONS, type ConsoleCompacti
 const text = (text: string, role: "user" | "assistant" = "user"): NativeMessage => ({ role, content: [{ type: "text", text }] });
 const end = (value = "done"): NativeRuntimeResult => ({ content: text(value).content, stopReason: "end_turn", durationMs: 0 });
 const summary = "Completed the earlier checks. Preserve the original goal and latest constraints. Continue from the recorded tool results.";
-const call = (id: string): NativeRuntimeResult => ({ content: [{ type: "tool_use", id, name: "payload_lookup", input: {} }], stopReason: "tool_use", durationMs: 0 });
+const call = (id: string): NativeRuntimeResult => ({ content: [{ type: "tool_use", id, name: "load_skill", input: {} }], stopReason: "tool_use", durationMs: 0 });
 const pair = (id: string, size: number): NativeMessage[] => [
   { role: "assistant", content: call(id).content },
   { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "x".repeat(size) }] },
@@ -27,7 +27,7 @@ function runtime(executeNative: NativeRuntime["executeNative"]): NativeRuntime {
 }
 function session(rt: NativeRuntime, extra: Partial<ConsoleSessionConfig> = {}) {
   return createConsoleSession({ runtime: rt, refineObjective: false,
-    systemPrompt: "system", tools: [{ name: "payload_lookup", description: "fake tool", parameters: {} }],
+    systemPrompt: "system", tools: [{ name: "load_skill", description: "fake tool", parameters: {} }],
     contextWindowTokens: 20_000, compaction: { enabled: true, thresholdFraction: 0.8 }, ...extra });
 }
 afterEach(() => vi.restoreAllMocks());

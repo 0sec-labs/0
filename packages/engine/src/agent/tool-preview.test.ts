@@ -32,56 +32,21 @@ describe("toolCallPreview", () => {
     expect(preview).toContain("echo");
   });
 
-  it("http_request previews as METHOD url", () => {
-    expect(toolCallPreview(call("http_request", {
-      url: "https://example.com/login",
-      method: "POST",
-    })))
-      .toBe("http_request: POST https://example.com/login");
-  });
-
-  it("http_request defaults to GET when method is missing", () => {
-    expect(toolCallPreview(call("http_request", {
-      url: "https://example.com/",
-    })))
-      .toBe("http_request: GET https://example.com/");
-  });
-
-  it("crawl previews the URL", () => {
-    expect(toolCallPreview(call("crawl", { url: "https://doruk.ch" })))
-      .toBe("crawl: https://doruk.ch");
-  });
-
-  it("submit_form previews the URL", () => {
-    expect(toolCallPreview(call("submit_form", { url: "https://t/login" })))
-      .toBe("submit_form: https://t/login");
-  });
-
-  it("browser includes action and URL when both are present", () => {
-    expect(toolCallPreview(call("browser", { action: "navigate", url: "https://t/" })))
-      .toBe("browser.navigate: https://t/");
-  });
-
-  it("browser handles action-only and URL-only cases", () => {
-    expect(toolCallPreview(call("browser", { action: "screenshot" }))).toBe("browser.screenshot");
-    expect(toolCallPreview(call("browser", { url: "https://t/" }))).toBe("browser: https://t/");
-  });
-
-  it("save_finding previews as [severity] title", () => {
-    expect(toolCallPreview(call("save_finding", {
+  it("finding previews as [severity] title", () => {
+    expect(toolCallPreview(call("finding", {
       severity: "high",
       title: "Reflected XSS in search param",
     })))
-      .toBe("save_finding: [high] Reflected XSS in search param");
+      .toBe("finding: [high] Reflected XSS in search param");
   });
 
-  it("save_finding falls back gracefully when fields are missing", () => {
+  it("finding falls back gracefully when fields are missing", () => {
     // `clip()` trims trailing whitespace, so the blank title collapses the
     // "] " suffix down to "]".
-    expect(toolCallPreview(call("save_finding", { severity: "info" })))
-      .toBe("save_finding: [info]");
-    expect(toolCallPreview(call("save_finding", {})))
-      .toBe("save_finding: [?]");
+    expect(toolCallPreview(call("finding", { severity: "info" })))
+      .toBe("finding: [info]");
+    expect(toolCallPreview(call("finding", {})))
+      .toBe("finding: [?]");
   });
 
   it("unknown tools fall back to the first string argument", () => {
@@ -127,9 +92,9 @@ describe("summariseTurnToolCalls", () => {
 
   it("preserves order across heterogeneous tool calls in a single turn", () => {
     const s = summariseTurnToolCalls([
-      call("http_request", { url: "https://t/", method: "GET" }),
-      call("save_finding", { severity: "medium", title: "cors" }),
+      call("bash", { command: "curl https://t/" }),
+      call("finding", { severity: "medium", title: "cors" }),
     ]);
-    expect(s).toBe("http_request: GET https://t/ | save_finding: [medium] cors");
+    expect(s).toBe("bash: curl https://t/ | finding: [medium] cors");
   });
 });

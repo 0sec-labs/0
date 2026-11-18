@@ -109,15 +109,10 @@ export function presentToolCall(call: ToolCallState): ToolPresentation {
     outputKind = "text";
   } else if (name === "done" && record(payload) && typeof payload.summary === "string") {
     title = "Finish review"; output = payload.summary; outputKind = "text";
-  } else if (name === "save_finding" && record(payload)) {
+  } else if (/^(finding|save_finding|update_finding)$/.test(name) && record(payload)) {
     title = `Save finding${typeof args.title === "string" ? `: ${args.title}` : ""}`;
     if (typeof payload.message === "string") { output = payload.message; outputKind = "text"; }
     add("Finding ID", payload.findingId);
-  } else if (name === "visualize") {
-    // The diagram itself is rendered in the chat/Visuals panel; the work log only needs a one-line description.
-    title = `Visualization: ${string(args.title)?.trim() || string(args.kind) || "untitled"}`;
-    const summary = string(args.summary)?.trim();
-    if (summary) { output = summary; outputKind = "text"; } else output = undefined;
   } else if (name === "list_files" && record(payload) && Array.isArray(payload.files) && payload.files.every(item => typeof item === "string")) {
     title = `List files${typeof args.path === "string" ? ` in ${args.path}` : ""}`;
     output = payload.files.join("\n"); outputKind = "text";

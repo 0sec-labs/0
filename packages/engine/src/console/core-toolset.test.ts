@@ -43,8 +43,7 @@ describe("core toolset registry", () => {
     for (const skill of loadSkillRegistry().values()) expect(resolvePacks(skill.tools).unknown, skill.id).toEqual([]);
   });
   it("accepts core and pack:<name> spellings", () => {
-    expect(resolvePacks(["core", "pack:cloud", "oast"])).toEqual({ tools: [...TOOL_PACKS.cloud!, ...TOOL_PACKS.oast!], unknown: [] });
-    expect(resolvePacks(["pack:nope"]).unknown).toEqual(["pack:nope".slice(5)]);
+    expect(resolvePacks(["core", "pack:nope"])).toEqual({ tools: [], unknown: ["nope"] });
   });
   it("resolves the toolset from explicit value, then env, then the surface default", () => {
     expect(resolveToolset({ surfaceDefault: "core", env: {} })).toBe("core");
@@ -65,55 +64,6 @@ describe("core toolset in the console", () => {
       const first = names(runtime.calls[0]!.tools);
       expect(first.sort()).toEqual([...CORE_TOOL_NAMES].sort());
       expect(JSON.stringify(runtime.calls[1]!.tools)).toBe(JSON.stringify(runtime.calls[0]!.tools));
-    } finally { await session.cleanup(); }
-  });
-
-  it("only tells the model to delegate when spawn_agent is offered", async () => {
-    const coreRuntime = new ScriptedRuntime([end("a")]);
-    const fullRuntime = new ScriptedRuntime([end("a")]);
-    const core = createConsoleSession({ runtime: coreRuntime, refineObjective: false });
-    const full = createConsoleSession({ runtime: fullRuntime, toolset: "full", refineObjective: false });
-    try {
-      await core.send("hi");
-      await full.send("hi");
-      expect(coreRuntime.calls[0]!.system).not.toContain("spawn_agent");
-      expect(fullRuntime.calls[0]!.system).toContain("spawn_agent");
-    } finally { await core.cleanup(); await full.cleanup(); }
-  });
-
-  it("keeps the full list when asked", async () => {
-    const runtime = new ScriptedRuntime([end("a")]);
-    const session = createConsoleSession({ runtime, toolset: "full", refineObjective: false });
-    try {
-      await session.send("hello");
-      const advertised = names(runtime.calls[0]!.tools);
-      expect(advertised).toEqual(expect.arrayContaining(["list_tools", "load_tool", "browser", "http_request"]));
-      expect(advertised.length).toBeGreaterThan(CORE_TOOL_NAMES.length);
-    } finally { await session.cleanup(); }
-  });
-
-  it("adds a pack on the turn after a skill that declares it loads", async () => {
-    const runtime = new ScriptedRuntime([call("load_skill", { skill_id: "advisory-disclosure" }), end("done")]);
-    const session = createConsoleSession({ runtime, refineObjective: false });
-    try {
-      const outcome = await session.send("draft an advisory");
-      expect(outcome.toolCalls[0]!.result.success).toBe(true);
-      expect(names(runtime.calls[0]!.tools)).not.toContain("intel");
-      expect(names(runtime.calls[1]!.tools)).toEqual(expect.arrayContaining(["intel", "web_search"]));
-      expect(names(runtime.calls[1]!.tools)).not.toContain("proxy");
-    } finally { await session.cleanup(); }
-  });
-
-  it("keeps pack tools out of list_tools and load_tool even when other deferred tools exist", async () => {
-    const runtime = new ScriptedRuntime([call("list_tools", {}), call("load_tool", { names: ["crawl", "start_run"] }), end("done")]);
-    const session = createConsoleSession({ runtime, workflowLifecycle: { invoke: async () => ({}) } as never, refineObjective: false });
-    try {
-      const outcome = await session.send("what else can I load");
-      const listed = JSON.stringify(outcome.toolCalls[0]!.result.output);
-      expect(listed).toContain("start_run");
-      expect(listed).not.toContain("crawl");
-      expect(JSON.stringify(outcome.toolCalls[1]!.result.output)).toContain("crawl");
-      expect(names(runtime.calls[2]!.tools)).not.toContain("crawl");
     } finally { await session.cleanup(); }
   });
 

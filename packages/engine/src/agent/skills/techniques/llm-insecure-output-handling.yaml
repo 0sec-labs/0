@@ -3,7 +3,6 @@ name: "LLM Insecure Output Handling"
 description: "Exploit clients that render/execute LLM output without sanitizing it: markdown-image exfiltration, HTML/JS injection (XSS via the model), and SSRF via auto-fetched URLs."
 summary: "Exploit apps that render or run model output without sanitizing it."
 category: "LLM"
-tools: [browser]
 version: 1
 applicable_roles:
   - attack
@@ -45,7 +44,7 @@ content: |
     onerror=alert(document.cookie)>` or `<script>...`. If the UI renders
     unescaped, you have stored/reflected XSS through the model.
   - **SSRF via output:** induce a link to `http://169.254.169.254/...` or
-    `http://localhost/...` that a link-unfurler or browser tool auto-fetches.
+    `http://localhost/...` that a link-unfurler or headless browser auto-fetches.
   - **Code / SQL:** if output is eval'd or used to build a query, break out.
 
   ### Step 3: Confirm at the sink

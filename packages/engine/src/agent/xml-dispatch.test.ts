@@ -20,14 +20,12 @@ describe("parseXmlDispatch", () => {
   it("flag-first: <flag> wins over <command> in the same response", () => {
     // Spec test #2: a model that finds the flag mid-thought sometimes
     // also leaves a stray <command>. The flag is the answer; it must
-    // dispatch `done` and not the bash command.
+    // end the run and not dispatch the bash command.
     const parse = parseXmlDispatch(
       "<command>curl -s http://target/probe</command>\n<flag>FLAG{1d0r-w0rks}</flag>",
     );
-    expect(parse.calls).toHaveLength(1);
-    expect(parse.calls[0].name).toBe("done");
-    expect(parse.calls[0].arguments.flag).toBe("FLAG{1d0r-w0rks}");
-    expect((parse.calls[0].arguments.summary as string)).toContain("FLAG{1d0r-w0rks}");
+    expect(parse.calls).toHaveLength(0);
+    expect(parse.flag).toBe("FLAG{1d0r-w0rks}");
   });
 
   it("dispatches multiple <command> tags in source order", () => {
@@ -38,11 +36,10 @@ describe("parseXmlDispatch", () => {
     expect(parse.calls.map((c) => c.arguments.command)).toEqual(["a", "b", "c"]);
   });
 
-  it("flag-first: a single <flag> with no commands still dispatches done", () => {
+  it("flag-first: a single <flag> with no commands ends the run", () => {
     const parse = parseXmlDispatch("<flag>FLAG{abc}</flag>");
-    expect(parse.calls).toHaveLength(1);
-    expect(parse.calls[0].name).toBe("done");
-    expect(parse.calls[0].arguments.flag).toBe("FLAG{abc}");
+    expect(parse.calls).toHaveLength(0);
+    expect(parse.flag).toBe("FLAG{abc}");
   });
 
   it("rejects an unclosed <command> with a clear error", () => {
@@ -65,12 +62,12 @@ describe("parseXmlDispatch", () => {
     expect(parse.calls[0].arguments.command).toBe("ls");
   });
 
-  it("parses <finding> bodies into save_finding args", () => {
+  it("parses <finding> bodies into finding args", () => {
     const parse = parseXmlDispatch(
       "<finding>title: Reflected XSS; severity: high; category: xss; evidence: <script>alert(1)</script></finding>",
     );
     expect(parse.calls).toHaveLength(1);
-    expect(parse.calls[0].name).toBe("save_finding");
+    expect(parse.calls[0].name).toBe("finding");
     expect(parse.calls[0].arguments.title).toBe("Reflected XSS");
     expect(parse.calls[0].arguments.severity).toBe("high");
     // Bare `evidence` is normalised onto evidence_response so cheap models
@@ -123,7 +120,7 @@ describe("formatXmlOutput", () => {
   });
 
   it("serializes object output as JSON", () => {
-    const out = formatXmlOutput("save_finding", {
+    const out = formatXmlOutput("finding", {
       success: true,
       output: { id: "f1", title: "Test" },
     });

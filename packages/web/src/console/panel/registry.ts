@@ -24,7 +24,6 @@ export const panelViewRegistry: Record<StaticViewId, PanelView> = {
   findings: { id: "findings", title: "Findings", icon: CapyIssueDashedIcon, alwaysListed: true, closable: true, shortcut: shortcut("f"), keywords: ["vulnerabilities", "issues", "triage"] },
   evidence: { id: "evidence", title: "Evidence", icon: CapyAttachIcon, alwaysListed: false, closable: true, shortcut: shortcut("e"), keywords: ["proof", "request", "response", "screenshots"] },
   browser: { id: "browser", title: "Browser", icon: CapyGlobeIcon, alwaysListed: true, closable: true, shortcut: shortcut("l"), keywords: ["live", "preview", "page"] },
-  visuals: { id: "visuals", title: "Visuals", icon: CapyPresentationIcon, alwaysListed: false, closable: true, shortcut: shortcut("v"), keywords: ["diagram", "graph", "chart", "timeline", "attack path", "visualization"] },
   preview: { id: "preview", title: "Preview", icon: CapyEyeIcon, alwaysListed: false, closable: true, keywords: ["develop", "self-edit", "live preview", "dev server"] },
   report: { id: "report", title: "Report", icon: CapyDocumentIcon, alwaysListed: false, closable: true, keywords: ["export", "summary"] },
   agents: { id: "agents", title: "Helpers", icon: CapySubagentsIcon, alwaysListed: false, closable: true, keywords: ["workers", "subagents", "helpers", "swarm"] },
@@ -33,7 +32,7 @@ export const panelViewRegistry: Record<StaticViewId, PanelView> = {
 export const panelViews: readonly PanelView[] = STATIC_VIEW_IDS.map(id => panelViewRegistry[id]);
 
 /** Menu order for the Views section (agents are a separate section; `agents` itself is the section header link). */
-export const VIEW_MENU_ORDER: readonly StaticViewId[] = ["overview", "findings", "evidence", "browser", "visuals", "preview", "report", "tools"];
+export const VIEW_MENU_ORDER: readonly StaticViewId[] = ["overview", "findings", "evidence", "browser", "preview", "report", "tools"];
 
 /** The view definition behind any id; per-entity ids reuse their parent kind's icon. */
 export function viewDefinition(id: PanelViewId): PanelView {

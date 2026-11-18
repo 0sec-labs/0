@@ -949,24 +949,6 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     expect((result1.usage?.outputTokens ?? 0) + (result2.usage?.outputTokens ?? 0)).toBe(5);
   });
 
-  it("regression: closes owned bridge/process when native loop completes on done", async () => {
-    const { runNativeAgentLoop } = await import("../agent/native-loop.js");
-    const { TOOL_DEFINITIONS } = await import("../agent/tools.js");
-    vi.stubEnv("ZERO_FEATURE_HUNT_MEMORY", "0"); vi.stubEnv("ZERO_NO_TELEMETRY", "1");
-    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
-    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
-    const statePromise = runNativeAgentLoop({ runtime: rt, config: { role: "attack", systemPrompt: "fixture", tools: [TOOL_DEFINITIONS.done!], target: "https://fixture.test", scanId: "review-cleanup-fixture", maxTurns: 1 } });
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
-    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
-    child.line(assistant("done-message", [{ type: "tool_use", id: "done-one", name: "mcp__zero__done", input: { summary: "Finished" } }]));
-    const held = bridgeCall(endpoint, "done", { summary: "Finished" }, "done-one");
-    const state = await statePromise;
-    const leaked = !child.kill.mock.calls.length;
-    rt.resetSession(); await held;
-    expect(state.done).toBe(true);
-    expect(leaked).toBe(false);
-  });
-
   it("awaits observed subprocess exit rather than treating a kill request as cleanup", async () => {
     const child = makeLiveChild(); child.kill.mockImplementation(() => undefined);
     spawnMock.mockImplementationOnce(() => child);

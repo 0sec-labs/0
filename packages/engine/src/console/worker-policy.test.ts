@@ -22,10 +22,10 @@ describe("operator worker policy", () => {
     let checkpoint: ReturnType<typeof session.exportCheckpoint>;
     try {
       await session.ready;
-      const policy = { allowedTools: ["http_request", "done"], allowedHttpMethods: ["GET" as const], maxTurns: 6 };
+      const policy = { allowedTools: ["bash", "load_skill"], allowedHttpMethods: ["GET" as const], maxTurns: 6 };
       session.setWorkerPolicy!(policy);
-      policy.allowedTools.push("save_finding");
-      expect(session.workerPolicy).toEqual({ allowedTools: ["http_request", "done"], allowedHttpMethods: ["GET"], maxTurns: 6 });
+      policy.allowedTools.push("finding");
+      expect(session.workerPolicy).toEqual({ allowedTools: ["bash", "load_skill"], allowedHttpMethods: ["GET"], maxTurns: 6 });
       expect(Object.isFrozen(session.workerPolicy)).toBe(true); expect(Object.isFrozen(session.workerPolicy?.allowedTools)).toBe(true);
       await session.send("Return ready without performing any actions.");
       checkpoint = session.exportCheckpoint();
@@ -33,17 +33,17 @@ describe("operator worker policy", () => {
       expect(() => session.setWorkerPolicy!({ allowedTools: ["not_a_real_tool"] })).toThrow("unknown tool");
       expect(session.workerPolicy?.maxTurns).toBe(6);
     } finally { await session.cleanup(); }
-    const resumed = createConsoleSession({ runtime, initialCheckpoint: checkpoint!, workerPolicy: { allowedTools: ["http_request", "done", "save_finding"], allowedHttpMethods: ["GET", "POST"], maxTurns: 100 } });
+    const resumed = createConsoleSession({ runtime, initialCheckpoint: checkpoint!, workerPolicy: { allowedTools: ["bash", "load_skill", "finding"], allowedHttpMethods: ["GET", "POST"], maxTurns: 100 } });
     try {
       await resumed.ready;
-      expect(resumed.workerPolicy).toEqual({ allowedTools: ["http_request", "done"], allowedHttpMethods: ["GET"], maxTurns: 6 });
+      expect(resumed.workerPolicy).toEqual({ allowedTools: ["bash", "load_skill"], allowedHttpMethods: ["GET"], maxTurns: 6 });
     } finally { await resumed.cleanup(); }
   });
 
   it("validates mandatory ceiling fields and preserves an explicit deny-all policy", () => {
     expect(snapshotWorkerPolicy({ allowedTools: [], allowedHttpMethods: [], maxTurns: 1 })).toEqual({ allowedTools: [], allowedHttpMethods: [], maxTurns: 1 });
     expect(snapshotWorkerPolicy(undefined)).toBeUndefined();
-    for (const value of [{ maxTurns: 0 }, { maxTurns: 1.5 }, { maxTurns: 10_001 }, { allowedTools: ["done", "done"] }, { allowedHttpMethods: ["TRACE"] }, { unexpected: true }]) {
+    for (const value of [{ maxTurns: 0 }, { maxTurns: 1.5 }, { maxTurns: 10_001 }, { allowedTools: ["load_skill", "load_skill"] }, { allowedHttpMethods: ["TRACE"] }, { unexpected: true }]) {
       expect(() => snapshotWorkerPolicy(value as never)).toThrow();
     }
   });

@@ -1,12 +1,9 @@
-// Subprocess execution helpers: bash wallclock ceiling, run_command pipelines, install hints and edit-card metadata.
+// Subprocess execution helpers: bash wallclock ceiling, install hints and edit-card metadata.
 // Extracted verbatim from ../tools.ts; the public API is re-exported there.
-import { spawnSync, spawn } from "node:child_process";
-import type { ToolResult, ToolResultMeta } from "../types.js";
-import { formatTruncated } from "../output-truncation.js";
+import { spawn } from "node:child_process";
+import type { ToolResultMeta } from "../types.js";
 import { BASH_TIMEOUT_MS, resolveLimit } from "../../shared/limits.js";
-import { sanitizedEnv } from "../sanitized-env.js";
 import { trackExecutionResourceSpawn } from "../execution-resource-registry.js";
-import type { ToolHealthRecordInput } from "../tool-health.js";
 
 // ── Bash tool wallclock ceiling ──
 //
@@ -19,11 +16,6 @@ import type { ToolHealthRecordInput } from "../tool-health.js";
 // See https://github.com/0sec-labs/0security/issues/181
 
 export const DEFAULT_BASH_WALLCLOCK_MS = BASH_TIMEOUT_MS.default;
-/**
- * Per-request model timeout for spawned subagents. Matches the runtime
- * default and the other fork sites: non-streaming wires (e.g. OpenRouter
- * chat completions) must finish the whole generation inside this window.
- */
 export const SUBAGENT_MODEL_TIMEOUT_MS = 120_000;
 export const BASH_GRACE_MS = 2_000;
 
@@ -180,161 +172,6 @@ export async function runBashWithWallclock(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     if (opts.signal?.aborted) onAbort();
   });
-}
-
-
-// run_command subprocess stdout/stderr ceiling. The old 1 MiB limit made a
-// broad `rg`/`grep` sweep over a large repo abort with `spawnSync … ENOBUFS`
-// (stdout buffer reached maxBuffer size limit) instead of returning results.
-// 64 MiB comfortably holds a wide sweep; on the rare overflow we now return
-// the partial capture with a truncation note rather than crashing.
-export const MAX_COMMAND_BUFFER = 64 * 1024 * 1024;
-
-/**
- * Install-hint for optional binaries the audit agent can drive through
- * run_command. Used to turn a raw ENOENT spawn failure into an actionable
- * "not installed — skipping (install: …)" message + tool-health event.
- */
-export const OPTIONAL_BINARY_INSTALL_HINTS: Record<string, string> = {
-  semgrep: "pip install semgrep  (or: brew install semgrep)",
-  codeql: "https://github.com/github/codeql-cli-binaries/releases",
-  foxguard: "internal tool — provision on the runner image",
-  jq: "brew install jq  (or: apt-get install jq)",
-};
-
-/**
- * Install hints for the structured external scanners (run_sqlmap / run_nmap /
- * run_ffuf / run_nuclei). Used to turn an ENOENT (binary absent) into a
- * graceful, actionable skip instead of a raw spawn error.
- */
-export const SCANNER_INSTALL_HINTS: Record<string, string> = {
-  sqlmap: "apt-get install sqlmap  (or: pip install sqlmap)",
-  nmap: "apt-get install nmap  (or: brew install nmap)",
-  ffuf: "go install github.com/ffuf/ffuf/v2@latest  (or: brew install ffuf)",
-  nuclei: "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest  (or: brew install nuclei)",
-};
-
-export function executePipeline(
-  segments: string[][],
-  cwd: string,
-  timeout: number,
-  onHealth?: (input: ToolHealthRecordInput) => void,
-): ToolResult {
-  let stdin: string | Buffer | undefined;
-
-  for (const tokens of segments) {
-    const bin = tokens[0];
-    const result = spawnSync(bin, tokens.slice(1), {
-      cwd,
-      timeout,
-      input: stdin,
-      maxBuffer: MAX_COMMAND_BUFFER,
-      env: sanitizedEnv(),
-      encoding: "utf-8",
-    });
-
-    if (result.error) {
-      const err = result.error as NodeJS.ErrnoException;
-
-      // ENOBUFS — output exceeded even the raised ceiling. Return the partial
-      // capture (spawnSync fills stdout up to maxBuffer before aborting) with a
-      // clear truncation note rather than a hard crash. Classify as a
-      // buffer-limit tool-health event so the operator sees WHY it was clipped.
-      if (err.code === "ENOBUFS") {
-        onHealth?.({
-          tool: "run_command",
-          category: "buffer-limit",
-          message: `'${bin}' output exceeded the ${Math.round(MAX_COMMAND_BUFFER / (1024 * 1024))}MB buffer; returning partial results.`,
-          remedy: "Narrow the query (add a path filter, -m/--max-count, or --max-filesize) or pipe through head.",
-        });
-        const partial = typeof result.stdout === "string" ? result.stdout : "";
-        const note = `\n[truncated: '${bin}' output exceeded the ${Math.round(MAX_COMMAND_BUFFER / (1024 * 1024))}MB buffer — results are PARTIAL. Narrow the search (path filter / -m / --max-filesize) for the full set.]`;
-        // Continue the pipeline with the partial stdout as the next stdin so a
-        // trailing `| head`/`| wc` still produces a bounded, useful result.
-        stdin = partial;
-        if (segments[segments.length - 1] === tokens) {
-          return { success: true, output: formatTruncated(partial, { mode: "bytes", limit: 10_000 - Buffer.byteLength(note, "utf8") }) + note };
-        }
-        continue;
-      }
-
-      // ENOENT — the binary isn't installed on this runner (semgrep/codeql/…).
-      // Graceful skip: a clear "not installed — skipping" result that does NOT
-      // read as a hard crash, plus a missing-binary tool-health event.
-      if (err.code === "ENOENT") {
-        const hint = OPTIONAL_BINARY_INSTALL_HINTS[bin];
-        onHealth?.({
-          tool: bin,
-          category: "missing-binary",
-          message: `'${bin}' is not installed on this runner — skipping.`,
-          ...(hint ? { remedy: `install: ${hint}` } : {}),
-        });
-        return {
-          success: true,
-          output: {
-            skipped: true,
-            reason: `'${bin}' not installed — skipping.`,
-            ...(hint ? { install: hint } : {}),
-          },
-        };
-      }
-
-      throw result.error;
-    }
-
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    if (result.status !== 0) {
-      return {
-        success: false,
-        output: null,
-        error: formatTruncated(output, { mode: "bytes", limit: 2_000 }) || `Command exited with status ${result.status}`,
-      };
-    }
-
-    stdin = result.stdout ?? "";
-  }
-
-  return {
-    success: true,
-    output: typeof stdin === "string" ? formatTruncated(stdin, { mode: "bytes", limit: 10_000 }) : "",
-  };
-}
-
-/**
- * Build the display-only edit-card {@link ToolResultMeta} for an `apply_patch`
- * result. Counts added/removed lines and extracts a hunk diff body from the
- * patch envelope, and names the path(s) the ops touched. Pure; never throws
- * (a display sidecar must never take down a successful edit).
- */
-export function buildEditCardMeta(
-  patchInput: string,
-  applied: ReadonlyArray<{ kind: string; path: string }>,
-): ToolResultMeta {
-  let added = 0;
-  let removed = 0;
-  const diffLines: string[] = [];
-  for (const line of patchInput.split("\n")) {
-    // Envelope control lines: `*** Begin Patch`, `*** Update File: …`, `@@ …`.
-    if (line.startsWith("*** ") || line.startsWith("@@")) continue;
-    if (line.startsWith("+")) {
-      added += 1;
-      diffLines.push(line);
-    } else if (line.startsWith("-")) {
-      removed += 1;
-      diffLines.push(line);
-    } else {
-      diffLines.push(line);
-    }
-  }
-  const paths = Array.from(new Set(applied.map((a) => a.path)));
-  const path = paths.length > 0 ? paths.join(", ") : "(patch)";
-  return {
-    kind: "edit",
-    path,
-    added,
-    removed,
-    diff: diffLines.join("\n").trim(),
-  };
 }
 
 /**

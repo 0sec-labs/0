@@ -1942,7 +1942,7 @@ it("retains a quiescent quarantine marker in save-as without permitting executio
 });
 
 
-it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and leaves another chat usable", async () => {
+it("keeps an abort-ignoring spawn_agent batch fenced until confirmed drain and leaves another chat usable", async () => {
   vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
   vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
   const started = Promise.withResolvers<AbortSignal>();
@@ -1952,11 +1952,11 @@ it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and 
     executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
       childStarts++; started.resolve(signal!);
       await release.promise; // The real native loop awaits a runtime that ignores abort.
-      return { content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Drained" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } };
+      return { content: [{ type: "text", text: "Drained" }], stopReason: "end_turn", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } };
     },
   };
   const runtime: import("@0/engine").NativeRuntime = { ...childRuntime, forkForSubagent: async () => childRuntime,
-    executeNative: async () => { parentCalls++; if (parentCalls > 1) throw new Error("Unexpected extra planner request"); return { content: [{ type: "tool_use", id: "blocking-batch", name: "spawn_agents", input: { read_only: true, tasks: [{ task: "Running child" }, { task: "Queued second" }, { task: "Queued third" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+    executeNative: async () => { parentCalls++; if (parentCalls > 1) throw new Error("Unexpected extra planner request"); return { content: [{ type: "tool_use", id: "blocking-batch", name: "spawn_agent", input: { wait: true, read_only: true, tasks: [{ task: "Running child" }, { task: "Queued second" }, { task: "Queued third" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }; } };
   let activeSend: Promise<ConsoleTurnOutcome> | undefined;
   const instance = gateway(input => {
     if (input.target !== "https://batch.fixture") return engine(input);
@@ -2160,44 +2160,7 @@ describe("confirmed mode changes and pending tool actions", () => {
     expect(instance.get(chat.id).pendingConfiguration).toBeUndefined();
     later.resolve(); await idle(instance, chat.id);
     expect(allowed).toBe(true); expect(instance.get(chat.id).pendingDecisions).toEqual([]);
-  });
-  it("emits an additive visual event for visualize, keeps the spec out of tool-result, and persists the spec via the saved tool_use", async () => {
-    const spec = { nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }] };
-    const input = { kind: "graph", title: "Path", summary: "A reaches B.", spec };
-    const visual = { id: "viz-1", version: 1 as const, createdAt: "2026-09-30T00:00:00.000Z", ...input };
-    const instance = gateway(inputArgs => {
-      const base = engine(inputArgs);
-      return { ...base, async send(text, callbacks) {
-        base.messages.push({ role: "user", content: [{ type: "text", text }] });
-        const call: ToolCall = { name: "visualize", arguments: input };
-        callbacks?.onToolStart?.(call);
-        callbacks?.onToolResult?.(call, { success: true, output: { visual_id: "viz-1" }, meta: { kind: "visual", visual } as never });
-        const failed: ToolCall = { name: "visualize", arguments: { kind: "graph" } };
-        callbacks?.onToolResult?.(failed, { success: false, output: null, error: "bad" });
-        base.messages.push({ role: "assistant", content: [{ type: "tool_use", id: "tu1", name: "visualize", input }] });
-        base.messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: "tu1", content: '{"visual_id":"viz-1"}' }] });
-        return outcome("done");
-      } };
-    });
-    const chat = instance.create();
-    await instance.send(chat.id, { text: "draw it" }); await idle(instance, chat.id);
-    const events = instance.get(chat.id).events;
-    const visuals = events.filter(event => event.type === "visual");
-    expect(visuals).toHaveLength(1);
-    expect(visuals[0]).toMatchObject({ type: "visual", visual: { id: "viz-1", version: 1, kind: "graph", spec: { nodes: [{ id: "a" }, { id: "b" }] } }, call: { name: "visualize" } });
-    // Strictly ordered after its tool-result; the failed call yields no visual.
-    const results = events.filter(event => event.type === "tool-result");
-    expect(results).toHaveLength(2);
-    expect(JSON.stringify((results[0] as { result: unknown }).result)).not.toContain('"nodes"');
-    expect(events.findIndex(event => event.type === "visual")).toBe(events.indexOf(results[0]!) + 1);
-    // Events are replayed through the cursor API unchanged.
-    expect(instance.eventsAfter(chat.id, 0).events.some(event => event.type === "visual")).toBe(true);
-    // Saved sessions persist messages: the spec survives as the visualize tool_use input.
-    const resumed = await instance.resume(instance.save(chat.id).id);
-    const blocks = instance.get(resumed.id).messages.flatMap(message => message.content);
-    expect(blocks).toContainEqual({ type: "tool_use", id: "tu1", name: "visualize", input });
-  });
-});
+  });});
 
 describe("ConsoleGateway windowed snapshots, long-poll and resume reuse", () => {
   async function bigChat() {

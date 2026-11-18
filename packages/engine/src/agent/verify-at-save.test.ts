@@ -12,7 +12,7 @@ import type { Finding } from "../shared/index.js";
  * fabricated quotes remain `needs_verify`. Business impact is retained only
  * when explicitly provided, rather than inferred during the evidence save.
  */
-describe("save_finding harness re-verification", () => {
+describe("finding harness re-verification", () => {
   let root: string;
   let ctx: ToolContext;
   let executor: ToolExecutor;
@@ -48,7 +48,7 @@ describe("save_finding harness re-verification", () => {
     mkdirSync(join(root, "app", "api", "helpers"), { recursive: true });
     writeFileSync(join(root, "app", "api", "helpers", "authHelper.ts"), "export const x = 1;\n");
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         ...baseFinding(),
         source_path: "app/api/helpers/authHelper.ts",
@@ -68,7 +68,7 @@ describe("save_finding harness re-verification", () => {
       "const secret = user.apiKey;\nif (secret === expected) { grant(); }\n",
     );
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         ...baseFinding(),
         source_path: "app/api/helpers/authHelper.ts",
@@ -87,7 +87,7 @@ describe("save_finding harness re-verification", () => {
     // must never consume their planner runtime or create an unaccounted call.
     Object.assign(ctx, { runtime: { type: "api", executeNative } });
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: { ...baseFinding() },
     });
     expect(result.success).toBe(true);
@@ -103,7 +103,7 @@ describe("save_finding harness re-verification", () => {
       reachability_tier: "remote-auth", blast_radius: "Authenticated customer records",
       weaponizability: "info-leak", business_impact: "notable", rationale: "A caller can read another customer's records.",
     };
-    const result = await executor.execute({ name: "save_finding", arguments: {
+    const result = await executor.execute({ name: "finding", arguments: {
       ...baseFinding(), impact_assessment: JSON.stringify(assessment),
     } });
     expect(result.success).toBe(true);
@@ -115,7 +115,7 @@ describe("save_finding harness re-verification", () => {
     mkdirSync(join(root, "app", "api", "helpers"), { recursive: true });
     writeFileSync(join(root, "app", "api", "helpers", "authHelper.ts"), "export const x = 1;\n");
     const result = await executor.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         ...baseFinding(),
         source_path: "app/api/helpers/authHelper.ts",

@@ -1,6 +1,5 @@
 /**
- * Flag-boundary tests for the SOP surfaces: dynamic playbooks and the `plan`
- * tool.
+ * Flag-boundary tests for the SOP surfaces: dynamic playbooks and drift detection.
  *
  * These exist because every one of these features is a getter reading an env
  * var at call time (so the CLI `--features` flag, which mutates the env AFTER
@@ -13,11 +12,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { features } from "./features.js";
 import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.js";
-import { getToolsForRole, TOOL_DEFINITIONS } from "./tools.js";
 
 const TOUCHED_ENV = [
   "ZERO_FEATURE_DYNAMIC_PLAYBOOKS",
-  "ZERO_FEATURE_AGENT_PLAN",
   "ZERO_FEATURE_DRIFT_DETECTION",
 ];
 
@@ -34,63 +31,10 @@ describe("feature-flag boundaries", () => {
     expect(features.dynamicPlaybooks).toBe(false);
   });
 
-  it("agentPlan defaults OFF and can be opted into", () => {
-    // Default OFF per the features.ts convention: the plan tool adds a tool to
-    // every scan's tool list, a system-prompt block and a per-turn injected
-    // block. That changes agent behaviour, so it must be A/B'd before it
-    // ships on — and shipping it on would silently invalidate every existing
-    // benchmark baseline.
-    expect(features.agentPlan).toBe(false);
-    process.env["ZERO_FEATURE_AGENT_PLAN"] = "1";
-    expect(features.agentPlan).toBe(true);
-  });
-
   it("driftDetection defaults OFF and can be opted into", () => {
     expect(features.driftDetection).toBe(false);
     process.env["ZERO_FEATURE_DRIFT_DETECTION"] = "1";
     expect(features.driftDetection).toBe(true);
-  });
-});
-
-describe("`plan` tool exposure follows the agentPlan flag", () => {
-  it("is offered to the attack role when on and withheld when off", () => {
-    process.env["ZERO_FEATURE_AGENT_PLAN"] = "1";
-    const on = getToolsForRole("attack").map((t) => t.name);
-    expect(on).toContain("plan");
-
-    process.env["ZERO_FEATURE_AGENT_PLAN"] = "0";
-    const off = getToolsForRole("attack").map((t) => t.name);
-    expect(off).not.toContain("plan");
-  });
-
-  it("is kept out of the audit/review everything-set when off", () => {
-    // Regression guard matching the use_loot / JIT-skill gating: tools that
-    // enumerate Object.keys(TOOL_DEFINITIONS) would otherwise leak `plan` into
-    // roles regardless of the flag.
-    process.env["ZERO_FEATURE_AGENT_PLAN"] = "0";
-    for (const role of ["audit", "review"]) {
-      expect(getToolsForRole(role).map((t) => t.name)).not.toContain("plan");
-    }
-    process.env["ZERO_FEATURE_AGENT_PLAN"] = "1";
-    for (const role of ["audit", "review"]) {
-      expect(getToolsForRole(role).map((t) => t.name)).toContain("plan");
-    }
-  });
-
-  it("declares a schema whose required set matches the discriminated union", () => {
-    const def = TOOL_DEFINITIONS.plan;
-    expect(def).toBeDefined();
-    // `action` is the only unconditionally-required field; everything else is
-    // conditional on the action and is enforced by Zod, not by the schema.
-    expect(def?.required).toEqual(["action"]);
-    expect(def?.parameters.action?.enum).toEqual([
-      "add",
-      "start",
-      "complete",
-      "drop",
-      "note",
-      "list",
-    ]);
   });
 });
 

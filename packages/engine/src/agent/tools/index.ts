@@ -13,122 +13,32 @@
  */
 import type { ToolDefinition } from "../types.js";
 import { reconToolDefinitions } from "./recon.js";
-import { browserToolDefinitions } from "./browser.js";
 import { findingsToolDefinitions } from "./findings.js";
 import { systemToolDefinitions } from "./system.js";
-import { accessControlToolDefinitions } from "./access-control.js";
-import { exploitToolDefinitions } from "./exploit.js";
-import { intelToolDefinitions } from "./intel.js";
 import { skillsToolDefinitions } from "./skills.js";
-import { scannerToolDefinitions, SCANNER_TOOL_NAMES } from "./scanner.js";
-import { detectionToolDefinitions } from "./detections.js";
-import { cloudToolDefinitions, CLOUD_TOOL_NAMES } from "./cloud.js";
-import { oastToolDefinitions, OAST_TOOL_NAMES } from "./oast.js";
-import { pythonToolDefinitions } from "./python.js";
-import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
 import { askOperatorToolDefinitions } from "./ask-operator.js";
-import { todosToolDefinitions } from "./todos.js";
-import { visualizeToolDefinitions } from "./visualize.js";
-import { evalToolDefinitions } from "./eval.js";
-import { proxyToolDefinitions } from "./proxy.js";
-
-export { LEGACY_DELEGATION_TOOL_NAMES } from "./system.js";
-
-export {
-  SCANNER_TOOL_NAMES,
-  CLOUD_TOOL_NAMES,
-  OAST_TOOL_NAMES,
-  BINARY_TOOL_NAMES,
-};
 
 // Every per-domain definition map, merged. Key collisions are impossible —
 // each tool name is owned by exactly one domain module.
 const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...reconToolDefinitions,
-  ...browserToolDefinitions,
   ...findingsToolDefinitions,
   ...systemToolDefinitions,
-  ...accessControlToolDefinitions,
-  ...exploitToolDefinitions,
-  ...intelToolDefinitions,
   ...skillsToolDefinitions,
-  ...scannerToolDefinitions,
-  ...detectionToolDefinitions,
-  ...cloudToolDefinitions,
-  ...oastToolDefinitions,
-  ...pythonToolDefinitions,
-  ...binaryToolDefinitions,
   ...askOperatorToolDefinitions,
-  ...todosToolDefinitions,
-  ...visualizeToolDefinitions,
-  ...evalToolDefinitions,
-  ...proxyToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
 // Object.keys(TOOL_DEFINITIONS), so keep additions deliberate and deterministic.
 const TOOL_REGISTRY_ORDER = [
-  "http_request",
-  "send_prompt",
-  "save_finding",
-  "query_findings",
-  "use_loot",
-  "plan",
-  "update_finding",
-  "read_file",
-  "list_files",
-  "search_files",
+  "finding",
   "str_replace",
-  "apply_patch",
-  "run_command",
-  "update_target",
-  "crawl",
-  "submit_form",
-  "access_control_probe",
-  "access_control_workflow",
-  "access_control_cleanup",
   "bash",
-  "browser",
   "spawn_agent",
-  "spawn_agents",
-  "spawn_persistent_agent",
-  "monitor",
   "web_search",
-  "intel",
-  "payload_lookup",
-  "pty_session",
-  "wp_fingerprint",
-  "discover_api_surface",
-  "surface_sweep",
-  "js_recon",
-  "mongo_objectid",
-  "list_skills",
   "load_skill",
-  "read_skill",
-  "create_skill",
-  "save_skill",
-  "copy_skill",
-  "done",
-  "run_scanner",
-  "structural_sqli_probe",
-  "prompt_layer_probe",
-  "auth_boundary_probe",
-  "cloud_s3_probe",
-  "cloud_validate_credentials",
-  "oast_register",
-  "oast_poll",
-  "python_exec",
-  "js_eval",
-  "python_eval",
-  "analyze_binary",
   "ask_operator",
-  "update_todos",
-  "write_todos",
-  "visualize",
   "memory",
-  // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
-  // lazy ProxyDriver seam; scope-gated like http_request/browser.
-  "proxy",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(

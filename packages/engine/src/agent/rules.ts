@@ -157,8 +157,8 @@ export const SECURITY_RULES: readonly Rule[] = [
     id: "waf-rotate-headers",
     name: "rotate-headers-on-403",
     severity: "warn",
-    trigger: { tool: ["bash", "run_command", "http_request"], regex: ["HTTP/\\S*\\s+403", "cloudflare", "Access denied", "Just a moment"] },
-    rule: "WAF/403 on the last request — rotate the User-Agent and add realistic Accept/Referer/Origin headers (or switch to the browser tool) before retrying; don't hammer the blocked request unchanged.",
+    trigger: { tool: ["bash"], regex: ["HTTP/\\S*\\s+403", "cloudflare", "Access denied", "Just a moment"] },
+    rule: "WAF/403 on the last request — rotate the User-Agent and add realistic Accept/Referer/Origin headers before retrying; don't hammer the blocked request unchanged.",
     repeat: "once-per-scan",
   },
   {

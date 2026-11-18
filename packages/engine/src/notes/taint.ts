@@ -8,7 +8,7 @@ import type { NoteStatus } from "./core.js";
 
 /** Tools whose results carry nothing from outside the user and the host. Adding one is a reviewed decision. */
 export const TRUSTED_TOOLS: ReadonlySet<string> = new Set([
-  "memory", "ask_operator", "update_todos", "write_todos", "plan", "done", "visualize", "list_skills", "load_skill", "read_skill", "update_target", "list_tools", "load_tool",
+  "memory", "ask_operator", "load_skill", "list_tools", "load_tool",
 ]);
 
 export const isUntrustedTool = (name: string): boolean => !TRUSTED_TOOLS.has(name);

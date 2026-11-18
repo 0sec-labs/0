@@ -83,7 +83,7 @@ export function seedFromJournal(
   try {
     const state = rehydrateContext(entries);
     messages = renderSeedMessages(state);
-    // `finding` journal entries are written from real `save_finding` payloads
+    // `finding` journal entries are written from real `finding` payloads
     // (native-loop shadow write), but the journal types them loosely as
     // `Record<string, unknown>`. Cast through `unknown` to recover the shape
     // the in-loop tool context carries.
@@ -122,7 +122,7 @@ export function buildInitialPrompt(config: NativeAgentConfig): string {
     `Target: ${config.target}`,
     `Scan ID: ${config.scanId}`,
     "",
-    "Use your tools to accomplish your task. When done, call the done tool with a summary.",
+    "Use your tools to accomplish your task. When you are finished, reply with a summary and no tool call.",
     hasJitSkillTools ? `\n## Just-in-Time Skills\n${formatJitSkillsInstruction()}` : "",
   ].join("\n");
 }
@@ -134,7 +134,7 @@ export function buildContinuePrompt(config: NativeAgentConfig, turnCount: number
 
 function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
   if (config.consoleSession && /^https?:\/\//i.test(config.target) && !getLocalSourceBoundary()) {
-    return "Continue the delegated web task using only the provided tools and inherited scope. Report observations and untested coverage accurately. Call done when the assigned task is complete or blocked; a local workspace does not require source-code inspection for a web task.";
+    return "Continue the delegated web task using only the provided tools and inherited scope. Report observations and untested coverage accurately. Reply without a tool call when the assigned task is complete or blocked; a local workspace does not require source-code inspection for a web task.";
   }
   const scopedSourceAudit =
     typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
@@ -154,8 +154,8 @@ function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): 
           ? "You must use your scoped source tools to analyze the target. Start by listing files and reading source. Do not just describe what you would do — actually do it."
           : "You must use your tools to analyze the target. Start by reading files and running commands. Do not just describe what you would do — actually do it."
         : scopedSourceAudit
-          ? "Continue your analysis. Use list_files to map source, search_files with literal identifiers to trace patterns, read_file for full context, and save_finding for vulnerabilities. Call done only when you have thoroughly analyzed the code."
-          : "Continue your analysis. Use read_file to examine source code, run_command to search for patterns, and save_finding for any vulnerabilities. Call the done tool only when you have thoroughly analyzed the code.";
+          ? "Continue your analysis. Use bash (cat -n, rg, ls) when allowed to read, map and trace source, and finding for vulnerabilities."
+          : "Continue your analysis. Use bash to read source code and search for patterns, and finding for any vulnerabilities.";
   }
 }
 

@@ -89,7 +89,7 @@ describe("Console bookkeeping progress", () => {
   it("does not cap evidence work interspersed with bookkeeping", async () => {
     const runtime = new ScriptedRuntime([
       ...Array.from({ length: 11 }, (_, index) => plan(index)),
-      { content: [{ type: "tool_use", id: "read-evidence", name: "payload_lookup", input: { name: "jsfuck_alert" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "read-evidence", name: "load_skill", input: {} }], stopReason: "tool_use", durationMs: 1 },
       ...Array.from({ length: 11 }, (_, index) => plan(index + 11)),
       endTurn("Evidence gathered."),
     ]);
@@ -103,68 +103,6 @@ describe("Console bookkeeping progress", () => {
 });
 
 describe("Auto finding verification workflow", () => {
-  it.each([false, true])("continues from a saved source lead without approval (missing runtime: %s)", async (missingRuntime) => {
-    const root = mkdtempSync(join(tmpdir(), "0-yolo-verification-"));
-    const source = join(root, "parser.cjs");
-    writeFileSync(source, "module.exports = input => parseInt(input, 10);\n");
-    const command = missingRuntime
-      ? "0_nonexistent_poc_runtime_147 --version"
-      : `node -e 'const parse = require(${JSON.stringify(source)}); require("node:assert/strict").equal(parse("42admin"), 42); console.log("runtime-reproduced: malformed integer accepted")'`;
-    let round = 0;
-    const runtime: NativeRuntime = {
-      type: "api",
-      async isAvailable() { return true; },
-      async executeNative(_system, messages) {
-        round++;
-        const tool = (name: string, input: Record<string, unknown>): NativeRuntimeResult => ({
-          content: [{ type: "tool_use", id: `verification-${round}`, name, input }],
-          stopReason: "tool_use", durationMs: 1,
-        });
-        if (round === 1) return tool("read_file", { path: source });
-        if (round === 2) return tool("save_finding", {
-          title: "Parser accepts malformed integer", category: "missing-validation", severity: "low",
-          description: "parser.cjs accepts nonnumeric suffixes instead of rejecting invalid input. Runtime impact is unverified.",
-          evidence_request: "parseInt(input, 10)", evidence_response: "Source inspected only; no runtime reproduction yet.",
-          verification_spec: JSON.stringify({ code: [{ kind: "file-contains", file: "parser.cjs", pattern: "parseInt" }] }),
-        });
-        if (round === 3) {
-          const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
-          if (receipt?.type !== "tool_result" || !receipt.content.includes("verification_workflow")) {
-            return endTurn("Should I test this?");
-          }
-          // The planning fixture responds to the host's workflow handoff; the
-          // console must execute the real verification through normal gates.
-          expect(receipt.content).toContain('"source_status":"matched"');
-          expect(receipt.content).toContain('"replay_status":"not_run"');
-          return tool("bash", { command, timeout: 5 });
-        }
-        const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
-        expect(receipt?.type).toBe("tool_result");
-        if (receipt?.type === "tool_result") {
-          expect(receipt.content).toContain(missingRuntime ? "not found" : "runtime-reproduced");
-        }
-        return endTurn(missingRuntime
-          ? "Source-verified only. Runtime verification failed: 0_nonexistent_poc_runtime_147 is unavailable. No runtime reproduction."
-          : "Runtime-reproduced: malformed integer accepted. Local parser PoC executed; caller impact still requires investigation.");
-      },
-    };
-    const approveTool = vi.fn(async () => { throw new Error("Routine Auto verification must not request approval"); });
-    const askOperator = vi.fn(async () => { throw new Error("Routine Auto verification must not ask whether to test"); });
-    const session = createConsoleSession({ runtime, autonomyMode: "yolo", approveTool, askOperator,
-      refineObjective: false });
-    try {
-      const outcome = await session.send(`Investigate and verify the local parser in ${root}`);
-      expect(outcome.stopReason).toBe("end_turn");
-      expect(outcome.toolCalls.map(({ call }) => call.name)).toEqual(["read_file", "save_finding", "bash"]);
-      // bash can successfully return stderr for a nonzero exit. Use the
-      // actual process receipt, not the transport success bit, as evidence.
-      expect(outcome.toolCalls[2].result.meta?.exitCode).toBe(missingRuntime ? 127 : 0);
-      expect(outcome.assistantText).not.toContain("Should I test");
-      expect(approveTool).not.toHaveBeenCalled();
-      expect(askOperator).not.toHaveBeenCalled();
-      expect(session.exportCheckpoint().sessionData.findings[0].status).not.toBe("verified");
-    } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
-  });
 
   it.each(["standard"] as const)("does not prescribe automatic PoCs for an older %s value (it asks first)", (autonomyMode) => {
     expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("Auto verification workflow");
@@ -214,60 +152,6 @@ describe("createConsoleSession", () => {
     await session.cleanup();
   });
 
-  it("exposes the full audit-role tool registry by default", () => {
-    const session = createConsoleSession({ runtime: new ScriptedRuntime([]) });
-    const names = session.tools.map((t) => t.name);
-    // A cross-section of the unified cockpit's capabilities.
-    expect(names).toContain("http_request"); // web pentest
-    expect(names).toContain("read_file"); // source scan
-    expect(names).toContain("apply_patch"); // patch-gen
-    expect(names).toContain("run_command");
-    expect(session.tools.length).toBeGreaterThan(10);
-  });
-
-  it("runs the real ToolExecutor for a tool call and feeds the result back", async () => {
-    const runtime = new ScriptedRuntime([
-      // Turn 1: the model asks to run a real registry tool.
-      {
-        content: [
-          { type: "text", text: "Looking that up." },
-          { type: "tool_use", id: "call-1", name: "payload_lookup", input: { name: "jsfuck_alert" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-        usage: { inputTokens: 10, outputTokens: 5 },
-      },
-      // Turn 2: after seeing the tool result, the model answers and stops.
-      endTurn("Here is the payload."),
-    ]);
-
-    const session = createConsoleSession({ runtime, toolset: "full" });
-
-    const seen: string[] = [];
-    const outcome = await session.send("find me a jsfuck alert payload", {
-      onToolStart: (call) => seen.push(`start:${call.name}`),
-      onToolResult: (call, result) => seen.push(`result:${call.name}:${result.success}`),
-    });
-
-    // The REAL executor ran the REAL tool and succeeded.
-    expect(seen).toEqual(["start:payload_lookup", "result:payload_lookup:true"]);
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.success).toBe(true);
-    expect(outcome.stopReason).toBe("end_turn");
-    expect(outcome.assistantText).toContain("Here is the payload.");
-    expect(outcome.usage.inputTokens).toBe(10);
-
-    // Specialist schemas are discoverable while legacy dispatch remains compatible.
-    expect(session.tools.some((t) => t.name === "payload_lookup")).toBe(true);
-    expect(runtime.calls[0].tools.some((t) => t.name === "list_tools")).toBe(true);
-    // The second runtime call carried the tool_result back into history.
-    const secondCallMessages = runtime.calls[1].messages;
-    const hasToolResult = secondCallMessages.some((m) =>
-      m.content.some((b) => b.type === "tool_result" && b.tool_use_id === "call-1"),
-    );
-    expect(hasToolResult).toBe(true);
-  });
-
   it("preserves conversation history across operator turns", async () => {
     const runtime = new ScriptedRuntime([endTurn("hi there"), endTurn("still here")]);
     const session = createConsoleSession({ runtime });
@@ -286,7 +170,7 @@ describe("createConsoleSession", () => {
   it("keeps latest planner occupancy separate from cumulative input usage", async () => {
     const runtime = new ScriptedRuntime([
       ...["first", "second"].map((id): NativeRuntimeResult => ({
-        content: [{ type: "tool_use", id, name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+        content: [{ type: "tool_use", id, name: "load_skill", input: {} }],
         stopReason: "tool_use",
         durationMs: 1,
         usage: { inputTokens: 216_000, outputTokens: 10 },
@@ -361,7 +245,7 @@ describe("createConsoleSession", () => {
 
   it("continues past 100 tool rounds by default and stops when the task finishes", async () => {
     const tools: NativeRuntimeResult[] = Array.from({ length: 101 }, (_, index) => ({
-      content: [{ type: "tool_use", id: `round-${index}`, name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+      content: [{ type: "tool_use", id: `round-${index}`, name: "load_skill", input: {} }],
       stopReason: "tool_use", durationMs: 1,
     }));
     const runtime = new ScriptedRuntime([...tools, endTurn("Review completed")]);
@@ -383,7 +267,7 @@ describe("createConsoleSession", () => {
   it("caps tool-call rounds per turn to avoid runaway loops", async () => {
     // Always request a tool → would loop forever without the cap.
     const infiniteToolCall: NativeRuntimeResult = {
-      content: [{ type: "tool_use", id: "c", name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+      content: [{ type: "tool_use", id: "c", name: "load_skill", input: {} }],
       stopReason: "tool_use",
       durationMs: 1,
     };
@@ -422,88 +306,6 @@ describe("Responses output-cap continuation", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-  });
-
-  it("completes one DeepSeek turn after a cap without replaying tools, losing the plan or failing a live worker", async () => {
-    let releaseChild!: (result: NativeRuntimeResult) => void;
-    let childStarted!: () => void;
-    const started = new Promise<void>(resolve => { childStarted = resolve; });
-    let childParked!: () => void;
-    const parked = new Promise<void>(resolve => { childParked = resolve; });
-    let childSignal: AbortSignal | undefined;
-    const child: NativeRuntime = {
-      type: "api", isAvailable: async () => true,
-      executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
-        childSignal = signal;
-        const result = new Promise<NativeRuntimeResult>(resolve => {
-          releaseChild = resolve;
-          signal?.addEventListener("abort", () => resolve({ content: [], stopReason: "error", cancelled: true, durationMs: 0 }), { once: true });
-        });
-        childStarted();
-        return result;
-      },
-    };
-    const lifecycle: SubagentLifecyclePayload[] = [];
-    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
-      if (type === "subagent_lifecycle") {
-        const event = payload as SubagentLifecyclePayload;
-        lifecycle.push(event);
-        if (event.status === "parked") childParked();
-      }
-    } });
-    const plan = { todos: [{ content: "Retain verified observation and finish report", status: "in_progress" }] };
-    const requests: Array<Record<string, unknown>> = [];
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
-      requests.push(JSON.parse(String(init?.body)));
-      if (requests.length === 1) return stream([{ type: "response.completed", response: {
-        status: "completed", output: [
-          { type: "function_call", call_id: "plan", name: "update_todos", arguments: JSON.stringify(plan) },
-          { type: "function_call", call_id: "spawn", name: "spawn_persistent_agent", arguments: JSON.stringify({ task: "Retain the observation", name: "observer", max_turns: 2 }) },
-        ], usage: { input_tokens: 12, output_tokens: 3 },
-      } }]);
-      if (requests.length === 2) { await started; return cap(); }
-      expect(childSignal?.aborted).toBe(false);
-      releaseChild({ content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Observation preserved." } }], stopReason: "tool_use", durationMs: 0 });
-      await parked;
-      return stream([
-        { type: "response.output_text.delta", delta: " Final report." },
-        { type: "response.completed", response: { status: "completed",
-          output: [{ type: "message", content: [{ type: "output_text", text: " Final report." }] }],
-          usage: { input_tokens: 15, output_tokens: 4 } } },
-      ]);
-    }));
-    const model = runtime();
-    vi.spyOn(model, "forkForSubagent").mockResolvedValue(child);
-    const session = createConsoleSession({ runtime: model, refineObjective: false });
-    const deltas: string[] = [];
-    const usage: ConsoleUsageReport[] = [];
-    try {
-      const outcome = await session.send("Produce a report and retain a background observer.", {
-        onAssistantDelta: text => deltas.push(text), onUsage: value => usage.push(value),
-        onToolResult: (_call, result) => expect(result.success).toBe(true),
-      });
-      expect(outcome.stopReason).toBe("end_turn");
-      expect(outcome.assistantText).toBe("Completed observation. Final report.");
-      expect(deltas).toEqual(["Completed observation.", " Final report."]);
-      expect(outcome.toolCalls.map(entry => entry.call.name)).toEqual(["update_todos", "spawn_persistent_agent"]);
-      expect(outcome.usage).toEqual({ inputTokens: 37, outputTokens: 8199 });
-      expect(usage.filter(value => value.kind === "planner").map(value => value.outputTokens)).toEqual([3, 8192, 4]);
-      expect(requests).toHaveLength(3);
-      expect(requests.every(request => request.max_output_tokens === 8192)).toBe(true);
-      const continuation = JSON.stringify(requests[2].input);
-      expect(continuation).toContain("Completed observation.");
-      expect(continuation).toContain(plan.todos[0].content);
-      expect(continuation).toContain("[OUTPUT CAP CHECKPOINT]");
-      expect(continuation).not.toContain("not-authorized");
-      expect(session.messages.filter(message => message.role === "assistant").flatMap(message => message.content)
-        .filter(block => block.type === "tool_use").map(block => block.id)).toEqual(["plan", "spawn"]);
-      expect(lifecycle.some(event => event.status === "failed")).toBe(false);
-      expect(lifecycle.find(event => event.status === "parked")).toMatchObject({ done: true, completion_reason: "done" });
-    } finally {
-      releaseChild?.(endTurn("Released."));
-      await session.cleanup();
-      unsubscribe();
-    }
   });
 
   it("automatically continues repeated provider caps beyond the former three-retry limit", async () => {
@@ -583,74 +385,12 @@ describe("Responses output-cap continuation", () => {
 // ── Console autonomy / scope-resolution contract tests ──
 
 describe("Console autonomy — scope resolution", () => {
-  it("requests scope for network-capable tools when scope is absent and denies on null", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://outofscope.test/api" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Scope denied."),
-    ]);
-
-    const requests: ConsoleScopeRequest[] = [];
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async (req) => {
-        requests.push(req);
-        return null; // deny
-      },
-    });
-
-    const outcome = await session.send("probe the target");
-    expect(requests).toHaveLength(1);
-    expect(requests[0].call.name).toBe("http_request");
-    expect(requests[0].requestedUrls).toContain("https://outofscope.test/api");
-    expect(requests[0].target).toBe("");
-    expect(requests[0].currentScope).toBeUndefined();
-
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("denied");
-    expect(outcome.stopReason).toBe("end_turn");
-  });
-
-  it("approves scope resolution and updates in-memory session target + scope", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://example.test/api" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-        usage: { inputTokens: 5, outputTokens: 3 },
-      },
-      endTurn("Scope approved, tool ran."),
-    ]);
-
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => ({
-        target: "https://example.test",
-        scope: ScopePolicy.fromJson({ in_scope: ["example.test"] }),
-      }),
-    });
-
-    await session.send("go");
-    // Scope resolution updated the in-memory session state.
-    expect(session.target).toBe("https://example.test");
-    expect(session.scope).toBeDefined();
-  });
 
   it("does not trigger requestScope for non-network tools", async () => {
     const runtime = new ScriptedRuntime([
       {
         content: [
-          { type: "tool_use", id: "c1", name: "payload_lookup", input: { name: "jsfuck_alert" } },
+          { type: "tool_use", id: "c1", name: "load_skill", input: {} },
         ],
         stopReason: "tool_use",
         durationMs: 1,
@@ -672,61 +412,9 @@ describe("Console autonomy — scope resolution", () => {
     expect(requestScopeCalled).toBe(false);
     expect(session.scope).toBeUndefined();
   });
-
-  it("skips scope resolution when requestScope callback is absent", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://example.test" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("No scope gate → falls through to executor."),
-    ]);
-
-    const session = createConsoleSession({ runtime });
-    const outcome = await session.send("go");
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.stopReason).toBe("end_turn");
-  });
 });
 
 describe("Console autonomy — standard mode (per-action approval)", () => {
-  it("prompts the operator before EACH effectful action and denies on a no", async () => {
-    // Two effectful actions dispatched in one round: standard must put BOTH to
-    // the operator (the most-prompting mode), and deny each one the operator
-    // refuses — approval is per action, never once-per-turn.
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "bash", input: { command: "echo one" } },
-          { type: "tool_use", id: "c2", name: "run_command", input: { command: "echo two" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Both actions were put to the operator."),
-    ]);
-
-    const approved: string[] = [];
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      approveTool: async (call) => {
-        approved.push(call.name);
-        return false; // deny each action
-      },
-    });
-
-    const outcome = await session.send("run both");
-    // Every effectful action was put to the operator — one prompt per action.
-    expect(approved).toEqual(["bash", "run_command"]);
-    expect(outcome.toolCalls).toHaveLength(2);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("not approved by the operator");
-    expect(outcome.toolCalls[1].result.success).toBe(false);
-  });
 
   it("dispatches the action only on an explicit operator yes (approval never assumed)", async () => {
     const runtime = new ScriptedRuntime([
@@ -749,7 +437,7 @@ describe("Console autonomy — standard mode (per-action approval)", () => {
 
   it("exempts read-only tools from the per-action prompt", async () => {
     const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "payload_lookup", input: { name: "jsfuck_alert" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c1", name: "load_skill", input: {} }], stopReason: "tool_use", durationMs: 1 },
       endTurn("Read-only ran without a prompt."),
     ]);
     let prompted = 0;
@@ -808,277 +496,12 @@ describe("Console autonomy — standard mode (per-action approval)", () => {
     expect(outcome.toolCalls[0].result.error).toContain("requires operator approval");
   });
 
-  it("uses scope-on-demand for out-of-scope network calls", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://new-target.test" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Scope approved in standard mode."),
-    ]);
-
-    const requests: ConsoleScopeRequest[] = [];
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async (req) => {
-        requests.push(req);
-        return { target: "https://new-target.test", scope: ScopePolicy.fromJson({ in_scope: ["new-target.test"] }) };
-      },
-    });
-
-    await session.send("go");
-    expect(requests).toHaveLength(1);
-    expect(session.target).toBe("https://new-target.test");
-    expect(session.scope).toBeDefined();
-  });
-
 });
 
 
 // ── Denied-host memory: no unbounded re-prompt loop ──
 
-/** A single-tool-call turn that references `url` via http_request, then stops. */
-function httpTurn(id: string, url: string): NativeRuntimeResult {
-  return {
-    content: [{ type: "tool_use", id, name: "http_request", input: { url } }],
-    stopReason: "tool_use",
-    durationMs: 1,
-  };
-}
-
-describe("Console autonomy — denied-host memory", () => {
-  // Denial memory can no longer accrue from prompts (the mode ladder is
-  // retired and every session is pinned to yolo, which never prompts); the
-  // only creation path left is the checkpoint seed.
-  async function deniedCheckpoint(deniedHosts: string[]) {
-    const seed = createConsoleSession({ runtime: new ScriptedRuntime([]) });
-    await seed.ready;
-    const checkpoint = seed.exportCheckpoint();
-    await seed.cleanup();
-    return { ...checkpoint, deniedHosts };
-  }
-
-  it("denies a checkpoint-declined host outright without prompting again", async () => {
-    // Two operator turns, each asking the model to hit the same out-of-scope
-    // host. The first turn's request is declined; the second must be denied
-    // from session memory WITHOUT a second prompt — otherwise the operator is
-    // stuck in the re-prompt loop this fix removes.
-    const runtime = new ScriptedRuntime([
-      httpTurn("c1", "https://blocked.test/api"),
-      endTurn("First request declined."),
-      httpTurn("c2", "https://blocked.test/other"),
-      endTurn("Second request auto-denied from memory."),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => {
-        prompts += 1;
-        return null; // decline
-      },
-    });
-
-    const first = await session.send("probe blocked.test");
-    expect(first.toolCalls[0].result.success).toBe(false);
-
-    const second = await session.send("try blocked.test again");
-    expect(second.toolCalls[0].result.success).toBe(false);
-    // The declined host is remembered — the operator is prompted only once.
-    expect(prompts).toBe(1);
-    // The error tells the model it was already declined so it stops retrying.
-    expect(second.toolCalls[0].result.error).toContain("already declined");
-  });
-
-  it("denies the whole call without prompting when only some requested hosts were declined", async () => {
-    // The model bundles a previously-declined host with a fresh one. We must
-    // not silently drop the declined host and prompt for the rest — the entire
-    // call is denied without a new prompt.
-    const runtime = new ScriptedRuntime([
-      httpTurn("c1", "https://blocked.test/a"),
-      endTurn("Declined."),
-      {
-        content: [
-          {
-            type: "tool_use",
-            id: "c2",
-            name: "http_request",
-            input: { url: "https://blocked.test/a", extra: "https://fresh.test/b" },
-          },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Bundled call denied."),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => {
-        prompts += 1;
-        return null;
-      },
-    });
-
-    await session.send("hit blocked.test");
-    const outcome = await session.send("hit blocked.test and fresh.test");
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    // Still only the first prompt — the bundled call short-circuits.
-    expect(prompts).toBe(1);
-    expect(outcome.toolCalls[0].result.error).toContain("blocked.test");
-  });
-
-  it("keeps a declined host blocked when an unrelated approval also covers it", async () => {
-    const runtime = new ScriptedRuntime([
-      httpTurn("c1", "https://a.test/x"),
-      endTurn("a.test declined."),
-      httpTurn("c2", "https://b.test/y"),
-      endTurn("b.test approved."),
-      httpTurn("c3", "https://a.test/z"),
-      endTurn("a.test now allowed."),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async (req) => {
-        prompts += 1;
-        // Decline the first request (a.test); approve the second with a scope
-        // covering both hosts.
-        if (req.requestedUrls.some((u) => u.includes("a.test")) && prompts === 1) return null;
-        return { target: "https://b.test", scope: ScopePolicy.fromJson({ in_scope: ["a.test", "b.test"] }) };
-      },
-    });
-
-    const denied = await session.send("hit a.test");
-    expect(denied.toolCalls[0].result.success).toBe(false);
-    expect(denied.toolCalls[0].result.error).toContain("declined");
-
-    // The approval passes the scope gate (whether the real http_request then
-    // succeeds over the network is irrelevant here — assert only that it was
-    // not blocked by scope).
-    await session.send("hit b.test");
-    expect(session.scope?.match("https://a.test/z").allowed).toBe(true);
-
-    const reused = await session.send("hit a.test again");
-    expect(reused.toolCalls[0].result.success).toBe(false);
-    expect(reused.toolCalls[0].result.error).toContain("already declined");
-    // Only fresh explicit operator selection may reconsider the earlier denial.
-    expect(prompts).toBe(2);
-  });
-
-  it("does not poison the denied set with an unparseable URL", async () => {
-    // A network-capable tool whose args carry a non-parseable pseudo-URL must
-    // not add anything to the denied set (fail safe). We verify the operator is
-    // still prompted on a second attempt rather than being auto-denied from a
-    // corrupted memory entry.
-    const runtime = new ScriptedRuntime([
-      {
-        content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "https://" } }],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("First declined."),
-      {
-        content: [{ type: "tool_use", id: "c2", name: "http_request", input: { url: "https://" } }],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Second declined."),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => {
-        prompts += 1;
-        return null;
-      },
-    });
-
-    await session.send("hit the bad url");
-    await session.send("hit the bad url again");
-    // "https://" has no parseable host, so nothing is remembered and the
-    // operator is prompted both times (current behaviour preserved).
-    expect(prompts).toBe(2);
-  });
-
-  it("remembers a Standard refusal after switching to Auto without prompting again", async () => {
-    const runtime = new ScriptedRuntime([
-      httpTurn("c1", "https://offscope.test/a"),
-      endTurn("Yolo denial 1."),
-      httpTurn("c2", "https://offscope.test/b"),
-      endTurn("Yolo denial 2."),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => {
-        prompts += 1;
-        return null;
-      },
-    });
-
-    const first = await session.send("go");
-    session.setApprovals("auto");
-    const second = await session.send("go again");
-    expect(prompts).toBe(1);
-    expect(first.toolCalls[0].result.success).toBe(false);
-    expect(second.toolCalls[0].result.success).toBe(false);
-  });
-});
-
 describe("Console autonomy — yolo still enforces scope", () => {
-  it.each(["", "https://previous.test/"])("crawls public URLs without rewriting target or scope from %s", async target => {
-    const crawl: NativeRuntimeResult = {
-      content: [{ type: "tool_use", id: "crawl", name: "crawl", input: { url: "https://doruk.ch/", depth: 1 } }],
-      stopReason: "tool_use", durationMs: 0,
-    };
-    const runtime = new ScriptedRuntime([
-      endTurn("Welcome"),
-      { ...crawl, content: [
-        { type: "tool_use", id: "profile", name: "update_target", input: { endpoints: JSON.stringify(["https://doruk.ch/"]) } },
-        ...crawl.content,
-      ] },
-      endTurn("Crawled"), crawl, endTurn("Continued"),
-    ]);
-    const fetch = vi.spyOn(http, "fetchScoped").mockImplementation(async () => new Response("<html>fixture</html>", { status: 200 }));
-    const requests: ConsoleScopeRequest[] = [];
-    const session = createConsoleSession({
-      runtime, target, autonomyMode: "yolo", refineObjective: false,
-      requestScope: async request => {
-        requests.push(request);
-        expect(session.target).toBe(target);
-        expect(fetch).not.toHaveBeenCalled();
-        return { target: "https://doruk.ch/", scope: ScopePolicy.fromJson({ in_scope: ["doruk.ch", "excluded.test"] }) };
-      },
-      approveTool: async () => { throw new Error("Auto must not add a second per-action approval"); },
-    });
-    try {
-      await session.send("hello");
-      const history = session.messages;
-      const outcome = await session.send("Inspect the proposed website");
-      expect(outcome.toolCalls.map(item => item.result.success)).toEqual([true, true]);
-      expect(session.target).toBe(target);
-      expect(session.scope).toBeUndefined();
-      expect((await session.send("Continue the crawl")).toolCalls[0].result.success).toBe(true);
-      expect(requests).toEqual([]);
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(session.messages).toBe(history);
-      expect(runtime.calls[3].messages[0].content).toEqual([{ type: "text", text: "hello" }]);
-    } finally { await session.cleanup(); fetch.mockRestore(); }
-  });
 
   it("allows tools in yolo mode when scope is preconfigured", async () => {
     // Use bash (network-capable per NETWORK_CAPABLE_TOOLS) with no URLs in
@@ -1113,59 +536,9 @@ describe("Console autonomy — yolo still enforces scope", () => {
     expect(outcome.toolCalls).toHaveLength(1);
     expect(outcome.toolCalls[0].result.success).toBe(true);
   });
-
-  it("enforces an explicit empty scope without prompting in Auto", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://unknown.test" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Auto denials hold without requestScope."),
-    ]);
-
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "yolo",
-      scope: ScopePolicy.fromJson({}),
-    });
-
-    const outcome = await session.send("go");
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("out-of-scope URL");
-  });
 });
 
 describe("Console autonomy — approval integrity", () => {
-  it("rejects a scope resolution that does not cover the requested URL", async () => {
-    const runtime = new ScriptedRuntime([
-      {
-        content: [
-          { type: "tool_use", id: "c1", name: "http_request", input: { url: "https://uncovered.test/api" } },
-        ],
-        stopReason: "tool_use",
-        durationMs: 1,
-      },
-      endTurn("Scope was invalid."),
-    ]);
-
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async () => ({
-        target: "https://uncovered.test",
-        scope: ScopePolicy.fromJson({ in_scope: ["different.test"] }),
-      }),
-    });
-
-    const outcome = await session.send("probe it");
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.error).toContain("does not cover");
-    expect(session.scope).toBeUndefined();
-  });
 
   it("moves the ask-first setting on and off while preserving conversation and updating the system prompt", async () => {
     const runtime = new ScriptedRuntime([
@@ -1242,34 +615,6 @@ describe("clearConversation", () => {
 
     session.clearConversation();
     expect(session.messages).toHaveLength(0);
-  });
-
-  it("does not affect session identity, target, scope, or tools", async () => {
-    const runtime = new ScriptedRuntime([endTurn("hi")]);
-    const session = createConsoleSession({
-      runtime,
-      scanId: "my-scan",
-      target: "https://target.test",
-      autonomyMode: "copilot",
-    });
-
-    await session.send("hello");
-    expect(session.messages).toHaveLength(2);
-
-    // Capture pre-clear state of preserved fields.
-    const scanId = session.scanId;
-    const target = session.target;
-    const tools = session.tools;
-    const sysPrompt = session.systemPrompt;
-
-    session.clearConversation();
-    expect(session.messages).toHaveLength(0);
-
-    // Everything else untouched.
-    expect(session.scanId).toBe(scanId);
-    expect(session.target).toBe(target);
-    expect(session.tools).toBe(tools);
-    expect(session.systemPrompt).toBe(sysPrompt);
   });
 
   it("starts fresh on the next send after clearConversation", async () => {
@@ -1415,50 +760,14 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
     };
   }
 
-  it("triggers requestLocalScope once and succeeds after the operator approves a directory", async () => {
-    const root = makeTmpRoot();
-    mkdirSync(join(root, "src"), { recursive: true });
-    const filePath = join(root, "src", "app.ts");
-    writeFileSync(filePath, "export const x = 1;\nexport const y = 2;\n");
-
-    const runtime = new ScriptedRuntime([
-      toolTurn("c1", "read_file", { path: filePath }),
-      // Second in-scope read of another file in the same approved subtree.
-      toolTurn("c2", "read_file", { path: filePath }),
-      endTurn("Read the file."),
-    ]);
-
-    let calls = 0;
-    let seenRequestedPath = "";
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestLocalScope: async (req: ConsoleLocalScopeRequest) => {
-        calls += 1;
-        seenRequestedPath = req.requestedPath;
-        return { scopePath: root };
-      },
-    });
-
-    const outcome = await session.send("review src/app.ts");
-
-    // Callback invoked exactly once; the second in-scope read reused the scope.
-    expect(calls).toBe(1);
-    expect(seenRequestedPath).toBe(realpathSync(filePath));
-    expect(outcome.toolCalls).toHaveLength(2);
-    expect(outcome.toolCalls[0].result.success).toBe(true);
-    expect(outcome.toolCalls[1].result.success).toBe(true);
-    expect(session.localScopePath).toBe(root);
-  });
-
   it("denies on decline, mentions the operator declined, and does NOT re-prompt for the same path", async () => {
     const root = makeTmpRoot();
     const filePath = join(root, "secret.ts");
     writeFileSync(filePath, "const s = 1;\n");
 
     const runtime = new ScriptedRuntime([
-      toolTurn("c1", "read_file", { path: filePath }),
-      toolTurn("c2", "read_file", { path: filePath }), // identical retry
+      toolTurn("c1", "str_replace", { path: filePath, old_string: "", new_string: "x" }),
+      toolTurn("c2", "str_replace", { path: filePath, old_string: "", new_string: "x" }), // identical retry
       endTurn("Giving up."),
     ]);
 
@@ -1483,55 +792,6 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
     expect(session.localScopePath).toBeUndefined();
   });
 
-  it("approving /a/b does not authorize /a, /a/c, or the /a/bc prefix sibling", async () => {
-    const root = makeTmpRoot();
-    const aB = join(root, "a", "b");
-    const aBnested = join(aB, "nested");
-    const aC = join(root, "a", "c");
-    const aBc = join(root, "a", "bc");
-    const aRoot = join(root, "a");
-    for (const dir of [aBnested, aC, aBc]) mkdirSync(dir, { recursive: true });
-    const fileInB = join(aB, "in-b.ts");
-    const fileInBNested = join(aBnested, "deep.ts");
-    const fileInC = join(aC, "in-c.ts");
-    const fileInBc = join(aBc, "in-bc.ts");
-    const fileInA = join(aRoot, "in-a.ts");
-    for (const f of [fileInB, fileInBNested, fileInC, fileInBc, fileInA]) writeFileSync(f, "x\n");
-
-    const runtime = new ScriptedRuntime([
-      toolTurn("c1", "read_file", { path: fileInB }), // approve /a/b
-      toolTurn("c2", "read_file", { path: fileInBNested }), // inside /a/b → covered
-      toolTurn("c3", "read_file", { path: fileInBc }), // /a/bc sibling → NOT covered
-      toolTurn("c4", "read_file", { path: fileInC }), // /a/c → NOT covered
-      toolTurn("c5", "read_file", { path: fileInA }), // /a parent → NOT covered
-      endTurn("Done probing scope edges."),
-    ]);
-
-    let calls = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestLocalScope: async (req: ConsoleLocalScopeRequest) => {
-        calls += 1;
-        // Approve only the first request (/a/b); deny every re-prompt so the
-        // "not covered" cases surface as denials rather than silent grants.
-        return calls === 1 ? { scopePath: aB } : null;
-      },
-    });
-
-    const outcome = await session.send("probe the tree");
-
-    // /a/b approved once, then /a/bc, /a/c, /a each re-prompted (not covered).
-    // The nested read inside /a/b did NOT re-prompt.
-    expect(calls).toBe(4);
-    expect(session.localScopePath).toBe(realpathSync(aB));
-    expect(outcome.toolCalls[0].result.success).toBe(true); // /a/b
-    expect(outcome.toolCalls[1].result.success).toBe(true); // /a/b/nested (covered)
-    expect(outcome.toolCalls[2].result.success).toBe(false); // /a/bc
-    expect(outcome.toolCalls[3].result.success).toBe(false); // /a/c
-    expect(outcome.toolCalls[4].result.success).toBe(false); // /a
-  });
-
   it("rejects an approval whose directory does not cover the requested path", async () => {
     const root = makeTmpRoot();
     const aB = join(root, "a", "b");
@@ -1542,7 +802,7 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
     writeFileSync(fileInB, "x\n");
 
     const runtime = new ScriptedRuntime([
-      toolTurn("c1", "read_file", { path: fileInB }),
+      toolTurn("c1", "str_replace", { path: fileInB, old_string: "", new_string: "x" }),
       endTurn("Rejected."),
     ]);
 
@@ -1562,7 +822,7 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
 
   it("refuses the filesystem root without prompting", async () => {
     const runtime = new ScriptedRuntime([
-      toolTurn("c1", "read_file", { path: "/" }),
+      toolTurn("c1", "str_replace", { path: "/", old_string: "", new_string: "x" }),
       endTurn("Refused."),
     ]);
 
@@ -1580,45 +840,6 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
     expect(outcome.toolCalls[0].result.success).toBe(false);
     expect(outcome.toolCalls[0].result.error).toContain("protected root");
   });
-
-  it("refuses the user's home directory itself without prompting", async () => {
-    const runtime = new ScriptedRuntime([
-      toolTurn("c1", "list_files", { path: homedir() }),
-      endTurn("Refused."),
-    ]);
-
-    let calls = 0;
-    const session = createConsoleSession({
-      runtime,
-      requestLocalScope: async () => {
-        calls += 1;
-        return { scopePath: homedir() };
-      },
-    });
-
-    const outcome = await session.send("list my home");
-    expect(calls).toBe(0);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("protected root");
-  });
-
-  it("leaves behaviour unchanged when no requestLocalScope callback is configured", async () => {
-    const runtime = new ScriptedRuntime([
-      toolTurn("c1", "list_files", {}),
-      endTurn("No scope."),
-    ]);
-
-    // No requestLocalScope, no scope — exactly the legacy readline console.
-    const session = createConsoleSession({ runtime, autonomyMode: "standard" });
-
-    const outcome = await session.send("list files");
-    expect(outcome.toolCalls).toHaveLength(1);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain(
-      "requires a scoped local directory",
-    );
-    expect(session.localScopePath).toBeUndefined();
-  });
 });
 
 // ── Per-turn cost guards: token budget (primary) + iteration backstop ──
@@ -1634,7 +855,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
   /** A turn that always asks for one cheap tool, with scripted usage numbers. */
   function toolCallWithUsage(usage?: { inputTokens: number; outputTokens: number }): NativeRuntimeResult {
     return {
-      content: [{ type: "tool_use", id: "c", name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+      content: [{ type: "tool_use", id: "c", name: "load_skill", input: {} }],
       stopReason: "tool_use",
       durationMs: 1,
       ...(usage ? { usage } : {}),
@@ -1727,20 +948,6 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.toolCalls).toHaveLength(7);
     expect(outcome.budget.iterations).toBe(7);
     expect(outcome.budget.maxToolIterations).toBe(7);
-  });
-
-  it("honours an explicit maxTurnTokens independently of the iteration ceiling", async () => {
-    const runtime = new ScriptedRuntime(
-      Array.from({ length: 30 }, () => toolCallWithUsage({ inputTokens: 100_000, outputTokens: 0 })),
-    );
-    // Budget allows five 100k rounds with room for pending input and output;
-    // the independent iteration ceiling is far away.
-    const session = createConsoleSession({ runtime, maxTurnTokens: 510_000, maxToolIterations: 1000 });
-
-    const outcome = await session.send("go");
-    expect(outcome.stopReason).toBe("max_turn_tokens");
-    expect(outcome.toolCalls).toHaveLength(5);
-    expect(outcome.budget.tokensUsed).toBe(500_000);
   });
 
   it("completes normally with end_turn when well inside both guards", async () => {
@@ -1837,7 +1044,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
         this.turn += 1;
         if (this.turn === 1) {
           return {
-            content: [{ type: "tool_use", id: "c1", name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+            content: [{ type: "tool_use", id: "c1", name: "load_skill", input: {} }],
             stopReason: "tool_use",
             durationMs: 1,
           };
@@ -2130,9 +1337,9 @@ describe("Console scope gate — the false-positive line", () => {
     }
   });
 
-  it("leaves a structured non-shell tool with no URL untouched (read_file)", async () => {
+  it("leaves a structured non-shell tool with no URL untouched (str_replace)", async () => {
     const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "read_file", input: { path: "/etc/hostname" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c1", name: "str_replace", input: { path: "/etc/hostname", old_string: "a", new_string: "b" } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("done"),
     ]);
     let prompts = 0;
@@ -2374,7 +1581,7 @@ describe("Console operator target selection", () => {
   function profileAndProbe(url: string): NativeRuntimeResult {
     return {
       content: [
-        { type: "tool_use", id: "profile", name: "update_target", input: { endpoints: JSON.stringify([url]) } },
+        { type: "tool_use", id: "profile", name: "load_skill", input: {} },
         // Exercise the real shared network authorization gate without contacting
         // an external server: bash prints the URL instead of fetching it.
         { type: "tool_use", id: "probe", name: "bash", input: { command: `printf '%s' ${JSON.stringify(url)}` } },
@@ -2598,19 +1805,6 @@ describe("Console operator target selection", () => {
       await pending;
     }
   });
-
-  it("retains the public-target private-network boundary after target selection", async () => {
-    const runtime = new ScriptedRuntime([{
-      content: [{ type: "tool_use", id: "private", name: "http_request", input: { url: "http://169.254.169.254/latest/meta-data/" } }],
-      stopReason: "tool_use", durationMs: 1,
-    }, endTurn("Blocked")]);
-    const session = openSession(runtime, {
-      scope: ScopePolicy.fromJson({ in_scope: ["169.254.169.254"] }),
-    });
-    const outcome = await session.send("doruk.ch");
-    expect(outcome.toolCalls[0].result.error).toContain("Local/internal http_request blocked");
-    expect(session.target).toBe("");
-  });
 });
 
 describe("Console autonomy — yolo: no preconfigured scope, but the target still anchors it", () => {
@@ -2639,55 +1833,6 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
     expect(prompts).toBe(0);
     expect(outcome.toolCalls).toHaveLength(1);
     expect(outcome.toolCalls[0].result.success).toBe(true);
-  });
-
-  it("reaches the launch target in yolo with no preconfigured scope, without prompting", async () => {
-    // No scope object, just a launch target. yolo auto-expands to the target
-    // host itself (the anchor) — no prompt — and the call passes the scope gate.
-    // (The subsequent real network fetch is irrelevant; we assert it was not
-    // blocked by the scope gate and that the scope now covers the target.)
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "https://target.test/health" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "yolo",
-      target: "https://target.test",
-      requestScope: async () => {
-        prompts += 1;
-        return null;
-      },
-    });
-
-    await session.send("hit the target");
-    expect(prompts).toBe(0);
-    expect(session.scope).toBeUndefined();
-  });
-
-  it("honors configured scope without asking to expand it in Auto", async () => {
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "https://unrelated.test/x" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "yolo",
-      target: "https://target.test",
-      scope: ScopePolicy.fromJson({ in_scope: ["target.test"] }),
-      requestScope: async () => {
-        prompts += 1;
-        return null;
-      },
-    });
-
-    const outcome = await session.send("try to pivot off-target");
-    expect(prompts).toBe(0);
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    // The unrelated host was NOT quietly added to scope.
-    expect(session.scope?.match("https://unrelated.test/x").allowed ?? false).toBe(false);
   });
 
   it("RUNS a command it cannot statically resolve in yolo, with no prompt", async () => {
@@ -2721,28 +1866,6 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
     }
   });
 
-  it("the SSRF / private-network rail STILL blocks in yolo, even for an in-scope local host", async () => {
-    // The SSRF rail sits ABOVE scope in the executor: an in-scope host that
-    // resolves to a private/metadata address is refused regardless of mode. Here
-    // yolo's scope covers the metadata IP (so the console gate approves it), yet
-    // the executor's validateTargetUrl still blocks it. No mode bypasses this.
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "http_request", input: { url: "http://169.254.169.254/latest/meta-data/" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("done"),
-    ]);
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "yolo",
-      target: "https://target.test", // a public base target
-      scope: ScopePolicy.fromJson({ in_scope: ["169.254.169.254", "target.test"] }),
-    });
-
-    const outcome = await session.send("try SSRF to the metadata endpoint");
-    expect(outcome.toolCalls[0].result.success).toBe(false);
-    // The executor's absolute private-network rail, not the scope gate, blocked it.
-    expect(outcome.toolCalls[0].result.error).toContain("Local/internal http_request blocked");
-  });
-
   it("lets an in-scope call through in yolo when a scope is configured", async () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "c1", name: "bash", input: { command: "echo hello" } }], stopReason: "tool_use", durationMs: 1 },
@@ -2760,7 +1883,7 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
 
   it("does not restrict non-network tools in yolo without a scope", async () => {
     const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "c1", name: "payload_lookup", input: { name: "jsfuck_alert" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c1", name: "load_skill", input: {} }], stopReason: "tool_use", durationMs: 1 },
       endTurn("done"),
     ]);
     const session = createConsoleSession({ runtime, autonomyMode: "yolo" });
@@ -2779,62 +1902,6 @@ describe("Console source acquisition is not target authorization", () => {
       durationMs: 1,
     };
   }
-
-  it("does not let source acquisition bypass an explicit operator restriction", async () => {
-    // Substitute external Git I/O, not the console or executor authorization.
-    vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
-    const runtime = new ScriptedRuntime([
-      checkoutTurn("cd /tmp && git clone --depth=1 https://github.com/golang/go.git golang-go-audit"),
-      endTurn("Source ready."),
-      httpTurn("probe-source-host", "https://github.com/golang/go.git"),
-      endTurn("Hosting service is not an authorized target."),
-    ]);
-    const requestScope = vi.fn(async () => null);
-    const session = createConsoleSession({
-      runtime, autonomyMode: "yolo", target: "https://target.test",
-      scope: ScopePolicy.fromJson({ in_scope: ["target.test"] }),
-      requestScope,
-    });
-
-    const checkout = await session.send("Get Go source for local review");
-    expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(requestScope).not.toHaveBeenCalled();
-    expect(session.target).toBe("https://target.test");
-    expect(session.scope?.match("https://github.com").allowed).toBe(false);
-    const probe = await session.send("Now test the hosting service");
-    expect(probe.toolCalls[0].result.success).toBe(false);
-    expect(requestScope).not.toHaveBeenCalled();
-  });
-
-  it("refuses source setup through run_command with no exact repository target", async () => {
-    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
-    const session = createConsoleSession({
-      runtime: new ScriptedRuntime([
-        checkoutTurn("git clone --depth 1 https://github.com/golang/go.git", "run_command"),
-        endTurn("Source ready."),
-      ]),
-      autonomyMode: "yolo",
-    });
-    const checkout = await session.send("Get Go source");
-    expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(runCheckout).not.toHaveBeenCalled();
-    expect(session.scope?.match("https://github.com").allowed ?? false).toBe(false);
-  });
-
-  it("allows an exact operator-supplied repository target, including a clone suffix", async () => {
-    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
-    const session = createConsoleSession({
-      runtime: new ScriptedRuntime([
-        checkoutTurn("git clone --depth 1 https://github.com/muse-spark/muse-spark.git", "run_command"),
-        endTurn("Source ready."),
-      ]),
-      autonomyMode: "yolo",
-      target: "https://github.com/muse-spark/muse-spark",
-    });
-    const checkout = await session.send("Review the official Muse Spark source");
-    expect(checkout.toolCalls[0].result.success).toBe(true);
-    expect(runCheckout).toHaveBeenCalledOnce();
-  });
 
   it("blocks the Muse Spark to legacy MUSE substitution before clone I/O or findings", async () => {
     const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
@@ -2954,8 +2021,8 @@ describe("Console turn cancellation — AbortSignal", () => {
   function twoToolRound(idA: string, idB: string): NativeRuntimeResult {
     return {
       content: [
-        { type: "tool_use", id: idA, name: "payload_lookup", input: { name: "jsfuck_alert" } },
-        { type: "tool_use", id: idB, name: "payload_lookup", input: { name: "jsfuck_alert" } },
+        { type: "tool_use", id: idA, name: "load_skill", input: {} },
+        { type: "tool_use", id: idB, name: "load_skill", input: {} },
       ],
       stopReason: "tool_use",
       durationMs: 1,
@@ -2963,7 +2030,7 @@ describe("Console turn cancellation — AbortSignal", () => {
   }
   function oneToolRound(id: string): NativeRuntimeResult {
     return {
-      content: [{ type: "tool_use", id, name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+      content: [{ type: "tool_use", id, name: "load_skill", input: {} }],
       stopReason: "tool_use",
       durationMs: 1,
     };
@@ -3099,57 +2166,6 @@ describe("Console turn cancellation — AbortSignal", () => {
     ).toBe(true);
   });
 
-  it("cancellation does not clear denied-host memory or granted scope", async () => {
-    const runtime = new ScriptedRuntime([
-      httpTurn("c1", "https://blocked.test/a"), // turn 1: declined → remembered
-      endTurn("declined"),
-      httpTurn("c2", "https://ok.test/b"), // turn 2: approve a scope
-      endTurn("scope granted"),
-      // turn 3 is an already-aborted cancel — issues no model call.
-      httpTurn("c3", "https://blocked.test/c"), // turn 4: must still be denied
-      endTurn("still denied from memory"),
-    ]);
-
-    let prompts = 0;
-    const session = createConsoleSession({
-      runtime,
-      autonomyMode: "standard",
-      requestScope: async (req) => {
-        prompts += 1;
-        // Decline blocked.test; approve anything else with a covering scope.
-        if (req.requestedUrls.some((u) => u.includes("blocked.test"))) return null;
-        return {
-          target: "https://ok.test",
-          scope: ScopePolicy.fromJson({ in_scope: ["ok.test"] }),
-        };
-      },
-    });
-
-    await session.send("hit blocked.test"); // prompt #1 → declined & remembered
-    await session.send("hit ok.test"); // prompt #2 → scope granted
-    expect(prompts).toBe(2);
-    expect(session.scope).toBeDefined();
-
-    // The cancelled turn: an already-aborted signal, no model call.
-    const controller = new AbortController();
-    controller.abort();
-    const cancelled = await session.send("try to cancel", undefined, { signal: controller.signal });
-    expect(cancelled.stopReason).toBe("cancelled");
-    // Turns 1 & 2 each made two model calls (tool round + endTurn); the cancel
-    // itself issued none.
-    expect(runtime.calls).toHaveLength(4);
-
-    // Granted scope survived the cancel.
-    expect(session.scope).toBeDefined();
-
-    // Denied-host memory survived the cancel: blocked.test is still auto-denied
-    // WITHOUT a fresh prompt (prompts stays 2).
-    const after = await session.send("hit blocked.test again");
-    expect(after.toolCalls[0].result.success).toBe(false);
-    expect(after.toolCalls[0].result.error).toContain("already declined");
-    expect(prompts).toBe(2);
-  });
-
   it("no signal passed = today's behaviour exactly (normal tool turn unaffected)", async () => {
     const runtime = new ScriptedRuntime([
       { ...oneToolRound("c1"), usage: { inputTokens: 4, outputTokens: 2 } },
@@ -3167,39 +2183,12 @@ describe("Console turn cancellation — AbortSignal", () => {
     expect(outcome.stopReason).toBe("end_turn");
     expect(outcome.toolCalls).toHaveLength(1);
     expect(outcome.toolCalls[0].result.success).toBe(true);
-    expect(seen).toEqual(["start:payload_lookup", "result:payload_lookup:true"]);
+    expect(seen).toEqual(["start:load_skill", "result:load_skill:true"]);
     expect(outcome.budget.tokensUsed).toBe(6);
   });
 });
 
 describe("createConsoleSession — MCP deferred tool loading", () => {
-  it("keeps specialist built-ins discoverable and loads a batch on the next round", async () => {
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "load-specialists", name: "load_tool", input: { names: ["crawl", "submit_form"] } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("ready"),
-    ]);
-    const session = createConsoleSession({ runtime, toolset: "full" });
-    expect(session.tools.some(tool => tool.name === "crawl")).toBe(true);
-    const outcome = await session.send("prepare the web tools");
-    const first = runtime.calls[0]!.tools.map(tool => tool.name);
-    expect(first).toContain("http_request");
-    expect(first).toContain("load_tool");
-    expect(first).not.toContain("crawl");
-    expect(first).not.toContain("submit_form");
-    expect(first.length).toBeLessThan(30);
-    expect(outcome.toolCalls[0]!.result.success).toBe(true);
-    expect(runtime.calls[1]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["crawl", "submit_form"]));
-    const checkpoint = session.exportCheckpoint();
-    expect(checkpoint.loadedMcpTools).toEqual(["crawl", "submit_form"]);
-    await session.cleanup();
-    const resumedRuntime = new ScriptedRuntime([endTurn("resumed")]);
-    const resumed = createConsoleSession({ runtime: resumedRuntime, initialCheckpoint: checkpoint, toolset: "full" });
-    try {
-      await resumed.send("continue");
-      expect(resumedRuntime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["crawl", "submit_form"]));
-    } finally { await resumed.cleanup(); }
-
-  });
 
   // A stub MCP host exposing an arbitrary catalog. Only the methods the turn
   // engine + executor touch are implemented.
@@ -3708,39 +2697,6 @@ describe("console workflow draft authoring", () => {
       await session.send("Also review lockfiles.");
       expect(runtime.calls[1]?.system).toContain("current revision 2");
       expect(runtime.calls[1]?.system).not.toContain("current revision 1");
-    } finally { await session.cleanup(); }
-  });
-
-  it("uses real structured tool calls to save a draft without executing or granting permissions", async () => {
-    const save = vi.fn((_input: SecurityWorkflowInput) => saved); const list = vi.fn(() => [saved]); const approval = vi.fn(async () => true);
-    const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "draft-1", name: "console_save_workflow", input: { ...input } }], stopReason: "tool_use", durationMs: 1 },
-      { content: [{ type: "tool_use", id: "list-1", name: "console_list_workflows", input: { id: "workflow-fixture" } }], stopReason: "tool_use", durationMs: 1 },
-      endTurn("Saved the workflow draft for inspection."),
-    ]);
-    const session = createConsoleSession({ runtime, autonomyMode: "standard", approveTool: approval, workflowAuthoring: { list, save } });
-    try {
-      await session.send("Create a dependency review workflow draft.");
-      expect(save).toHaveBeenCalledOnce();
-      expect(list).toHaveBeenCalledOnce();
-      expect(save.mock.calls[0]?.[0]).toEqual(input);
-      const readResult = runtime.calls[2]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "list-1");
-      expect(readResult && "content" in readResult ? readResult.content : "").toContain(input.instructions);
-      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"edges"');
-      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"allowedAgentTools":["read_file"]');
-      expect(runtime.calls[0]?.system).toContain("workflow.instructions only for description notes");
-      const saveTool = session.tools.find(tool => tool.name === "console_save_workflow");
-      expect(JSON.stringify(saveTool?.parameters)).toContain('"execution"');
-      expect(JSON.stringify(saveTool?.parameters)).toContain('"allowedAgentTools"');
-      expect(approval).not.toHaveBeenCalled();
-      expect(session.scope).toBeUndefined();
-      expect(session.localScopePath).toBeUndefined();
-      expect(session.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["console_save_workflow", "console_list_workflows"]));
-      expect(runtime.calls[0]?.tools.map(tool => tool.name)).not.toContain("console_save_workflow");
-      expect(runtime.calls[0]?.system).toContain("Do not claim saving runs or schedules it");
-      const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
-      expect(result && "content" in result ? result.content : "").toContain('"executed":false');
-      expect(result && "content" in result ? result.content : "").toContain("/workflows?workflow=workflow-fixture");
     } finally { await session.cleanup(); }
   });
 

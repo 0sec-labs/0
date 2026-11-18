@@ -73,6 +73,8 @@ export interface XmlDispatchParse {
   calls: ToolCall[];
   /** Free-form notes. Not dispatched; kept for logging / state inspection. */
   notes: string[];
+  /** A `<flag>` answer: it ends the run and no command in the same response is dispatched. */
+  flag?: string;
   /**
    * If the response had an unclosed `<command>` / `<flag>` / `<finding>` /
    * `<note>` tag, this carries a clear, terminal error. The loop should
@@ -140,7 +142,7 @@ function findUnclosed(text: string): TagName | null {
  *    sometimes emits both a stray `<command>` and a `<flag>`; the flag is
  *    the answer and must win.
  *  - Otherwise: every `<command>` becomes a `bash` call, in source order.
- *  - `<finding>` becomes `save_finding` (best-effort parsing of
+ *  - `<finding>` becomes `finding` (best-effort parsing of
  *    `key: value` pairs).
  *  - `<note>` is NOT dispatched — kept on the parse result for logging.
  *
@@ -169,16 +171,9 @@ export function parseXmlDispatch(text: string): XmlDispatchParse {
     const flag = flagTag.body.trim();
     const notes = tags.filter((t) => t.tag === "note").map((t) => t.body.trim());
     return {
-      calls: [
-        {
-          name: "done",
-          arguments: {
-            summary: `Flag captured: ${flag}`,
-            flag,
-          },
-        },
-      ],
+      calls: [],
       notes,
+      flag,
     };
   }
 
@@ -193,7 +188,7 @@ export function parseXmlDispatch(text: string): XmlDispatchParse {
     } else if (t.tag === "finding") {
       const args = parseFindingBody(t.body);
       if (args) {
-        calls.push({ name: "save_finding", arguments: args });
+        calls.push({ name: "finding", arguments: args });
       }
     } else if (t.tag === "note") {
       notes.push(t.body.trim());
@@ -234,7 +229,7 @@ function parseFindingBody(body: string): Record<string, unknown> | null {
     }
   }
   if (!out.title && !out.evidence && !out.evidence_request) return null;
-  // The save_finding tool expects evidence_request/evidence_response;
+  // The finding tool expects evidence_request/evidence_response;
   // map a single `evidence` field into evidence_response so cheap models
   // don't have to remember both.
   if (out.evidence && !out.evidence_response) {
@@ -251,7 +246,7 @@ function parseFindingBody(body: string): Record<string, unknown> | null {
  *
  * BoxPwnr wraps every shell result in `<output>...</output>`. We do the
  * same, plus prefix the tool name and OK/ERROR status so the agent can
- * distinguish bash output from save_finding ack from done ack.
+ * distinguish bash output from finding ack from done ack.
  *
  * Long outputs are truncated at 8 KB to protect the context window — the
  * threshold is generous enough that `curl -i` and `find /` still fit
@@ -287,7 +282,7 @@ function stringify(v: unknown): string {
  * the agent is for — it just appends the protocol instructions.
  *
  * `tools` is the same list the JSON dispatcher receives; we only surface
- * the four protocol verbs (`bash`, `save_finding`, `done`, plus a free
+ * the four protocol verbs (`bash`, `finding`, `done`, plus a free
  * `<note>` channel) to the model since BoxPwnr's experience shows that
  * narrowing the action space is what makes XML dispatch reliable.
  */

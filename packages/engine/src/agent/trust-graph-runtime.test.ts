@@ -93,8 +93,8 @@ function createMockRuntime(responses: NativeRuntimeResult[]): NativeRuntime {
 
 const DONE_ONCE: NativeRuntimeResult[] = [
   {
-    content: [{ type: "tool_use", id: "tc1", name: "done", input: { summary: "ok" } }],
-    stopReason: "tool_use",
+    content: [{ type: "text", text: "ok" }],
+    stopReason: "end_turn",
     durationMs: 1,
   },
 ];

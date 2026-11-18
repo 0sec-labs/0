@@ -10,7 +10,7 @@ import { currentRunContribution } from "../../telemetry/run-contribution.js";
 /** Patterns that indicate a message contains critical information worth preserving verbatim. */
 const CRITICAL_PATTERNS = [
   /flag/i, /password/i, /credentials?/i, /cookie/i, /token/i,
-  /session/i, /admin/i, /root/i, /\/etc\/passwd/i, /save_finding/i,
+  /session/i, /admin/i, /root/i, /\/etc\/passwd/i, /finding/i,
   /secret/i, /api[_-]?key/i, /bearer/i, /jwt/i,
 ];
 
@@ -33,7 +33,7 @@ const SUMMARY_EXTRACT_PATTERNS = [
   /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?/,
   /\/[\w/.-]{3,}/, // file paths / URL paths
   /error|denied|forbidden|unauthorized|success|found|vulnerable/i,
-  /save_finding/i,
+  /finding/i,
   /admin|root|sudo/i,
 ];
 
@@ -69,8 +69,8 @@ function extractKeyFindings(messages: NativeMessage[]): string {
 
       if (!text) continue;
 
-      // For save_finding calls, capture the whole thing
-      if (block.type === "tool_use" && block.name === "save_finding") {
+      // For finding calls, capture the whole thing
+      if (block.type === "tool_use" && block.name === "finding") {
         const entry = `FINDING: ${JSON.stringify(block.input)}`;
         if (!seen.has(entry)) {
           seen.add(entry);

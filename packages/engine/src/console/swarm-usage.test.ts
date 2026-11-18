@@ -9,7 +9,7 @@ const roots: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function isolatedHome() { const root = mkdtempSync(join(tmpdir(), "0-swarm-usage-")); roots.push(root); vi.stubEnv("HOME", root); return root; }
 function done(usage = { inputTokens: 20, outputTokens: 2 }): NativeRuntimeResult {
-  return { content: [{ type: "tool_use", id: "done", name: "done", input: { summary: "Inspection complete." } }], stopReason: "tool_use", durationMs: 0, usage };
+  return { content: [{ type: "text", text: "Inspection complete." }], stopReason: "end_turn", durationMs: 0, usage };
 }
 
 it("includes recursive child usage once with actual model and cache breakdowns", async () => {
@@ -50,13 +50,13 @@ it("includes recursive child usage once with actual model and cache breakdowns",
   } finally { await session.cleanup(); }
 });
 
-function parentWithChild(child: NativeRuntime, persistent = false, afterInitial?: (call: number) => Promise<void>): NativeRuntime {
+function parentWithChild(child: NativeRuntime, afterInitial?: (call: number) => Promise<void>): NativeRuntime {
   let calls = 0;
   return {
     type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4o", forkForSubagent: async () => child,
     executeNative: async () => {
       calls++;
-      if (calls === 1) return { content: [{ type: "tool_use", id: "spawn", name: persistent ? "spawn_persistent_agent" : "spawn_agent", input: { task: "Inspect a bounded detail", max_turns: 3 } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } };
+      if (calls === 1) return { content: [{ type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Inspect a bounded detail", max_turns: 3 } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } };
       await afterInitial?.(calls);
       return { content: [{ type: "text", text: "Parent completed." }], stopReason: "end_turn", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } };
     },
@@ -140,65 +140,4 @@ it("stops admitting child requests after the active parent token allowance is sp
     // A dispatched request may overshoot; this is not a hard billing cap.
     expect(outcome.budget.tokensUsed).toBe(200_012);
   } finally { await session.cleanup(); }
-});
-
-it("reports a late persistent worker to the latest turn without calling the old renderer", async () => {
-  isolatedHome();
-  const started = Promise.withResolvers<void>(), releaseChild = Promise.withResolvers<void>();
-  const secondStarted = Promise.withResolvers<void>(), releaseParent = Promise.withResolvers<void>();
-  const workerReported = Promise.withResolvers<void>();
-  const first: ConsoleUsageReport[] = [], second: ConsoleUsageReport[] = [];
-  const child: NativeRuntime = { type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4.1", executeNative: async () => {
-    started.resolve(); await releaseChild.promise;
-    return done({ inputTokens: 30, outputTokens: 3 });
-  } };
-  const session = createConsoleSession({ runtime: parentWithChild(child, true, async call => {
-    if (call === 3) { secondStarted.resolve(); await releaseParent.promise; }
-  }) });
-  try {
-    await session.send("Start an ongoing worker.", { onUsage: usage => first.push(usage) });
-    await started.promise;
-    const next = session.send("Continue the parent conversation.", { onUsage: usage => { second.push(usage); if (usage.kind === "worker") workerReported.resolve(); } });
-    await secondStarted.promise;
-    releaseChild.resolve(); await workerReported.promise;
-    releaseParent.resolve();
-    expect((await next).usage).toEqual({ inputTokens: 40, outputTokens: 4 });
-    expect(first.filter(usage => usage.kind === "worker")).toEqual([]);
-    expect(second.filter(usage => usage.kind === "worker")).toMatchObject([{ model: "gpt-4.1", inputTokens: 30, outputTokens: 3 }]);
-  } finally { releaseChild.resolve(); releaseParent.resolve(); await session.cleanup(); }
-});
-
-it("does not notify retired renderers when an in-flight worker finishes during disposal", async () => {
-  isolatedHome();
-  const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
-  const reports: ConsoleUsageReport[] = [];
-  const child: NativeRuntime = { type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4.1", executeNative: async () => {
-    started.resolve(); await release.promise;
-    return done({ inputTokens: 30, outputTokens: 3 });
-  } };
-  const session = createConsoleSession({ runtime: parentWithChild(child, true) });
-  await session.send("Start a worker.", { onUsage: usage => reports.push(usage) });
-  await started.promise;
-  const count = reports.length;
-  const closing = session.cleanup();
-  release.resolve(); await closing;
-  expect(reports).toHaveLength(count);
-  expect(reports.filter(usage => usage.kind === "worker")).toEqual([]);
-});
-
-it("reports post-turn worker usage without mutating the completed turn outcome", async () => {
-  isolatedHome();
-  const started = Promise.withResolvers<void>(), release = Promise.withResolvers<void>(), reported = Promise.withResolvers<void>();
-  const reports: ConsoleUsageReport[] = [];
-  const child: NativeRuntime = { type: "api", isAvailable: async () => true, resolvedModel: () => "gpt-4.1", executeNative: async () => {
-    started.resolve(); await release.promise; return done({ inputTokens: 30, outputTokens: 3 });
-  } };
-  const session = createConsoleSession({ runtime: parentWithChild(child, true) });
-  try {
-    const outcome = await session.send("Start a worker.", { onUsage: usage => { reports.push(usage); if (usage.kind === "worker") reported.resolve(); } });
-    await started.promise; release.resolve(); await reported.promise;
-    expect(outcome.usage).toEqual({ inputTokens: 20, outputTokens: 2 });
-    expect(outcome.budget.tokensUsed).toBe(22);
-    expect(reports.filter(usage => usage.kind === "worker")).toMatchObject([{ inputTokens: 30, outputTokens: 3, turnTokensUsed: 55 }]);
-  } finally { release.resolve(); await session.cleanup(); }
 });

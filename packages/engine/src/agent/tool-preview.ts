@@ -35,7 +35,7 @@ function stringArg(args: Record<string, unknown>, key: string): string | undefin
 
 /**
  * Build a one-line preview like `bash: curl -sI https://...` or
- * `http_request: POST https://target/login` for display in the scan TUI.
+ * `finding: [high] Title` for display in the scan TUI.
  * Always safe to call on any ToolCall shape; never throws.
  */
 export function toolCallPreview(call: ToolCall): string {
@@ -47,47 +47,14 @@ export function toolCallPreview(call: ToolCall): string {
       const command = stringArg(args, "command");
       return command ? clip(`bash: ${command}`) : "bash";
     }
-    case "http_request": {
-      const url = stringArg(args, "url");
-      if (!url) return "http_request";
-      const method = stringArg(args, "method") ?? "GET";
-      return clip(`http_request: ${method} ${url}`);
-    }
-    case "crawl": {
-      const url = stringArg(args, "url");
-      return url ? clip(`crawl: ${url}`) : "crawl";
-    }
-    case "submit_form": {
-      const url = stringArg(args, "url");
-      return url ? clip(`submit_form: ${url}`) : "submit_form";
-    }
-    case "browser": {
-      const action = stringArg(args, "action");
-      const url = stringArg(args, "url");
-      if (action && url) return clip(`browser.${action}: ${url}`);
-      if (action) return clip(`browser.${action}`);
-      if (url) return clip(`browser: ${url}`);
-      return "browser";
-    }
-    case "send_prompt": {
-      const target = stringArg(args, "target");
-      const prompt = stringArg(args, "prompt");
-      if (target && prompt) return clip(`send_prompt: ${target} → ${prompt}`);
-      if (prompt) return clip(`send_prompt: ${prompt}`);
-      return "send_prompt";
-    }
-    case "save_finding": {
+    case "finding": {
       const severity = stringArg(args, "severity") ?? "?";
       const title = stringArg(args, "title") ?? "";
-      return clip(`save_finding: [${severity}] ${title}`);
+      return clip(`finding: [${severity}] ${title}`);
     }
     case "save_target_info": {
       const type = stringArg(args, "type");
       return type ? `save_target_info: ${type}` : "save_target_info";
-    }
-    case "done": {
-      const summary = stringArg(args, "summary");
-      return summary ? clip(`done: ${summary}`) : "done";
     }
     default: {
       // Generic fallback: pick the first non-empty string argument, if any,

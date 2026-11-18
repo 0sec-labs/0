@@ -56,7 +56,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1 saves vulnerability on /api/users
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: title1,
         severity: "critical",
@@ -72,7 +72,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 saves distinct vulnerability on /api/orders
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: title2,
         severity: "high",
@@ -105,7 +105,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1 reports SQL injection
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Vulnerability in profile endpoint",
         severity: "critical",
@@ -120,7 +120,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 reports Stored XSS on the same endpoint
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Vulnerability in profile endpoint",
         severity: "medium",
@@ -152,7 +152,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1 saves finding
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "SQL Injection in /api/v1/users",
         severity: "critical",
@@ -167,7 +167,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 reports the same vulnerability with slight title variation
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "SQL injection in /api/v1/users.json",
         severity: "high",
@@ -202,7 +202,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1 saves finding with no evidence_request
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: title1,
         severity: "medium",
@@ -215,7 +215,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 saves finding with no evidence_request
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: title2,
         severity: "medium",
@@ -243,7 +243,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Subagent A finds command injection in ping tool
     const resA = await subagentA.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Command Injection in ping tool",
         severity: "critical",
@@ -258,7 +258,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Subagent B finds command injection in net tool (different endpoint, title distance <= 5)
     const resB = await subagentB.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Command Injection in net tool",
         severity: "critical",
@@ -274,7 +274,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
     // Subagent C finds true duplicate of Subagent A (same endpoint, similar title within distance 5)
     // "tool" vs "test" has edit distance 3 <= 5
     const resC = await subagentC.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Command Injection in ping test",
         severity: "critical",
@@ -307,7 +307,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1 saves finding on /api/users
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -322,7 +322,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 saves finding on /api/orders with the identical title
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "high",
@@ -353,7 +353,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Save on /api/users
     const res1 = await agent.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -368,7 +368,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Save on /api/orders within the same agent session
     const res2 = await agent.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "high",
@@ -395,7 +395,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1: GET method
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -410,7 +410,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2: POST method on the same path
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -440,7 +440,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
     const sharedRequest = "GET /api/v1/auth?user=admin'-- HTTP/1.1\r\nHost: target.test";
 
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -454,7 +454,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
     const id1 = (res1.output as any).findingId;
 
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "high",
@@ -502,7 +502,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2 reports finding with specific category "sql-injection"
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Vulnerability in test endpoint",
         severity: "critical",
@@ -529,7 +529,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1: Saves generic finding with empty evidence request
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -542,7 +542,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2: Saves finding with identical generic title but concrete endpoint evidence
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -571,7 +571,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // First save: no evidence
     const res1 = await agent.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -584,7 +584,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Second save: concrete evidence
     const res2 = await agent.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -611,7 +611,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1: Saves finding with concrete endpoint evidence
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -626,7 +626,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2: Saves finding with identical title but no evidence
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: genericTitle,
         severity: "critical",
@@ -654,7 +654,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 1: Static finding with description only
     const res1 = await agent1.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: staticTitle,
         severity: "high",
@@ -667,7 +667,7 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
 
     // Agent 2: Sibling lane also discovers the same static issue
     const res2 = await agent2.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: staticTitle,
         severity: "high",

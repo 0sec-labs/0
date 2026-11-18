@@ -209,14 +209,21 @@ describe("str_replace (executor-level integration)", () => {
     expect(result.error).toMatch(/file does not exist/);
   });
 
-  it("rejects an empty old_string", async () => {
+  it("creates a new file when old_string is empty, and refuses to overwrite a non-empty file", async () => {
+    const created = await scopedExecutor.execute({
+      name: "str_replace",
+      arguments: { path: "sub/new.ts", old_string: "", new_string: "export const x = 1;\n" },
+    });
+    expect(created.success).toBe(true);
+    expect(readFileSync(join(tmp, "sub/new.ts"), "utf-8")).toBe("export const x = 1;\n");
     writeFileSync(join(tmp, "e.ts"), "x\n");
-    const result = await scopedExecutor.execute({
+    const refused = await scopedExecutor.execute({
       name: "str_replace",
       arguments: { path: "e.ts", old_string: "", new_string: "y" },
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/must not be empty/);
+    expect(refused.success).toBe(false);
+    expect(refused.error).toMatch(/already exists/);
+    expect(readFileSync(join(tmp, "e.ts"), "utf-8")).toBe("x\n");
   });
 
   it("rejects an identical old_string / new_string no-op", async () => {
@@ -620,7 +627,7 @@ describe("str_replace (executor-level integration)", () => {
   });
 });
 
-describe("str_replace scope + role gating (mirrors apply_patch)", () => {
+describe("str_replace scope + role gating ", () => {
   it("refuses to run without a scoped local directory", async () => {
     const executor = new ToolExecutor({ ...baseCtx }, null);
     const result = await executor.execute({
@@ -631,13 +638,11 @@ describe("str_replace scope + role gating (mirrors apply_patch)", () => {
     expect(result.error).toMatch(/requires a scoped local directory/);
   });
 
-  it("is offered to the verify role only alongside apply_patch when scoped", () => {
+  it("is offered to the verify role only when scoped", () => {
     const scoped = getToolsForRole("verify", { hasScope: true }).map((t) => t.name);
     expect(scoped).toContain("str_replace");
-    expect(scoped).toContain("apply_patch");
 
     const unscoped = getToolsForRole("verify").map((t) => t.name);
     expect(unscoped).not.toContain("str_replace");
-    expect(unscoped).not.toContain("apply_patch");
   });
 });

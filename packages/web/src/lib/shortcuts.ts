@@ -38,7 +38,6 @@ export const SHORTCUTS: readonly Shortcut[] = [
   panelView("findings", "Open Findings", "f"),
   panelView("evidence", "Open Evidence", "e"),
   panelView("browser", "Open Browser", "l"),
-  panelView("visuals", "Open Visuals", "v"),
   { id: "composer.send", action: "Send message", group: "Editor", scope: "composer", when: "Composer focused", bindings: [{ key: "Enter" }], handler: "composer.native" },
   { id: "composer.newline", action: "New line", group: "Editor", scope: "composer", when: "Composer focused", bindings: [{ key: "Enter", shift: true }], handler: "composer.native" },
   { id: "composer.choose", action: "Choose command or mention", group: "Editor", scope: "composer", when: "Suggestions open", bindings: [{ key: "ArrowUp" }, { key: "ArrowDown" }], handler: "composer.native" },

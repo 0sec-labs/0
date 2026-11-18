@@ -50,32 +50,6 @@ describe("CLI E2E", () => {
     for (const hidden of ["web", "doctor", "automation", "api"]) expect(result.stdout).not.toMatch(new RegExp(`^  ${hidden}\\b`, "m"));
   });
 
-  it("allows piped analysis commands without invoking shell operators", async () => {
-    const executor = new ToolExecutor({
-      target: "http://example.com",
-      scanId: "test",
-      findings: [],
-      attackResults: [],
-      targetInfo: {},
-      scopePath: projectRoot,
-      persistFindings: false,
-      approvals: "ask",
-    }, null);
-
-    const ok = await executor.execute({
-      name: "run_command",
-      arguments: { command: "cat package.json | head -n 1" },
-    });
-    expect(ok.success).toBe(true);
-
-    const blocked = await executor.execute({
-      name: "run_command",
-      arguments: { command: "cat package.json || head -n 1" },
-    });
-    expect(blocked.success).toBe(false);
-    expect(String(blocked.error)).toContain("Empty pipe segments");
-  });
-
   it("--version shows version", () => {
     const result = run(["--version"]);
     expect(result.status).toBe(0);

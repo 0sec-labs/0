@@ -128,6 +128,9 @@ const CHILD_ENV_ALLOWLIST = [
   // Existing child-runtime configuration contract; each name is non-secret.
   "ZERO_FEATURE_JIT_SKILLS",
   "ZERO_BASH_TIMEOUT_MS",
+  // The `0` CLI run from bash finds the running console through a descriptor file under HOME,
+  // keyed by the database path; both must match the engine's (see packages/cli/src/local-engine.ts).
+  "ZERO_DB_PATH",
 ] as const;
 
 /** Operator override names; documented in configuration.md. */

@@ -45,7 +45,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     findings: [],
     attackResults: [],
     targetInfo: {},
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent],
+    delegationTools: [TOOL_DEFINITIONS.load_skill, TOOL_DEFINITIONS.spawn_agent],
     ...overrides,
   };
 }
@@ -70,7 +70,7 @@ function collectLifecycle(): {
   return { events, unsubscribe };
 }
 
-describe("spawn_agents — concurrent subagent dispatch", () => {
+describe("spawn_agent batches — concurrent subagent dispatch", () => {
   beforeEach(() => {
     eventBus.clear();
     vi.spyOn(ToolExecutor.prototype as any, "loadSubagentDeps").mockResolvedValue({
@@ -111,7 +111,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
       h.impl = async () => fakeState([]);
       const ctx = toolContext({ role: "audit", scopePath: b, workspaceRoot: a });
       const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
-      const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "alpha" }, { task: "beta" }] } });
+      const result = await executor.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [{ task: "alpha" }, { task: "beta" }] } });
       expect(result.output).toMatchObject({ succeeded: 2, failed: 0 });
       expect(h.configs).toHaveLength(2);
       for (const config of h.configs) {
@@ -126,7 +126,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
         ctx.scopePath = a;
         return fakeRuntime();
       });
-      const rejected = await remapped.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "alpha" }, { task: "beta" }] } });
+      const rejected = await remapped.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [{ task: "alpha" }, { task: "beta" }] } });
       expect(rejected.output).toMatchObject({ succeeded: 0, failed: 2 });
       expect(JSON.stringify(rejected.output)).toContain("workspace_mismatch");
       expect(h.configs).toHaveLength(0);
@@ -151,7 +151,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
       const fork = vi.fn(fakeRuntime);
       const executor = new ToolExecutor(toolContext({ role: "audit", scopePath: b.path, workspaceRoot: a.path }), undefined, undefined, fork);
       const task = { task: "Review the pinned source", expected_workspace: b };
-      const valid = await executor.execute({ name: "spawn_agents", arguments: { tasks: [task] } });
+      const valid = await executor.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [task] } });
       expect(valid.output).toMatchObject({ succeeded: 1, failed: 0 });
       expect(h.configs[0].workspaceIdentity.head).toBe(b.head);
       fork.mockClear(); h.configs = [];
@@ -161,7 +161,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
         { ...b, origin: "https://user:secret@example.test/wrong.git" },
         { ...b, path: join(root, "missing") },
       ]) {
-        for (const name of ["spawn_agent", "spawn_agents"]) {
+        for (const name of ["spawn_agent"]) {
           const request = { ...task, expected_workspace: expected };
           const result = await executor.execute({ name, arguments: name === "spawn_agent" ? request : { tasks: [task, request] } });
           expect(result.success).toBe(false);
@@ -170,7 +170,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
         }
       }
       for (const expected of [{ path: "relative", head: b.head }, { ...b, head: "HEAD" }, { ...b, head: "abc1234" }, { ...b, unexpected: true }]) {
-        const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ ...task, expected_workspace: expected }] } });
+        const result = await executor.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [{ ...task, expected_workspace: expected }] } });
         expect(result.success).toBe(false);
       }
       expect(fork).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
       const ctx = toolContext();
       const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
       const result = await executor.execute({
-        name: "spawn_agents",
+        name: "spawn_agent",
         arguments: {
           tasks: [{ task: "probe alpha" }, { task: "probe beta" }],
         },
@@ -221,7 +221,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     };
     const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
     const result = await executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: { context: shared, tasks: tasks.map((task) => ({ task })) },
     });
 
@@ -245,8 +245,9 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     const ctx = toolContext();
     const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
     const result = await executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: {
+        wait: true,
         tasks: [{ task: "do BOOM" }, { task: "do fine" }],
       },
     });
@@ -296,8 +297,9 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     });
     const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
     const result = await executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: {
+        wait: true,
         tasks: [
           { task: "child 1" },
           { task: "child 2" },
@@ -320,7 +322,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     const { events, unsubscribe } = collectLifecycle();
     try {
       const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
-      const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "inspect source" }] } });
+      const result = await executor.execute({ name: "spawn_agent", arguments: { wait: true, tasks: [{ task: "inspect source" }] } });
       expect(result.success).toBe(false);
       expect(result.error).toContain("ZERO_SUBAGENT_CONCURRENCY must be a positive safe integer");
       expect(events).toEqual([]);
@@ -340,8 +342,8 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     try {
       const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
       const results = await Promise.all(Array.from({ length: 3 }, (_, swarm) => executor.execute({
-        name: "spawn_agents",
-        arguments: { tasks: Array.from({ length: 128 }, (_, agent) => ({ task: `swarm ${swarm}, agent ${agent}` })) },
+        name: "spawn_agent",
+        arguments: { wait: true, tasks: Array.from({ length: 128 }, (_, agent) => ({ task: `swarm ${swarm}, agent ${agent}` })) },
       })));
       for (const result of results) {
         expect(result.success).toBe(true);
@@ -370,8 +372,9 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     const ctx = toolContext();
     const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
     const result = await executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: {
+        wait: true,
         tasks: Array.from({ length: 6 }, (_, i) => ({ task: `child ${i}` })),
       },
     });
@@ -392,8 +395,8 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
       const ctx = toolContext();
       const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
       await executor.execute({
-        name: "spawn_agents",
-        arguments: { tasks: [{ task: "a" }, { task: "b" }] },
+        name: "spawn_agent",
+        arguments: { wait: true, tasks: [{ task: "a" }, { task: "b" }] },
       });
 
       // Group events by child.
@@ -419,32 +422,33 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
 
     const empty = await executor.execute({
-      name: "spawn_agents",
-      arguments: { tasks: [] },
+      name: "spawn_agent",
+      arguments: { wait: true, tasks: [] },
     });
     expect(empty).toMatchObject({ success: false });
     expect(empty.error).toContain("non-empty array");
 
     const notArray = await executor.execute({
-      name: "spawn_agents",
-      arguments: { tasks: "nope" },
+      name: "spawn_agent",
+      arguments: { wait: true, tasks: "nope" },
     });
     expect(notArray).toMatchObject({ success: false });
 
     const oversized = await executor.execute({
-      name: "spawn_agents",
+      name: "spawn_agent",
       arguments: {
+        wait: true,
         tasks: Array.from({ length: 1025 }, (_, i) => ({ task: `child ${i}` })),
       },
     });
     expect(oversized).toMatchObject({ success: false });
-    expect(oversized.error).toContain("max 1024");
+    expect(oversized.error).toContain("maximum 1024");
 
     const malformed = await executor.execute({
-      name: "spawn_agents",
-      arguments: { tasks: [{ task: "ok" }, { max_turns: 3 }] },
+      name: "spawn_agent",
+      arguments: { wait: true, tasks: [{ task: "ok" }, { max_turns: 3 }] },
     });
     expect(malformed).toMatchObject({ success: false });
-    expect(malformed.error).toContain("tasks[1].task");
+    expect(malformed.error).toContain("tasks[1]: task is required");
   });
 });

@@ -12,7 +12,6 @@ import type { McpToolHost } from "../../agent/mcp-host.js";
 import { toNativeToolDef } from "../../agent/native-tooldef.js";
 import { partitionForToolset, resolveToolset } from "../../agent/toolset.js";
 import { DeferredToolRegistry, partitionToolDefinitions, DEFERRED_TOOLS_MIN, DEFERRED_CONTROL_TOOL_NAMES, LIST_TOOLS_NAME, LOAD_TOOL_NAME, listToolsDef, loadToolDef } from "../../agent/deferred-tools.js";
-import { LearningStore, learningProjectId } from "../../storage/index.js";
 import { createThreadGuard, memoryContext, parseRememberRequest, memoryDisabledByEnv, openMemory, runMemoryTool, type NoteStore } from "../../notes/index.js";
 import { TOOL_DISPATCH } from "../../agent/tools/dispatch.js";
 import { evaluateGuards, guardApprovalUnavailable, guardUnresolvedCapabilities, type GuardContext, type ToolGuard } from "../../agent/guards.js";
@@ -36,7 +35,7 @@ import { registerSignalCleanup } from "../../agent/signal-cleanup.js";
 import { type ConsoleCompactionEvent, type ConsoleRenderCallbacks, type ConsoleUsageReport, type ConsoleScopeResolution, type ConsoleTurnBudget, type ConsoleTurnOutcome, type ConsoleSendOptions, type ConsoleSessionConfig, type ConsoleSourceLesson, type ConsoleSourceContext, type ConsoleSession } from "./types.js";
 import { DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TURN_TOKENS, CONSOLE_SUMMARIZER_INSTRUCTION, buildConsoleSystemPrompt, describeCaughtError } from "./prompt-and-runtime.js";
 import { stringifyToolResult, WORKFLOW_LIFECYCLE_NAMES, getWorkflowLifecycleTools, WORKFLOW_TOOL_NAMES, WORKFLOW_AUTHORING_TOOLS, LIST_CONVERSATIONS_NAME, READ_CONVERSATION_NAME, LIST_CONVERSATIONS_DEF, READ_CONVERSATION_DEF, dispatchConversationHistoryTool } from "./console-tools.js";
-import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, pathBelongsToEngagement, extractToolTargets } from "./tool-targets.js";
+import { canonicalizeRealPath, isWithinDir, isDangerousLocalRoot, extractLocalPath, hostOf, anchorHostFromTarget, operatorTargetFromMessage, hostBelongsToEngagement, directoryToGrantFor, extractToolTargets } from "./tool-targets.js";
 import { runBeforeCommand } from "../../agent/before-command.js";
 import { loadMcpServers, mcpLoadResult } from "./mcp-load.js";
 import { beforeCommandInputForCall } from "./before-command.js";
@@ -248,7 +247,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   // The real dispatcher over the real registry. `db = null` → no persistence
   // this pass (findings live in `toolContext.findings` for the session). When
-  // the CLI/TUI provides a DB handle, save_finding persists there and
+  // the CLI/TUI provides a DB handle, finding persists there and
   // query_findings can read current, prior, or all sessions.
   const executor = new ToolExecutor(toolContext, config.db ?? null, undefined, runtime.forkForSubagent?.bind(runtime), cp?.executor);
 
@@ -279,7 +278,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       getMemory()?.add({ text: note, ...(root ? { scope: "folder" as const, folder: root } : { scope: "global" as const }), source: "user", thread: scanId });
     } catch { /* a secret-looking or empty request is simply not saved; the model sees the same text and answers it */ }
   };
-  const roleTools = config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners, webSearchEnabled: true });
+  const roleTools = config.tools ?? getToolsForRole(role, { webSearchEnabled: true });
   const tools = memoryToolEnabled
     ? [...roleTools.filter(tool => tool.name !== "memory"), TOOL_DEFINITIONS.memory]
     : roleTools.filter(tool => tool.name !== "memory");
@@ -432,7 +431,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
   const operatorInstructionsBlock = buildOperatorInstructionsBlock(config.operatorInstructions);
-  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -496,7 +495,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (executionPolicy(approvals).publicNetwork) toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
     }
   }
 
@@ -507,7 +506,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       sessionTarget = target;
       toolContext.target = target;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
       }
       notify?.(`Target set to ${target}; scope extension is disabled and no scope is defined, authorization is not enforced.`);
       return;
@@ -531,7 +530,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         return;
       }
       // This control request originates only from fresh root-operator input;
-      // it does not execute update_target or let a model retry clear a denial.
+      // it does not execute a tool or let a model retry clear a denial.
       let resolution: ConsoleScopeResolution | null;
       let onAbort: (() => void) | undefined;
       try {
@@ -605,7 +604,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     sessionScope = expanded;
     toolContext.scope = expanded;
     if (customSystemPrompt === undefined) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
     }
     notify?.(
       `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
@@ -1186,7 +1185,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
     if (customSystemPrompt === undefined && !turnInProgress) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
     }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
@@ -1290,7 +1289,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let iterations = 0;
     let bookkeepingCalls = 0;
     const bookkeepingLimit = 12;
-    const bookkeepingTools = new Set(["update_todos", "report_status", "plan"]);
+    const bookkeepingTools = new Set(["update_todos", "report_status"]);
     const recordToolResult = (call: ToolCall, result: ToolResult, startedAt: number, findingsBefore: number): void => {
       bookkeepingCalls = bookkeepingTools.has(call.name) ? bookkeepingCalls + 1 : 0;
       try {
@@ -1767,7 +1766,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // reproduction. Build the receipt from the host's finding ledger, not
         // the model's submitted evidence prose. All subsequent verification
         // still passes through dispatchAuthorized and its independent gates.
-        if (executionPolicy(approvals).verificationReceipts && call.name === "save_finding" && toolResult.success &&
+        if (executionPolicy(approvals).verificationReceipts && call.name === "finding" && toolResult.success &&
           toolResult.output && typeof toolResult.output === "object" && "findingId" in toolResult.output) {
           const findingId = toolResult.output.findingId;
           const finding = toolContext.findings.find((item) => item.id === findingId);
@@ -1971,7 +1970,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // is what makes an approvals change take effect without a restart.
       toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: configuredScope, deniedHosts } : undefined;
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
       }
     },
     configureWorkspace: (path) => {
@@ -2001,7 +2000,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         toolContext.publicNetwork = executionPolicy(approvals).publicNetwork ? { scope: undefined, deniedHosts } : undefined;
       }
       if (customSystemPrompt === undefined) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot, delegation: !corePartition });
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, approvals, developmentSourceRoot: config.developmentSourceRoot});
       }
     },
     reconfigureRuntime: (sel) => {

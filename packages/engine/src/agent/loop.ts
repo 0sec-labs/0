@@ -7,11 +7,10 @@ import type {
   ToolCall,
 } from "./types.js";
 import { ToolExecutor, getToolsForRole } from "./tools.js";
-import { WafDetector } from "../scope/waf-detect.js";
 import type { ToolContext } from "./types.js";
 import type { osecDB } from "../storage/index.js";
 import type { Runtime } from "../runtime/types.js";
-import type { Finding, TargetInfo } from "../shared/index.js";
+import type { Finding } from "../shared/index.js";
 import {
   resolveDispatchMode,
   parseXmlDispatch,
@@ -41,7 +40,7 @@ export interface AgentLoopOptions {
   runtime: Runtime;
   db: osecDB | null;
   onTurn?: (turn: number, message: AgentMessage) => void;
-  /** Called only after a new finding has passed save_finding validation. */
+  /** Called only after a new finding has passed finding validation. */
   onFindingSaved?: (finding: Finding) => void | Promise<void>;
 }
 
@@ -75,18 +74,8 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     scopePath: config.scopePath,
     persistFindings: db !== null,
     authConfig: config.authConfig,
-    identities: config.identities,
-    session: config.session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
-    // WAF detection + adaptive evasion (0#568). Auto-enabled for
-    // authorized engagements (scope/enforcement set) unless explicitly
-    // disabled with `wafDetector: null`.
-    wafDetector:
-      config.wafDetector === null
-        ? undefined
-        : (config.wafDetector ??
-          (config.scope || config.enforcement ? new WafDetector() : undefined)),
     webSearchEnabled: config.webSearchEnabled,
     allowScanners: config.allowScanners,
     attribution: config.attribution,
@@ -100,7 +89,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   };
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners, webSearchEnabled: config.webSearchEnabled });
+  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, webSearchEnabled: config.webSearchEnabled });
   toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&
@@ -144,7 +133,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   let initialPrompt: string;
   if (dispatchMode === "xml") {
     // 0#232: XML dispatch ships a deliberately narrower action
-    // surface (bash / save_finding / done / note). The full tool catalog
+    // surface (bash / finding / done / note). The full tool catalog
     // would just confuse cheap models — BoxPwnr's whole point is that
     // narrowing wins.
     initialPrompt = buildXmlDispatchPrompt({
@@ -176,7 +165,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       "",
       "Example:",
       'TOOL_CALL: send_prompt {"prompt": "Hello, what can you help me with?"}',
-      'TOOL_CALL: save_finding {"title": "System prompt leak", "severity": "critical", "category": "system-prompt-extraction", "evidence_request": "...", "evidence_response": "..."}',
+      'TOOL_CALL: finding {"title": "System prompt leak", "severity": "critical", "category": "system-prompt-extraction", "evidence_request": "...", "evidence_response": "..."}',
       "",
       "When you are done with your task, call:",
       'TOOL_CALL: done {"summary": "What I found/did"}',
@@ -345,10 +334,12 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     const assistantContent = result.output;
     let toolCalls: ToolCall[];
     let xmlParseError: string | undefined;
+    let xmlFlag: string | undefined;
     if (dispatchMode === "xml") {
       const parsed = parseXmlDispatch(assistantContent);
       toolCalls = parsed.calls;
       xmlParseError = parsed.error;
+      if (parsed.flag !== undefined) xmlFlag = parsed.flag;
     } else {
       toolCalls = parseToolCalls(assistantContent);
     }
@@ -365,7 +356,20 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     state.messages.push(assistantMsg);
     onTurn?.(state.turnCount, assistantMsg);
 
-    // If no tool calls, the agent is just talking — prompt for action
+    // A `<flag>` answer ends the run.
+    if (xmlFlag !== undefined) {
+      state.done = true;
+      state.summary = `Flag captured: ${xmlFlag}`;
+      break;
+    }
+
+    // A reply with no tool calls ends the run (the model is finished); an XML
+    // protocol error is sent back so the model can re-emit its action.
+    if (toolCalls.length === 0 && dispatchMode !== "xml" && !xmlParseError && assistantContent.trim()) {
+      state.done = true;
+      state.summary = assistantContent;
+      break;
+    }
     if (toolCalls.length === 0) {
       consecutiveNoToolTurns += 1;
       if (db) {
@@ -412,7 +416,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         ? `Protocol error: ${xmlParseError} Re-emit your action with balanced <command>...</command> or <flag>...</flag> tags.`
         : dispatchMode === "xml"
           ? "Please use your tools to take action. Emit a `<command>...</command>` to run a shell command, or `<flag>...</flag>` if you found the flag."
-          : "Please use your tools to take action. Call a tool using the TOOL_CALL format, or call done if you are finished.";
+          : "Please use your tools to take action, or reply in plain text when you are finished.";
       state.messages.push({ role: "user", content: nudge });
       if (db && state.turnCount % 2 === 0) {
         persistSession(db, state, config, sessionId, "running");
@@ -445,7 +449,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       );
 
       if (
-        call.name === "save_finding" &&
+        call.name === "finding" &&
         toolResult.success &&
         toolResult.output &&
         typeof toolResult.output === "object" &&
@@ -463,12 +467,6 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
             // External sinks must not make a successfully-saved local finding fail.
           }
         }
-      }
-
-      // Check if agent called done
-      if (call.name === "done" && toolResult.success) {
-        state.done = true;
-        state.summary = (toolResult.output as { summary: string }).summary;
       }
     }
 

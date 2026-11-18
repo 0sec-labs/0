@@ -65,6 +65,6 @@ content: |
   - Narrative: which row/column, impact class(es), blast radius (all users /
     one tenant), persistence (survives restarts — it's in the DB), and the
     writable + re-read proof.
-  - save_finding with the table/column, a read-only sample, the privilege/re-read
+  - finding with the table/column, a read-only sample, the privilege/re-read
     evidence, the impact classification, and the narrative. State explicitly that
     NO destructive write was performed.

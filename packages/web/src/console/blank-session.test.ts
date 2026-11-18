@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { DesktopConsoleSession } from "@0/engine/shared";
 import { findBlankSession, isBlankSession, withCreateLock } from "./blank-session";
-import { partitionVisualCalls } from "./visuals";
 import { mergeSessionAliases } from "./use-session-aliases";
 
 const session = (over: Partial<DesktopConsoleSession>) =>
@@ -49,15 +48,3 @@ describe("create lock", () => {
   });
 });
 
-describe("saved visualize calls", () => {
-  test("renders valid visualize calls inline and keeps other tools", () => {
-    const calls = [
-      { id: "t1", name: "bash", arguments: { command: "ls" } },
-      { id: "t2", name: "visualize", arguments: { kind: "table", title: "Hosts", summary: "Open hosts", spec: { columns: [], rows: [] } } },
-      { id: "t3", name: "visualize", arguments: "not-an-object" },
-    ];
-    const { visuals, others } = partitionVisualCalls(calls);
-    expect(visuals.map((item) => item.id)).toEqual(["t2"]);
-    expect(others.map((item) => item.id)).toEqual(["t1", "t3"]);
-  });
-});

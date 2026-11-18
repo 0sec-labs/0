@@ -576,7 +576,7 @@ export function buildSubagentMessage(
   const results = toolResults ?? [];
   const tools: SubagentToolMessage[] = calls
     .map((call, callIndex) => ({ call, callIndex, result: results[callIndex] }))
-    .filter(({ call, result }) => call.name !== "report_status" && (call.name !== "done" || !result?.success))
+    .filter(({ call }) => call.name !== "report_status")
     .map(({ call, callIndex, result }) => ({
       callIndex,
       call: { name: call.name, arguments: call.arguments ?? {} },
@@ -592,12 +592,7 @@ export function buildSubagentMessage(
           }
         : { success: false, output: null },
     }));
-  const doneIndex = calls.findIndex((call, index) => call.name === "done" && results[index]?.success);
-  const doneOutput = doneIndex >= 0 ? results[doneIndex]?.output : undefined;
-  const summary = doneOutput && typeof doneOutput === "object" && "summary" in doneOutput && typeof doneOutput.summary === "string"
-    ? doneOutput.summary.trim() : "";
-  const prose = assistantText ?? "";
-  const assistant = summary && summary !== prose.trim() ? [prose, summary].filter((text) => text.trim()).join("\n\n") : prose;
+  const assistant = assistantText ?? "";
   return {
     ...telemetry,
     agent_id: base.agent_id,

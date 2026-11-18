@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   clampDisabled,
   failedCallCount,
-  hideFromWorkLog,
   isRetryableError,
   messageLink,
   plainText,
@@ -53,15 +52,6 @@ describe("clamp rules", () => {
   });
 });
 
-describe("visualize rows", () => {
-  it("hides only successful visualize calls that render inline", () => {
-    expect(hideFromWorkLog(call("visualize", { ok: true }), true)).toBe(true);
-    expect(hideFromWorkLog(call("visualize", { success: false, error: "bad" }), true)).toBe(false);
-    expect(hideFromWorkLog(call("visualize", { ok: true }), false)).toBe(false);
-    expect(hideFromWorkLog(call("read_file", { ok: true }), true)).toBe(false);
-  });
-});
-
 describe("retry eligibility", () => {
   it("allows generic errors only", () => {
     expect(isRetryableError("Provider returned HTTP 500")).toBe(true);
@@ -92,10 +82,10 @@ describe("turnArtifacts", () => {
   it("extracts saved findings and PR urls from successful results", () => {
     const artifacts = turnArtifacts({
       toolCalls: [
-        call("save_finding", { success: true, output: { findingId: "F-1" } }, { title: "SQLi in /login" }),
-        call("save_finding", { findingId: "F-1" }, { title: "dup" }),
+        call("finding", { success: true, output: { findingId: "F-1" } }, { title: "SQLi in /login" }),
+        call("finding", { findingId: "F-1" }, { title: "dup" }),
         call("fix_publish", { fix: { published: { prUrl: "https://github.com/acme/app/pull/12" } } }),
-        call("save_finding", { success: false, error: "no" }, { title: "failed" }),
+        call("finding", { success: false, error: "no" }, { title: "failed" }),
       ],
     });
     expect(artifacts).toEqual([

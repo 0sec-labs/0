@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import type { NativeRuntime, NativeMessage, NativeContentBlock } from "../runtime/types.js";
 import type { Finding } from "../shared/index.js";
 import { runNativeAgentLoop } from "./native-loop.js";
-import { getToolsForRole, TOOL_DEFINITIONS } from "./tools.js";
+import { TOOL_DEFINITIONS } from "./tools.js";
 import { shellPentestPrompt, specialistSection, VULN_CLASS_LABELS } from "./prompts.js";
 import type { VulnClass } from "./prompts.js";
 import { skillIdForVulnClass } from "./skills/index.js";
@@ -129,7 +129,7 @@ const POSITIVE_SIGNALS: Array<{ pattern: RegExp; weight: number; label: string }
   { pattern: /\/etc\/passwd|root:x:/i, weight: 0.5, label: "lfi success" },
   { pattern: /49|7\*7|uid=\d+/i, weight: 0.4, label: "ssti/rce success" },
   { pattern: /vulnerable|confirmed|exploited/i, weight: 0.15, label: "confirmation keyword" },
-  { pattern: /save_finding/, weight: 0.4, label: "finding saved" },
+  { pattern: /finding/, weight: 0.4, label: "finding saved" },
 ];
 
 /** Patterns that suggest a branch is a dead end. */
@@ -177,7 +177,7 @@ export function scoreEvidence(
       evidence.push({
         label: `finding: ${f.severity}`,
         excerpt: (f.title ?? f.templateId ?? "").slice(0, 200),
-        source: "save_finding",
+        source: "finding",
       });
     }
   }
@@ -289,20 +289,18 @@ async function proposeChildHypotheses(
 /** Build the shared tool set for branch mini-loops. */
 async function buildBranchTools(repoPath?: string): Promise<ToolDefinition[]> {
   const hasSource = !!repoPath;
-  let hasBrowser = false;
-  try { await import("playwright"); hasBrowser = true; } catch { /* not installed */ }
 
   const names = hasSource
-    ? ["bash", ...(hasBrowser ? ["browser"] : []), "read_file", "run_command", "save_finding", "done"]
-    : ["bash", ...(hasBrowser ? ["browser"] : []), "save_finding", "done"];
+    ? ["bash", "finding"]
+    : ["bash", "finding"];
   return names
     .map((n) => TOOL_DEFINITIONS[n])
     .filter((t): t is ToolDefinition => t !== undefined);
 }
 
 /** Build the system prompt for a single branch mini-loop. */
-function buildBranchPrompt(node: AttackNode, config: EGATSConfig, hasBrowser: boolean): string {
-  const base = shellPentestPrompt(config.target, config.repoPath, { hasBrowser });
+function buildBranchPrompt(node: AttackNode, config: EGATSConfig): string {
+  const base = shellPentestPrompt(config.target, config.repoPath);
   const ancestry: string[] = [];
   // (ancestry walked by caller; here we just include this node's hypothesis)
   const header = [
@@ -313,7 +311,7 @@ function buildBranchPrompt(node: AttackNode, config: EGATSConfig, hasBrowser: bo
     "",
     "You MUST gather concrete evidence (tool output, HTTP responses, error traces) that either",
     "confirms or refutes this specific hypothesis. Do not wander — stay on this branch.",
-    "If you find a flag, call save_finding and done immediately.",
+    "If you find a flag, call finding and stop.",
   ].join("\n");
   let prompt = base + "\n" + header;
   if (config.challengeHint) prompt += "\n" + config.challengeHint;
@@ -372,24 +370,9 @@ export function classifyHypothesis(hypothesis: string): VulnClass | null {
 }
 
 /**
- * Extra tools layered onto the base branch tool set for each specialist class.
- * Names are resolved against TOOL_DEFINITIONS and silently dropped if missing,
- * so this stays robust to tool-registry changes.
- */
-const SPECIALIST_TOOL_EXTRAS: Record<VulnClass, string[]> = {
-  sqli: ["http_request", "payload_lookup"],
-  xss: ["http_request", "crawl", "submit_form", "payload_lookup"],
-  ssrf: ["http_request"],
-  ssti: ["http_request", "payload_lookup"],
-  idor: ["http_request", "submit_form", "crawl"],
-  "auth-bypass": ["http_request", "submit_form", "payload_lookup"],
-};
-
-/**
  * Build the class-tuned tool subset for a specialist branch: the shared branch
- * tools (bash, browser when available, source tools in white-box mode,
- * save_finding, done) plus class-specific extras, the JIT-skill tools when that
- * feature is on, and the ObjectId forge for IDOR work when that feature is on.
+ * tools (bash, source tools in white-box mode, finding, done) plus the
+ * JIT-skill tools when that feature is on.
  * Deduped by tool name.
  */
 async function buildSpecialistTools(
@@ -398,8 +381,7 @@ async function buildSpecialistTools(
 ): Promise<ToolDefinition[]> {
   const base = await buildBranchTools(repoPath);
 
-  const extraNames = [...SPECIALIST_TOOL_EXTRAS[vulnClass]];
-  if (vulnClass === "idor" && features.mongoObjectIdForge) extraNames.push("mongo_objectid");
+  const extraNames: string[] = [];
   if (features.jitSkills) extraNames.push("list_skills", "load_skill");
 
   const merged: ToolDefinition[] = [...base];
@@ -419,10 +401,9 @@ async function buildSpecialistTools(
 function buildSpecialistPrompt(
   node: AttackNode,
   config: EGATSConfig,
-  hasBrowser: boolean,
   vulnClass: VulnClass,
 ): string {
-  const base = shellPentestPrompt(config.target, config.repoPath, { hasBrowser });
+  const base = shellPentestPrompt(config.target, config.repoPath);
   const label = VULN_CLASS_LABELS[vulnClass];
   const header = [
     "",
@@ -434,7 +415,7 @@ function buildSpecialistPrompt(
     "the hypothesis implicates your vulnerability class. Focus exclusively on it —",
     "apply the class methodology below and gather concrete evidence (tool output, HTTP",
     "responses, error traces) that either confirms or refutes this specific hypothesis.",
-    "Do not wander into other classes. If you find a flag, call save_finding and done immediately.",
+    "Do not wander into other classes. If you find a flag, call finding and stop.",
     "",
     specialistSection(vulnClass),
   ].join("\n");
@@ -454,8 +435,6 @@ async function exploreNode(
 ): Promise<void> {
   const turns = config.turnsPerNode ?? 8;
   config.signal?.throwIfAborted();
-  let hasBrowser = false;
-  try { await import("playwright"); hasBrowser = true; } catch { /* not installed */ }
 
   onEvent?.("egats_node_start", {
     nodeId: node.id,
@@ -470,7 +449,7 @@ async function exploreNode(
   let preloadedSkillIds: string[] | undefined;
 
   if (vulnClass) {
-    systemPrompt = buildSpecialistPrompt(node, config, hasBrowser, vulnClass);
+    systemPrompt = buildSpecialistPrompt(node, config, vulnClass);
     nodeTools = await buildSpecialistTools(vulnClass, config.repoPath);
     const skillId = skillIdForVulnClass(vulnClass);
     preloadedSkillIds = skillId ? [skillId] : undefined;
@@ -495,7 +474,7 @@ async function exploreNode(
       });
     }
   } else {
-    systemPrompt = buildBranchPrompt(node, config, hasBrowser);
+    systemPrompt = buildBranchPrompt(node, config);
   }
 
   try {

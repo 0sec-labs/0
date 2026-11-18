@@ -45,7 +45,7 @@ export interface ExecutionPolicy {
   readonly inheritsConsoleTools: boolean;
   /** Any non-dangerous local path is granted without a prompt. */
   readonly autoGrantsLocalPaths: boolean;
-  /** Builds a verification receipt from the finding ledger on save_finding. */
+  /** Builds a verification receipt from the finding ledger on finding. */
   readonly verificationReceipts: boolean;
   /** How the network scope grows: never, within the engagement, or around the target. */
   readonly scopeExpansion: "ask" | "engagement" | "target-related";

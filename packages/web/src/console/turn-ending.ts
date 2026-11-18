@@ -20,7 +20,7 @@ export const TURN_ENDING_ACTIONS: Record<TurnEndingKind, { retry: boolean; conti
 
 /** A turn that did something visible without writing text (a tool that worked, a visual, a subagent) finished its task. */
 export function turnHasSilentWork(turn: ReducedTurn, subagents = 0): boolean {
-  return subagents > 0 || Boolean(turn.visuals?.length) || turn.toolCalls.some((call) => toolCallStatus(call) === "Done");
+  return subagents > 0 || turn.toolCalls.some((call) => toolCallStatus(call) === "Done");
 }
 
 /** `undefined` while the turn is running or when it ended normally (or in a generic error/stop with its own treatment). */

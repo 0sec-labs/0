@@ -1,32 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { getToolsForRole } from "../tools.js";
 import { toNativeToolDef } from "../native-tooldef.js";
-import { TOOL_DEFINITIONS, LEGACY_DELEGATION_TOOL_NAMES } from "./index.js";
-import { TOOL_DISPATCH } from "./dispatch.js";
+import { TOOL_DEFINITIONS } from "./index.js";
 
 describe("public delegation catalog", () => {
-  it("offers one delegation tool while retaining legacy dispatch compatibility", () => {
+  it("offers one delegation tool, spawn_agent, in every audit and review role", () => {
     for (const role of ["audit", "review"]) {
       for (const hasScope of [false, true]) {
         const names = getToolsForRole(role, { hasScope }).map(tool => tool.name);
         expect(names).toContain("spawn_agent");
-        for (const alias of LEGACY_DELEGATION_TOOL_NAMES) expect(names).not.toContain(alias);
+        for (const gone of ["spawn_agents", "spawn_persistent_agent", "monitor"]) expect(names).not.toContain(gone);
       }
-    }
-    for (const alias of LEGACY_DELEGATION_TOOL_NAMES) {
-      expect(TOOL_DEFINITIONS[alias]).toBeDefined();
-      expect(TOOL_DISPATCH[alias]).toBeDefined();
     }
   });
 
-  it("offers typed per-task tool and HTTP-method policies in every delegation shape", () => {
+  it("offers a typed per-task tool allowlist in every delegation shape", () => {
     const single = toNativeToolDef(TOOL_DEFINITIONS.spawn_agent!).input_schema.properties;
     const tasks = single.tasks as { items: { properties: Record<string, unknown> } };
-    const legacy = toNativeToolDef(TOOL_DEFINITIONS.spawn_agents!).input_schema.properties.tasks as { items: { properties: Record<string, unknown> } };
-    const persistent = toNativeToolDef(TOOL_DEFINITIONS.spawn_persistent_agent!).input_schema.properties;
-    for (const properties of [single, tasks.items.properties, legacy.items.properties, persistent]) {
+    for (const properties of [single, tasks.items.properties]) {
       expect(properties.allowed_tools).toMatchObject({ type: "array", items: { type: "string" } });
-      expect(properties.allowed_http_methods).toMatchObject({ type: "array", items: { type: "string", enum: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"] } });
     }
   });
 

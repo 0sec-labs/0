@@ -139,7 +139,7 @@ describe("LootLedger.harvestFromFinding", () => {
     });
     expect(added.some((i) => i.kind === "cookie" && i.value.includes("session=deadbeefcafe"))).toBe(true);
     expect(added.some((i) => i.kind === "credential" && i.value.includes("leakedPass99"))).toBe(true);
-    expect(l.all()[0]?.source).toContain("save_finding");
+    expect(l.all()[0]?.source).toContain("finding");
   });
 });
 
@@ -169,7 +169,6 @@ describe("LootLedger.query / render", () => {
     const text = l.render();
     expect(text).toContain("Known footholds");
     expect(text).toContain("[loot-1] credential: admin:pw");
-    expect(text).toContain("use_loot");
   });
 
   it("render('') is empty for an empty ledger", () => {
@@ -184,10 +183,10 @@ describe("LootLedger.query / render", () => {
   });
 });
 
-// ── ToolExecutor wiring (use_loot + save_finding harvest) ───────────────────
+// ── ToolExecutor wiring (finding harvest) ──────────────────────────────
 
-describe("ToolExecutor use_loot", () => {
-  function makeCtx(loot?: LootLedger): ToolContext {
+describe("ToolExecutor finding harvest", () => {
+  function makeCtx(loot: LootLedger | undefined): ToolContext {
     return {
       target: "https://example.com",
       scanId: "loot-test",
@@ -198,31 +197,11 @@ describe("ToolExecutor use_loot", () => {
     };
   }
 
-  it("returns full stored values, filterable by kind", async () => {
-    const loot = new LootLedger();
-    loot.add({ kind: "credential", value: "root:toor", source: "http_request" });
-    loot.add({ kind: "endpoint", value: "https://h/admin", source: "crawl" });
-    const exec = new ToolExecutor(makeCtx(loot), null);
-
-    const res = await exec.execute({ name: "use_loot", arguments: { kind: "credential" } });
-    expect(res.success).toBe(true);
-    const out = res.output as { count: number; items: LootItem[] };
-    expect(out.count).toBe(1);
-    expect(out.items[0].value).toBe("root:toor"); // FULL value for reuse
-  });
-
-  it("degrades gracefully when no ledger is present", async () => {
-    const exec = new ToolExecutor(makeCtx(undefined), null);
-    const res = await exec.execute({ name: "use_loot", arguments: {} });
-    expect(res.success).toBe(true);
-    expect((res.output as { count: number }).count).toBe(0);
-  });
-
-  it("save_finding harvests footholds into the ledger", async () => {
+  it("finding harvests footholds into the ledger", async () => {
     const loot = new LootLedger();
     const exec = new ToolExecutor(makeCtx(loot), null);
     const res = await exec.execute({
-      name: "save_finding",
+      name: "finding",
       arguments: {
         title: "Creds in login response",
         severity: "high",
@@ -237,36 +216,14 @@ describe("ToolExecutor use_loot", () => {
   });
 });
 
-// ── getToolsForRole gating ──────────────────────────────────────────────────
-
-describe("getToolsForRole loot gating", () => {
-  const ORIGINAL = process.env["ZERO_FEATURE_LOOT_LEDGER"];
-  afterEach(() => {
-    if (ORIGINAL === undefined) delete process.env["ZERO_FEATURE_LOOT_LEDGER"];
-    else process.env["ZERO_FEATURE_LOOT_LEDGER"] = ORIGINAL;
-  });
-
-  it("exposes use_loot to the attack role when the flag is on", () => {
-    delete process.env["ZERO_FEATURE_LOOT_LEDGER"]; // default ON
-    const names = getToolsForRole("attack").map((t) => t.name);
-    expect(names).toContain("use_loot");
-  });
-
-  it("hides use_loot when the flag is off", () => {
-    process.env["ZERO_FEATURE_LOOT_LEDGER"] = "0";
-    expect(getToolsForRole("attack").map((t) => t.name)).not.toContain("use_loot");
-    expect(getToolsForRole("audit").map((t) => t.name)).not.toContain("use_loot");
-  });
-});
-
 // ── Full-loop chaining acceptance (0#567) ──────────────────────────────
 //
 // Deterministic stand-in for the issue's acceptance fixture: step 1 leaks a
 // credential, step 2 needs it. We script the agent (mock runtime) to (1) save a
-// finding whose evidence leaks a credential, (2) call use_loot to retrieve it,
+// finding whose evidence leaks a credential, (2) query the findings,
 // (3) finish. We then assert the ledgered credential was (a) re-injected into
-// the agent's context as a "known footholds" block and (b) returned in full by
-// use_loot — i.e. the artifact survived as reusable state for chaining.
+// the agent's context as a "known footholds" block and (b) still
+// present in the transcript — i.e. the artifact survived as reusable state for chaining.
 
 function createMockRuntime(responses: NativeRuntimeResult[]): NativeRuntime {
   let i = 0;
@@ -294,7 +251,7 @@ describe("native loop loot chaining (acceptance)", () => {
     else process.env["ZERO_FEATURE_LOOT_LEDGER"] = ORIGINAL;
   });
 
-  it("leaks a credential in step 1, reuses it via use_loot in step 2", async () => {
+  it("leaks a credential in step 1 and the ledger re-injects it in step 2", async () => {
     delete process.env["ZERO_FEATURE_LOOT_LEDGER"]; // default ON
     // Synthetic fixture value (not a real credential) — named neutrally so the
     // hardcoded-secret scanner doesn't flag the test as committing a password.
@@ -307,7 +264,7 @@ describe("native loop loot chaining (acceptance)", () => {
           {
             type: "tool_use",
             id: "tc1",
-            name: "save_finding",
+            name: "finding",
             input: {
               title: "Admin password leaked in /login response",
               severity: "high",
@@ -323,9 +280,9 @@ describe("native loop loot chaining (acceptance)", () => {
         usage: { inputTokens: 10, outputTokens: 10 },
       },
       {
-        // Step 2 — retrieve the captured credential to reuse it.
+        // Step 2 — a further turn, after which the ledger block is injected.
         content: [
-          { type: "tool_use", id: "tc2", name: "use_loot", input: { kind: "credential" } },
+          { type: "tool_use", id: "tc2", name: "query_findings", input: {} },
         ],
         stopReason: "tool_use",
         durationMs: 10,
@@ -333,8 +290,8 @@ describe("native loop loot chaining (acceptance)", () => {
       },
       {
         // Step 3 — finish.
-        content: [{ type: "tool_use", id: "tc3", name: "done", input: { summary: "chained" } }],
-        stopReason: "tool_use",
+        content: [{ type: "text", text: "chained" }],
+        stopReason: "end_turn",
         durationMs: 10,
         usage: { inputTokens: 10, outputTokens: 10 },
       },
@@ -361,7 +318,7 @@ describe("native loop loot chaining (acceptance)", () => {
     const blob = JSON.stringify(state.messages);
     // The credential was re-injected as a known-footholds block...
     expect(blob).toContain("Known footholds");
-    // ...and use_loot returned the FULL credential value for reuse (step 2).
+    // ...with the FULL credential value available for reuse (step 2).
     expect(blob).toContain(plantedValue);
     // The loop emitted the loot-injection event.
     expect(events).toContain("loot_injected");

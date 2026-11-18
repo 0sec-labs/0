@@ -4,14 +4,14 @@
  * Background — the cloud-side `findings.confidence` column (numeric(4,3),
  * range 0.000–1.000) was 100% NULL because @0/cli never emitted a
  * confidence value on findings: the OSS `Finding` type carried the field
- * but the `save_finding` agent tool didn't accept it, the JSON / structured
+ * but the `finding` agent tool didn't accept it, the JSON / structured
  * findings parser hard-coded `confidence: undefined`, and the
  * `finding_ingested` event payload didn't propagate it. This helper adds
  * the missing source-of-truth.
  *
  * We use strategy (c) — hybrid:
  *
- *   1. **LLM self-report.** `save_finding` now accepts an optional
+ *   1. **LLM self-report.** `finding` now accepts an optional
  *      `confidence: number` (0..1). The agent reports its own calibration.
  *   2. **PoC-status floor.** LLMs are notoriously badly calibrated, so we
  *      clamp the LLM's value UP to a floor based on what the codebase
@@ -90,7 +90,7 @@ export function pocStatusFloor(pocSteps: PocStep[] | undefined): number {
  * Compute the final per-finding confidence value to emit.
  *
  * @param rawConfidence  the LLM-reported confidence, if any (raw value from
- *   the `save_finding` tool call args — could be anything)
+ *   the `finding` tool call args — could be anything)
  * @param pocSteps       structured PoC step graph attached to the finding,
  *   if any
  * @returns a finite number in [0,1], or `undefined` when neither signal is

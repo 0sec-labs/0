@@ -16,7 +16,15 @@
 
 import { describe, it, expect } from "vitest";
 import { DriftMonitor, contentTerms } from "./drift.js";
-import { TaskLedger } from "./task-ledger.js";
+
+/** Minimal stand-in for an open-task list: the monitor only consumes the open tasks' text. */
+class TaskLedger {
+  private readonly tasks: Array<{ id: string; title: string; done: boolean }> = [];
+  add(title: string, _detail?: string, _turn?: number): void { this.tasks.push({ id: `task-${this.tasks.length + 1}`, title, done: false }); }
+  start(_id: string, _turn?: number): void {}
+  complete(id: string, ..._rest: unknown[]): void { const t = this.tasks.find((x) => x.id === id); if (t) t.done = true; }
+  openText(): string { return this.tasks.filter((t) => !t.done).map((t) => t.title).join(" ").trim(); }
+}
 
 const OBJECTIVE =
   "You are an attack agent. Assess the shop application for injection and access-control flaws in its checkout and order endpoints.";
@@ -133,7 +141,7 @@ describe("drift does NOT fire on a focused trajectory", () => {
       m.record(
         [
           call("bash", { command: `probe unrelated-service-${i}` }),
-          call("save_finding", { title: `something at unrelated-service-${i}` }),
+          call("finding", { title: `something at unrelated-service-${i}` }),
         ],
         planText,
       );
@@ -193,9 +201,8 @@ describe("neutral and empty turns", () => {
     const m = monitor();
     m.record([call("bash", { command: "nslookup unrelated.org" })], planText);
     expect(m.state.streak).toBe(1);
-    // query_findings / use_loot say nothing about focus either way.
-    m.record([call("query_findings", { limit: 20 })], planText);
-    m.record([call("use_loot", { kind: "credential" })], planText);
+    // query_findings / load_skill say nothing about focus either way.
+    m.record([call("load_skill", { id: "x" })], planText);
     expect(m.state.streak).toBe(1);
   });
 

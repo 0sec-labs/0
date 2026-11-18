@@ -71,7 +71,7 @@ content: |
   truncates a large file, page through it — do not conclude from the first
   screen).
 
-  ### Phase 4: Confirm before save_finding
+  ### Phase 4: Confirm before finding
   - Show the source (untrusted length/data) → the unchecked copy/free/use, with
     file:line, and why the surrounding checks don't cover the value.
   - For UAF: the alloc site, the free site, the use site, and the path/race that

@@ -165,7 +165,7 @@ describe("engine bearer on routes outside /api/console", () => {
   });
   it("fails when a handler exposes a top-level /api segment that is not classified", () => {
     const classified = new Set(["console", "dashboard", "scans", "findings", "finding-family", "events", "v1", "work", "workflow-engine", "control", "workers", "skills", "engagements", "findings-access", "backends", "backend", "team", "webhooks"]);
-    const files = ["../commands/dashboard.ts", "dashboard-api.ts", "team-web.ts", "team-setup.ts", "team-presence-stream.ts", "backend-connections.ts", "findings-access-tokens.ts", "finding-impact.ts", "browser-live-routes.ts"];
+    const files = ["../commands/dashboard.ts", "dashboard-api.ts", "team-web.ts", "team-setup.ts", "team-presence-stream.ts", "backend-connections.ts", "findings-access-tokens.ts", "finding-impact.ts"];
     const found = new Set<string>();
     for (const file of files) {
       const text = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");

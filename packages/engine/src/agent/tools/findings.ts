@@ -13,11 +13,17 @@
 import type { ToolDefinition } from "../types.js";
 
 export const findingsToolDefinitions: Record<string, ToolDefinition> = {
-  save_finding: {
-    name: "save_finding",
+  finding: {
+    name: "finding",
     description:
-      "Save a security finding to the database. Call this when you discover a vulnerability.",
+      "Record or update a security finding. Without `id` it saves a new finding (call it when you discover a vulnerability; title, severity, category, evidence_request and evidence_response are required). With `id` it updates that finding's `status` (for example confirmed or false-positive); no other field is needed.",
     parameters: {
+      id: { type: "string", description: "ID of an existing finding to update. Omit to save a new finding." },
+      status: {
+        type: "string",
+        description: "With `id`: the new status of that finding.",
+        enum: ["discovered", "confirmed", "false-positive"],
+      },
       title: { type: "string", description: "Short title for the finding" },
       description: { type: "string", description: "Detailed description of the vulnerability" },
       severity: {
@@ -78,11 +84,6 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       evidence_request: { type: "string", description: "The request/prompt that triggered the vuln" },
       evidence_response: { type: "string", description: "The response showing the vulnerability" },
       evidence_analysis: { type: "string", description: "Your analysis of why this is a vulnerability" },
-      oast_handle_id: {
-        type: "string",
-        description:
-          "OPTIONAL verified handle_id from oast_poll. Pass only after the callback verdict was verified; save_finding attaches the trusted callback evidence and marks the finding verified. The OAST class must match this finding's category.",
-      },
       source_path: {
         type: "string",
         description:
@@ -198,117 +199,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
           "OPTIONAL JSON-encoded string[] of filesystem paths inside the scan workspace that back this finding (screenshots, captured-request blobs, etc.). Paths must be relative to the workspace root OR absolute and inside it. '..' segments, paths outside the workspace, and symlinks that escape the workspace are rejected.",
       },
     },
-    required: ["title", "severity", "category", "evidence_request", "evidence_response"],
-  },
-
-  query_findings: {
-    name: "query_findings",
-    description:
-      "Query existing findings. Defaults to the current scan/session; set all_sessions=true or pass scan_id to query other sessions (requires the persistent findings database). Workers without database access should ask their parent to run cross-session queries.",
-    parameters: {
-      scan_id: {
-        type: "string",
-        description:
-          "Optional scan/session id to query. When omitted, only the current session is queried unless all_sessions=true.",
-      },
-      all_sessions: {
-        type: "boolean",
-        description:
-          "Optional: when true, query findings across all sessions/scans instead of only the current session; requires a persistent findings database.",
-      },
-      severity: {
-        type: "string",
-        description: "Filter by severity",
-        enum: ["critical", "high", "medium", "low", "info"],
-      },
-      category: { type: "string", description: "Filter by attack category" },
-      status: {
-        type: "string",
-        description: "Filter by status",
-        enum: ["discovered", "confirmed", "false-positive"],
-      },
-      limit: { type: "number", description: "Max results to return (default 20)" },
-    },
-  }, 
-
-  // 0#567 — retrieve previously captured footholds for exploit chaining.
-  use_loot: {
-    name: "use_loot",
-    description:
-      "Retrieve footholds (credentials, tokens, cookies, hashes, endpoints, sensitive paths) captured EARLIER this scan so you can REUSE them in a follow-up request and chain to higher impact — e.g. authenticate with a leaked credential, replay a session cookie, hit a discovered endpoint, or crack a captured hash. Returns the FULL stored values (the per-turn 'known footholds' summary may truncate long ones). Optionally filter by kind and/or a case-insensitive substring.",
-    parameters: {
-      kind: {
-        type: "string",
-        description: "Optional: only return loot of this kind.",
-        enum: ["credential", "token", "path", "endpoint", "hash", "cookie"],
-      },
-      search: {
-        type: "string",
-        description:
-          "Optional: only return loot whose id, value, or context contains this substring (case-insensitive).",
-      },
-      id: { type: "string", description: "Optional: return only the loot item with this id (e.g. 'loot-3')." },
-    },
-  },
-
-  // Typed TODO / plan ledger. One tool with an `action` discriminator rather
-  // than five separate tools — five schemas in every request for one concept
-  // is a bad trade, and a small closed enum is something models get right.
-  // Arguments are Zod-validated (`validatePlanArgs`) and a rejection comes back
-  // as an is_error result so the model self-corrects, per agent/AGENTS.md §1.
-  plan: {
-    name: "plan",
-    description:
-      "Maintain your TODO list for this target. Your plan is re-shown to you every turn, so it is the one piece of state guaranteed to survive context compaction — keep it current and it will keep you on track across a long run. Use action='add' to record a task you intend to do (pass several at once by putting one task per line in `title`), action='start' to mark the task you are working on RIGHT NOW (only one task can be active; starting another sends the previous one back to pending), action='complete' when it is genuinely finished, action='drop' when you have ruled it out, action='note' to record what you learned on a task without closing it, and action='list' to see everything. Add and start a task BEFORE you begin work that is not already on the plan.",
-    parameters: {
-      action: {
-        type: "string",
-        description:
-          "What to do: add a task, start (make active) an existing task, complete it, drop it, note progress on it, or list the plan.",
-        enum: ["add", "start", "complete", "drop", "note", "list"],
-      },
-      title: {
-        type: "string",
-        description:
-          "Required for action='add'. One-line statement of the task. To seed several tasks in a single call, put one task per line.",
-      },
-      id: {
-        type: "string",
-        description:
-          "Required for action='start'|'complete'|'drop'|'note'. The task id, e.g. 'task-2'.",
-      },
-      detail: {
-        type: "string",
-        description:
-          "Optional for add/complete/drop; required for action='note'. The concrete approach, endpoint, payload, or what you learned.",
-      },
-    },
-    required: ["action"],
-  },
-
-  update_finding: {
-    name: "update_finding",
-    description:
-      "Update the status of an existing finding (e.g., mark as confirmed or false-positive).",
-    parameters: {
-      finding_id: { type: "string", description: "ID of the finding to update" },
-      status: {
-        type: "string",
-        description: "New status",
-        enum: ["discovered", "confirmed", "false-positive"],
-      },
-    },
-    required: ["finding_id", "status"],
-  },
-
-  done: {
-    name: "done",
-    description:
-      "Signal that you have completed your task. Include a summary of what you found or did.",
-    parameters: {
-      summary: { type: "string", description: "Summary of completed work" },
-    },
-    required: ["summary"],
+    required: [],
   },
 };
 
@@ -317,10 +208,5 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
 // shared dispatch switch. Assembled by ./dispatch.ts; resolved off the
 // executor instance in agent/tools.ts (handler bodies stay private methods).
 export const findingsDispatch: Record<string, string> = {
-  save_finding: "saveFinding",
-  query_findings: "queryFindings",
-  use_loot: "useLoot",
-  plan: "planTool",
-  update_finding: "updateFinding",
-  done: "markDone",
+  finding: "findingTool",
 };

@@ -3,7 +3,6 @@ name: "SSRF & SSRF-Filter Bypass"
 description: "Server-side request forgery and, more importantly, bypasses of the SSRF guards apps already have — redirect-follow, DNS rebinding, parser confusion, and absolute-URL injection. Verified in openai-node (bearer-cred leak) and vercel/ai."
 summary: "Find server-side request forgery and bypasses of existing SSRF protections."
 category: "Web"
-tools: [proxy]
 version: 1
 applicable_roles:
   - attack
@@ -67,7 +66,7 @@ content: |
     — this is the openai-node finding and it's high-severity on its own.
   - Internal port scan / blind SSRF with timing oracle.
 
-  ### Phase 4: Confirm before save_finding
+  ### Phase 4: Confirm before finding
   - Show the guard code AND the exact bypass (the redirect/rebind/parse case),
     file:line for both. "There's a fetch" is not a finding — the bypass is.
   - Demonstrate the request leaving to an attacker-controlled host (or the creds

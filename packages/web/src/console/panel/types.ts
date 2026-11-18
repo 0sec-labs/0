@@ -1,7 +1,7 @@
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/engine/shared";
 
 /** Views with a fixed identity. `agents` is the worker list, `tools` the available-tool catalog. */
-export const STATIC_VIEW_IDS = ["overview", "findings", "evidence", "browser", "visuals", "preview", "report", "agents", "tools"] as const;
+export const STATIC_VIEW_IDS = ["overview", "findings", "evidence", "browser", "preview", "report", "agents", "tools"] as const;
 export type StaticViewId = (typeof STATIC_VIEW_IDS)[number];
 
 /** One dockable view. `agent:<workerId>` and `finding:<fingerprint>` are per-entity views. */

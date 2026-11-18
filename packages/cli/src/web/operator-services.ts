@@ -847,7 +847,7 @@ export class WebOperatorServices {
         catch (error) { if (error instanceof UpdateError) throw new OperatorError(error.status, error.code, error.message, error.extra); throw error; }
       }
       else if (path === "tools" && method === "GET") {
-        const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
+        const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })) };
       } else if (path === "project/directories" && method === "POST") {
         data = await listWorkspaceDirectories(object(input).path);
