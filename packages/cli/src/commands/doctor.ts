@@ -54,10 +54,8 @@ export function registerDoctorCommand(program: Command): void {
         console.log(chalk.gray(`  ${apiRuntime.error.split("\n").join("\n  ")}`));
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));
-        console.log(chalk.gray("  Try one of:"));
-        console.log(chalk.gray("    0 scan https://example.com"));
-        console.log(chalk.gray("    0 scan ."));
-        console.log(chalk.gray("    0 scan npm:express"));
+        console.log(chalk.gray("  Open the console with:"));
+        console.log(chalk.gray("    0"));
       } else {
         console.log(chalk.yellow("  Next step: install Claude/Codex CLI or set an API key."));
       }

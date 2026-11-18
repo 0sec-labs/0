@@ -1,7 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
-import { SecurityWorkflowBindingsSchema, type RunRecord, type SecurityWorkflowExecution, type ScanPlan } from "@0/engine/shared";
 import { ConsoleGateway } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
@@ -23,27 +22,9 @@ interface CliWorkflowRuntimeOptions {
   /** Thread commands only make sense against a running console: never fall back to a private in-process one. */
   requireEngine?: boolean;
 }
-export interface StartWorkflowRun {
-  sessionId?: string;
-  templateId?: string;
-  workflowId?: string;
-  revision?: number;
-  target: string;
-  idempotencyKey?: string;
-  model?: string;
-  timeCapMs?: number;
-  costCapUsd?: number;
-  inputs?: Record<string, unknown>;
-  allowApply?: boolean;
-}
 /** Inject an existing engine host. Detaching this client never disposes that host. */
 interface CliWorkflowDependencies {
   host?: { gateway: ConsoleGateway; workflows: WebWorkflowService };
-}
-
-/** Bindings are data, never portable approvals or executable graph code. */
-export function parseWorkflowRunInputs(value: unknown): Record<string, unknown> {
-  return structuredClone(SecurityWorkflowBindingsSchema.parse(value ?? {}));
 }
 
 /** Embedded transport over the same engine host used by the browser API. */
@@ -54,19 +35,14 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
   if (!dependencies.host) {
     const existing = await connectLocalEngine({ ...options, workspace });
     if (existing) {
-      return { ...existing, startRun: (request: StartWorkflowRun) => {
-        if (options.target && request.target.trim() !== options.target.trim()) return Promise.reject(new Error("Target does not match this workflow client's configured target."));
-        const timeCapMs = request.timeCapMs === undefined ? options.timeCapMs : options.timeCapMs === undefined ? request.timeCapMs : Math.min(request.timeCapMs, options.timeCapMs);
-        const costCapUsd = request.costCapUsd === undefined ? options.costCapUsd : options.costCapUsd === undefined ? request.costCapUsd : Math.min(request.costCapUsd, options.costCapUsd);
-        return existing.startRun({ ...request, ...(timeCapMs !== undefined ? { timeCapMs } : {}), ...(costCapUsd !== undefined ? { costCapUsd } : {}) });
-      } };
+      return existing;
     }
     if (options.requireEngine) throw new Error("No console running. Start one with: 0 --headless");
   }
   const ownsHost = !dependencies.host;
   const gateway = dependencies.host?.gateway ?? new ConsoleGateway({ projectPath: workspace, dbPath: options.dbPath });
   const workflows = dependencies.host?.workflows ?? new WebWorkflowService({ gateway, dbPath: options.dbPath, recoverInterrupted: options.recoverInterrupted });
-  if (ownsHost) gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
+  if (ownsHost) gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args) });
   let engine: WorkflowEngineService;
   try {
     engine = new WorkflowEngineService({
@@ -94,7 +70,6 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
   };
   return {
     getCapabilities: () => invoke("get_capabilities"),
-    resumeScan: (request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }) => invoke("resume_scan", request),
     listSessions: () => invoke("list_sessions"),
     listSessionWorkers: async (sessionId: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { workers: gateway.workers(liveSessionId(sessionId)) }; },
     getSessionWorker: async (sessionId: string, workerId: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { worker: gateway.worker(liveSessionId(sessionId), workerId) }; },
@@ -119,20 +94,8 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     listTemplates: () => invoke("list_templates"),
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
-    listRuns: () => invoke("list_runs"),
-    listWork: () => invoke("list_work") as Promise<RunRecord[]>,
-    getWork: (workId: string) => invoke("get_work", { workId }) as Promise<RunRecord>,
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
-    startAssessment: (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> => invoke("start_assessment", { ...request }) as Promise<SecurityWorkflowExecution>,
-    startRun: (request: StartWorkflowRun): Promise<SecurityWorkflowExecution> => {
-      if (request.model !== undefined && request.model !== options.model) return Promise.reject(new Error("Configure the embedded engine model before starting this workflow."));
-      const { model: _model, ...args } = request;
-      return invoke("start_run", args) as Promise<SecurityWorkflowExecution>;
-    },
-    getRun: (id: string): Promise<SecurityWorkflowExecution | null> => invoke("get_run", { runId: id }) as Promise<SecurityWorkflowExecution | null>,
-    getRunResults: (id: string, page: { cursor?: number; limit?: number } = {}) => invoke("get_run_results", { runId: id, ...page }),
-    cancelRun: (id: string) => invoke("cancel_run", { runId: id }),
     dispose: async () => {
       if (disposed) return;
       disposed = true;

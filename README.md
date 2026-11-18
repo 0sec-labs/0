@@ -54,7 +54,8 @@ Prefer the terminal?
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
-0 scan ./your-repo --runtime api --depth quick --cost-ceiling 2
+0 threads send new "Review ./your-repo for security problems"
+0 findings list
 ```
 
 Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSeek and more, see [Models](https://docs.0.security/models/)), or connect one in the browser with `0`.
@@ -69,20 +70,15 @@ Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSe
 
 </details>
 
-Only scan systems you own or are authorized to test. See [Scope](https://docs.0.security/configuration/#scope).
+Only point 0 at systems you own or are authorized to test. See [Scope](https://docs.0.security/configuration/#scope).
 
 ## What can you do with 0?
 
-- **Find vulnerabilities** in source code, web apps and APIs, MCP endpoints and packages
-- **Check dependencies** with `0 scan . --module deps` and `0 scan . --module deps-fix` for npm, pnpm, Cargo and PyPI
-- **Hunt variants** of a known fix across a codebase
-- **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
-- **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
-- **Verify and fix**: reproduce findings, generate patches and validate each one
-- **Build persistent security agents**: Agents with a scope, budget and memory that run on a schedule or on every pull request, with skills, extensions and automations
-- **Disclose**: assemble GHSA-ready advisory drafts from saved findings
-- **Test AI agents** with prompt-injection campaigns
-- **Automate** scans in [CI](https://docs.0.security/#ci) with JSON and SARIF output
+- **Talk to a security agent** about a folder on your computer or a remote Computer, in a Thread
+- **Review findings** on a board, with source evidence, and export them
+- **Verify fixes**: a finding is marked Verified by or Not verified
+- **Build persistent security agents**: Agents are standing threads that wake on a schedule or on every pull request, with skills, memory and automations written as prompts
+- **Keep memory** as plain notes that every thread can read
 - **Extend** it with [extensions and skills](https://docs.0.security/extensions/), or drive it from coding agents over MCP
 
 <p align="center">
@@ -99,25 +95,22 @@ Only scan systems you own or are authorized to test. See [Scope](https://docs.0.
 - **Private**: runs on your computer, in your CI or in a container, and only the context you send to your chosen model leaves it
 - **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent over MCP
 - **Evidence first**: every finding links to its source evidence
-- **Verified fixes**: patches are reproduced and validated before you apply them
+- **Verified**: a finding says whether it was verified, and by what
 - **Proven in public**: [disclosed vulnerabilities and upstream fixes](https://0.security/research/#disclosures), including in the Linux kernel
 
-## CI and coding agents
+## Coding agents
 
 ```bash
-0 agents run --automation --template security-research \
-  --target /absolute/path/to/repo --workspace /absolute/path/to/repo
+0 agents run <id> --task "Review this pull request" --yes
 0 lab mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
-See the [CI guide](https://docs.0.security/#ci), [extensions and MCP](https://docs.0.security/extensions/) and the [command reference](https://docs.0.security/commands/).
+See [extensions and MCP](https://docs.0.security/extensions/) and the [command reference](https://docs.0.security/commands/).
 
 ## Learn more
 
 - [Documentation](https://docs.0.security/)
-- [Scan from the terminal](https://docs.0.security/#scan-from-the-terminal)
 - [Models and providers](https://docs.0.security/models/)
-- [CI guide](https://docs.0.security/#ci)
 - [Extensions and MCP](https://docs.0.security/extensions/)
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
@@ -129,7 +122,7 @@ See the [CI guide](https://docs.0.security/#ci), [extensions and MCP](https://do
 
 - **Report bugs** in [issues](https://github.com/0sec-labs/0security/issues)
 - **Improve the docs**
-- **Write an extension** or scan module
+- **Write an extension** or a skill
 - **Found a vulnerability in 0?** See [SECURITY.md](.github/SECURITY.md)
 
 Start with the [contributing guide](.github/CONTRIBUTING.md). Run `pnpm install` and `pnpm dev` to work on the engine. Open an issue before large changes.

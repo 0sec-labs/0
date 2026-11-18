@@ -43,7 +43,7 @@ export function useTeamOverview(client: TeamClient, { enabled }: { enabled: bool
           void cache.invalidateQueries({ queryKey: all ? queryKeys.engagementReport(client.backendId) : queryKeys.engagementReport(client.backendId, change.id) });
         }
         if (all || change.kind === "workflow") {
-          for (const queryKey of [queryKeys.workflowDefinitions(), queryKeys.workflowVersions(), queryKeys.workflowExecutions()]) void cache.invalidateQueries({ queryKey });
+          for (const queryKey of [queryKeys.workflowDefinitions()]) void cache.invalidateQueries({ queryKey });
         }
         if (all || change.kind === "conversation") {
           void cache.invalidateQueries({ queryKey: queryKeys.consoleSessions() });

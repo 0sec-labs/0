@@ -4,9 +4,6 @@ import type { ConsoleClient } from "../console-embed-client.js";
 import { consoleDefaults, consoleFlags, enc, readJsonObject, renderFields, renderTable, requireYes, resolveId, UsageError, withConsole, type ConsoleCommandDeps, type ConsoleFlags } from "./console-command.js";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
-const TRIGGERS = "/api/console/workflow-triggers";
-
-interface Trigger { id: string; workflowId: string; workflowRevision: number; cadence: string; startAt: string; timezone: string; enabled: boolean; nextFireAt?: string | null; lastStatus?: string; version?: number }
 
 async function definitions(client: ConsoleClient): Promise<SecurityWorkflow[]> {
   return ((await client.request("GET", DEFINITIONS)) as { definitions: SecurityWorkflow[] }).definitions;
@@ -34,12 +31,7 @@ function validated(input: unknown) {
   try { return parseSecurityWorkflowInput(input); }
   catch (error) { throw new UsageError(`Invalid automation definition: ${error instanceof Error ? error.message : String(error)}`); }
 }
-const triggerRows = (triggers: Trigger[]) => renderTable(triggers, [
-  { header: "ID", value: t => t.id }, { header: "ENABLED", value: t => (t.enabled ? "yes" : "no") }, { header: "CADENCE", value: t => t.cadence },
-  { header: "NEXT RUN", value: t => t.nextFireAt ?? "-" }, { header: "LAST", value: t => t.lastStatus ?? "-" },
-]);
-
-/** Create, edit, copy, version, rollback and delete saved automations, plus their schedules. */
+/** Create, edit, copy, version, rollback and delete saved automations. */
 export function registerAutomationManageCommands(automation: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
   consoleFlags(automation.command("create").description("Create an automation from a template or a JSON definition")
     .option("--template <id>", "Start from a template (see `0 agents list --automation --templates`)")
@@ -91,7 +83,7 @@ export function registerAutomationManageCommands(automation: Command, deps: Cons
       return ((await client.request("POST", `${DEFINITIONS}/${enc(current.id)}/rollback`, { revision, expectedRevision: current.revision })) as { definition: SecurityWorkflow }).definition;
     }, summary));
 
-  consoleFlags(automation.command("delete <id>").description("Delete a saved automation and its schedules")
+  consoleFlags(automation.command("delete <id>").description("Delete a saved automation")
     .option("--revision <n>", "Reviewed revision to delete (default: the current one)")
     .option("--yes", "Confirm deletion"))
     .action((id: string, options: ConsoleFlags & { revision?: string; yes?: boolean }) => withConsole(options, deps, async client => {
@@ -100,34 +92,4 @@ export function registerAutomationManageCommands(automation: Command, deps: Cons
       await client.request("DELETE", `${DEFINITIONS}/${enc(current.id)}?revision=${revisionOption(options.revision) ?? current.revision}`);
       return { ok: true, id: current.id };
     }, result => `Deleted automation ${result.id}`));
-
-  const triggers = automation.command("triggers").description("Inspect and control an automation's schedules (needs a running engine)");
-  consoleFlags(triggers.command("list <id>").description("List schedules for an automation"))
-    .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => {
-      const current = await definition(client, id);
-      return ((await client.request("GET", `${TRIGGERS}?workflowId=${enc(current.id)}`)) as { triggers: Trigger[] }).triggers;
-    }, triggerRows, { requireHost: "Schedules" }));
-  consoleFlags(triggers.command("enable <trigger-id>").description("Enable a schedule after reviewing it; it then runs unattended").option("--yes", "Confirm that this schedule was reviewed"))
-    .action((triggerId: string, options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
-      requireYes(options.yes, "Enabling a schedule lets the automation run unattended.");
-      const found = await trigger(client, triggerId);
-      return ((await client.request("PATCH", `${TRIGGERS}/${enc(found.id)}`, { enabled: true, approval: "enable-reviewed-trigger", expectedVersion: found.version })) as { trigger: Trigger }).trigger;
-    }, value => triggerRows([value]), { requireHost: "Schedules" }));
-  consoleFlags(triggers.command("disable <trigger-id>").description("Pause a schedule"))
-    .action((triggerId: string, options: ConsoleFlags) => withConsole(options, deps, async client => {
-      const found = await trigger(client, triggerId);
-      return ((await client.request("PATCH", `${TRIGGERS}/${enc(found.id)}`, { enabled: false, expectedVersion: found.version })) as { trigger: Trigger }).trigger;
-    }, value => triggerRows([value]), { requireHost: "Schedules" }));
-  consoleFlags(triggers.command("remove <trigger-id>").description("Delete a schedule").option("--yes", "Confirm deletion"))
-    .action((triggerId: string, options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
-      requireYes(options.yes, "Removing a schedule cannot be undone.");
-      const found = await trigger(client, triggerId);
-      await client.request("DELETE", `${TRIGGERS}/${enc(found.id)}`);
-      return { ok: true, id: found.id };
-    }, result => `Removed schedule ${result.id}`, { requireHost: "Schedules" }));
-}
-
-async function trigger(client: ConsoleClient, reference: string): Promise<Trigger> {
-  const all = ((await client.request("GET", TRIGGERS)) as { triggers: Trigger[] }).triggers;
-  return resolveId(all, reference, "Schedule");
 }

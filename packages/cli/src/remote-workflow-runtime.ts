@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/engine/shared";
-import type { StartWorkflowRun } from "./workflow-runtime.js";
+import { BackendIdSchema, requireBackendCapability, type BackendDescriptor } from "@0/engine/shared";
 
 interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
 interface Registry {
@@ -8,7 +7,6 @@ interface Registry {
   handshake(id: string): Promise<{ backend: BackendDescriptor; error?: string }>;
   request(id: string, path: string, options: { method: string; body: unknown; signal: AbortSignal }): Promise<Response>;
 }
-const executionSchema = z.object({ id: z.string().min(1).max(160), status: z.enum(["queued", "running", "completed", "failed", "cancelled", "interrupted"]) }).passthrough();
 class BackendRequestError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 async function readJson(response: Response): Promise<unknown> {
   const maximum = 16 * 1024 * 1024;
@@ -108,7 +106,6 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
   }
   return {
     getCapabilities: () => invoke("get_capabilities"),
-    resumeScan: (request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }) => invoke("resume_scan", request),
     listSessions: () => invoke("list_sessions"),
     listSessionWorkers: async (sessionId: string) => request(await liveWorkerPath(sessionId), "GET"),
     getSessionWorker: async (sessionId: string, workerId: string) => {
@@ -146,24 +143,8 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     listTemplates: () => invoke("list_templates"),
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
-    listRuns: () => invoke("list_runs"),
-    listWork: async () => z.array(RunRecordSchema).parse(await invoke("list_work")),
-    getWork: async (workId: string) => RunRecordSchema.parse(await invoke("get_work", { workId })),
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
-    startAssessment: async (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> =>
-      executionSchema.parse(await invoke("start_assessment", { ...(options.sessionId ? { sessionId: options.sessionId } : {}), ...request })) as unknown as SecurityWorkflowExecution,
-    startRun: async (request: StartWorkflowRun & { sessionId?: string }): Promise<SecurityWorkflowExecution> => {
-      if (request.model !== undefined) throw new Error("The selected backend owns its configured model connection.");
-      const { model: _model, ...args } = request;
-      return executionSchema.parse(await invoke("start_run", { ...(options.sessionId ? { sessionId: options.sessionId } : {}), ...args })) as unknown as SecurityWorkflowExecution;
-    },
-    getRun: async (id: string): Promise<SecurityWorkflowExecution | null> => {
-      const result = await invoke("get_run", { runId: id });
-      return result === null ? null : executionSchema.parse(result) as unknown as SecurityWorkflowExecution;
-    },
-    getRunResults: (id: string, page: { cursor?: number; limit?: number } = {}) => invoke("get_run_results", { runId: id, ...page }),
-    cancelRun: (id: string) => invoke("cancel_run", { runId: id }),
     dispose: async () => { if (disposed) return; disposed = true; for (const abort of active) abort.abort(); active.clear(); if (!suppliedRegistry) registry.dispose?.(); },
   };
 }

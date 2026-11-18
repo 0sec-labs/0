@@ -68,7 +68,7 @@ test("classify: web component -> web only, typecheck web, no docs", () => {
 
 test("classify: engine change fans out to dependants", () => {
   const p = classify(["packages/engine/src/x.ts"]);
-  assert.deepEqual(p.typecheck, ["engine", "bench", "cli", "web"]);
+  assert.deepEqual(p.typecheck, ["engine", "cli", "web"]);
   assert.equal(p.packages.cli.mode, "related");
 });
 

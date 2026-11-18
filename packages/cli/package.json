@@ -16,7 +16,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@0/bench": "workspace:*",
     "@0/engine": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "chalk": "^6.0.1",

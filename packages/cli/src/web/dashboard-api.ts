@@ -12,7 +12,6 @@ import { handleInstructionsRequest } from "./operator-instructions.js";
 import { handleWorkspaceHostRequest } from "./workspace-host-routes.js";
 import { audit, auditActor, auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
-import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth, parseAuthMode } from "./github-auth.js";
 import { GitHubConnector } from "./github-connector.js";
@@ -34,7 +33,6 @@ import { createExtensionService } from "@0/engine";
 import { handleExtensionRequest } from "./extension-routes.js";
 import type { SkillsStore } from "./skills.js";
 import { WebRequestError, json, text, readJson, readJsonObject, requireControlToken } from "./dashboard-http.js";
-import { startManagedDaemon, isLiveLocalPid, stopDaemonWorkers } from "./dashboard-daemon.js";
 import { type DBFindingRow, type DBScanRow, type DBEventRow, type DashboardRecentEventRow, type DBVerdictRow, type DBSessionRow, type DBWorkerRow, type DBWorkItemRow, normalizeTriageStatus, normalizeWorkflowStatus, parsePayload, presentationEventFromDashboardRow, summarizeRecentEvent, summarizeScan, summarizeWorker, summarizeQueue, normalizeFinding, buildWorkflowSummary, groupFindings, buildCases, buildWorkItems, buildArtifacts, groupByKey } from "./dashboard-summaries.js";
 
 export function parseScanPath(pathname: string): { scanId: string; suffix?: "events" | "findings" } | null {
@@ -65,26 +63,8 @@ function parseFindingFamilyPath(pathname: string): { fingerprint: string; action
   };
 }
 
-export function parseControlPath(pathname: string): {
-  action:
-    | "recover-stale-workers"
-    | "prune-stopped-workers"
-    | "reset-database"
-    | "start-daemon"
-    | "stop-daemon"
-    | "launch-run";
-} | null {
-  const match = pathname.match(/^\/api\/control\/(recover-stale-workers|prune-stopped-workers|reset-database|start-daemon|stop-daemon|launch-run)$/);
-  if (!match) return null;
-  return {
-    action: match[1] as
-      | "recover-stale-workers"
-      | "prune-stopped-workers"
-      | "reset-database"
-      | "start-daemon"
-      | "stop-daemon"
-      | "launch-run",
-  };
+export function parseControlPath(pathname: string): { action: "reset-database" } | null {
+  return pathname === "/api/control/reset-database" ? { action: "reset-database" } : null;
 }
 
 function consoleEventsAfter(value: string | null): number {
@@ -129,7 +109,6 @@ export async function handleWebConsoleApiRequest(
   gateway: ConsoleGateway,
   operator: WebOperatorServices,
   workflows: WebWorkflowService,
-  triggers: WorkflowTriggerService,
   github: GitHubPublicationAuth,
   sentinels: WebSentinelService,
   team?: { auth: TeamAuth; collaboration?: CollaborationService },
@@ -179,8 +158,6 @@ export async function handleWebConsoleApiRequest(
       json(res, 202, { github: await github.start(parseAuthMode(input)) }); return true;
     }
     if (path === "github/device-auth" && method === "DELETE") { json(res, 200, { github: await github.cancel() }); return true; }
-    const trigger = await triggers.handle(method, requestUrl, input);
-    if (trigger) { json(res, trigger.status, trigger.data); return true; }
     const workflow = await workflows.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (workflow) {
       if (team?.collaboration && method !== "GET" && method !== "HEAD" && workflow.status >= 200 && workflow.status < 300) {
@@ -461,58 +438,6 @@ export async function handleApiRequest(
       return true;
     }
 
-    if (controlPath.action === "recover-stale-workers") {
-      const { recoverStaleWorkers } = await import("../commands/orchestrate.js");
-      const body = await readJsonObject<{ staleAfterMs?: number }>(req);
-      const recovered = recoverStaleWorkers(
-        dbPath,
-        typeof body.staleAfterMs === "number" ? body.staleAfterMs : 30_000,
-      );
-      json(res, 200, { ok: true, recovered });
-      return true;
-    }
-
-    if (controlPath.action === "prune-stopped-workers") {
-      const db = new osecDB(dbPath);
-      try {
-        const deleted = db.deleteWorkersByStatus("stopped");
-        json(res, 200, { ok: true, deleted });
-      } finally {
-        db.close();
-      }
-      return true;
-    }
-
-    if (controlPath.action === "start-daemon") {
-      const body = await readJsonObject<{ label?: string; pollIntervalMs?: number }>(req);
-      const db = new osecDB(dbPath);
-      try {
-        const activeWorkers = (db.listWorkers(100) as DBWorkerRow[]).filter((worker) =>
-          worker.status !== "stopped" && Date.now() - Date.parse(worker.heartbeatAt) < 20_000,
-        );
-        if (activeWorkers.length > 0) {
-          json(res, 409, { error: "An active daemon is already heartbeating. Stop it before starting another local daemon." });
-          return true;
-        }
-      } finally {
-        db.close();
-      }
-
-      const started = startManagedDaemon({
-        dbPath,
-        label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : "control-plane-1",
-        pollIntervalMs: typeof body.pollIntervalMs === "number" ? body.pollIntervalMs : 2000,
-      });
-      json(res, 200, { ok: true, ...started });
-      return true;
-    }
-
-    if (controlPath.action === "stop-daemon") {
-      const stopped = stopDaemonWorkers(osecDB, dbPath);
-      json(res, 200, { ok: true, stopped });
-      return true;
-    }
-
     if (controlPath.action === "reset-database") {
       const { resetOsecDatabase } = await import("@0/engine/storage");
       const { seedVerificationWorkbench } = await import("../commands/db.js");
@@ -522,21 +447,6 @@ export async function handleApiRequest(
       if (!["verification", "empty"].includes(seed)) {
         json(res, 400, { error: `Unsupported seed preset: ${seed}` });
         return true;
-      }
-
-      const activeWorkerDb = new osecDB(dbPath);
-      try {
-        const hasActiveWorker = (activeWorkerDb.listWorkers(100) as DBWorkerRow[]).some((worker) =>
-          ["idle", "claiming", "running", "sleeping"].includes(worker.status)
-            && Date.now() - Date.parse(worker.heartbeatAt) < 20_000
-            && (worker.pid ? isLiveLocalPid(worker.pid) : true),
-        );
-        if (hasActiveWorker) {
-          json(res, 409, { error: "Stop active orchestration daemons before resetting the local database." });
-          return true;
-        }
-      } finally {
-        activeWorkerDb.close();
       }
 
       await evictSharedDb(dbPath);

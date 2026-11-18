@@ -88,7 +88,6 @@ export const PAGE_ROUTES: readonly { readonly path: string; readonly variant: Pa
   { path: "/doctor", variant: "list" },
   { path: "/tools", variant: "list" },
   { path: "/project", variant: "list" },
-  { path: "/fix", variant: "list" },
   { path: "/team", variant: "list" },
   { path: "/api-access", variant: "list" },
 ];

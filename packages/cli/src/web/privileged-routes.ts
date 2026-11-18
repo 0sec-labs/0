@@ -5,7 +5,7 @@
  *    It is DEFAULT-DENY for every mutating /api/console route: only the allowlist below is
  *    reachable with it. Anything that can run code as the operator, change provider credentials or
  *    base URLs, change operator consent/execution settings, install or enable extensions and MCP servers,
- *    self-edit, or create automations that launch runs requires the browser control token and
+ *    self-edit, or create automations requires the browser control token and
  *    returns 403 `browser_only`. A new mutating route is therefore browser-only until it is added
  *    to ENGINE_ALLOWED_MUTATIONS with a justification (see privileged-routes.test.ts).
  * 2. Team mode owner gate (isPrivilegedOperatorRoute): routes that act on the operator's machine,
@@ -23,10 +23,6 @@ export const ENGINE_ALLOWED_MUTATIONS: readonly EngineAllowedMutation[] = [
   { pattern: /^saved\/[^/]+(?:\/(?:archive|resume))?$/, methods: ["POST", "DELETE"], why: "Saved conversation resume/archive/delete used by remote clients." },
   { pattern: /^remote-sessions(?:\/.*)?$/, methods: ["POST", "PATCH"], why: "Provider-session transport for attached engines." },
   { pattern: /^provider-relays(?:\/.*)?$/, methods: ["POST", "PUT", "PATCH", "DELETE"], why: "Provider relay transport is engine-only by design." },
-  { pattern: /^workflows$/, methods: ["POST"], why: "Launch a session-scoped workflow from a template." },
-  { pattern: /^workflows\/[^/]+\/cancel$/, methods: ["POST"], why: "Cancel a session-scoped workflow job." },
-  { pattern: /^workflow-definitions\/[^/]+\/run$/, methods: ["POST"], why: "Run an operator-approved existing workflow definition." },
-  { pattern: /^workflow-executions\/[^/]+\/cancel$/, methods: ["POST"], why: "Cancel a running workflow execution." },
   { pattern: /^project\/directories$/, methods: ["POST"], why: "Read-only directory listing (POST body carries the path)." },
 ];
 
@@ -52,9 +48,7 @@ export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] 
  * the browser-only POST /api/console/workflow-definitions, which stays default-deny for the bearer.
  */
 export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
-  { pattern: /^\/api\/workflow-engine\/call$/, methods: ["POST"], why: "Attached engine/MCP/remote workflow runtime invokes the bounded engine operation set (sessions, runs, workflows, assessments)." },
-  { pattern: /^\/api\/control\/launch-run$/, methods: ["POST"], why: "Launching an assessment is equivalent to session create plus start_assessment, both engine-allowed." },
-  { pattern: /^\/api\/scans\/[^/]+\/resume$/, methods: ["POST"], why: "Equivalent to the engine-allowed resume_scan operation; admitted by the remote backend transport." },
+  { pattern: /^\/api\/workflow-engine\/call$/, methods: ["POST"], why: "Attached engine/MCP/remote workflow runtime invokes the bounded engine operation set (sessions and saved automation records)." },
   { pattern: /^\/api\/finding-family\/[^/]+\/(?:triage|workflow)$/, methods: ["POST"], why: "Finding triage/assignment on a remote engine (artifacts capability); data-only." },
   { pattern: /^\/api\/findings\/[^/]+\/impact-assessment$/, methods: ["POST", "DELETE"], why: "Business impact notes on a remote engine (artifacts capability); data-only." },
 ];

@@ -18,9 +18,8 @@ export interface TopLevelCommand {
   readonly arguments?: string;
 }
 
-/** Descriptions of the nine visible commands: the one copy the real groups and the root help share. */
+/** Descriptions of the eight visible commands: the one copy the real groups and the root help share. */
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  scan: "Scan a target (URL, repository, package) or work a finding: fix, verify, disclose",
   findings: "Browse findings and change their status",
   threads: "Start, follow and stop threads",
   agents: "Agents and their automations: list, run, change",
@@ -33,7 +32,6 @@ export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
 
 /** The only subcommands `--help` shows for each visible command. Everything else stays reachable as a hidden old name (see command-compat.ts). */
 export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
-  scan: ["fix", "verify", "disclose"],
   findings: ["list", "show", "update"],
   threads: ["list", "send", "stop"],
   agents: ["list", "run", "set"],
@@ -45,7 +43,6 @@ export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = 
 };
 
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
-  { name: "scan", aliases: [], description: GROUP_DESCRIPTIONS["scan"]! },
   { name: "findings", aliases: [], description: GROUP_DESCRIPTIONS["findings"]!, options: true },
   { name: "threads", aliases: [], description: GROUP_DESCRIPTIONS["threads"]! },
   { name: "agents", aliases: [], description: GROUP_DESCRIPTIONS["agents"]! },
@@ -60,7 +57,7 @@ export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: "doctor", aliases: [], description: "Check local runtime prerequisites and suggest the next command", hidden: true, options: true },
   { name: "web", aliases: [], description: "Run the local browser console and operations workspace", hidden: true, options: true },
   { name: "api", aliases: [], description: "Call a trusted engine API with deterministic JSON output (defaults to its handshake)", hidden: true, options: true, arguments: "[path]" },
-  { name: "lab", aliases: [], description: "Developer commands: research, improve, console, mcp-server, runs", hidden: true },
+  { name: "lab", aliases: [], description: "Developer commands: console, mcp-server", hidden: true },
 ];
 
 export function findTopLevel(name: string): TopLevelCommand | undefined {

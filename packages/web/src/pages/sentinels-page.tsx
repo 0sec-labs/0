@@ -19,7 +19,6 @@ import { GitHubWebhookControl } from "@/components/console-control/github-webhoo
 import { AutomationEditor } from "@/components/automations/automation-editor";
 import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
 import { useAutomationRows } from "@/components/automations/use-automations";
-import { relativeAge } from "@/components/automations/automation-model";
 import { useSentinel, useSentinels } from "@/sentinels/api";
 import { SENTINEL_VIEWS, orderSentinels, parseView, sentinelHref, type SentinelView } from "@/sentinels/model";
 
@@ -62,7 +61,7 @@ export function SentinelsPage() {
     {automations.rows.length > 0 && <section aria-label="Automations" className="space-y-2">
       <h2 className="text-sm font-medium">Automations</h2>
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
-        {automations.rows.map(item => { const owner = owners.get(item.id); return <li key={item.id}><Link to={hrefFor(item.id, owner)} className="flex items-center gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="hidden truncate text-xs text-muted-foreground-1 sm:block">{owner ? nameOf.get(owner) : ""}</span><span className="hidden w-40 truncate text-xs text-muted-foreground-1 md:block">{item.trigger}</span><span className="w-20 text-right text-xs tabular-nums text-muted-foreground-1">{relativeAge(item.lastRunAt, Date.now())}</span></Link></li>; })}
+        {automations.rows.map(item => { const owner = owners.get(item.id); return <li key={item.id}><Link to={hrefFor(item.id, owner)} className="flex items-center gap-3 px-4 py-3 text-sm outline-none ui-row-hover focus-visible:outline-ring-inset"><span className="min-w-0 flex-1 truncate">{item.name}</span><span className="hidden truncate text-xs text-muted-foreground-1 sm:block">{owner ? nameOf.get(owner) : ""}</span><span className="hidden w-40 truncate text-xs text-muted-foreground-1 md:block">{item.trigger}</span></Link></li>; })}
       </ul>
     </section>}
     {!readOnly && <GitHubWebhookControl />}

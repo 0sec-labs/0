@@ -85,10 +85,8 @@ const excludedPaths = [
   "docs/src",
   "docs/design",
   "docs/paper",
-  "packages/engine/src/bench/corpus-v1.json",
   "release-staging",
   "research",
-  "packages/bench/results",
   ".github/workflows/ci.yml",
   ".github/workflows/docker-kali-publish.yml",
 ];

@@ -59,7 +59,7 @@ export function prefetchRoute(name: RouteName) {
   void loaders[name]().catch(() => started.delete(name));
 }
 
-const CONTROL_ROUTES = ["connections", "models", "settings", "doctor", "tools", "project", "fix"];
+const CONTROL_ROUTES = ["connections", "models", "settings", "doctor", "tools", "project"];
 export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
   if (first === "chats") return second === "saved" ? "saved" : "console";

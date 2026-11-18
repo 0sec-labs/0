@@ -15,25 +15,6 @@ export type FindingStatusFilter = "all" | "open" | "verified" | "accepted" | "fi
 export type FindingFilters = { status: FindingStatusFilter; severity: SeverityLevel | "all" };
 export const DEFAULT_FINDING_FILTERS: FindingFilters = { status: "all", severity: "all" };
 
-/** Minimal slice of a fix proposal needed to link a finding to its pull request. */
-export type FixPrLink = { finding: { id: string }; published?: { prUrl: string } | null };
-
-/** findingId -> PR URL. First published fix per finding wins; fixes without a PR are ignored. */
-export function fixPrByFindingId(fixes: readonly FixPrLink[] | undefined): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const fix of fixes ?? []) {
-    const url = fix.published?.prUrl;
-    if (url && !map.has(fix.finding.id)) map.set(fix.finding.id, url);
-  }
-  return map;
-}
-
-/** Short label for a PR URL: `#123` when the path ends with a number, otherwise `PR`. */
-export function prLabel(url: string): string {
-  const match = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url) ?? /\/(\d+)\/?$/.exec(url);
-  return match ? `#${match[1]}` : "PR";
-}
-
 const FIXED = new Set(["fixed", "resolved", "remediated", "patched"]);
 const CLOSED = new Set([...FIXED, "false_positive", "false-positive", "dismissed", "wont_fix", "closed"]);
 const statusKey = (value: string) => value.trim().toLowerCase();

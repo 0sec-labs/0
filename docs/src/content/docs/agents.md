@@ -1,9 +1,9 @@
 ---
 title: Agents
-description: Standing jobs with a scope and a review gate, plus the saved automations they run and the GitHub pull request trigger.
+description: Standing jobs with a scope and a review gate, plus the prompt-based automations they run and the GitHub pull request trigger.
 ---
 
-An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a workflow template plus a trigger: a saved list of steps that runs against a target and keeps its results. An Agent owns automations.
+An Agent is a persistent agent with a name, a standing job, a scope, files and a schedule, configured once. It is one thread that never ends, plus triggers: it wakes on a schedule or when a GitHub pull request is opened or updated, does its work in that thread, and answers you there whenever you write to it. An **automation** is a saved prompt plus a trigger: when the trigger fires, the prompt is sent into the Agent's thread. An Agent owns automations.
 
 ## Create one
 
@@ -134,31 +134,22 @@ Everything on the Agents page works from `0 agents`. Commands attach to a runnin
 
 ## Automations
 
-A **template** is a versioned starter definition, an **automation** is a saved definition you can edit, and a **run** is one execution with its step results, findings and evidence. Use one when you want the same job repeated, scheduled or handed to a pipeline. Scan steps use the model connection from [Models](/models/); the model of a coding agent that calls 0 over MCP does not configure it.
+An **automation** is a saved prompt plus a trigger (a schedule, a manual run or a GitHub pull request). When the trigger fires, the prompt goes into the Agent's own thread as a wake-up message, and the Agent does the work there with its scope, skills and memory. There are no steps to wire together: change what the Agent does by changing the prompt. Use one when you want the same job repeated or scheduled.
 
-In the browser, open an Agent, add an automation from a template (or describe a custom one in a thread), edit its **Steps**, and set a **Triggers** schedule. A schedule fires only while the app and its computer are running.
+In the browser, open an Agent, add an automation from a preset's suggestions (or describe a custom one in the thread), and set its **Triggers** schedule. A schedule fires only while the app and its computer are running.
+
+Run the Agent by hand from the CLI; it sends a message into the Agent's thread and needs the engine:
 
 ```bash
-0 agents list --automation --templates
-0 agents set --automation create --template repository-review --name "Weekly review" --target /absolute/path/to/repo
-0 agents run --automation --template repository-review --revision 1 \
-  --target /absolute/path/to/repo --workspace /absolute/path/to/repo \
-  --time-cap 600000 --cost-cap 5 --format json > run.json
-0 agents run --automation AUTOMATION_ID --revision 3 \
-  --target https://target.example.com --scope /absolute/path/to/scope.json
+0 agents run AGENT_ID --task "Re-test the login flow" --yes
+0 agents run AGENT_ID --history
 ```
 
-`set --automation` also takes `edit`, `duplicate`, `delete` and `triggers`; `delete`, `triggers remove` and `triggers enable` need `--yes`. Other flags of `run` are `--model`, `--inputs <path>` (a JSON object of artifact inputs, such as a finding to verify), `--allow-apply` (permit patch-apply steps) and `--chat <id>` (attach to an existing thread). The command stays in the foreground, and Ctrl-C cancels.
+- A completed turn exits `0` even when it found something. Read the findings, not only the exit code.
+- Cost is shown on the thread, like any thread. Nothing stops an Agent because of what it costs.
+- Applying a patch needs your approval. A patch is not evidence that it fixes the finding; see [Findings](/findings/#verified-and-not-verified).
 
-Templates for source targets include `repository-review`, `finding-verification` (needs a finding and a replay runner), `fix-candidate` (needs a finding and a `testCommand`), `security-research` and `deep-source-review`. A template whose prerequisites are missing fails before launch; it never turns into a plain scan.
-
-- A completed run exits `0` even when it found something. Execution failure exits `2` and cancellation `130`. Read the findings in the JSON, not only the exit code. The `scan` shortcuts keep their own convention and can exit `1` on findings.
-- Steps run in order, and earlier findings pass forward as evidence. One deadline and one cost ledger cover the run. Cost accounting is an estimate, so in-flight calls can pass the cap.
-- Partial results stay on record when later work fails or the run is cancelled. Run history does not resume interrupted work; `0 lab runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing thread when the computer supports it.
-- Applying a patch needs `--allow-apply` on the foreground command and approval of the exact candidate that process created. A candidate is not evidence that it fixes the finding; see [Findings](/findings/#verify-and-fix).
-- `0 lab runs list|show|cancel` reads retained runs, including the one-step runs that `0 scan` records.
-
-To work on the runs you see in the browser from a CLI or MCP client, attach to that computer with `--engine-url` and `--engine-token-env`, or `--engine <id>` for a registered one; see [Computers](/computers/).
+To work on an Agent you see in the browser from a CLI or MCP client, attach to that computer with `--engine-url` and `--engine-token-env`, or `--engine <id>` for a registered one; see [Computers](/computers/).
 
 ## Older Agents
 

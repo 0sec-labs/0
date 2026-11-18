@@ -13,12 +13,9 @@ export const queryKeys = {
   chatFindings: key("chat-findings"),
   runs: key("runs"),
   scans: key("scans"),
-  scanEvents: key("scan-events"),
   scanFindings: key("scan-findings"),
   scanResume: key("scan-resume"),
   findingFamily: key("finding-family"),
-  findingFixes: key("finding-fixes"),
-  panelFixes: key("panel-fixes"),
   selfEditEnabled: key("self-edit-enabled"),
   browserViews: key("browser-views"),
   // Chats
@@ -58,13 +55,8 @@ export const queryKeys = {
   skillsCatalogPreview: key("skills-catalog-preview"),
   // Automations
   workflowDefinitions: key("workflow-definitions"),
-  workflowVersions: key("workflow-versions"),
   workflowTriggers: key("workflow-triggers"),
   workflowTriggerSessions: key("workflow-trigger-sessions"),
-  workflowExecutions: key("workflow-executions"),
-  workflowToolCatalog: key("workflow-tool-catalog"),
-  consoleWorkflows: key("console-workflows"),
-  consoleWorkflow: key("console-workflow"),
   // Engagements, workers and team
   engagements: key("engagements"),
   engagementRuns: key("engagement-runs"),

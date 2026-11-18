@@ -10,7 +10,7 @@ describe("view menu model", () => {
     expect(ids(buildViewMenu({}))).toEqual(["overview", "findings", "browser"]);
   });
   it("shows data views once they have a count and carries badges", () => {
-    const sections = buildViewMenu({ counts: { evidence: 7, fixes: 0, report: 1, tools: "2 tools" } });
+    const sections = buildViewMenu({ counts: { evidence: 7, report: 1, tools: "2 tools" } });
     expect(ids(sections)).toEqual(["overview", "findings", "evidence", "browser", "report", "tools"]);
     const tools = flattenMenuRows(sections).find(row => row.kind === "view" && row.id === "tools");
     expect(tools && tools.kind === "view" && tools.badge).toBe("2 tools");

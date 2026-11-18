@@ -1,6 +1,5 @@
 import { osecDB, SentinelStore } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
-import { isApiRuntime } from "@0/engine";
 import { homeStateDir, toShareSafeFindings } from "@0/engine/shared";
 import { findingFromRow } from "../state/findings-data.js";
 import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
@@ -10,7 +9,6 @@ import { EngagementStore } from "./engagements.js";
 import { WebOperatorServices } from "./operator-services.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
-import { WorkflowTriggerService } from "./workflow-triggers.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
 import { WebSentinelService } from "./sentinels.js";
 import type { TeamAuth } from "./team-auth.js";
@@ -55,35 +53,20 @@ export async function createWorkspaceServices(options: Options) {
   const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, updates: options.updates });
   let workflows: WebWorkflowService | undefined;
   let engine: WorkflowEngineService | undefined;
-  let triggers: WorkflowTriggerService | undefined;
   let github: GitHubPublicationAuth | undefined;
   let sentinels: WebSentinelService | undefined;
   const dispose = async () => {
-    const actions = [() => remoteProviderRelays.dispose(),() => engine?.dispose(), () => triggers?.dispose(), () => sentinels?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
+    const actions = [() => remoteProviderRelays.dispose(),() => engine?.dispose(), () => sentinels?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
     let failure: unknown;
     for (const action of actions) { try { await action(); } catch (cause) { failure ??= cause; } }
     if (failure) throw failure;
   };
   try {
-    workflows = new WebWorkflowService({ gateway, dbPath: options.dbPath });
+    workflows = new WebWorkflowService({ dbPath: options.dbPath });
     const workflow = workflows;
-    gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflow.invokeLifecycle(sessionId, name, args, capabilities) });
+    gateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflow.invokeLifecycle(sessionId, name, args) });
     engine = new WorkflowEngineService({ token: options.engineBearer ?? options.controlToken, workspace: options.workspace, scopePath: options.scopePath, target: options.target, allowApply: options.allowApply, dbPath: options.dbPath, timeCapMs: options.timeCapMs, costCapUsd: options.costCapUsd }, { gateway, workflows: workflow });
     await engine.ready;
-    triggers = new WorkflowTriggerService({ dbPath: options.dbPath, adapter: {
-      async validate(trigger) {
-        const sessionId = await gateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-        const context = await workflow.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-        return { model: context.model, providerId: context.providerId, ...(isApiRuntime(context.runtime) ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
-      },
-      async launch(trigger) {
-        const sessionId = await gateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-        const result = await workflow.launchScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-        return { executionId: result.execution.id };
-      },
-    } });
-    const schedules = triggers;
-    gateway.attachScheduleLifecycle({ invoke: (sessionId, name, args, context) => schedules.invokeLifecycle(sessionId, name, args, context) });
     github = new GitHubPublicationAuth();
     sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: {
       // `workspacePath` is not a create-time field of the gateway; it is applied right after, and the first send waits for it.
@@ -111,6 +94,6 @@ export async function createWorkspaceServices(options: Options) {
         try { return toShareSafeFindings(db.getFindings(id).slice(0, 200).map(findingFromRow)); } finally { db.close(); }
       },
     }, scheduler: true });
-    return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, sentinels, dispose };
+    return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, github, sentinels, dispose };
   } catch (cause) { await dispose().catch(() => {}); throw cause; }
 }

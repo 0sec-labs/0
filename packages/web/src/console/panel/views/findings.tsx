@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageSquarePlus } from "lucide-react";
-import { CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest } from "@/ui/icons/capy";
+import { CapyArrowUpRightIcon as ExternalLink } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/ui/components/select";
 import { cn } from "@/lib/utils";
@@ -10,10 +10,8 @@ import { findingViewId, type PanelViewComponent } from "../types";
 import { useFindingActions } from "./finding-actions";
 import {
   DEFAULT_FINDING_FILTERS,
-  fixPrByFindingId,
   groupBySeverity,
   findingStatusLabel,
-  prLabel,
   SEVERITY_ORDER,
   SEVERITY_LABELS,
   severityCounts,
@@ -44,9 +42,8 @@ const STATUS_FILTERS: readonly { value: FindingStatusFilter; label: string }[] =
 
 export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendId, busy, openView }) => {
   const { findings, loading, error, runsError, retry } = useChatFindings(sessionId, snapshot?.session.savedId);
-  const { onAddFinding, fixes } = useFindingActions();
+  const { onAddFinding } = useFindingActions();
   const [filters, setFilters] = useState<FindingFilters>(DEFAULT_FINDING_FILTERS);
-  const prs = useMemo(() => fixPrByFindingId(fixes), [fixes]);
   const groups = useMemo(() => groupBySeverity(findings, filters), [findings, filters]);
   const counts = useMemo(() => severityCounts(findings), [findings]);
   const working = snapshot?.session.status === "working";
@@ -117,7 +114,6 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
               <ul>
                 {group.findings.map((finding) => {
                   const { fingerprint, latest } = finding;
-                  const pr = prs.get(latest.id);
                   return (
                     <li
                       key={fingerprint}
@@ -135,18 +131,6 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
                           {findingStatusLabel(finding)}
                         </span>
                       </button>
-                      {pr && (
-                        <a
-                          href={pr}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Pull request ${prLabel(pr)} for ${latest.title}`}
-                          className="inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1 text-2xs text-muted-foreground hover:text-foreground"
-                        >
-                          <GitPullRequest className="size-3" />
-                          {prLabel(pr)}
-                        </a>
-                      )}
                       <span className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
                         <Button
                           variant="ghost"

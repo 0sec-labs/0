@@ -8,13 +8,12 @@ import { enginesConfigOption } from "./shared-options.js";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import { BackendRequestIdSchema, BackendDescriptorSchema, ScanResumeRequestSchema } from "@0/engine/shared";
+import { BackendRequestIdSchema, BackendDescriptorSchema } from "@0/engine/shared";
 import { exportReport, runStartupImport, isReportExportFormat, modelTransportStats } from "@0/engine";
 import { ConsoleGateway } from "../web/console-gateway.js";
 import { closeSharedDbs } from "../web/shared-db.js";
 import { WebOperatorServices } from "../web/operator-services.js";
 import { WebWorkflowService } from "../web/workflows.js";
-import { WorkflowTriggerService } from "../web/workflow-triggers.js";
 import type { WebSentinelService } from "../web/sentinels.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { findDashboardInstance } from "../web/dashboard-instance.js";
@@ -241,7 +240,6 @@ export function registerDashboardCommand(program: Command): void {
       let startupGateway: ConsoleGateway | undefined;
       let startupOperator: WebOperatorServices | undefined;
       let startupWorkflows: WebWorkflowService | undefined;
-      let startupTriggers: WorkflowTriggerService | undefined;
       let startupGitHub: GitHubPublicationAuth | undefined;
       let startupSentinels: WebSentinelService | undefined;
       let startupAssetCleanup: (() => void) | undefined;
@@ -257,7 +255,7 @@ export function registerDashboardCommand(program: Command): void {
         const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
         stopHostReconnect = watchManagedHosts();
-        let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = services;
+        let { skills, gateway: consoleGateway, engagements, operator, workflows, github, sentinels } = services;
         engine = services.engine;
         webhookSentinels = () => sentinels;
         // Opt-in: close resumed-but-never-used chats after this many idle ms (>= 1000).
@@ -266,7 +264,7 @@ export function registerDashboardCommand(program: Command): void {
           setInterval(() => { void consoleGateway.reapIdleResumed(reapIdleMs).catch(() => undefined); }, Math.min(60_000, Math.floor(reapIdleMs / 2))).unref();
         }
         runningThreads = () => consoleGateway.activeThreadCount() + (workflows.hasActiveWork() ? 1 : 0);
-        startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
+        startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupGitHub = github; startupSentinels = sentinels;
         let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
         let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
         const activeResponses = new Set<ServerResponse>();
@@ -291,8 +289,8 @@ export function registerDashboardCommand(program: Command): void {
               await localProviderSessions.dispose();
               modelBackends.dispose(); backends.dispose(); unregisterLocalEngine?.();
               services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; configureAudit(opts.dbPath); collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
-              ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
-              startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
+              ({ skills, gateway: consoleGateway, engagements, operator, workflows, github, sentinels } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
+              startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupGitHub = github; startupSentinels = sentinels;
               stopHostReconnect = watchManagedHosts();
             } catch (cause) { nextBackends?.dispose(); nextUnregister?.(); await next.dispose().catch(() => {}); throw cause; }
           },
@@ -523,16 +521,6 @@ export function registerDashboardCommand(program: Command): void {
                 json(res, 202, result);
                 return;
               }
-              if (requestUrl.pathname === "/api/control/launch-run") {
-                if (req.method !== "POST") throw new WebRequestError("Use POST to launch a run.", 405);
-                const body = z.object({ target: z.string().trim().min(1).max(4096), depth: z.enum(["quick", "default", "deep"]).optional(), runtime: z.enum(["api", "auto"]).optional(), mode: z.enum(["deep", "web"]).optional(), ensureDaemon: z.boolean().optional() }).strict().parse(await readJson(req));
-                if (body.runtime !== undefined || body.mode !== undefined) throw new WebRequestError("The selected engine owns its model and assessment execution. Submit a target and depth, or use a workflow for specialized execution.", 400);
-                if (body.ensureDaemon) throw new WebRequestError("Engine runs do not require a separate orchestration daemon. Configure a workflow schedule for recurring work.", 400);
-                const session = await engine!.invoke("create_session", { config: { target: body.target, title: `Assessment: ${body.target}` } }) as { id: string };
-                const execution = await engine!.invoke("start_assessment", { sessionId: session.id, target: body.target, plan: { goal: "unknown-vulnerabilities", depth: body.depth ?? "default", runCount: 1, executionMode: "sequential", timeCapMs, costCapUsd } }) as { id: string; jobId?: string };
-                json(res, 202, { ok: true, engineOwned: true, sessionId: session.id, runId: execution.id, jobId: execution.jobId });
-                return;
-              }
               const workRecord = requestUrl.pathname.match(/^\/api\/work\/([^/]+)$/);
               if (requestUrl.pathname === "/api/work" || workRecord) {
                 if (req.method !== "GET") throw new WebRequestError("Use GET to inspect work history.", 405);
@@ -553,14 +541,6 @@ export function registerDashboardCommand(program: Command): void {
                 json(res, 200, await engine.invoke(input.name, input.args));
                 return;
               }
-              const resumeScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/resume$/);
-              if (resumeScan) {
-                if (req.method !== "POST") throw new WebRequestError("Use POST to resume a scan.", 405);
-                const request = ScanResumeRequestSchema.parse(await readJson(req));
-                const result = await workflows.resumeScan(decodeURIComponent(resumeScan[1]!), { ...request, timeCapMs: Math.min(request.timeCapMs ?? timeCapMs, timeCapMs), costCapUsd: Math.min(request.costCapUsd ?? costCapUsd, costCapUsd) });
-                json(res, result.status, result.data);
-                return;
-              }
               if (/^\/api\/findings\/[^/]+\/impact-assessment$/.test(requestUrl.pathname)) {
                 const input = req.method === "POST" || req.method === "DELETE" ? await readJson(req) : undefined;
                 const impactId = decodeURIComponent(requestUrl.pathname.split("/")[3] ?? "");
@@ -575,14 +555,14 @@ export function registerDashboardCommand(program: Command): void {
                 const format = requestedFormat === "md" ? "markdown" : requestedFormat;
                 if (!isReportExportFormat(format)) throw new WebRequestError("Unsupported report export format.", 400);
                 const report = exportScan
-                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? (await findingsServiceFor(opts.dbPath).sourceOfScan(decodeURIComponent(exportScan[1]!)))?.id ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
+                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? (await findingsServiceFor(opts.dbPath).sourceOfScan(decodeURIComponent(exportScan[1]!)))?.id ?? opts.dbPath)
                   : await retainedFindingsAcrossDatabases((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
                 const artifact = await exportReport(report, format, exportScan ? `0-scan-${decodeURIComponent(exportScan[1]!)}` : "0-findings");
                 res.writeHead(200, { "Content-Type": artifact.contentType, "Content-Disposition": `attachment; filename="${artifact.filename}"`, "Content-Length": artifact.body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
                 res.end(artifact.body);
                 return;
               }
-              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills, webhookConsole);
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills, webhookConsole);
               if (consoleHandled) return;
               const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
               if (!handled) json(res, 404, { error: "Not found" });
@@ -699,7 +679,7 @@ export function registerDashboardCommand(program: Command): void {
           void drained.then(() => {
           stopHostReconnect?.(); hostRepairAbort.abort();
           services.remoteProviderRelays.dispose();
-          void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => triggers.dispose()).then(() => sentinels.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
+          void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => sentinels.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
             operator.dispose();
             closeSharedDbs();
             github.dispose();
@@ -725,7 +705,6 @@ export function registerDashboardCommand(program: Command): void {
         stopHostReconnect?.(); hostRepairAbort.abort();
         await localProviderSessions.dispose();
         modelBackends.dispose(); backends.dispose();
-        await startupTriggers?.dispose().catch(() => {});
         await startupSentinels?.dispose().catch(() => {});
         await startupGateway?.closeAll().catch(() => {});
         await startupWorkflows?.dispose().catch(() => {});

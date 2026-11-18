@@ -1,14 +1,13 @@
 import { useEffect, useRef } from "react";
 import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { Navigate, useLocation } from "react-router-dom";
-import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapyPullRequestIcon, CapySettingsIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
+import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapySettingsIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
 import { SettingsControl } from "@/components/console-control/settings-control";
 import { settingsPageId, settingsPages, settingsRedirect } from "@/components/console-control/settings-index";
 import { DoctorControl, ProjectControl, ToolsControl } from "@/components/console-control/system-control";
-import { FixControl } from "@/components/console-control/workflow-control";
 
-export type WebConsoleControlMode = "connections" | "models" | "settings" | "doctor" | "tools" | "project" | "fix";
+export type WebConsoleControlMode = "connections" | "models" | "settings" | "doctor" | "tools" | "project";
 
 const pages = [
   { mode: "connections", path: "/connections", label: "Models", icon: CapyApiKeyIcon, description: "" },
@@ -17,7 +16,6 @@ const pages = [
   { mode: "settings", path: "/settings", label: "Settings", icon: CapySettingsIcon, description: "" },
   { mode: "doctor", path: "/doctor", label: "Diagnostics", icon: CapyGaugeIcon, description: "" },
   { mode: "tools", path: "/tools", label: "Tools", icon: CapyTerminalSparkleIcon, description: "" },
-  { mode: "fix", path: "/fix", label: "Fixes", icon: CapyPullRequestIcon, description: "" },
 ] as const;
 
 export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsoleControlMode }) {
@@ -49,8 +47,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : mode === "settings" ? <SettingsControl category={category} />
     : mode === "doctor" ? <DoctorControl />
     : mode === "tools" ? <ToolsControl sessionId={sessionId} />
-    : mode === "project" ? <ProjectControl sessionId={sessionId} />
-    : <FixControl sessionId={sessionId} />;
+    : <ProjectControl sessionId={sessionId} />;
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
   const subtitle = mode === "settings" && category === "shortcuts" ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;

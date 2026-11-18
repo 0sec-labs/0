@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FINDING_FILTERS, fixPrByFindingId, groupBySeverity, matchesFilters, normalizeSeverity, prLabel, severityCounts } from "../src/console/panel/views/findings-model";
+import { DEFAULT_FINDING_FILTERS, groupBySeverity, matchesFilters, normalizeSeverity, severityCounts } from "../src/console/panel/views/findings-model";
 import { buildEvidence, clipEvidence, evidenceArtifactCount } from "../src/console/panel/views/evidence-model";
 import type { FindingGroup } from "../src/types";
 
@@ -27,18 +27,6 @@ describe("findings model", () => {
     expect(matchesFilters(verified, { ...DEFAULT_FINDING_FILTERS, status: "verified" })).toBe(true);
     expect(matchesFilters(fp, { ...DEFAULT_FINDING_FILTERS, status: "open" })).toBe(false);
     expect(groupBySeverity([fixed, group("l", "low")], { status: "all", severity: "low" }).map(item => item.severity)).toEqual(["low"]);
-  });
-  it("joins fix PRs by finding id", () => {
-    const map = fixPrByFindingId([
-      { finding: { id: "a" }, published: { prUrl: "https://github.com/o/r/pull/12" } },
-      { finding: { id: "a" }, published: { prUrl: "https://github.com/o/r/pull/13" } },
-      { finding: { id: "b" } },
-    ]);
-    expect(map.get("a")).toBe("https://github.com/o/r/pull/12");
-    expect(map.has("b")).toBe(false);
-    expect(fixPrByFindingId(undefined).size).toBe(0);
-    expect(prLabel("https://github.com/o/r/pull/12")).toBe("#12");
-    expect(prLabel("https://example.com/x")).toBe("PR");
   });
 });
 

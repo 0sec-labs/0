@@ -3,10 +3,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getFindingPriority } from "@0/engine/shared/finding-priority";
-import { ChevronLeft, ShieldCheck, ShieldOff, ShieldQuestion, Wrench } from "lucide-react";
-import { CapyChevronDownIcon as ChevronDown, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest, CapyChatIcon as MessageSquare, CapyUserIcon as User, CapyCloseIcon as X } from "@/ui/icons/capy";
+import { ChevronLeft, ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
+import { CapyChevronDownIcon as ChevronDown, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyArrowUpRightIcon as ExternalLink, CapyChatIcon as MessageSquare, CapyUserIcon as User, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
-import { AssessmentAccessMilestones } from "@/components/access-milestone";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { ReportExportControl } from "@/components/report-export-control";
 import { ErrorState } from "@/components/state-panel";
@@ -18,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CopyButton, EvidenceArtifactRow } from "@/console/panel/views/evidence";
 import { buildEvidence } from "@/console/panel/views/evidence-model";
-import { prLabel } from "@/console/panel/views/findings-model";
 import { formatTime } from "@/lib/format";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
@@ -37,7 +35,6 @@ export type FindingDetailProps = {
   /** Dashboard summary: lets the panel paint before the family request resolves. */
   group: FindingGroup | null;
   variant: "panel" | "page";
-  fixPrUrl?: string;
   missionName?: string;
   mutations: ReturnType<typeof useFindingMutations>;
   onClose?: () => void;
@@ -99,7 +96,6 @@ export function FindingDetail(props: FindingDetailProps) {
             <p className="min-w-0 text-[13px] leading-6 whitespace-pre-wrap break-words text-muted-foreground-1">{latest.description || "No description recorded."}</p>
           </section>
 
-          <AssessmentAccessMilestones scanId={latest.scanId} />
           <EvidenceSection group={group} latest={latest} workflow={workflow} fingerprint={fingerprint} />
 
           <section aria-label="Review" className="flex flex-col gap-3">
@@ -182,7 +178,7 @@ function useMissionHref(scanId: string): string | null {
   return savedMatch ? `/chats/saved/${encodeURIComponent(savedMatch.id)}` : null;
 }
 
-function Properties({ group, family, latest, workflow, status, fingerprint, fixPrUrl, missionName, mutations }: FindingDetailProps & {
+function Properties({ group, family, latest, workflow, status, fingerprint, missionName, mutations }: FindingDetailProps & {
   family: FindingFamilyResponse | null;
   latest: NonNullable<FindingGroup["latest"]>;
   workflow: FindingGroup["workflow"];
@@ -233,13 +229,6 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
         {missionHref ? (
           <Button variant="ghost" size="sm" className={valueButton} render={<Link to={missionHref} />}><span className="min-w-0 truncate">{missionLabelText}</span></Button>
         ) : <span className="min-w-0 truncate px-2">{missionLabelText}</span>}
-      </Prop>
-      <Prop label="Fix">
-        {fixPrUrl ? (
-          <Button variant="ghost" size="sm" className={cn(valueButton, "text-success")} render={<a href={fixPrUrl} target="_blank" rel="noreferrer noopener" />}><GitPullRequest />{prLabel(fixPrUrl)}</Button>
-        ) : (
-          <Button variant="ghost" size="sm" className={cn(valueButton, "text-muted-foreground-1")} render={<Link to={`/fix?finding=${encodeURIComponent(latest.id)}&return=${encodeURIComponent(`/findings?finding=${fingerprint}`)}`} />}><Wrench />Prepare a fix</Button>
-        )}
       </Prop>
       <Prop label="Triage"><span className="px-2">{latest.triageStatus === "new" ? "Not reviewed" : latest.triageStatus === "accepted" ? "Accepted" : "Dismissed"}</span></Prop>
       <Prop label="Occurrences"><span className="px-2 tabular-nums">{count}{group && group.scanCount > 1 ? ` in ${group.scanCount} ${v("{missions}")}` : count === 1 ? " time" : " times"}</span></Prop>

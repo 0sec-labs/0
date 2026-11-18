@@ -40,7 +40,7 @@ Type `/` for a menu. Each entry mirrors a CLI command, and anything that changes
 | Slash command | CLI |
 | --- | --- |
 | `/threads start`, `/threads list`, `/threads export` | `0 threads send new`, `0 threads list`, `0 threads list <id> --export` |
-| `/findings list`, `/fix [finding-id]` | `0 findings list`, `0 scan fix` |
+| `/findings list`, `/fix [finding-id]` | `0 findings list`, `0 threads send new` |
 | `/agents list`, `/agents create` | `0 agents list`, `0 agents set --create` |
 | `/computers list`, `/models list`, `/skills list`, `/memory list` | the same words after `0` |
 | `/config get`, `/doctor` | `0 config get`, `0 config doctor` |
@@ -72,7 +72,7 @@ Who may write what depends on what the thread has read:
 - **Review**: the Memory page shows a Proposed section at the top (Accept, Edit then accept, Reject) and a dot on the Memory sidebar item. From the terminal use `0 memory proposed list`, `0 memory proposed accept <id>` and `0 memory proposed reject <id>`.
 - **Limits**: 0 may save 5 notes per thread and 20 per day. A note close to an existing one is not duplicated; the tool returns the existing id so the model can update it.
 - **Secrets**: a note that looks like a key, token, password, private key or other high-entropy secret is refused ("Not saved: looks like a secret"), whoever writes it. Zero-width, direction-changing and control characters are removed, and text that hides characters this way is refused.
-- **Scans**: only `avoid` notes you wrote or accepted are shown to the scan verifier, as untrusted context. Notes 0 wrote on its own, proposals and imported notes are not.
+- **Verification**: only `avoid` notes you wrote or accepted are shown to the verifier, as untrusted context. Notes 0 wrote on its own, proposals and imported notes are not.
 
 Every note records where it came from: who wrote it (`user`, `model` or `import`), the thread, whether that thread had read untrusted content, and when. Notes are keyed by the repository, not the path: the normalised `origin` remote (for example `github.com/acme/app`), falling back to the real path, so worktrees (`app-wt-*`) and clones share notes. Notes saved under the older path-keyed folders are still read.
 
@@ -121,12 +121,12 @@ A task that needs a human decision cannot finish headless; open it in the browse
 
 On a server or in CI, start the app with `0 --headless --ready-json`. It opens no browser and serves the API only. To drive a running app from scripts, `0 api` calls its backend HTTP API with the normal authentication and approval checks. Keep the token in an environment variable, for example `--engine-token-env ZERO_AGENT_TOKEN`, never on the command line.
 
-## Commands, skills and workflows
+## Commands, skills and automations
 
-- **The nine CLI commands** (`scan`, `findings`, `threads`, `agents`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
+- **The eight CLI commands** (`findings`, `threads`, `agents`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
 - **Skills** are know-how a thread loads when a task needs it: `SKILL.md` folders, which extensions can also supply. See [Skills](/skills/).
-- **Workflows** today are pipeline templates run by the engine's workflow runner, with time and cost caps. An **automation** is a workflow template plus a trigger (`schedule`, `manual` or `github-pr`; a webhook only speeds up `github-pr`). An **Agent** owns automations. See [Agents](/agents/#automations).
-- **Direction, not shipped:** a thread would run a skill on a target, and `scan` would become shorthand for that. A verifier gate run by the engine itself, instead of by the model, is the first slice and is in progress.
+- **Automations** are prompts. An **automation** is a saved prompt plus a trigger (`schedule`, `manual` or `github-pr`; a webhook only speeds up `github-pr`). An **Agent** owns automations. See [Agents](/agents/#automations).
+- **Verifier gate:** a skill can declare a check that the engine runs itself, so a thread cannot claim Verified without it. See [Findings](/findings/#verified-and-not-verified).
 
 ## Limits
 

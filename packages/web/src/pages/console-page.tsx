@@ -1041,13 +1041,7 @@ function ConsolePageContent({
       }
       const destination = getCommandByName(name)?.destination;
       if (destination) {
-        let extra = name === "theme" ? "#setting-web-color-theme" : name === "shortcuts" ? "&tab=keybindings" : "";
-        if (name === "fix" && command.args) {
-          if (command.args === "cancel") extra = "&intent=cancel";
-          else if (command.args.startsWith("publish "))
-            extra = `&finding=${encodeURIComponent(command.args.slice(8).trim())}&intent=publish`;
-          else extra = `&finding=${encodeURIComponent(command.args)}`;
-        }
+        const extra = name === "theme" ? "#setting-web-color-theme" : name === "shortcuts" ? "&tab=keybindings" : "";
         messageWorkspace.setDraft("");
         navigate(`${destination}${controlsQuery}${extra}`);
         return;
@@ -1267,9 +1261,6 @@ function ConsolePageContent({
                 <p className="mt-1 text-muted-foreground">Not assessed yet.</p>
               )}
             </div>
-            <Button size="sm" variant="outline" render={<Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`} />}>
-              Prepare a fix
-            </Button>
           </div>
         </Disclosure>
       )}
@@ -1355,7 +1346,7 @@ function ConsolePageContent({
     agents: panelData.agents,
     scope: {
       bind: bindChatNode,
-      findingActions: { onAddFinding, fixes: panelData.fixes },
+      findingActions: { onAddFinding },
       agentActions: {
         onStopAll: snapshot
           ? () => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })

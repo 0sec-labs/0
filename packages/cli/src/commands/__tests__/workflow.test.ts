@@ -1,45 +1,18 @@
 import { Command } from "commander";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SecurityWorkflowExecution } from "@0/engine/shared";
-import { createSecurityWorkflowTemplate } from "@0/engine/shared";
-import { SecurityWorkflowStore } from "@0/engine/storage";
-import { registerWorkflowCommand, runWorkflowCommand, type WorkflowCliRuntime, type WorkflowCommandDeps } from "../workflow.js";
+import { registerWorkflowCommand, type WorkflowCliRuntime, type WorkflowCommandDeps } from "../workflow.js";
 
-function fixture(status: SecurityWorkflowExecution["status"] = "completed"): SecurityWorkflowExecution {
-  return { id: "run-1", status, nodeResults: {} } as SecurityWorkflowExecution;
-}
 function setup() {
   const runtime: WorkflowCliRuntime = {
     listTemplates: vi.fn(() => [{ id: "repository-review" }]), getTemplate: vi.fn(() => ({ id: "repository-review" })),
     listWorkflows: vi.fn(() => []), getWorkflow: vi.fn(() => ({ id: "saved", target: "/repo", revision: 4 })),
-    startRun: vi.fn(() => fixture("running")), getRun: vi.fn(() => fixture()),
-    getRunResults: vi.fn(() => ({ findings: [{ severity: "critical", evidence: "code" }] })),
-    cancelRun: vi.fn(), dispose: vi.fn(),
+    dispose: vi.fn(),
   };
   const deps: WorkflowCommandDeps = { createRuntime: vi.fn(async () => runtime), out: vi.fn(), err: vi.fn(), sleep: vi.fn(async () => {}) };
   return { runtime, deps };
 }
 afterEach(() => { process.exitCode = 0; });
 describe("workflow CLI", () => {
-  it("lists and inspects the same canonical work references as the dashboard", async () => {
-    const { runtime, deps } = setup();
-    const work = { id: "workflow:run-1", kind: "workflow", native: { workflowExecutionId: "run-1", scanIds: ["scan-1"] }, conversation: { sessionId: "web-session" } };
-    runtime.listWork = vi.fn(() => [work]);
-    runtime.getWork = vi.fn(() => work);
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["runs", "list", "--all", "--backend", "engine"], { from: "user" });
-    expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])).toEqual([work]);
-    await program.parseAsync(["runs", "show", work.id, "--backend", "engine"], { from: "user" });
-    expect(runtime.getWork).toHaveBeenCalledWith(work.id);
-    expect(JSON.parse(vi.mocked(deps.out).mock.calls[1]![0])).toEqual({ work, run: fixture(), results: { findings: [{ severity: "critical", evidence: "code" }], nextCursor: null } });
-    expect(runtime.getRun).toHaveBeenCalledWith("run-1");
-    expect(deps.createRuntime).not.toHaveBeenCalled();
-    expect(runtime.cancelRun).not.toHaveBeenCalled();
-  });
   it("thread commands need a running console: no private in-process fallback, one clear message, non-zero exit", async () => {
     const { deps } = setup();
     vi.mocked(deps.createRuntime).mockRejectedValue(new Error("No console running. Start one with: 0 --headless"));
@@ -51,87 +24,20 @@ describe("workflow CLI", () => {
     expect(vi.mocked(deps.out)).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(2); process.exitCode = 0;
   });
-  it("preserves every results page when inspecting a canonical workflow reference", async () => {
+  it("renders sessions and automation definitions as readable text without changing JSON defaults", async () => {
     const { runtime, deps } = setup();
-    runtime.getWork = vi.fn(() => ({ id: "workflow:run-1", native: { workflowExecutionId: "run-1" } }));
-    vi.mocked(runtime.getRunResults)
-      .mockReturnValueOnce({ findings: [{ id: "first" }], nextCursor: 10 })
-      .mockReturnValueOnce({ findings: [{ id: "second" }], nextCursor: null });
-    const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["runs", "show", "workflow:run-1"], { from: "user" });
-    const output = JSON.parse(vi.mocked(deps.out).mock.calls[0]![0]);
-    expect(output.run.id).toBe("run-1");
-    expect(output.work.id).toBe("workflow:run-1");
-    expect(output.results.findings).toEqual([{ id: "first" }, { id: "second" }]);
-    expect(runtime.getRunResults).toHaveBeenNthCalledWith(2, "run-1", { cursor: 10, limit: 100 });
-  });
-  it("renders work, sessions and workflow definitions as readable text without changing JSON defaults", async () => {
-    const { runtime, deps } = setup();
-    runtime.listWork = vi.fn(() => [{ id: "scan:scan-1", status: "failed", native: { scanIds: ["scan-1"] } }]);
     runtime.getSession = vi.fn(() => ({ session: { id: "chat-1", status: "ready" }, pendingDecisions: [] }));
     const program = new Command(); registerWorkflowCommand(program, deps);
-    for (const args of [["runs", "list", "--all"], ["threads", "show", "chat-1"], ["automation", "show", "saved"], ["runs", "show", "run-1"]]) {
+    for (const args of [["threads", "show", "chat-1"], ["automation", "show", "saved"]]) {
       await program.parseAsync([...args, "--format", "text"], { from: "user" });
     }
     const outputs = vi.mocked(deps.out).mock.calls.map(([text]) => text);
-    expect(outputs[0]).toContain("Id: scan:scan-1");
-    expect(outputs[0]).toContain("Status: failed");
-    expect(outputs[0]).toContain("Scan Ids:\n");
-    expect(outputs[1]).toContain("Session:\n  Id: chat-1");
-    expect(outputs[2]).toContain("Target: /repo");
-    expect(outputs[3]).toContain("Run:\n  Id: run-1");
-    expect(outputs[3]).toContain("Severity: critical");
-    expect(outputs[3]).toContain("Evidence: code");
+    expect(outputs[0]).toContain("Session:\n  Id: chat-1");
+    expect(outputs[1]).toContain("Target: /repo");
     for (const text of outputs) expect(() => JSON.parse(text)).toThrow();
     const defaultsProgram = new Command(); registerWorkflowCommand(defaultsProgram, deps);
     await defaultsProgram.parseAsync(["automation", "show", "saved"], { from: "user" });
-    expect(JSON.parse(vi.mocked(deps.out).mock.calls[4]![0])).toEqual({ id: "saved", target: "/repo", revision: 4 });
-  });
-  it("does not interrupt active executions when reading retained history", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "workflow-history-read-"));
-    const store = new SecurityWorkflowStore(join(directory, "history.db"));
-    try {
-      const workflow = createSecurityWorkflowTemplate("repository-review");
-      const execution = store.createExecutionFromSnapshot(workflow, "active-browser-session");
-      const { deps } = setup();
-      const program = new Command(); registerWorkflowCommand(program, deps);
-      await program.parseAsync(["runs", "list", "--db-path", join(directory, "history.db")], { from: "user" });
-      expect(store.getExecution(execution.id)?.status).toBe("queued");
-      expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])[0].status).toBe("queued");
-      expect(deps.createRuntime).not.toHaveBeenCalled();
-    } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
-  });
-  it("resolves canonical workflow cancellation and rejects unsupported scan cancellation", async () => {
-    const { runtime, deps } = setup();
-    runtime.getWork = vi.fn(() => ({ native: { workflowExecutionId: "native-run" } }));
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["runs", "cancel", "workflow:native-run", "--backend", "engine"], { from: "user" });
-    expect(runtime.getWork).toHaveBeenCalledWith("workflow:native-run");
-    expect(runtime.cancelRun).toHaveBeenCalledWith("native-run");
-    vi.mocked(runtime.cancelRun).mockClear();
-    await program.parseAsync(["runs", "cancel", "scan:standalone", "--backend", "engine"], { from: "user" });
-    expect(runtime.cancelRun).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(2);
-    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning thread"));
-  });
-  it("binds a remote run to the selected web session without opening local storage", async () => {
-    const { runtime, deps } = setup();
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand("saved", { engine: "engine", chat: "web-session" }, deps);
-    expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
-    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
-    expect(deps.createRuntime).not.toHaveBeenCalled();
-  });
-  it("attaches directly to an engine and rejects an unbound session", async () => {
-    const { runtime, deps } = setup();
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand("saved", { engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN", chat: "web-session" }, deps);
-    expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN" }));
-    vi.mocked(runtime.startRun).mockClear();
-    await runWorkflowCommand("saved", { chat: "web-session" }, deps);
-    expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support thread attachment.");
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[2]![0])).toEqual({ id: "saved", target: "/repo", revision: 4 });
   });
   it("uses engine session lifecycle methods and keeps disconnect separate from cancellation", async () => {
     const { runtime, deps } = setup();
@@ -150,7 +56,6 @@ describe("workflow CLI", () => {
     expect(runtime.continueSession).toHaveBeenCalledWith("web-session", "continue");
     expect(runtime.getSessionEvents).toHaveBeenCalledWith("web-session", 0);
     expect(runtime.cancelSession).not.toHaveBeenCalled();
-    expect(runtime.cancelRun).not.toHaveBeenCalled();
     const program = new Command(); registerWorkflowCommand(program, deps);
     await program.parseAsync(["threads", "cancel", "web-session", "--backend", "engine"], { from: "user" });
     expect(runtime.cancelSession).toHaveBeenCalledWith("web-session");
@@ -168,160 +73,21 @@ describe("workflow CLI", () => {
     expect(printed).toContain("Fix the build");
     expect(printed).toContain("Untitled");
   });
-  it("resumes a scan in the selected engine session without claiming a workflow restart", async () => {
-    const { runtime, deps } = setup();
-    runtime.resumeScan = vi.fn(() => ({ runId: "scan-resume-run" }));
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["runs", "resume", "scan-1", "--session", "web-session", "--backend", "engine", "--branch-from-entry", "0", "--time-cap", "1000"], { from: "user" });
-    expect(runtime.resumeScan).toHaveBeenCalledWith({ sessionId: "web-session", scanId: "scan-1", branchFromEntry: 0, timeCapMs: 1000 });
-    expect(runtime.startRun).not.toHaveBeenCalled();
-  });
-  it("binds an automatically discovered engine session and fails if that session disappeared", async () => {
-    const { runtime, deps } = setup();
-    runtime.attachSession = vi.fn(() => ({ id: "web-session" }));
-    await runWorkflowCommand("saved", { chat: "web-session" }, deps);
-    expect(runtime.attachSession).toHaveBeenCalledWith("web-session");
-    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
-    vi.mocked(runtime.startRun).mockClear();
-    vi.mocked(runtime.attachSession).mockReturnValue(null);
-    await runWorkflowCommand("saved", { chat: "gone" }, deps);
-    expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine thread no longer exists.");
-  });
-  it("remembers cancellation while a remote engine allocates a run", async () => {
-    const { runtime, deps } = setup();
-    const previous = process.listenerCount("SIGINT");
-    vi.mocked(runtime.startRun).mockImplementation(async () => { process.emit("SIGINT"); return fixture("running"); });
-    await runWorkflowCommand("saved", {}, deps);
-    expect(runtime.cancelRun).toHaveBeenCalledWith("run-1");
-    expect(process.listenerCount("SIGINT")).toBe(previous);
-  });
-  it("runs a template directly and preserves findings without failing completed execution", async () => {
-    const { runtime, deps } = setup();
-    await runWorkflowCommand(undefined, { template: "repository-review", target: "/repo", workspace: "/repo", scope: "/scope.json", model: "configured", timeCap: "1000", costCap: "2", format: "json" }, deps);
-    expect(runtime.startRun).toHaveBeenCalledWith({ templateId: "repository-review", workflowId: undefined, revision: undefined, target: "/repo", model: "configured", timeCapMs: 1000, costCapUsd: 2 });
-    expect(deps.createRuntime).toHaveBeenCalledWith(expect.objectContaining({ ownerId: "cli", workspace: "/repo", scopePath: "/scope.json" }));
-    expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0]).results.findings[0].severity).toBe("critical");
-    expect(process.exitCode ?? 0).toBe(0);
-    expect(runtime.dispose).toHaveBeenCalledOnce();
-  });
-  it("collects all result pages and updates the combined report", async () => {
-    const { runtime, deps } = setup();
-    vi.mocked(runtime.getRunResults)
-      .mockReturnValueOnce({ findings: [{ id: "first" }], report: { findings: [{ id: "first" }] }, totalFindings: 2, nextCursor: 100 })
-      .mockReturnValueOnce({ findings: [{ id: "second" }], nextCursor: null });
-    await runWorkflowCommand("saved", {}, deps);
-    expect(runtime.getRunResults).toHaveBeenNthCalledWith(2, "run-1", { cursor: 100, limit: 100 });
-    const results = JSON.parse(vi.mocked(deps.out).mock.calls[0]![0]).results;
-    expect(results.findings.map((finding: { id: string }) => finding.id)).toEqual(["first", "second"]);
-    expect(results.report.findings).toEqual(results.findings);
-    expect(results.nextCursor).toBeNull();
-  });
-  it("rejects non-advancing pagination instead of looping or claiming complete results", async () => {
-    const { runtime, deps } = setup();
-    vi.mocked(runtime.getRunResults).mockReturnValue({ findings: [], nextCursor: 100 });
-    await runWorkflowCommand("saved", {}, deps);
-    expect(runtime.getRunResults).toHaveBeenCalledTimes(2);
-    expect(deps.out).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("Invalid result pagination cursor.");
-    expect(process.exitCode).toBe(2);
-  });
-  it("binds bounded artifact inputs and explicitly grants patch permission to host and run", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "workflow-inputs-"));
-    try {
-      const inputs = join(directory, "inputs.json");
-      writeFileSync(inputs, JSON.stringify({ finding: { id: "finding-1" }, artifact: "evidence" }));
-      const { runtime, deps } = setup();
-      await runWorkflowCommand("saved", { inputs, allowApply: true }, deps);
-      expect(deps.createRuntime).toHaveBeenCalledWith(expect.objectContaining({ allowApply: true }));
-      expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ inputs: { finding: { id: "finding-1" }, artifact: "evidence" }, allowApply: true }));
-    } finally { rmSync(directory, { recursive: true, force: true }); }
-  });
-  it("rejects oversized, malformed, and non-object input files before launching", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "workflow-inputs-"));
-    try {
-      const inputs = join(directory, "inputs.json");
-      for (const contents of [" ".repeat(256 * 1024 + 1), JSON.stringify({ value: "x".repeat(32 * 1024) }), "{broken", "[]", "null", "42"]) {
-        writeFileSync(inputs, contents);
-        const { runtime, deps } = setup();
-        await runWorkflowCommand("saved", { inputs }, deps);
-        expect(runtime.startRun).not.toHaveBeenCalled();
-        expect(deps.err).toHaveBeenCalled();
-        expect(runtime.dispose).toHaveBeenCalledOnce();
-      }
-    } finally { rmSync(directory, { recursive: true, force: true }); }
-  });
-  it("uses saved target and enforces a requested revision", async () => {
-    const { runtime, deps } = setup();
-    await runWorkflowCommand("saved", { revision: "4" }, deps);
-    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ workflowId: "saved", revision: 4, target: "/repo" }));
-  });
-  it("does not start when selectors conflict or limits are invalid", async () => {
-    for (const options of [{ template: "repository-review", target: "/repo" }, { target: "/repo", timeCap: "NaN" }, { target: "/repo", revision: "1.5" }]) {
-      const { runtime, deps } = setup();
-      await runWorkflowCommand("saved", options, deps);
-      expect(runtime.startRun).not.toHaveBeenCalled();
-      expect(deps.err).toHaveBeenCalled();
-    }
-  });
-  it("retains failed results and sets an execution error exit code", async () => {
-    const { runtime, deps } = setup();
-    vi.mocked(runtime.getRun).mockReturnValue(fixture("failed"));
-    await runWorkflowCommand("saved", {}, deps);
-    expect(process.exitCode).toBe(2);
-    expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0]).run.status).toBe("failed");
-  });
-  it("cancels the foreground run on SIGINT and removes its handler", async () => {
-    const { runtime, deps } = setup();
-    const previous = process.listenerCount("SIGINT");
-    vi.mocked(deps.sleep).mockImplementation(async () => { process.emit("SIGINT"); });
-    vi.mocked(runtime.getRun).mockReturnValue(fixture("cancelled"));
-    await runWorkflowCommand("saved", {}, deps);
-    expect(runtime.cancelRun).toHaveBeenCalledWith("run-1");
-    expect(process.exitCode).toBe(130);
-    expect(process.listenerCount("SIGINT")).toBe(previous);
-  });
-  it("exposes discovery and persisted inspection through commander", async () => {
+  it("exposes template and saved automation discovery through commander", async () => {
     const { runtime, deps } = setup();
     const program = new Command();
     registerWorkflowCommand(program, deps);
     await program.parseAsync(["automation", "list", "--templates"], { from: "user" });
     expect(runtime.listTemplates).toHaveBeenCalledOnce();
     expect(runtime.listWorkflows).not.toHaveBeenCalled();
-    await program.parseAsync(["runs", "show", "run-1", "--format", "json"], { from: "user" });
-    expect(runtime.getRunResults).toHaveBeenCalledWith("run-1");
   });
-  it("reports host cancellation errors instead of pretending another process was cancelled", async () => {
-    const { runtime, deps } = setup();
-    vi.mocked(runtime.cancelRun).mockImplementation(() => { throw new Error("Run is not owned by this host."); });
-    const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["runs", "cancel", "run-1"], { from: "user" });
-    expect(deps.err).toHaveBeenCalledWith(JSON.stringify({ error: "Run is not owned by this host." }));
-    expect(process.exitCode).toBe(2);
+  it("has no run or runs commands any more", () => {
+    const program = new Command();
+    registerWorkflowCommand(program, setup().deps);
+    expect(program.commands.map(command => command.name()).sort()).toEqual(["automation", "threads"]);
+    expect(program.commands.find(command => command.name() === "automation")!.commands.map(command => command.name()).sort()).toEqual(["list", "show"]);
   });
 });
-
-
-describe("remote workflow CLI selection", () => {
-  it("uses remote targets and inputs without a local model, root or storage", async () => {
-    const { runtime, deps } = setup();
-    deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand(undefined, { template: "repository-review", engine: "engine-one", enginesConfig: "/operator/engines.json", target: "D:\\engine\\repo" }, deps);
-    expect(deps.createRemoteRuntime).toHaveBeenCalledWith({ backendId: "engine-one", configPath: "/operator/engines.json" });
-    expect(deps.createRuntime).not.toHaveBeenCalled();
-    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ target: "D:\\engine\\repo" }));
-  });
-  it("rejects local execution flags and never creates a local runtime on remote failure", async () => {
-    for (const options of [{ workspace: "/repo" }, { scope: "/scope.json" }, { dbPath: "/local.db" }, { model: "local-model" }]) {
-      const { runtime, deps } = setup(); deps.createRemoteRuntime = vi.fn(async () => runtime);
-      await runWorkflowCommand(undefined, { engine: "engine-one", template: "review", target: "/engine/repo", ...options }, deps);
-      expect(deps.createRuntime).not.toHaveBeenCalled(); expect(deps.createRemoteRuntime).not.toHaveBeenCalled();
-      expect(process.exitCode).toBe(2);
-    }
-  });
-});
-
 describe("explicit operator force-stop command", () => {
   it("dispatches only the selected force-stop action and prints the owning engine result", async () => {
     const { runtime, deps } = setup();
@@ -330,7 +96,7 @@ describe("explicit operator force-stop command", () => {
     const program = new Command(); registerWorkflowCommand(program, deps);
     await program.parseAsync(["threads", "force-stop", "live", "--engine-url", "http://127.0.0.1:48123", "--engine-token-env", "OPERATOR_TOKEN"], { from: "user" });
     expect(runtime.forceStopSession).toHaveBeenCalledExactlyOnceWith("live");
-    expect(runtime.cancelSession).not.toHaveBeenCalled(); expect(runtime.startRun).not.toHaveBeenCalled();
+    expect(runtime.cancelSession).not.toHaveBeenCalled();
     expect(deps.createRuntime).not.toHaveBeenCalled(); expect(runtime.dispose).toHaveBeenCalledOnce();
     expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])).toEqual({ session: { id: "live", status: "ready" } });
   });

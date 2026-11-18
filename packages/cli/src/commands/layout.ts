@@ -21,12 +21,11 @@ export function nest(parent: Command, group: string, registrars: readonly Regist
 
 /** Commands that moved under another group. The old top-level name keeps working through `command-aliases.ts`. */
 export const NEW_HOME: Readonly<Record<string, string>> = {
-  fix: "scan", verify: "scan", deps: "scan", eval: "scan", "agent-assure": "scan", disclose: "scan",
   reports: "findings",
   connections: "models", usage: "models",
   "audit-log": "config", team: "config", db: "config", github: "config",
-  upgrade: "doctor", workbench: "doctor", checks: "doctor",
-  research: "lab", improve: "lab", console: "lab", "mcp-server": "lab", runs: "lab",
+  upgrade: "doctor", workbench: "doctor",
+  console: "lab", "mcp-server": "lab",
 };
 
 /** Move already-registered top-level commands under their new parent, keeping each command object (and handler) as is. `only` limits it to one parent (the lazy loader builds one group at a time). */
@@ -41,7 +40,7 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["scan", "findings", "threads", "agents"]],
+  ["Work", ["findings", "threads", "agents"]],
   ["Setup", ["skills", "memory", "models", "computers", "config"]],
 ];
 
@@ -81,13 +80,11 @@ const NEW_FORM_STUBS: Readonly<Record<string, readonly NewFormStub[]>> = {
 
 /** Flags the new grammar adds to commands that already existed; shown at the end of their help. */
 const NEW_FORM_HELP: Readonly<Record<string, string>> = {
-  scan: "A target is a URL, a folder or repository, or npm:<name>, pypi:<name>, cargo:<name>, oci:<ref>. `--module deep|repair|campaign|deps|deps-fix` picks a module that has no target-detecting form.",
-  "scan disclose": "Also: --pack <finding.json>, --track <id>, --review <finding.json>",
   "threads list": "With an id: show that thread. Then --events, --export, --rename <title>, --set, --clear, --close, --archive or --delete act on it.",
   "threads send": "`send new <prompt>` starts a thread. With an id: --retry, --resume or --decide <decision-id>.",
   "agents list": "With an id: show that Agent. --presets lists the starting points. --automation lists saved automations (with an id or --template: shows one).",
-  "agents run": "--history lists past activations. --automation runs a saved automation or template.",
-  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|triggers|versions|rollback> ...` manages saved automations.",
+  "agents run": "--history lists past activations.",
+  "agents set": "--create makes an Agent. With an id: --state active|paused|acknowledged|archived|deleted, --trigger <list|add|enable|disable|check|rm> ..., --files <list|get|put|rm> ... `--automation <create|edit|duplicate|delete|versions|rollback> ...` manages saved automations.",
   "skills list": "With a name: show that skill. --catalog browses the catalog. Extensions: `0 skills extensions list|info|enable|disable|update|remove`; --info, --enable, --disable and --mcp-remove on a name reach them.",
   "skills add": "<src> may be a catalog id, a repository, a folder of skills or a bundle. An extension is <repo>@<full sha>: you see one prompt first. Also: --mcp <url> adds an MCP server as a local extension, --preview checks a folder, --remove <name> removes a skill.",
   "models list": "Also: --usage shows tokens and cost, --recommended the suggested models.",
@@ -111,7 +108,6 @@ export function applyNewSurface(top: Command): void {
     return;
   }
   top.description(description);
-  if (top.name() === "scan") top.usage("[options] <target> | <command>");
   const topHelp = NEW_FORM_HELP[top.name()];
   if (topHelp) top.addHelpText("after", `\n${topHelp}\n`);
   for (const stub of NEW_FORM_STUBS[top.name()] ?? []) {

@@ -131,7 +131,7 @@ export function loadFindingFocus(id: string, options: { dbPath?: string } = {}):
   }
 
   if (matches.length === 0) {
-    throw new Error(`Finding '${requestedId}' was not found. Use an id or fingerprint from \`0 findings\`, or pass --db-path (findings from \`0 scan\` are in ~/.0/runs/<scan-id>/state.db).`);
+    throw new Error(`Finding '${requestedId}' was not found. Use an id or fingerprint from \`0 findings\`, or pass --db-path (findings from older scans are in ~/.0/runs/<scan-id>/state.db).`);
   }
   // The same issue found by several scans shares one fingerprint: take the most recent occurrence.
   const fingerprints = new Set(matches.map((match) => match.row.fingerprint));

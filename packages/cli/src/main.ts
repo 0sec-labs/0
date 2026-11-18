@@ -29,7 +29,6 @@ import { commandPathsOf, setCrashCommandPaths } from "./crash-capture.js";
 import { surfaceFromArgv } from "./surface.js";
 import { createRootProgram } from "./program.js";
 import { registerLazyCommandTree } from "./commands/lazy-tree.js";
-import { TOP_LEVEL_COMMANDS } from "./commands/manifest.js";
 import { getReleaseChannel } from "./state/runtime.js";
 import { maybePrintTelemetryNotice } from "./telemetry-notice.js";
 
@@ -106,7 +105,6 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-import { detectAndRoute, rewriteScanArgs, scanTargetProblem } from "./routing.js";
 import { shouldPrintMovedNotice } from "./command-aliases.js";
 import { formatMovedNotice, resolveInvocation } from "./command-compat.js";
 import { runStartupUpdate } from "./utils/update-check.js";
@@ -124,7 +122,7 @@ if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VER
 async function buildProgram(args: readonly string[]): Promise<Command> {
   const program = createRootProgram();
   program.hook("preAction", (_command, action) => {
-    if (!isWorkbenchManagement && !isRemoteBackendClient && ["web", "source", "package", "deep", "repair", "campaign"].includes(action.name()) && action.parent?.name() === "scan") {
+    if (!isWorkbenchManagement && !isRemoteBackendClient && action.name() === "web") {
       Object.assign(process.env, savedConnectionEnvPatch(process.env));
     }
   });
@@ -177,25 +175,8 @@ let userArgs = process.argv.slice(2);
   const resolved = resolveInvocation(userArgs);
   if (resolved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(formatMovedNotice(resolved.notice, process.stderr.isTTY === true));
   userArgs = resolved.args;
-  // A valid `--module` was rewritten to its implementation command above; one that is still here has no module to run.
-  if (userArgs[0] === "scan" && userArgs.some(arg => arg === "--module" || arg.startsWith("--module="))) {
-    console.error("Unknown or missing --module value. Use deep, repair, campaign, deps or deps-fix.");
-    process.exit(2);
-  }
 }
 process.argv = [process.argv[0], process.argv[1], ...userArgs];
-const unroutableScan = scanTargetProblem(userArgs);
-if (unroutableScan) {
-  console.error(unroutableScan);
-  process.exit(2);
-}
-const scanRoute = rewriteScanArgs(userArgs);
-if (scanRoute) {
-  userArgs = scanRoute;
-  process.argv = [process.argv[0], process.argv[1], ...userArgs];
-}
-
-const knownCommands = new Set(["help", ...TOP_LEVEL_COMMANDS.flatMap(command => [command.name, ...command.aliases])]);
 
 /** Run the program for `args`, which become the process arguments commander parses. */
 async function runProgram(args: string[]): Promise<void> {
@@ -219,14 +200,6 @@ if (userArgs.length === 0) {
   // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
   // query (or read the prompt from piped stdin when no argument is given).
   await runProgram(["lab", "console", "--print", ...userArgs.slice(1)]);
-} else if (!knownCommands.has(userArgs[0]) && !userArgs[0].startsWith("-")) {
-  const route = detectAndRoute(userArgs[0]);
-  if (route) {
-    await runProgram([...route, ...userArgs.slice(1)]);
-  } else {
-    console.error("Ambiguous target. Use the control plane (`0`) or an explicit URL, path, source:, npm:, pypi:, cargo:, or oci: target.");
-    process.exitCode = 2;
-  }
 } else {
   await runProgram(userArgs);
 }

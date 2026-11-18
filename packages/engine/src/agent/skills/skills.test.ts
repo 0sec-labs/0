@@ -46,24 +46,9 @@ const EXPECTED_SKILL_IDS = [
   "nextjs-appsec",
   "supabase-appsec",
   "python-web-appsec",
-  // Offline / read-only security-engine routing skills (dev-live-engine-recovery).
-  "ad-attack-paths",
-  "entra-attack-paths",
-  "entra-id",
   "seedless-depth-review",
   "advisory-disclosure",
-  "cve-poc-adaptation",
-  // Phase-2 offensive / active security-engine routing skills (dev-live-engine-recovery).
-  "variant-hunting",
-  "assumption-mining",
-  "scoped-fix",
   "develop-this-app",
-  "poc-verification",
-  "http-conformance-diff",
-  "spec-differential",
-  "kernel-weaponization",
-  "npm-ecosystem",
-  "llm-safety-eval",
   // Sentinel preset skills.
   "pr-diff-review",
 ];
@@ -213,22 +198,15 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe( 24);
+      expect(reviewSkills.length).toBe(17);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
-        // Offline / read-only security-engine routing skills (all review-applicable).
-        "ad-attack-paths",
         "advisory-disclosure",
-        // Phase-2 GROUP 1 offline source engines are review-applicable.
-        "assumption-mining",
         "blind-exploitation",
         "cardano-eutxo-validators",
         "cloud-iac-review",
         "crypto-misuse",
-        "cve-poc-adaptation",
         "develop-this-app",
-        "entra-attack-paths",
-        "entra-id",
         "graphql-introspection",
         "incident-triage",
         "jwt-attacks",
@@ -236,11 +214,9 @@ describe("Skill Registry", () => {
         "nextjs-appsec",
         "pr-diff-review",
         "python-web-appsec",
-        "scoped-fix",
         "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",
-        "variant-hunting",
         "visualize",
         "workflow-hardening",
       ]);

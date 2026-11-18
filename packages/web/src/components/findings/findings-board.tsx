@@ -4,10 +4,8 @@ import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, useDraggable, useDroppable, useSensor, useSensors,
   type Announcements, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent, type KeyboardCoordinateGetter,
 } from "@dnd-kit/core";
-import { CapyPullRequestIcon as GitPullRequest } from "@/ui/icons/capy";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
-import { prLabel } from "@/console/panel/views/findings-model";
 import type { FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import { STATUS_LABEL, boardColumns, findingCode, findingStatus, normalizeSeverity, resolveDrop, type BoardColumn, type Direction, type FindingStatus, type OrderBy } from "./findings-model";
@@ -20,7 +18,6 @@ export type FindingsBoardProps = {
   cursorFingerprint: string | null;
   selected: ReadonlySet<string>;
   pendingFingerprint: string | null;
-  fixPrs: ReadonlyMap<string, string>;
   onOpen: (fingerprint: string) => void;
   onToggleSelect: (fingerprint: string) => void;
   /** Dropping a card on a column. The owner applies the move or explains why it is refused (see `resolveDrop`). */
@@ -138,7 +135,6 @@ function Column({ column, draggedStatus, over, ...props }: { column: BoardColumn
 function Card({ group, overlay = false, ...props }: { group: FindingGroup; overlay?: boolean } & FindingsBoardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: group.fingerprint, disabled: overlay, data: { column: findingStatus(group) } });
   const { latest, fingerprint } = group;
-  const prUrl = props.fixPrs.get(latest.id);
   const selected = props.selected.has(fingerprint);
   const saving = props.pendingFingerprint === fingerprint;
   return (
@@ -168,11 +164,10 @@ function Card({ group, overlay = false, ...props }: { group: FindingGroup; overl
         <span className="ml-auto tabular-nums">{saving ? "Saving…" : formatRelativeAge(latest.timestamp)}</span>
       </div>
       <p className="line-clamp-2 text-sm leading-5 font-medium text-foreground" title={latest.title}>{latest.title}</p>
-      {latest.category || prUrl || group.count > 1 ? (
+      {latest.category || group.count > 1 ? (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground-1">
           {latest.category ? <span className="min-w-0 truncate rounded-md border-[0.5px] border-border-2 px-1.5 py-px">{latest.category}</span> : null}
           {group.count > 1 ? <span className="tabular-nums text-muted-foreground-2">×{group.count}</span> : null}
-          {prUrl ? <a href={prUrl} target="_blank" rel="noreferrer noopener" onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} aria-label={`Fix pull request ${prLabel(prUrl)}`} className="ml-auto inline-flex items-center gap-1 text-success outline-none focus-visible:outline-ring-inset"><GitPullRequest className="size-3.5" />{prLabel(prUrl)}</a> : null}
         </div>
       ) : null}
     </div>

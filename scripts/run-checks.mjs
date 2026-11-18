@@ -36,7 +36,6 @@ export const GROUPS = {
     "pnpm test:dashboard",
   ],
   packages: [
-    "pnpm --filter @0/bench test:targets",
     "pnpm --filter @0/cli test",
     "pnpm --filter @0/web test",
   ],

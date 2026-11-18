@@ -1,5 +1,4 @@
-import { compareFindingsByBusinessPriority, getFindingPriority, type Finding } from "@0/engine/shared";
-import { parseImpactAssessment } from "@0/engine";
+import { ImpactAssessmentSchema, compareFindingsByBusinessPriority, getFindingPriority, type Finding, type ImpactAssessment } from "@0/engine/shared";
 import type { NativeRuntime } from "@0/engine";
 import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
@@ -166,6 +165,15 @@ function parseJsonColumn(raw: string | null | undefined): unknown {
     // Malformed persisted JSON is unavailable, never a partial stand-in.
     return undefined;
   }
+}
+
+/** Parse a stored impact assessment (tolerates code fences and prose around the JSON); null when unusable. */
+function parseImpactAssessment(text: string): ImpactAssessment | null {
+  let json = text.trim();
+  const fence = json.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) json = fence[1]!.trim();
+  if (!json.startsWith("{")) { const brace = json.match(/\{[\s\S]*\}/); if (brace) json = brace[0]; }
+  try { const parsed = ImpactAssessmentSchema.safeParse(JSON.parse(json)); return parsed.success ? parsed.data : null; } catch { return null; }
 }
 
 /**

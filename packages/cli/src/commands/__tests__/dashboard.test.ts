@@ -19,7 +19,6 @@
  *   • `node:fs`            — fake existsSync/readFileSync so the asset
  *                            dir resolves and HTML "files" round-trip.
  *   • `@0/engine/storage`         — fake osecDB (no native bindings, no WAL).
- *   • `./orchestrate.js`   — fake recoverStaleWorkers (dynamic import).
  *   • `./db.js`            — fake seedVerificationWorkbench (dynamic import).
  *
  * The createServer fake captures the handler so individual tests can
@@ -473,13 +472,8 @@ vi.mock("@0/engine/storage", () => {
   };
 });
 
-// Dynamic imports — recoverStaleWorkers (orchestrate.js) and
-// seedVerificationWorkbench (db.js). Vitest hoists vi.mock so the
-// dynamic await import() in handleApiRequest also hits these stubs.
-const recoverStaleWorkersMock = vi.fn();
-vi.mock("../orchestrate.js", () => ({
-  recoverStaleWorkers: recoverStaleWorkersMock,
-}));
+// Dynamic import — seedVerificationWorkbench (db.js). Vitest hoists vi.mock so the
+// dynamic await import() in handleApiRequest also hits this stub.
 
 const seedVerificationWorkbenchMock = vi.fn();
 vi.mock("../db.js", () => ({
@@ -690,7 +684,6 @@ beforeEach(() => {
   dbState.recentEvents.length = 0;
 
   resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0.db");
-  recoverStaleWorkersMock.mockReset().mockReturnValue(3);
   seedVerificationWorkbenchMock
     .mockReset()
     .mockReturnValue({ scans: 4, families: 8, workers: 2 });
@@ -1338,7 +1331,7 @@ describe("dashboard — control-token gate", () => {
     const captured = await invokeHandler(
       makeRequest({
         method: "POST",
-        url: "/api/control/recover-stale-workers",
+        url: "/api/control/reset-database",
         body: {},
       }),
     );
@@ -1346,29 +1339,28 @@ describe("dashboard — control-token gate", () => {
     expect(JSON.parse(captured.body)).toEqual({
       error: "Invalid or missing control token",
     });
-    // Critical: the dynamic import path for recoverStaleWorkers must
-    // NOT have been reached on the rejection branch.
-    expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    // Critical: the reset must NOT have been reached on the rejection branch.
+    expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
   });
 
   it("POST /api/control/* with the wrong token → 403", async () => {
     const captured = await invokeHandler(
       makeRequest({
         method: "POST",
-        url: "/api/control/recover-stale-workers",
+        url: "/api/control/reset-database",
         headers: { "x-0-control-token": "not-the-real-token" },
         body: {},
       }),
     );
     expect(captured.statusCode).toBe(403);
-    expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
   });
 
   it("non-POST on /api/control/* → 405 method-not-allowed", async () => {
     const captured = await invokeHandler(
       makeRequest({
         method: "GET",
-        url: "/api/control/recover-stale-workers",
+        url: "/api/control/reset-database",
         headers: { "x-0-control-token": await getControlToken() },
       }),
     );
@@ -1376,20 +1368,6 @@ describe("dashboard — control-token gate", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Method not allowed" });
   });
 
-  it("POST /api/control/recover-stale-workers with the right token calls recoverStaleWorkers", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/recover-stale-workers",
-        headers: { "x-0-control-token": token },
-        body: { staleAfterMs: 45_000 },
-      }),
-    );
-    expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toEqual({ ok: true, recovered: 3 });
-    expect(recoverStaleWorkersMock).toHaveBeenCalledWith(undefined, 45_000);
-  });
 });
 
 describe("dashboard — browser request boundaries", () => {
@@ -1397,7 +1375,7 @@ describe("dashboard — browser request boundaries", () => {
     await runCli(["web", "--no-open"]);
   });
 
-  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers", "/api/console/learning"])(
+  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers"])(
     "refuses unauthenticated reads of %s before opening the database",
     async (url) => {
       const captured = await invokeHandler(makeRequest({ method: "GET", url }));
@@ -1408,19 +1386,7 @@ describe("dashboard — browser request boundaries", () => {
     },
   );
 
-  it("lists workflow schedules through the authenticated router", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/workflow-triggers", headers: { "x-0-control-token": token } }));
-    expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toEqual({ triggers: [] });
-  });
 
-  it("lists learning state through the authenticated router", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/learning", headers: { "x-0-control-token": token } }));
-    expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toMatchObject({ events: [], improvements: [], worker: { events: 0, improvements: 0, queue: { pending: 0, claimed: 0, completed: 0 } } });
-  });
 
   it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(
     "refuses to issue a browser token for hostile or missing Host %s",
@@ -1433,10 +1399,10 @@ describe("dashboard — browser request boundaries", () => {
 
   it("refuses a foreign Origin even when the API token is valid", async () => {
     const token = await getControlToken();
-    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers",
+    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/reset-database",
       headers: { "x-0-control-token": token, origin: "https://attacker.example" }, body: {} }));
     expect(captured.statusCode).toBe(403);
-    expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
     expect(dbState.ctorPaths).toHaveLength(0);
   });
 
@@ -1473,150 +1439,9 @@ describe("dashboard — browser request boundaries", () => {
 
 // ── Tests: daemon lifecycle ─────────────────────────────────────────────────
 
-describe("dashboard — daemon control", () => {
-  beforeEach(async () => {
-    await runCli(["web", "--no-open", "--db-path", "/tmp/fake.db"]);
-  });
-
-  it("start-daemon refuses (409) when an active worker is heartbeating", async () => {
-    dbState.workers.push({
-      id: "w-1",
-      status: "running",
-      label: "control-plane-1",
-      pid: 999,
-      heartbeatAt: new Date().toISOString(), // fresh
-    });
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/start-daemon",
-        headers: { "x-0-control-token": token },
-        body: {},
-      }),
-    );
-    expect(captured.statusCode).toBe(409);
-    expect(JSON.parse(captured.body).error).toMatch(/active daemon is already heartbeating/);
-    // The spawn boundary must not have been touched on the refusal path.
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
-
-  it("start-daemon spawns the orchestrate child when no active heartbeats", async () => {
-    // A stopped worker should not block startup.
-    dbState.workers.push({
-      id: "w-2",
-      status: "stopped",
-      label: "ghost",
-      pid: 12345,
-      heartbeatAt: new Date(0).toISOString(),
-    });
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/start-daemon",
-        headers: { "x-0-control-token": token },
-        body: { label: "my-daemon", pollIntervalMs: 5000 },
-      }),
-    );
-    expect(captured.statusCode).toBe(200);
-    const body = JSON.parse(captured.body);
-    expect(body.ok).toBe(true);
-    expect(body.label).toBe("my-daemon");
-    expect(typeof body.pid).toBe("number");
-
-    // Inspect the spawn call: arg shape (orchestrate --watch --label …).
-    expect(spawnMock).toHaveBeenCalledOnce();
-    const spawnArgs = spawnMock.mock.calls[0]!;
-    const childArgs = spawnArgs[1] as string[];
-    expect(childArgs).toContain("orchestrate");
-    expect(childArgs).toContain("--watch");
-    expect(childArgs).toContain("--label");
-    expect(childArgs).toContain("my-daemon");
-    expect(childArgs).toContain("--poll-interval");
-    expect(childArgs).toContain("5000");
-    expect(childArgs).toContain("--db-path");
-    expect(childArgs).toContain("/tmp/fake.db");
-  });
-
-  it("stop-daemon SIGTERMs live workers and marks them stopped in the DB", async () => {
-    dbState.workers.push({
-      id: "w-3",
-      status: "running",
-      label: "control-plane-1",
-      pid: 31337,
-      heartbeatAt: new Date().toISOString(),
-    });
-    // Capture process.kill so we can assert the SIGTERM call without
-    // actually killing a real PID.
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
-    try {
-      const token = await getControlToken();
-      const captured = await invokeHandler(
-        makeRequest({
-          method: "POST",
-          url: "/api/control/stop-daemon",
-          headers: { "x-0-control-token": token },
-        }),
-      );
-      expect(captured.statusCode).toBe(200);
-      expect(JSON.parse(captured.body)).toEqual({ ok: true, stopped: 1 });
-      expect(killSpy).toHaveBeenCalledWith(31337, "SIGTERM");
-      // The worker row is updated to status=stopped via upsertWorker.
-      expect(dbState.upserts).toHaveLength(1);
-      expect(dbState.upserts[0]!.status).toBe("stopped");
-    } finally {
-      killSpy.mockRestore();
-    }
-  });
-});
 
 // ── Tests: launch-run ───────────────────────────────────────────────────────
 
-describe("dashboard — launch-run control", () => {
-  beforeEach(async () => {
-    await runCli(["web", "--no-open"]);
-  });
-
-  it("rejects (400) when target is missing", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/launch-run",
-        headers: { "x-0-control-token": token },
-        body: {},
-      }),
-    );
-    expect(captured.statusCode).toBe(400);
-    expect(JSON.parse(captured.body).error).toEqual(expect.any(String));
-    expect(engineInvoke).not.toHaveBeenCalled();
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
-
-  it("delegates session and bounded assessment to the same persistent engine", async () => {
-    engineInvoke.mockResolvedValueOnce({ id: "session-owner" } as never).mockResolvedValueOnce({ id: "assessment-run", jobId: "assessment-job" } as never);
-    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { "x-0-control-token": await getControlToken() }, body: { target: "https://example.com", depth: "deep" } }));
-    expect(captured.statusCode).toBe(202);
-    expect(JSON.parse(captured.body)).toEqual({ ok: true, engineOwned: true, sessionId: "session-owner", runId: "assessment-run", jobId: "assessment-job" });
-    expect(engineInvoke.mock.calls).toEqual([
-      ["create_session", { config: { target: "https://example.com", title: "Assessment: https://example.com" } }],
-      ["start_assessment", { sessionId: "session-owner", target: "https://example.com", plan: expect.objectContaining({ goal: "unknown-vulnerabilities", depth: "deep", runCount: 1, executionMode: "sequential", timeCapMs: expect.any(Number), costCapUsd: expect.any(Number) }) }],
-    ]);
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects unsupported external runtimes and daemon ownership before invoking the engine", async () => {
-    const headers = { "x-0-control-token": await getControlToken() };
-    for (const input of [{ runtime: "claude" }, { runtime: "api" }, { mode: "deep" }, { mode: "web" }, { ensureDaemon: true }]) {
-      const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers, body: { target: "https://example.com", ...input } }));
-      expect(captured.statusCode).toBe(400);
-    }
-    expect(engineInvoke).not.toHaveBeenCalled();
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
-
-});
 
 // ── Tests: reset-database ───────────────────────────────────────────────────
 
@@ -1640,29 +1465,6 @@ describe("dashboard — reset-database control", () => {
     expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
   });
 
-  it("refuses (409) if an active worker is running", async () => {
-    dbState.workers.push({
-      id: "w-5",
-      status: "running",
-      label: "control-plane-1",
-      pid: undefined,
-      heartbeatAt: new Date().toISOString(),
-    });
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/reset-database",
-        headers: { "x-0-control-token": token },
-        body: { seed: "verification" },
-      }),
-    );
-    expect(captured.statusCode).toBe(409);
-    expect(JSON.parse(captured.body).error).toMatch(
-      /Stop active orchestration daemons before resetting/,
-    );
-    expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
-  });
 
   it("happy path: resets + seeds verification workbench", async () => {
     const token = await getControlToken();
@@ -1771,26 +1573,6 @@ describe("dashboard — finding-family POST handlers", () => {
 
 // ── Tests: prune-stopped-workers ────────────────────────────────────────────
 
-describe("dashboard — prune-stopped-workers", () => {
-  beforeEach(async () => {
-    await runCli(["web", "--no-open"]);
-  });
-
-  it("deletes workers in 'stopped' status and reports the count", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/prune-stopped-workers",
-        headers: { "x-0-control-token": token },
-        body: {},
-      }),
-    );
-    expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toEqual({ ok: true, deleted: 2 });
-    expect(dbState.deleteByStatusCalls).toEqual(["stopped"]);
-  });
-});
 
  it("reopens the existing dashboard without creating another server", async () => {
    instanceMock.mockResolvedValue(true);
@@ -1808,8 +1590,8 @@ describe("dashboard — persistent engine boundaries", () => {
     expect(await runCli(["web", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
   });
   it("denies engine-bearer process controls and accepts triage authorization", async () => {
-    const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
-    expect(control.statusCode).toBe(403); expect(JSON.parse(control.body).code).toBe("browser_only"); expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/reset-database", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
+    expect(control.statusCode).toBe(403); expect(JSON.parse(control.body).code).toBe("browser_only"); expect(resetOsecDatabaseMock).not.toHaveBeenCalled();
     const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
     expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
   });

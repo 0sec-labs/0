@@ -2,12 +2,12 @@
 // No I/O here (callers inject the file list and a reader) so it is unit-testable.
 import { posix } from "node:path";
 
-export const PACKAGES = ["engine", "bench", "cli", "web"];
+export const PACKAGES = ["engine", "cli", "web"];
 // Packages that import each package (a change there can break these).
-export const DEPENDANTS = { engine: ["bench", "cli", "web"], bench: ["cli"], cli: [], web: [] };
+export const DEPENDANTS = { engine: ["cli", "web"], cli: [], web: [] };
 const SRC_EXT = /\.(?:[cm]?[jt]sx?)$/;
 const RESOLVE_EXT = ["", ".ts", ".tsx", ".mts", ".js", ".mjs", ".jsx", ".json", ".css"];
-const PKG_BASES = ["", "packages/web/", "packages/cli/", "packages/engine/", "packages/bench/", "docs/"];
+const PKG_BASES = ["", "packages/web/", "packages/cli/", "packages/engine/", "docs/"];
 
 const FULL_RULES = [
   [/^package\.json$/, "root package.json"],
@@ -101,7 +101,7 @@ export function specCandidates(spec, fromFile) {
   const dir = fromFile ? posix.dirname(fromFile) : "";
   const pkg = fromFile ? pkgOf(fromFile) : null;
   if (spec.startsWith("@/")) return [`packages/${pkg ?? "web"}/src/${spec.slice(2)}`, `packages/web/src/${spec.slice(2)}`];
-  const ws = /^@0\/(engine|bench)(?:\/(.+))?$/.exec(spec);
+  const ws = /^@0\/(engine)(?:\/(.+))?$/.exec(spec);
   if (ws) {
     const [, name, sub] = ws;
     if (!sub) return [`packages/${name}/src/index.ts`];

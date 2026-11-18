@@ -3,12 +3,10 @@
 # ci-changed.sh [base-ref] — decide which verify groups a change can affect.
 # Prints KEY=true|false lines (GITHUB_OUTPUT format):
 #   code     dashboard/browser/smoke/unit groups
-#   engine   engine and bench suites
+#   engine   engine suite
 #   docs     docs site build (and, on main, deploy)
 #   docker   Docker image + server-mode smoke
 #   replay   real-container replay smoke
-#   windows  Windows private-storage coverage (Windows runners bill at 2x)
-#   action   composite GitHub Action contracts
 #   deps     dependency manifests changed (advisory audit)
 #
 # Safe by construction: on tags, for new branches (no base), when the
@@ -17,7 +15,7 @@
 # single required check.
 set -uo pipefail
 BASE="${1:-}"
-KEYS="code engine docs docker replay windows action deps"
+KEYS="code engine docs docker replay deps"
 all() { for k in $KEYS; do printf '%s=true\n' "$k"; done; exit 0; }
 case "${GITHUB_REF:-}" in refs/tags/*) all ;; esac
 # On main the caller passes the last green Main sha as the base.
@@ -42,13 +40,11 @@ while IFS= read -r f; do
     scripts/docker/*|scripts/smoke-server-mode.mjs|deploy/compose/*|packages/cli/src/web/server-mode*|packages/cli/src/web/dashboard-http.ts|packages/cli/src/commands/dashboard.ts) docker=true ;;
   esac
   case "$f" in
-    packages/engine/src/verify/*|packages/engine/src/scope/*|packages/engine/package.json|pnpm-lock.yaml|scripts/smoke-docker-replay.mjs) replay=true ;;
+    packages/engine/src/scope/*|packages/engine/package.json|pnpm-lock.yaml|scripts/smoke-docker-replay.mjs) replay=true ;;
   esac
   case "$f" in
-    packages/engine/src/improvement/*|packages/engine/package.json|pnpm-lock.yaml|scripts/check-windows-storage-bun.ts) windows=true ;;
   esac
   case "$f" in
-    action.yml|scripts/run-github-action*|scripts/render-github-action-output*|scripts/post-github-suggestions*|suggest/*) action=true ;;
   esac
   case "$f" in
     package.json|packages/*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml) deps=true ;;

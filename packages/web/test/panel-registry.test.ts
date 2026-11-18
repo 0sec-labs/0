@@ -24,7 +24,7 @@ describe("panel view registry", () => {
     expect(panelViewKind(agentViewId("w1"))).toBe("agent");
     expect(panelViewKind(findingViewId("fp"))).toBe("finding");
     expect(panelViewEntity(agentViewId("w1"))).toBe("w1");
-    expect(panelViewEntity("fixes")).toBeUndefined();
+    expect(panelViewEntity("evidence")).toBeUndefined();
   });
   it("titles per-entity views", () => {
     expect(viewTitle("findings")).toBe("Findings");

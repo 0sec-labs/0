@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${routeSessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
     : "?return=/chats";
   useShellNavigationShortcuts(isConsole ? `/settings${controlsQuery}` : "/settings");
-  const SETTINGS_PATHS = ["/settings", "/connections", "/models", "/project", "/doctor", "/tools", "/fix"];
+  const SETTINGS_PATHS = ["/settings", "/connections", "/models", "/project", "/doctor", "/tools"];
   const isSettings = SETTINGS_PATHS.includes(pathname.replace(/^\/console\//, "/").replace(/\/$/, ""));
   // Keep the sidebar mounted across route changes so scroll position and focus survive.
   return <SidebarHistoryContext.Provider value={drawerHistorySlot ?? historySlot}><BreadcrumbProvider><AppNoticeProvider><div className="relative flex h-dvh min-w-0 flex-col overflow-hidden bg-[var(--chrome,var(--background))] text-foreground"><AppNoticeHost /><ReconnectingNotice /><KeyboardShortcutsDialog />

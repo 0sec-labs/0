@@ -52,8 +52,8 @@ describe("the 0.35 surface", () => {
   const visibleChildren = (command: Command): Command[] => command.commands.filter((c) => !isHidden(c) && c.name() !== "help");
   const topLevel = visibleChildren(program);
 
-  it("has nine top-level commands", () => {
-    expect(topLevel.map((c) => c.name()).sort()).toEqual(["agents", "computers", "config", "findings", "memory", "models", "scan", "skills", "threads"]);
+  it("has eight top-level commands", () => {
+    expect(topLevel.map((c) => c.name()).sort()).toEqual(["agents", "computers", "config", "findings", "memory", "models", "skills", "threads"]);
   });
 
   it("shows at most three subcommands under each, and nothing below them", () => {
@@ -70,7 +70,7 @@ describe("the 0.35 surface", () => {
 const SILENT = (path: readonly string[]): boolean => path[0] === "lab" || path[0] === "api" || (path.length === 1 && path[0] === "doctor") || path.slice(0, 2).join(" ") === "agents webhook" || (path[0] === "memory" && ["export", "import", "enable", "disable"].includes(path[1] ?? ""));
 
 describe("alias table: every 0.34 command still resolves", () => {
-  it("lists the whole old tree", () => expect(OLD_COMMANDS.length).toBeGreaterThan(280));
+  it("lists the whole old tree", () => expect(OLD_COMMANDS.length).toBeGreaterThan(150));
 
   it.each(OLD_COMMANDS.map((path) => [path.join(" "), path] as const))("`0 %s`", async (_name, path) => {
     const resolved = resolveInvocation([...path, "--help"]);
@@ -115,7 +115,7 @@ describe("the notice", () => {
     expect(resolveInvocation(["--headless", "--ready-json"])).toEqual({ args: ["web", "--headless", "--ready-json"], notice: "" });
     expect(resolveInvocation(["--host=0.0.0.0", "--server-mode"]).args[0]).toBe("web");
     expect(resolveInvocation(["-p", "hello"]).args).toEqual(["-p", "hello"]);
-    expect(resolveInvocation(["hunt", "x"]).notice).toBe("moved: use `0 lab research hunt`");
+    expect(resolveInvocation(["triage", "x"]).notice).toBe("moved: use `0 findings update <id> --status ...`");
   });
 });
 
@@ -140,9 +140,7 @@ describe("the new grammar reaches the implementation commands", () => {
     ["agents list --automation --templates", "automation list --templates"],
     ["agents list x1 --automation", "automation show x1"],
     ["agents list --automation --template t", "automation show --template t"],
-    ["agents run --automation --template t --target .", "automation run --template t --target ."],
     ["agents set --automation create --template t", "automation create --template t"],
-    ["agents set --automation triggers list a1", "automation triggers list a1"],
     ["agents set --automation edit a1 --file d.json", "automation edit a1 --file d.json"],
     ["agents list --presets", "agents presets"],
     ["agents run a1 --history", "agents activations a1"],
@@ -198,13 +196,6 @@ describe("the new grammar reaches the implementation commands", () => {
     ["config doctor", "doctor"],
     ["config doctor upgrade --check", "doctor upgrade --check"],
     ["config doctor --fix", "config db repair"],
-    ["scan ./app --module deep --yes", "scan deep ./app --yes"],
-    ["scan ./app --module repair", "scan repair ./app"],
-    ["scan https://x.test --module campaign --scope s.json", "scan campaign --target https://x.test --scope s.json"],
-    ["scan . --module deps --ecosystem npm", "scan deps scan --cwd . --ecosystem npm"],
-    ["scan . --module deps-fix --yes", "scan deps fix --cwd . --yes"],
-    ["scan disclose --pack f.json", "scan disclose evidence-pack f.json"],
-    ["scan disclose --track g1", "scan disclose track g1"],
   ];
   it.each(cases)("0 %s", (input, expected) => {
     expect(rewriteNewForms(input.split(" "))?.join(" ")).toBe(expected);
@@ -215,7 +206,7 @@ describe("the new grammar reaches the implementation commands", () => {
   });
 
   it("leaves unchanged commands, partial input and help alone", () => {
-    for (const same of ["findings list", "findings show f1", "threads list --saved", "threads send t1 hello", "threads stop t1 --force", "agents set a1 --name x", "config get model", "config set model x", "skills add owner/repo", "models list", "scan fix .", "scan ./app", "scan https://x.test --depth deep"]) {
+    for (const same of ["findings list", "findings show f1", "threads list --saved", "threads send t1 hello", "threads stop t1 --force", "agents set a1 --name x", "config get model", "config set model x", "skills add owner/repo", "models list"]) {
       expect(rewriteNewForms(same.split(" ")), same).toBeUndefined();
     }
     expect(rewriteNewForms(["findings", "update", "f1", "--status", "bogus"])).toBeUndefined();

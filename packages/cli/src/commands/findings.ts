@@ -340,33 +340,6 @@ export function registerFindingsCommand(program: Command): void {
           console.log(`  ${chalk.gray("Evidence \u2014 Analysis:")}`);
           console.log(`  ${chalk.dim(finding.evidenceAnalysis)}`);
         }
-        // ── Triage provenance ──
-        // The answer to "which FP-moat layers actually ran for this finding?".
-        // Rendered for EVERY finding, including ones where nothing ran: an
-        // absent section would read as "not applicable" when the truthful
-        // reading is "the moat did not run". Derived purely from the recorded
-        // verdicts, so it reflects the scan's configuration and not this
-        // shell's env — see `triage/provenance.ts`.
-        {
-          const { summarizeTriageProvenance, formatTriageProvenance } = await import(
-            "@0/engine"
-          );
-          const provenance = summarizeTriageProvenance({
-            ...(finding as unknown as Finding),
-            layerVerdicts: parseLayerVerdicts(finding.layerVerdicts),
-          });
-          const [headline, totals, ...layerLines] = formatTriageProvenance(provenance);
-          console.log("");
-          console.log(`  ${chalk.gray("Triage provenance:")}`);
-          console.log(
-            `  ${provenance.moatEngaged ? chalk.green(headline) : chalk.yellow(headline)}`,
-          );
-          console.log(`  ${chalk.gray(totals)}`);
-          for (const line of layerLines) {
-            console.log(`  ${chalk.dim(line)}`);
-          }
-        }
-
         if (related.length > 1) {
           console.log("");
           console.log(`  ${chalk.gray("Related Findings:")}`);

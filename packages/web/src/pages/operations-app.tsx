@@ -96,7 +96,7 @@ export function OperationsApp() {
             <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
             <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
             <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
-            {["connections", "models", "settings", "doctor", "tools", "project", "fix"].map((route) => (
+            {["connections", "models", "settings", "doctor", "tools", "project"].map((route) => (
               <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
             ))}
             <Route path="/agents" element={<SentinelsPage />} />

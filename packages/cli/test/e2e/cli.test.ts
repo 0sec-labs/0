@@ -1,11 +1,9 @@
-import { afterAll, beforeAll, describe, it, expect } from "vitest";
-import { fork, spawnSync } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, describe, it, expect } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { detectAndRoute } from "../../src/routing.js";
 import { ToolExecutor } from "@0/engine";
 
 const thisDir = fileURLToPath(new URL(".", import.meta.url));
@@ -17,29 +15,6 @@ const cliPath = join(thisDir, "../../src/index.ts");
 const tsxCliPath = join(thisDir, "../../node_modules/tsx/dist/cli.mjs");
 const tsconfigPath = join(thisDir, "tsconfig.cli-e2e.json");
 const testHome = mkdtempSync(join(tmpdir(), "0-cli-test-"));
-const testDbPath = join(testHome, "findings.db");
-let registryUrl = "";
-let registryProcess: ChildProcess | undefined;
-beforeAll(async () => {
-  const packageRoot = join(testHome, "package");
-  mkdirSync(packageRoot);
-  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "is-odd", version: "3.0.1", main: "index.js" }));
-  writeFileSync(join(packageRoot, "index.js"), "module.exports = n => Number.isInteger(n) && Math.abs(n) % 2 === 1;\n");
-  const archive = join(testHome, "is-odd-3.0.1.tgz");
-  const packed = spawnSync("tar", ["-czf", archive, "-C", testHome, "package"], { encoding: "utf8" });
-  if (packed.status !== 0) throw new Error(`Unable to pack controlled npm fixture: ${packed.stderr}`);
-  // A separate process serves acquisition while spawnSync blocks the test worker.
-  registryProcess = fork(new URL("./npm-registry-fixture.mjs", import.meta.url), [], {
-    env: { PATH: process.env.PATH, HOME: testHome, NPM_FIXTURE_ARCHIVE: archive },
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
-  });
-  registryUrl = await new Promise<string>((resolve, reject) => {
-    registryProcess!.once("error", reject);
-    registryProcess!.once("exit", code => reject(new Error(`Controlled npm registry exited: ${code}`)));
-    registryProcess!.stdout!.once("data", data => resolve(String(data).trim()));
-  });
-});
-afterAll(() => registryProcess?.kill());
 afterAll(() => rmSync(testHome, { recursive: true, force: true }));
 
 const projectRoot = join(thisDir, "../../../..");
@@ -60,8 +35,6 @@ const run = (args: string[], timeout = 30_000, extraEnv: Record<string, string |
       "ZERO_OFFLINE": "1",
       "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1",
       ...extraEnv,
-      npm_config_registry: registryUrl,
-      npm_config_cache: join(testHome, "npm-cache"),
     },
   });
 };
@@ -71,14 +44,10 @@ describe("CLI E2E", () => {
     const result = run(["--help"]);
     expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
-    for (const cmd of ["scan", "findings", "threads", "agents", "skills", "memory", "models", "computers", "config"]) {
+    for (const cmd of ["findings", "threads", "agents", "skills", "memory", "models", "computers", "config"]) {
       expect(result.stdout).toMatch(new RegExp(`^  ${cmd}\\b`, "m"));
     }
     for (const hidden of ["lab", "web", "doctor", "plugin", "automation", "api"]) expect(result.stdout).not.toMatch(new RegExp(`^  ${hidden}\\b`, "m"));
-  });
-
-  it("auto-routes an existing bare relative path to deep source review", () => {
-    expect(detectAndRoute("src")).toEqual(["scan", "source", "src", "--depth", "deep"]);
   });
 
   it("allows piped analysis commands without invoking shell operators", async () => {
@@ -112,74 +81,4 @@ describe("CLI E2E", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
-
-  it("scan package --help shows package options", () => {
-    const result = run(["scan", "package", "--help"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("--depth");
-    expect(result.stdout).toContain("--format");
-    expect(result.stdout).toContain("--runtime");
-  });
-
-  it("audit is-odd --runtime api without an API key exits 3 (partial) with a fix hint", () => {
-    const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-partial"],
-      60_000,
-    );
-    expect(result.status).toBe(3);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed.package).toBe("is-odd");
-    expect(parsed.aiAnalysisSkipped).toBe(true);
-    expect(parsed.executionSuccessful).toBe(false);
-    expect(result.stderr).toContain("--static-only");
-  }, 65_000);
-
-  it("audit is-odd --static-only --format json runs the static layer and exits 0 without an API key", () => {
-    const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "json", "--db-path", testDbPath],
-      60_000,
-    );
-    expect(result.status).toBe(0);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed.package).toBe("is-odd");
-    expect(parsed.summary.totalFindings).toBeTypeOf("number");
-    const combined = result.stdout + result.stderr;
-    expect(combined).toContain('"package": "is-odd"');
-  }, 65_000);
-
-
-  it("scan web --help shows web options", () => {
-    const result = run(["scan", "web", "--help"]);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("--target");
-    expect(result.stdout).toContain("--mode");
-  });
-
-  it("share URL is still generated for a successful degraded deterministic run", () => {
-    const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "terminal", "--db-path", testDbPath + "-share"],
-      60_000,
-    );
-    const output = result.stdout + result.stderr;
-    expect(result.status).toBe(0);
-    expect(output).toContain("0.security/r#");
-  }, 65_000);
-
-  it("emits a machine-readable result line when requested on degraded api runs", () => {
-    const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "json", "--db-path", testDbPath + "-result-line"],
-      60_000,
-      {
-        "ZERO_EMIT_RESULT_LINE": "1",
-      },
-    );
-    const output = result.stdout + result.stderr;
-    expect(result.status).toBe(0);
-    const line = output.split("\n").find((entry) => entry.startsWith("ZERO_RESULT="));
-    expect(line).toBeTruthy();
-    const parsed = JSON.parse(line!.slice("ZERO_RESULT=".length));
-    expect(parsed.ok).toBe(true);
-    expect(parsed.exitCode).toBe(0);
-    expect(parsed.targetType).toBe("npm-package");
-  }, 65_000);
-}, 35_000);
+});

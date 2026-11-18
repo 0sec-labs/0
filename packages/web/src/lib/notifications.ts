@@ -7,7 +7,7 @@ export type NotificationPrefs = { enabled: boolean; sound: boolean; onlyWhenHidd
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   enabled: false, sound: true, onlyWhenHidden: true,
-  events: { "mission-finished": true, "mission-approval": true, "mission-question": true, "scan-finished": true, "fix-ready": true },
+  events: { "mission-finished": true, "mission-approval": true, "mission-question": true },
 };
 
 /** Read-tolerant: unknown or malformed fields fall back to defaults. */

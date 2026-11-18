@@ -38,7 +38,7 @@ describe("command tree", () => {
     const program = new Command();
     registerCommandTree(program);
     const find = (...path: string[]) => path.reduce<Command | undefined>((parent, name) => parent?.commands.find(c => c.name() === name || c.aliases().includes(name)), program);
-    for (const path of [["automations", "create"], ["automation", "delete"], ["automation", "triggers", "enable"], ["agents", "run"], ["agents", "files", "put"], ["agents", "triggers", "add"]]) expect(find(...path), path.join(" ")).toBeDefined();
+    for (const path of [["automations", "create"], ["automation", "delete"], ["agents", "run"], ["agents", "files", "put"], ["agents", "triggers", "add"]]) expect(find(...path), path.join(" ")).toBeDefined();
   });
 });
 
@@ -47,7 +47,7 @@ describe("destructive commands", () => {
     const calls: string[] = [];
     const client: ConsoleClient = { mode: "embedded", request: async (method, path) => { calls.push(`${method} ${path}`); return {}; }, dispose: async () => {} };
     const { run } = harness(async () => client);
-    for (const args of [["automation", "delete", "a"], ["agents", "delete", "s"], ["agents", "run", "s"], ["agents", "files", "rm", "s", "AGENTS.md"], ["agents", "triggers", "rm", "s", "t"], ["automation", "triggers", "remove", "t"]]) {
+    for (const args of [["automation", "delete", "a"], ["agents", "delete", "s"], ["agents", "run", "s"], ["agents", "files", "rm", "s", "AGENTS.md"], ["agents", "triggers", "rm", "s", "t"]]) {
       const result = await run(...args);
       expect(result.code, args.join(" ")).toBe(2);
       expect(result.err).toContain("--yes");
@@ -119,7 +119,7 @@ describe("embedded (no running engine)", () => {
     expect(JSON.parse((await run("agents", "list", ...db)).out)).toEqual([]);
   });
 
-  it("manages automations end to end and keeps schedules host-only", async () => {
+  it("manages automations end to end", async () => {
     const home = makeDir("0-auto-home-");
     const dbPath = join(home, "test.db");
     const { run } = harness(options => openConsoleClient(options), home);
@@ -150,9 +150,6 @@ describe("embedded (no running engine)", () => {
     expect(rolled.code, rolled.err).toBe(0);
     expect(JSON.parse(rolled.out).name).toBe("Weekly review");
 
-    const schedules = await run("automation", "triggers", "list", definition.id, ...db);
-    expect(schedules.code).toBe(1);
-    expect(schedules.err).toContain("running engine");
 
     expect((await run("automation", "delete", copy.id, "--yes", ...db)).code).toBe(0);
     expect((await run("automation", "delete", definition.id, "--yes", ...db)).code).toBe(0);

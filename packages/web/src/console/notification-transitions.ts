@@ -1,13 +1,11 @@
 import type { DesktopConsoleSessionStatus } from "@0/engine/shared";
 
-/** Events a mission can raise. Scan and fix events are declared so preferences are stable; they are raised by `scan`/`fix` callers. */
-export type NotificationEvent = "mission-finished" | "mission-approval" | "mission-question" | "scan-finished" | "fix-ready";
+/** Events a mission can raise. */
+export type NotificationEvent = "mission-finished" | "mission-approval" | "mission-question";
 export const NOTIFICATION_EVENTS: readonly { id: NotificationEvent; label: string; description: string; title: string }[] = [
   { id: "mission-finished", label: "Thread finished", description: "A thread completed its turn and is ready for you.", title: "Thread finished" },
   { id: "mission-approval", label: "Thread needs your approval", description: "A thread is paused until you approve or deny an action.", title: "Approval needed" },
   { id: "mission-question", label: "Thread asked a question", description: "A thread is waiting for your answer.", title: "Question from a thread" },
-  { id: "scan-finished", label: "Scan finished", description: "A scan completed.", title: "Scan finished" },
-  { id: "fix-ready", label: "Fix ready or pull request opened", description: "A fix is ready for review.", title: "Fix ready" },
 ];
 
 /** The minimum a transition needs: never finding text, only ids, status and the mission title. */

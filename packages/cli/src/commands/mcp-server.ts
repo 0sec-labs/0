@@ -1,4 +1,3 @@
-import { EngineAssessmentSchema } from "@0/engine";
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { automationsOption, chatOption, engineOptions } from "./shared-options.js";
@@ -82,9 +81,8 @@ const MCP_LIVE_TOOL_NAMES = new Set([
 
 const MCP_WORKFLOW_TOOL_NAMES = new Set([
   "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
-  "start_run", "get_run", "get_run_results", "cancel_run", "list_runs", "list_work", "get_work",
-  "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker",
-  "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "get_capabilities", "resume_scan", "start_assessment",
+    "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker",
+  "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "get_capabilities",
 ]);
 
 function resolveMcpToolNames(raw: string | undefined, workflows = false): ReadonlySet<string> {
@@ -311,9 +309,7 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     return id.parse(selected);
   };
   const tools = [
-    { name: "start_assessment", description: "Start a structured assessment in the selected engine session using an explicit goal, depth, run count, execution mode, and budgets.", schema: EngineAssessmentSchema, run: (args: any) => sessionRuntime.startAssessment({ ...(opts.chat ? { sessionId: opts.chat } : {}), ...args }) },
     { name: "get_capabilities", description: "Read the engine's supported operations and resume capabilities.", schema: z.object({}).strict(), run: () => sessionRuntime.getCapabilities() },
-    { name: "resume_scan", description: "Resume a retained scan in a selected session; this does not restart a workflow graph.", schema: z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => sessionRuntime.resumeScan(args) },
     { name: "get_session_events", description: "Read session events after an engine event cursor.", schema: z.object({ sessionId: id, after: z.number().int().nonnegative().optional() }).strict(), run: (args: any) => sessionRuntime.getSessionEvents(args.sessionId, args.after) },
     { name: "list_session_workers", description: "List real workers owned by an existing engine session. Does not create agents, a session, or a separate executor. Omit sessionId only when --chat selected an existing session.", schema: z.object({ sessionId: id.optional() }).strict(), run: (args: any) => sessionRuntime.listSessionWorkers(resolveSessionId(args.sessionId)) },
     { name: "get_session_worker", description: "Read one real worker and its published trace from its owning engine session. A worker from another session is refused.", schema: z.object({ sessionId: id.optional(), workerId: id }).strict(), run: (args: any) => sessionRuntime.getSessionWorker(resolveSessionId(args.sessionId), args.workerId) },
@@ -331,22 +327,9 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     { name: "resume_session", description: "Resume a saved snapshot as a new session; admission grants are revalidated.", schema: z.object({ savedSessionId: id }).strict(), run: (args: any) => sessionRuntime.resumeSession(args.savedSessionId) },
     { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
     { name: "get_template", description: "Read a workflow template.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getTemplate(args.id) },
-    { name: "list_work", description: "List normalized retained work across workflow executions and scans on the selected engine. Read-only; does not launch or recover work.", schema: z.object({}).strict(), run: () => runtime.listWork() },
-    { name: "get_work", description: "Read one normalized retained work record by its canonical work ID; includes links to its underlying execution or scan.", schema: z.object({ workId: id }).strict(), run: (args: any) => runtime.getWork(args.workId) },
-    { name: "list_runs", description: "List workflow runs visible to this execution owner on the selected engine.", schema: z.object({}).strict(), run: () => runtime.listRuns() },
     { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
     { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },
     { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.string(), z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
-    { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ sessionId: id.optional(), templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
-      if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
-      if (args.workflowId && !args.revision) throw new Error("Saved automation runs require a pinned revision.");
-      if (args.allowApply && !opts.allowApply) throw new Error("Applying automation changes requires the host --allow-apply capability.");
-      if (opts.target && args.target.trim() !== opts.target.trim()) throw new Error("Target does not match this MCP connection's configured target.");
-      return runtime.startRun({ ...(opts.chat ? { sessionId: opts.chat } : {}), ...args });
-    } },
-    { name: "get_run", description: "Read status of a run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
-    { name: "get_run_results", description: "Read paginated findings and artifact references from an owned run.", schema: z.object({ runId: id, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict(), run: (args: any) => runtime.getRunResults(args.runId, { cursor: args.cursor, limit: args.limit }) },
-    { name: "cancel_run", description: "Cancel an active run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.cancelRun(args.runId) },
   ];
   for (const tool of tools) {
     if (!selected.has(tool.name)) continue;

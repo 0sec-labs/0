@@ -23,7 +23,7 @@ import type {
 import type {
   DashboardResponse,
   FindingFamilyResponse,
-  FindingWorkflowStatus, ScanEventsResponse
+  FindingWorkflowStatus
 } from "./types";
 export { useBackendApi } from "./backend-context";
 
@@ -149,10 +149,6 @@ function getRuns(): Promise<RunRecord[]> {
 }
 
 
-
-function getScanEvents(scanId: string): Promise<ScanEventsResponse> {
-  return webFetchJson(`/api/scans/${encodeURIComponent(scanId)}/events`);
-}
 
 
 
@@ -309,6 +305,6 @@ function archiveConsoleSession(id: string, saved = false, archived = true): Prom
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
 
-  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getScanEvents, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, getConsoleTools, getConsoleWorker, getConsoleMessagesPage, getSavedTranscript, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, getConsoleTools, getConsoleWorker, getConsoleMessagesPage, getSavedTranscript, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
 }
 export type BackendApi = ReturnType<typeof createBackendApi>;

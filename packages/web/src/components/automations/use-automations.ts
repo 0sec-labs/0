@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SecurityWorkflow, SecurityWorkflowExecution, SecurityWorkflowInput } from "@0/engine/shared";
+import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
 import { createSecurityWorkflowTemplate, securityWorkflowScopeKind } from "@0/engine/shared/security-workflow-templates";
 import { parseSecurityWorkflowInput } from "@0/engine/shared/security-workflows";
 import { useBackendApi } from "@/api";
@@ -47,12 +47,11 @@ export function useCreateAutomation() {
   };
 }
 
-/** Every automation with its schedule and latest run, for the Agents page and an Agent's own list. */
+/** Every automation with its schedule, for the Agents page and an Agent's own list. */
 export function useAutomationRows() {
-  const { client, webFetchJson } = useBackendApi();
+  const { webFetchJson } = useBackendApi();
   const { definitions, query } = useAutomationDefinitions();
   const schedules = useQuery({ queryKey: queryKeys.workflowTriggers("all"), queryFn: ({ signal }) => webFetchJson<{ triggers: ScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 30_000 });
-  const executions = useQuery({ queryKey: queryKeys.workflowExecutions(client.backendId, "all"), queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 30_000 });
-  const rows = useMemo(() => sortAutomationRows(automationRows(definitions, schedules.data?.triggers ?? [], executions.data?.executions ?? [])), [definitions, schedules.data, executions.data]);
+  const rows = useMemo(() => sortAutomationRows(automationRows(definitions, schedules.data?.triggers ?? [])), [definitions, schedules.data]);
   return { rows, definitions, isLoading: query.isLoading, error: query.error };
 }

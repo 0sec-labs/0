@@ -3,7 +3,7 @@ title: Skills
 description: Give the agent reusable instructions with standard skill folders.
 ---
 
-A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Extensions](/extensions/) are different: they connect 0 to your tools and services (GitHub, MCP servers, rules like scope), and an extension can come with a skill that explains how to use it. [Automations](/agents/#automations) define the steps of a task. The nine CLI commands are fixed entry points, not skills; see [Threads](/threads/#commands-skills-and-workflows).
+A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Extensions](/extensions/) are different: they connect 0 to your tools and services (GitHub, MCP servers, rules like scope), and an extension can come with a skill that explains how to use it. [Automations](/agents/#automations) are prompts an Agent runs on a trigger. The eight CLI commands are fixed entry points, not skills; see [Threads](/threads/#commands-skills-and-automations).
 
 ## Add a skill
 

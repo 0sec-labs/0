@@ -10,10 +10,10 @@ describe("notification preferences", () => {
     expect(DEFAULT_NOTIFICATION_PREFS).toMatchObject({ enabled: false, sound: true, onlyWhenHidden: true });
   });
   it("keeps valid fields and drops malformed ones", () => {
-    const prefs = normalizePrefs({ enabled: true, sound: "loud", events: { "scan-finished": false, bogus: false } });
+    const prefs = normalizePrefs({ enabled: true, sound: "loud", events: { "mission-approval": false, bogus: false } });
     expect(prefs.enabled).toBe(true);
     expect(prefs.sound).toBe(true);
-    expect(prefs.events["scan-finished"]).toBe(false);
+    expect(prefs.events["mission-approval"]).toBe(false);
     expect(prefs.events["mission-finished"]).toBe(true);
     expect(Object.keys(prefs.events)).not.toContain("bogus");
   });

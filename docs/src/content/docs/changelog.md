@@ -12,12 +12,10 @@ Version 0.36 replaced the old plugin system with [extensions](/extensions/): one
 ## CLI changes in 0.35
 
 
-0.35 reduces the CLI to nine top-level commands, each with at most three subcommands in `--help`:
+0.35 reduced the CLI to nine top-level commands; the scan command has since been removed, leaving eight, each with at most three subcommands in `--help`:
 
 ```text
 0                         open the web console
-0 scan <target>           scan a URL, a folder, or npm:/pypi:/cargo:/oci: packages
-0 scan fix | verify | disclose
 0 findings                list | show | update
 0 threads                 list | send | stop
 0 agents                  list | run | set
@@ -47,34 +45,11 @@ The line is not printed when stdout is not a terminal (pipes, CI) or when `--jso
 
 Where the earlier commands do not fold into a single verb, the new form is a flag on the verb you already know. These are the same flag everywhere:
 
-- `0 scan <target> --module deep|repair|campaign|deps|deps-fix` runs the module that has no target-detecting form. Targets are still detected for URLs, folders and packages.
-- `0 agents list|run|set ... --automation` works on saved automations, with the arguments `automation` always had. `0 agents set --create`, `--state active|paused|acknowledged|archived|deleted`, `--budget`, `--trigger <sub>` and `--files <sub>` replace the old `agents` verbs.
 - `0 threads list <id>` shows one thread; add `--events`, `--export`, `--rename <title>`, `--set`, `--clear`, `--close`, `--archive` or `--delete` to act on it. `0 threads send new <prompt>` starts a thread; `0 threads send <id> --retry|--resume|--decide <decision-id>` replaces the old verbs.
 - `0 skills add <source>` takes a catalog id, a repository, a folder or a bundle. `--mcp <url>` adds an MCP server as a local extension. Extensions are installed with `0 skills add <repo>@<sha>` and managed with `0 skills extensions`; the plugin flags (`--plugin`, `--local`, `--new`, `--validate`, `--submit`, `--connect`) were folded into those or removed, see the plugin table below.
 - `0 config get|set` take the namespaces `audit`, `team`, `db`, `github` and `api.key`; `--all`, `--export`, `--from-file` and `--reset` replace `list`, `export`, `import` and `reset`.
-- `automation versions` and `automation rollback` are removed after this release; use git history for versions.
-- `scan eval` and `scan agent-assure` move into plugins after this release. `lab research` and `lab improve` stay hidden until their destinations exist (the private package and the benchmark plugin); they are not removed in 0.35.
 
 ### Every old command
-
-#### scan
-
-| Old | New |
-| --- | --- |
-| `0 scan web` | `0 scan <target>` |
-| `0 scan source` | `0 scan <target>` |
-| `0 scan package` | `0 scan <target>` |
-| `0 scan deep` | `0 scan <target> --module deep` |
-| `0 scan repair` | `0 scan <target> --module repair` |
-| `0 scan campaign` | `0 scan <target> --module campaign` |
-| `0 scan deps scan` | `0 scan <dir> --module deps` |
-| `0 scan deps fix` | `0 scan <dir> --module deps-fix` |
-| `0 scan deps` | `0 scan <dir> --module deps` |
-| `0 scan eval` | the benchmark plugin (removed after 0.35) |
-| `0 scan agent-assure` | the agent-assure plugin (removed after 0.35) |
-| `0 scan disclose evidence-pack` | `0 scan disclose --pack <finding.json>` |
-| `0 scan disclose track` | `0 scan disclose --track <id>` |
-| `0 scan disclose review` | `0 scan disclose --review <finding.json>` |
 
 #### findings
 
@@ -135,22 +110,6 @@ Where the earlier commands do not fold into a single verb, the new form is a fla
 | `0 agents activations` | `0 agents run <id> --history` |
 | `0 agents files` | `0 agents set <id> --files list\|get\|put\|rm` |
 | `0 agents triggers` | `0 agents set <id> --trigger list\|add\|enable\|disable\|check\|rm` |
-
-#### automation (now `agents --automation`)
-
-| Old | New |
-| --- | --- |
-| `0 automation list` | `0 agents list --automation` |
-| `0 automation show` | `0 agents list <id> --automation` |
-| `0 automation run` | `0 agents run <id> --automation` |
-| `0 automation create` | `0 agents set --automation create` |
-| `0 automation edit` | `0 agents set --automation edit <id>` |
-| `0 automation duplicate` | `0 agents set --automation duplicate <id>` |
-| `0 automation delete` | `0 agents set --automation delete <id>` |
-| `0 automation triggers` | `0 agents set --automation triggers <list\|enable\|disable\|remove>` |
-| `0 automation versions` | git history (this command is removed after 0.35) |
-| `0 automation rollback` | git (this command is removed after 0.35) |
-| `0 automation` | `0 agents list --automation` |
 
 #### models
 
@@ -243,7 +202,6 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | --- | --- |
 | `0 doctor upgrade` | `0 config doctor upgrade` |
 | `0 doctor workbench` | `0 config doctor workbench` |
-| `0 doctor checks` | `0 config doctor checks` |
 
 #### web
 
@@ -252,4 +210,4 @@ The `plugin` group is hidden and kept as aliases. The executable plugin runtime,
 | `0 web` | `0` |
 
 
-Commands that moved in earlier releases (`hunt`, `review`, `audit`, `secure`, `triage`, `history`, `resume` and the rest) keep their previous aliases and now say where their implementation lives, for example `0 hunt` prints `moved: use 0 lab research hunt`.
+Commands that moved in earlier releases (`hunt`, `review`, `audit`, `secure`, `triage`, `history`, `resume` and the rest) belonged to the scan and research engines, which were removed (see the Unreleased notes in the full changelog).

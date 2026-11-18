@@ -144,8 +144,6 @@ function FilterMenu({ filters, onFilters, categories, missions, missionNames }: 
         {STATUS_ORDER.map(status => (
           <DropdownMenu.Item key={status} {...keep} icon={<StatusIcon status={status} />} selected={filters.status.includes(status)} onClick={() => onFilters({ ...filters, status: toggleValue(filters.status, status) })}>{STATUS_LABEL[status]}</DropdownMenu.Item>
         ))}
-        <DropdownMenu.Label>Fix</DropdownMenu.Label>
-        <DropdownMenu.Item {...keep} selected={filters.hasFixPr} onClick={() => onFilters({ ...filters, hasFixPr: !filters.hasFixPr })}>Has fix PR</DropdownMenu.Item>
         {categories.length > 0 ? <DropdownMenu.Label>Category</DropdownMenu.Label> : null}
         {categories.map(item => (
           <DropdownMenu.Item key={item.value} {...keep} selected={filters.category.includes(item.value)} onClick={() => onFilters({ ...filters, category: toggleValue(filters.category, item.value) })}>
@@ -189,8 +187,7 @@ function FilterChips({ filters, onFilters, missionNames }: FindingsToolbarProps)
       {filters.status.length ? <FilterChip label="Status" values={filters.status.map(status => STATUS_LABEL[status]).join(", ")} onRemove={() => onFilters({ ...filters, status: [] })} /> : null}
       {filters.category.length ? <FilterChip label="Category" values={filters.category.join(", ")} onRemove={() => onFilters({ ...filters, category: [] })} /> : null}
       {filters.mission.length ? <FilterChip label={missionLabel} values={filters.mission.map(key => missionName(key, missionNames)).join(", ")} onRemove={() => onFilters({ ...filters, mission: [] })} /> : null}
-      {filters.hasFixPr ? <FilterChip label="Fix PR" values="Has fix PR" onRemove={() => onFilters({ ...filters, hasFixPr: false })} /> : null}
-      <Button variant="ghost" size="sm" className="ml-auto h-6 px-2" onClick={() => onFilters({ ...filters, severity: [], status: [], category: [], mission: [], hasFixPr: false })}>Clear</Button>
+      <Button variant="ghost" size="sm" className="ml-auto h-6 px-2" onClick={() => onFilters({ ...filters, severity: [], status: [], category: [], mission: [] })}>Clear</Button>
     </div>
   );
 }
