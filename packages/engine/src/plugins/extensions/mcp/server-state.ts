@@ -7,6 +7,9 @@ import type { McpToolInfo } from "./core/tool-hash.js";
 import type { McpSession } from "./ports.js";
 
 export type State = "idle" | "ready" | "blocked";
+export interface LoadResult { readonly ok: boolean; readonly message: string }
+export type SyncResult = { readonly ok: true } | { readonly ok: false; readonly reason: string };
+
 export interface Server {
   readonly id: string; readonly ext: LoadedExtension; readonly decl: McpServerDecl; readonly entry: ServerIndexEntry;
   state: State; reason: string; session?: McpSession;
@@ -16,11 +19,15 @@ export interface Server {
   secrets: string[];
   /** The server announced a changed tool list: nothing is callable until it has been reviewed again. */
   stale: boolean;
-  loading?: Promise<void>; revalidating?: Promise<void>;
+  /** Monotonic ownership epoch (never reset). Incremented on startup, drop, and closeAll. */
+  sessionToken: number;
+  /** Monotonic count of `tools/list_changed` notifications observed for this server (never reset). */
+  toolsVersion: number;
+  loading?: Promise<LoadResult>; revalidating?: Promise<SyncResult>;
 }
 
 export const newServer = (id: string, ext: LoadedExtension, decl: McpServerDecl, entry: ServerIndexEntry): Server =>
-  ({ id, ext, decl, entry, state: "idle", reason: "", tools: new Map(), allowed: new Set(), defs: [], secrets: [], stale: false });
+  ({ id, ext, decl, entry, state: "idle", reason: "", tools: new Map(), allowed: new Set(), defs: [], secrets: [], stale: false, sessionToken: 0, toolsVersion: 0 });
 
 export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).slice(0, 300);
 export const redactWith = (server: Pick<Server, "secrets">, text: string): string => server.secrets.reduce((r, s) => r.split(s).join("[redacted]"), text);

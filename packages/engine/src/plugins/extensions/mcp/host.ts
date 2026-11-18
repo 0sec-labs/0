@@ -23,7 +23,7 @@ import { mcpToolHash, hashTools, type McpToolInfo } from "./core/tool-hash.js";
 import { labelUntrustedOutput } from "./core/untrusted.js";
 import type { McpConnector, McpGate, McpObservationLog, McpPinStore, McpSession, McpSnapshotStore } from "./ports.js";
 import { reviewServer } from "./review-flow.js";
-import { message, newServer, redactWith, type Server, type State } from "./server-state.js";
+import { message, newServer, redactWith, type LoadResult, type Server, type State, type SyncResult } from "./server-state.js";
 
 export interface ExtensionMcpHostOptions {
   extensions: readonly LoadedExtension[];
@@ -37,7 +37,14 @@ export interface ExtensionMcpHostOptions {
 }
 
 const FLAGS: McpToolGateFlags = { networkCapable: true, readOnly: false };
+const MAX_REVALIDATIONS = 5;
 const byName = <T extends { name: string }>(a: T, b: T): number => (a.name < b.name ? -1 : 1);
+
+type AdoptResult =
+  | { readonly status: "ok" }
+  | { readonly status: "rejected"; readonly reason: string }
+  | { readonly status: "stale" }
+  | { readonly status: "superseded" };
 
 export class ExtensionMcpHost implements McpToolHost {
   readonly #servers = new Map<string, Server>();
@@ -78,7 +85,7 @@ export class ExtensionMcpHost implements McpToolHost {
 
   registeredTools(): ToolDefinition[] {
     const base = this.#o.base?.registeredTools() ?? []; const taken = new Set(base.map(d => d.name));
-    return [...base, ...[...this.#servers.values()].filter(s => s.state === "ready" && !s.stale && !this.#collides(s)).flatMap(s => s.defs).filter(d => !taken.has(d.name))];
+    return [...base, ...[...this.#servers.values()].filter(s => s.state === "ready" && !s.stale && !s.revalidating && !this.#collides(s)).flatMap(s => s.defs).filter(d => !taken.has(d.name))];
   }
 
   toolGateFlags(name: string): McpToolGateFlags | undefined { return this.#own(name) ? FLAGS : this.#o.base?.toolGateFlags?.(name); }
@@ -88,76 +95,176 @@ export class ExtensionMcpHost implements McpToolHost {
     return parsed && server && !this.#collides(server) ? { server, tool: parsed.tool } : null;
   }
 
-  async loadServer(name: string): Promise<{ ok: boolean; message: string }> {
-    const server = [...this.#servers.values()].find(s => indexName(s.id) === name);
-    if (!server) return { ok: false, message: `${name} is not an MCP server of an enabled extension.` };
-    if (this.#collides(server)) return { ok: false, message: `MCP server "${server.id}" is refused: its id is already used by one of the operator's own servers.` };
-    server.loading ??= this.#start(server).finally(() => { server.loading = undefined; });
-    await server.loading;
-    return server.state === "ready"
-      ? { ok: true, message: `MCP server "${server.id}" loaded: ${server.defs.length} tool(s), callable on your next turn: ${server.defs.map(d => d.name).join(", ")}.` }
-      : { ok: false, message: `MCP server "${server.id}" is not available: ${redactWith(server, server.reason)}` };
+  #readyMessage(server: Server): LoadResult {
+    return { ok: true, message: `MCP server "${server.id}" loaded: ${server.defs.length} tool(s), callable on your next turn: ${server.defs.map(d => d.name).join(", ")}.` };
   }
 
-  #block(server: Server, reason: string): void { server.state = "blocked"; server.reason = reason; server.defs = []; server.allowed = new Set(); server.tools = new Map(); }
+  #reviewingMessage(server: Server): LoadResult {
+    return { ok: false, message: `MCP server "${server.id}" is not available: the server reported changed tools and they are being reviewed` };
+  }
+
+  loadServer(name: string): Promise<LoadResult> {
+    const server = [...this.#servers.values()].find(s => indexName(s.id) === name);
+    if (!server) return Promise.resolve({ ok: false, message: `${name} is not an MCP server of an enabled extension.` });
+    if (this.#collides(server)) return Promise.resolve({ ok: false, message: `MCP server "${server.id}" is refused: its id is already used by one of the operator's own servers.` });
+    if (server.state === "ready") return Promise.resolve(server.stale || server.revalidating ? this.#reviewingMessage(server) : this.#readyMessage(server));
+    if (server.loading) return server.loading;
+    let done = false;
+    let tracked!: Promise<LoadResult>;
+    const clear = () => { done = true; if (server.loading === tracked) server.loading = undefined; };
+    tracked = this.#start(server, clear);
+    if (!done) server.loading = tracked;
+    return tracked;
+  }
+
+  #block(server: Server, token: number, reason: string): void {
+    if (server.sessionToken !== token) return;
+    server.state = "blocked"; server.reason = reason; server.stale = false;
+    server.defs = []; server.allowed = new Set(); server.tools = new Map();
+  }
 
   /** Forget a session that is gone or untrusted and close it. A server that merely died may be started again (and reviewed again). */
-  async #drop(server: Server, session: McpSession, state: "idle" | "blocked", reason: string): Promise<void> {
-    if (server.session !== session) return;
-    server.session = undefined; server.stale = false;
-    this.#block(server, reason); if (state === "idle") server.state = "idle";
-    await session.close();
+  async #drop(server: Server, token: number, state: "idle" | "blocked", reason: string): Promise<void> {
+    if (server.sessionToken !== token) return;
+    const session = server.session;
+    this.#block(server, token, reason);
+    if (state === "idle") server.state = "idle";
+    server.sessionToken++;
+    server.session = undefined;
+    server.revalidating = undefined;
+    server.loading = undefined;
+    await session?.close().catch(() => undefined);
   }
 
-  async #start(server: Server): Promise<void> {
-    if (server.state === "ready") return;
-    const { ext, decl } = server;
-    const plan = launchFor(decl, { extension: ext.name, dir: ext.dir, parentEnv: ext.connected(this.#o.parentEnv ?? process.env), approvedEnv: [...ext.approvedEnv, ...decl.env] });
-    if ("refused" in plan) return this.#block(server, plan.refused);
-    const launch = plan.launch;
-    server.secrets = launch.kind === "stdio" ? Object.entries(launch.env).filter(([k, v]) => !k.startsWith("ZERO_") && v.length >= 6).map(([, v]) => v) : [];
-    const operator = this.#operator;
-    const hook = await this.#o.gate(launchHookInput(launch, operator?.thread() ?? {}, operator?.cwd ?? ext.dir)).catch(e => ({ decision: "deny" as const, reason: `gate failed: ${message(e)}` }));
-    if (hook.decision === "deny") return this.#block(server, `denied before it started: ${hook.reason}`);
-    if (hook.decision === "ask") {
-      const what = launch.kind === "stdio" ? `start ${[launch.command, ...launch.args].join(" ")}` : `connect to ${launch.url}`;
-      if (!operator?.approve) return this.#block(server, `needs your approval to ${what} and no one can be asked here`);
-      if (!await operator.approve({ name: "mcp_server_start", summary: `Extension ${ext.name} wants to ${what} (MCP server ${decl.name}). ${hook.reason}` })) return this.#block(server, "you did not approve starting it");
-    }
-    let session: McpSession;
-    try { session = await this.#o.connector.connect(launch); } catch (e) { return this.#block(server, redactWith(server, `could not start: ${message(e)}`)); }
+  async #start(server: Server, onFinish: () => void): Promise<LoadResult> {
+    let dropReason: string | undefined;
+    const fail = (reason: string): LoadResult => ({ ok: false, message: `MCP server "${server.id}" is not available: ${redactWith(server, reason)}` });
+    const cancelled = (): LoadResult => fail(dropReason ?? "startup was cancelled");
     try {
-      const tools = await session.tools();
-      const ready = await this.#adopt(server, tools);
-      if (!ready.ok) { await session.close(); return this.#block(server, ready.reason); }
-      server.session = session; server.state = "ready"; server.reason = ""; server.stale = false;
-      session.onToolsChanged(() => { server.stale = true; void this.#revalidate(server, session); });
-      session.onClosed(reason => { void this.#drop(server, session, "idle", `the server stopped: ${reason}`); });
-    } catch (e) { await session.close(); this.#block(server, `could not list its tools: ${redactWith(server, message(e))}`); }
+      if (server.state === "ready") return server.stale || server.revalidating ? this.#reviewingMessage(server) : this.#readyMessage(server);
+      const token = ++server.sessionToken;
+      const { ext, decl } = server;
+      const plan = launchFor(decl, { extension: ext.name, dir: ext.dir, parentEnv: ext.connected(this.#o.parentEnv ?? process.env), approvedEnv: [...ext.approvedEnv, ...decl.env] });
+      if ("refused" in plan) { this.#block(server, token, plan.refused); return fail(plan.refused); }
+      const launch = plan.launch;
+      server.secrets = launch.kind === "stdio" ? Object.entries(launch.env).filter(([k, v]) => !k.startsWith("ZERO_") && v.length >= 6).map(([, v]) => v) : [];
+      const operator = this.#operator;
+      const hook = await this.#o.gate(launchHookInput(launch, operator?.thread() ?? {}, operator?.cwd ?? ext.dir)).catch(e => ({ decision: "deny" as const, reason: `gate failed: ${message(e)}` }));
+      if (server.sessionToken !== token) return cancelled();
+      if (hook.decision === "deny") { const r = `denied before it started: ${hook.reason}`; this.#block(server, token, r); return fail(r); }
+      if (hook.decision === "ask") {
+        const what = launch.kind === "stdio" ? `start ${[launch.command, ...launch.args].join(" ")}` : `connect to ${launch.url}`;
+        if (!operator?.approve) { const r = `needs your approval to ${what} and no one can be asked here`; this.#block(server, token, r); return fail(r); }
+        const ok = await operator.approve({ name: "mcp_server_start", summary: `Extension ${ext.name} wants to ${what} (MCP server ${decl.name}). ${hook.reason}` });
+        if (server.sessionToken !== token) return cancelled();
+        if (!ok) { const r = "you did not approve starting it"; this.#block(server, token, r); return fail(r); }
+      }
+      let session: McpSession;
+      try { session = await this.#o.connector.connect(launch); } catch (e) {
+        if (server.sessionToken !== token) return cancelled();
+        const r = redactWith(server, `could not start: ${message(e)}`);
+        this.#block(server, token, r); return fail(r);
+      }
+      if (server.sessionToken !== token) { await session.close().catch(() => undefined); return cancelled(); }
+
+      server.session = session; server.stale = false; server.revalidating = undefined;
+      session.onClosed(reason => { dropReason = `the server stopped: ${reason}`; void this.#drop(server, token, "idle", dropReason); });
+      session.onToolsChanged(() => {
+        if (server.sessionToken !== token) return;
+        server.toolsVersion++;
+        if (server.state === "ready") { server.stale = true; void this.#revalidate(server, token, session); }
+      });
+      if (server.sessionToken !== token) return cancelled();
+
+      const synced = await this.#syncTools(server, token, session, true);
+      if (!synced.ok) return fail(synced.reason || dropReason || "startup was cancelled");
+      if (server.sessionToken !== token) return cancelled();
+      if (server.stale || server.revalidating) return this.#reviewingMessage(server);
+      return this.#readyMessage(server);
+    } finally {
+      onFinish();
+    }
   }
 
   /** Review `tools` against the pin (asking the operator on a mismatch) and, if they pass, make them the callable set. */
-  async #adopt(server: Server, tools: McpToolInfo[]): Promise<{ ok: true } | { ok: false; reason: string }> {
+  async #adopt(server: Server, tools: McpToolInfo[], token: number, version: number): Promise<AdoptResult> {
     const { ext, decl } = server;
-    const review = await reviewServer({ pins: this.#o.pins, ...(this.#o.snapshots ? { snapshots: this.#o.snapshots } : {}), operator: this.#operator }, server, tools);
-    this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review: review.needsApproval ? review : null, blocked: review.needsApproval ? review.reason : null });
-    if (review.needsApproval) return { ok: false, reason: review.reason };
+    const outcome = await reviewServer(
+      {
+        pins: this.#o.pins,
+        ...(this.#o.snapshots ? { snapshots: this.#o.snapshots } : {}),
+        operator: this.#operator,
+        canCommit: () => server.sessionToken === token && server.toolsVersion === version,
+      },
+      server,
+      tools,
+    );
+    if (server.sessionToken !== token) return { status: "stale" };
+    if (outcome.kind === "aborted") return { status: "superseded" };
+    const { review } = outcome;
+    if (review.needsApproval) {
+      try { this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review, blocked: review.reason }); } catch { /* informational */ }
+      return { status: "rejected", reason: review.reason };
+    }
+    if (server.toolsVersion !== version) return { status: "superseded" };
+    try { this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review: null, blocked: null }); } catch { /* informational */ }
     server.tools = new Map(tools.map(t => [t.name, t])); server.allowed = new Set(review.allowed); server.defs = buildDefinitions(server.id, tools, server.allowed).definitions;
-    return { ok: true };
+    return { status: "ok" };
+  }
+
+  /** Fetch and adopt tools for the active epoch until quiescent, failing closed on rejection, error, or sustained churn. */
+  async #syncTools(server: Server, token: number, session: McpSession, initial: boolean, onFinish?: () => void): Promise<SyncResult> {
+    try {
+      if (!initial) {
+        // Yield once so `server.revalidating` is assigned before `session.tools()` runs (prevents re-entrant loops).
+        await Promise.resolve();
+        if (server.sessionToken !== token) return { ok: false, reason: "" };
+      }
+      for (let pass = 0; pass < MAX_REVALIDATIONS; pass++) {
+        const version = server.toolsVersion;
+        const tools = await session.tools();
+        if (server.sessionToken !== token) return { ok: false, reason: "" };
+        if (server.toolsVersion !== version) continue;
+
+        const result = await this.#adopt(server, tools, token, version);
+        if (server.sessionToken !== token) return { ok: false, reason: "" };
+        if (result.status === "superseded") continue;
+        if (result.status === "rejected") {
+          const reason = initial ? result.reason : `its tools changed while it was running: ${result.reason}`;
+          await this.#drop(server, token, "blocked", reason);
+          return { ok: false, reason };
+        }
+
+        if (server.toolsVersion === version) {
+          if (initial) { server.state = "ready"; server.reason = ""; }
+          server.stale = false;
+          return { ok: true };
+        }
+      }
+      const reason = "its tools kept changing while being reviewed";
+      await this.#drop(server, token, "blocked", reason);
+      return { ok: false, reason };
+    } catch (e) {
+      if (server.sessionToken !== token) return { ok: false, reason: "" };
+      const prefix = initial ? "could not list its tools" : "its tools changed and could not be reviewed";
+      const reason = `${prefix}: ${redactWith(server, message(e))}`;
+      await this.#drop(server, token, "blocked", reason);
+      return { ok: false, reason };
+    } finally {
+      onFinish?.();
+    }
   }
 
   /** The server said its tools changed. Calls stay refused until the new list is reviewed; unreviewed changes block the server. */
-  #revalidate(server: Server, session: McpSession): Promise<void> {
-    server.revalidating ??= (async () => {
-      try {
-        const tools = await session.tools();
-        if (server.session !== session) return;
-        const result = await this.#adopt(server, tools);
-        if (!result.ok) await this.#drop(server, session, "blocked", `its tools changed while it was running: ${result.reason}`);
-        else server.stale = false;
-      } catch (e) { await this.#drop(server, session, "blocked", `its tools changed and could not be reviewed: ${redactWith(server, message(e))}`); }
-    })().finally(() => { server.revalidating = undefined; });
-    return server.revalidating;
+  #revalidate(server: Server, token: number, session: McpSession): Promise<SyncResult> {
+    if (server.sessionToken !== token || server.session !== session) return Promise.resolve({ ok: false, reason: "" });
+    if (server.revalidating) return server.revalidating;
+    let done = false;
+    let tracked!: Promise<SyncResult>;
+    const clear = () => { done = true; if (server.revalidating === tracked) server.revalidating = undefined; };
+    tracked = this.#syncTools(server, token, session, false, clear);
+    if (!done && server.sessionToken === token) server.revalidating = tracked;
+    return tracked;
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -179,7 +286,12 @@ export class ExtensionMcpHost implements McpToolHost {
 
   async closeAll(): Promise<void> {
     const sessions = [...this.#servers.values()].flatMap(s => (s.session ? [s.session] : []));
-    for (const s of this.#servers.values()) { s.session = undefined; s.state = "idle"; s.defs = []; s.allowed = new Set(); s.tools = new Map(); }
+    for (const s of this.#servers.values()) {
+      s.sessionToken++;
+      s.session = undefined; s.state = "idle"; s.reason = "";
+      s.stale = false; s.revalidating = undefined; s.loading = undefined;
+      s.defs = []; s.allowed = new Set(); s.tools = new Map();
+    }
     await Promise.allSettled([...sessions.map(s => s.close()), this.#o.base?.closeAll()]);
   }
 }
