@@ -12,7 +12,15 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- `0 scan <folder or git URL>` scans a code base for security bugs and prints the findings as a report. A scan is a thread that follows the built-in `scan` skill, so it shows up in `0 threads` and in the app. `--budget` (default $5) stops it and keeps the partial findings, `--format` is `json`, `md`, `sarif`, `html` or `pdf`, `-o` writes a file, `--fail-on <severity>` sets the exit code for CI, `--timeout` cancels it and still prints what was found, and `--model` picks the model (default `gpt-6-luna`). With no console running it starts one for the scan; it also works with `--engine-url` and `--computer`. The JSON report is versioned (`schemaVersion: 1`). Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or time limit. Package and image targets are not supported.
+
 ### Fixed
+
+- In a scan, one flaw is one finding: findings of one scan that cite the same lines of a file are merged, and a scan's findings are no longer merged into another scan's, so a repeat scan or a scan of another project can no longer lose a finding from its own report.
+- A finding with a category outside the known list is stored as `other` (the model's label is kept in the description) instead of making the whole report unreadable, and a report skips a stored finding it cannot read and says so.
+- The Markdown report no longer prints a Depth row or an Attacks line of 0.
 
 - Sub-agents, Sentinel runs and every thread now get the same tools with a shell; one bad skill file no longer breaks `load_skill`; helpers can work in one folder together; a Sentinel run now tells its thread the charter.
 

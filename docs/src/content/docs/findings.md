@@ -47,6 +47,31 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 0 findings show 3f2a --db-path ./engagement.db
 ```
 
+## Scan a folder
+
+```bash
+0 scan ./your-repo
+0 scan https://github.com/acme/app --budget 2 --format json -o scan.json
+0 scan ./your-repo --format sarif -o scan.sarif --fail-on high
+```
+
+A scan is a thread that follows the `scan` skill: it lists every entry point of the code, checks each one, and records what it can show from the code. It appears in `0 threads` and its findings in `0 findings`, under the thread's ID. The target is a folder or a git URL (cloned shallow, then removed). Package names and container images are not scanned.
+
+| Option | What it does |
+|---|---|
+| `--budget <usd>` | Stop when the estimated spend reaches this much (default 5). Findings so far are kept. |
+| `--format <format>` | `md` (default), `json`, `sarif`, `html` or `pdf`. `pdf` needs `-o`. |
+| `-o, --output <file>` | Write the report to a file instead of stdout. |
+| `--fail-on <severity>` | Exit 1 when a finding is at or above this severity. |
+| `--timeout <seconds>` | Cancel the scan after this long (default 3600) and still print what was found. |
+| `--model <model>` | Model for the scan (default `gpt-6-luna`). |
+
+Exit codes: `0` done, `1` a finding at or above `--fail-on` or the scan failed, `2` usage error, `3` stopped at the budget or the time limit (the report is partial).
+
+`0 scan` uses the console that is running, or the engine named by `--engine-url` or `--computer`. With none running it starts one for the scan and stops it afterwards. The scan needs a model with working tool calls: in one test a small model sent most `finding` calls without their title and evidence and took minutes. Results also vary a little from run to run, so a clean scan is not proof there is nothing to find.
+
+The JSON report has `schemaVersion: 1`, the scan's `status` (`complete`, `budget_exhausted`, `timed_out` or `failed`), `counts` by severity, the model's closing `summary`, and for each finding its `fingerprint`, `severity`, `category`, `location`, `evidence`, `cvssScore` when given and `suggestedFix` when it wrote one. The `fingerprint` is the same for the same flaw in unchanged code, so use it to match findings between scans. The same report, in any format, is available later with `0 findings export --scan <thread id>`.
+
 Export findings without opening the browser:
 
 ```bash

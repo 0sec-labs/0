@@ -54,9 +54,11 @@ Prefer the terminal?
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
-0 threads send new "Review ./your-repo for security problems"
+0 scan ./your-repo
 0 findings list
 ```
+
+`0 scan` takes a folder or a git URL, prints a report (`--format json|md|sarif|html|pdf`) and stops at `--budget` (default $5).
 
 Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSeek and more, see [Models](https://docs.0.security/models/)), or connect one in the browser with `0`.
 
