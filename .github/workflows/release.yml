@@ -28,6 +28,7 @@ on:
       - "scripts/smoke-standalone-binary.sh"
       - "scripts/smoke-extension-runtime.mjs"
       - "scripts/smoke-web-setup.mjs"
+      - "scripts/smoke-folder-access.mjs"
       - "scripts/check-host-console-worker-bun.ts"
       - "scripts/bundle-cli.mjs"
   schedule:
