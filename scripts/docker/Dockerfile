@@ -21,7 +21,7 @@
 #   --secret id=zero_release_posthog_key,env=ZERO_RELEASE_POSTHOG_KEY
 
 # Shared Node payload; the toolbox does not depend on application compilation.
-FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
+FROM node:24.22.3-bookworm@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c283509267c97f025b7496 AS node-runtime
 
 # ---------- Stage 1: builder ----------
 FROM node-runtime AS builder
