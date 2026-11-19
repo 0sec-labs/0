@@ -23,7 +23,7 @@ content: |
 
   Your job is to find real, exploitable security bugs in the folder you were given and to record each one with the `finding` tool. A finding is a claim you can back with code. Report what the code does, not what you could demonstrate on a running system.
 
-  Stay inside the folder. Do not run the code against anything outside it, do not touch the network, and do not change any file unless the user asked for fixes.
+  Stay inside the folder. Do not run the code against anything outside it, do not touch the network, and do not change any file: never call str_replace or write a file in the folder, even to try a fix. Put a proposed fix in `suggested_replacement` on the finding. If a scan changes the code it reads, the scan is reported as failed.
 
   ### 1. Map: list every entry point
 
@@ -31,7 +31,16 @@ content: |
   - Write a numbered list of every entry point: each HTTP route, CLI argument, message or event handler, file or network reader and scheduled job. One line each: what it takes as input, who can call it, and what it reaches.
   - Note the trust boundaries: where outside input enters, what authenticates it, where it reaches a sink (database, shell, file system, template, deserializer, outbound request, token or crypto call).
 
-  This list is the scope of the scan. You are not done until every line has a verdict.
+  This list is the scope of the scan. You are not done until every line has a verdict. Build it with commands, not from memory: list the route and handler files, grep for route registrations, and count the entries. Keep the list in a file in your working notes so helpers and you can both read it.
+
+  ### 1b. A large code base: split the list, not the folders
+
+  If there are more than about 15 entry points, or more than a few dozen source files, do not read it all yourself in one pass and do not hand a helper a whole folder ("scan the routes"). That gets a shallow look. Instead:
+
+  - Split the entry-point list into batches of about 8 to 10 entries that belong together (one feature, or the files they call).
+  - Start one helper per batch with `spawn_agent`. Each task must contain: the exact entry points and files of its batch, an instruction to call `load_skill` with `scan` and follow it for those entry points only, an instruction to record every finding itself with the `finding` tool, and a demand to return one verdict per entry point (finding, checked and safe with the quoted control, or not reached).
+  - Give the cross-cutting parts their own helpers too: authentication and session handling, configuration and secrets, dependency manifests, the data layer.
+  - When the helpers return, check that every entry point has a verdict. Re-run any batch that came back without one. Then check each "checked, safe" verdict yourself.
 
   ### 2. Check every entry point against every class
 
@@ -54,6 +63,8 @@ content: |
 
   Before recording a finding, look in the code for something that actually prevents it: a check upstream, a framework default that is on, validation that provably covers the input, a route only an administrator can reach. Read the callers. Drop the finding only when you can point to that control in the code. If it only partly helps, lower the severity and say why. "I could not exploit it here" is not a control.
 
+  Never drop or soften a finding because the code looks like a demo, a training app, a test fixture, a challenge, or "intentionally vulnerable", or because you recognize the project. You do not know how this code is used, and the reader needs the list. Record it as a normal finding and say in the description that the code looks intentional.
+
   ### 5. Record
 
   Call `finding` once per issue with:
@@ -74,7 +85,8 @@ content: |
   - the database, HTTP or other layer in this folder is a stub, mock or empty implementation ("db.js only returns an empty array" does not make `SELECT ... ${id}` safe: the query string is still built from input and will run against the real driver);
   - a dependency is not installed or the app is never started here;
   - you could not run it or demonstrate it;
-  - a missing ownership check "might be handled elsewhere" and you did not find where.
+  - a missing ownership check "might be handled elsewhere" and you did not find where;
+  - the code looks like a demo, a challenge or an intentionally vulnerable app.
 
   Then record the findings you added.
 

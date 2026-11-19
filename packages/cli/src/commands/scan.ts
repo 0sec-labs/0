@@ -12,9 +12,8 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
-import { scanPrompt } from "@0/engine/shared/scan-prompt";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
-import type { ScanReport } from "@0/engine/shared";
+import { scanPrompt, type ScanReport } from "@0/engine/shared";
 import { scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, lastAssistantText, usageLine, type Json } from "./thread-output.js";
@@ -39,6 +38,8 @@ export interface ScanDeps {
   loadReport(client: ConsoleClient, threadId: string): Promise<ScanReport>;
   /** Start a headless console for this scan; returns how to stop it. Used only when none is running. */
   startConsole(): Promise<() => void>;
+  /** What `git status` lists in the folder, or undefined when it is not a git work tree. A scan must leave it as it found it. */
+  changedFiles(folder: string): Promise<Set<string> | undefined>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
@@ -53,6 +54,12 @@ const defaults: ScanDeps = {
     const report = asJson(await client.request("GET", `/api/scans/${encodeURIComponent(threadId)}/export?format=json`));
     if (!Array.isArray(report.findings)) throw new Error("The engine returned no report for this scan.");
     return report as unknown as ScanReport;
+  },
+  async changedFiles(folder) {
+    try {
+      const { stdout } = await exec("git", ["-C", folder, "status", "--porcelain", "--untracked-files=all"], { maxBuffer: 16 * 1024 * 1024 });
+      return new Set(stdout.split("\n").filter(Boolean));
+    } catch { return undefined; }
   },
   async startConsole() {
     // Run the same program again as `--headless`: the script when node runs a .js file, else the compiled binary itself.
@@ -129,6 +136,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     resolved = await resolveScanTarget(target!, deps);
     const budget = Number(options.budget);
     const startedAt = deps.now().toISOString();
+    const before = await deps.changedFiles(resolved.folder);
     ({ client, stop: stopConsole } = await connect(options, deps));
     const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
     const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title: `Scan ${resolved.label}`, costCeilingUsd: budget })).session);
@@ -166,13 +174,20 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     }
 
     const done = finishedThread(snapshot);
+    // The thread has the same tools as any thread, so it could edit the code it reads. Say so if it did.
+    const after = before ? await deps.changedFiles(resolved.folder) : undefined;
+    const changed = before && after ? [...after].filter(line => !before.has(line)) : [];
+    const changedError = changed.length
+      ? `The scan changed ${changed.length} file${changed.length === 1 ? "" : "s"} in the target (${changed.slice(0, 5).map(line => line.slice(3)).join(", ")}${changed.length > 5 ? ", ..." : ""}). A scan must not edit the code it reads; review and revert them.`
+      : undefined;
+    if (changedError) deps.err(changedError);
     const budgetExhausted = asJson(done.session).costCeilingExceeded === true;
     const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
     const outcome: ScanOutcome = {
       target: resolved.label, threadId: id, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
       ...(costUsd !== undefined ? { costUsd } : {}), budgetExhausted, ...(timedOut ? { timedOut } : {}),
-      failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked,
-      ...(done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),
+      failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked || changedError !== undefined,
+      ...(changedError ? { error: changedError } : done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),
     };
     const stored = await deps.loadReport(client, id);
 

@@ -26,7 +26,7 @@ function fakes(snapshot: unknown, findings: unknown[] = [storedFinding]) {
   const client = { request: vi.fn(async (method: string, path: string, body?: unknown) => { requests.push([method, path, body]); return method === "GET" ? { snapshot } : { session: { id: "t1" } }; }), dispose: vi.fn() };
   const deps: ScanDeps = {
     open: async () => client as never, out: bytes => out.push(bytes), err: text => err.push(text), sleep: async () => {}, now: () => new Date("2026-01-01T00:00:00Z"),
-    writeBytes: vi.fn(), loadReport: vi.fn(async () => storedReport(findings) as never), startConsole: vi.fn(async () => () => {}), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
+    writeBytes: vi.fn(), loadReport: vi.fn(async () => storedReport(findings) as never), startConsole: vi.fn(async () => () => {}), changedFiles: vi.fn(async () => undefined), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
   };
   return { deps, client, requests, out, err };
 }
@@ -102,6 +102,27 @@ describe("runScan", () => {
     client.request.mockImplementation(async (method: string) => { if (method === "PATCH") throw new Error("boom"); return { session: { id: "t1" } }; });
     await runScan(folder(), options(), deps);
     expect(stop).toHaveBeenCalled();
+  });
+
+  it("fails the scan and names the files when the scan changed the target", async () => {
+    const { deps, out, err } = fakes(finishedSnapshot());
+    deps.changedFiles = vi.fn().mockResolvedValueOnce(new Set([" M already-dirty.ts"])).mockResolvedValueOnce(new Set([" M already-dirty.ts", " M lib/insecurity.ts", "?? notes.md"]));
+    await runScan(folder(), options(), deps);
+    const report = JSON.parse(String(out[0]));
+    expect(report.status).toBe("failed");
+    expect(report.error).toMatch(/changed 2 files.*lib\/insecurity\.ts, notes\.md/);
+    expect(err.join("\n")).toMatch(/must not edit the code it reads/);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("does not blame the scan for files that were already changed, or when the target is not a git tree", async () => {
+    for (const [first, second] of [[new Set([" M a.ts"]), new Set([" M a.ts"])], [undefined, undefined]] as const) {
+      const { deps, out } = fakes(finishedSnapshot());
+      deps.changedFiles = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+      await runScan(folder(), options(), deps);
+      expect(JSON.parse(String(out[0])).status).toBe("complete");
+      expect(process.exitCode).toBeUndefined();
+    }
   });
 
   it("uses the default model unless --model is given", async () => {
