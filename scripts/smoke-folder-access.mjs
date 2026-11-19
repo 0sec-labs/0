@@ -36,6 +36,11 @@ try {
   assert.ok(!/read that folder/i.test(output), `the compiled binary could not read an ordinary folder:\n${output}`);
   console.log("folder access smoke passed");
 } finally {
-  if (host && host.exitCode === null) host.kill();
-  rmSync(root, { recursive: true, force: true });
+  if (host && host.exitCode === null) {
+    const exited = new Promise((resolveExit) => host.once("exit", resolveExit));
+    host.kill();
+    await Promise.race([exited, delay(5000)]);
+  }
+  // Windows will not delete a folder a process still has open, and a temp folder is not worth failing the smoke for.
+  try { rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* left for the OS temp cleaner */ }
 }
