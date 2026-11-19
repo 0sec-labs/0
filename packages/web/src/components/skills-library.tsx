@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, LoadingState } from "@/components/state-panel";
+import { ExploreTabs } from "@/components/explore-tabs";
 import { Cell, InstalledTile } from "@/components/skills/cells";
 import { abbreviateStars, type CatalogPublisher, type CatalogSkill } from "@/components/skills/skills-catalog-model";
 import { cleanSkillSummary } from "@/components/skills-model";
@@ -50,7 +51,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, disabled = fal
       : rows.length ? <ul aria-label="Installed skills" className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">{rows.map(skill => <InstalledRow key={skill.id} skill={skill} shared={shared} publishers={publishers} catalog={catalog} onSelect={onSelect} />)}</ul>
       : <EmptyState variant="inline" title={query.trim() ? "No matching skills." : v("No installed skills yet.")} />;
   return <Tabs value={tab} onValueChange={value => onTab?.(value === "browse" ? "browse" : "installed")} className="gap-6">
-    <TabsList variant="line" aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="browse">Browse</TabsTrigger></TabsList>
+    <ExploreTabs active="skills" trailing={<TabsList variant="line" aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="browse">Browse</TabsTrigger></TabsList>} />
     <TabsContent value="installed">{content}</TabsContent>
     <TabsContent value="browse">{browse}</TabsContent>
   </Tabs>;

@@ -20,6 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { errorText } from "@/lib/api-error";
+import { Tile } from "@/components/skills/cells";
+import { LaptopIcon, ServerIcon } from "@/ui/icons/device";
+import { computerLine } from "@/lib/computers-list";
 
 interface SshHostEntry { alias: string; hostname?: string; user?: string; port?: string }
 async function workerControlJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -131,19 +134,20 @@ export function WorkersPage() {
 
   return (
     <>
-      <PageHeader title="Computers" actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
+      <PageHeader title="Computers" summary="Where your threads run. Add another computer you can reach with SSH." actions={<Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" className="size-4" />Add computer</Button>} />
 
-      <section aria-label="Computers" className="space-y-3">
+      <section aria-label="Computers" className="flex flex-col gap-4">
         {loadingBackends && <LoadingState label="Loading computers…" rows={2} />}
         {backends.error && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-destructive"><p>Couldn’t load your computers. {backends.error.message}</p><Button size="sm" variant="outline" onClick={() => void backends.refetch()}>Try again</Button></div>}
-        {availableHosts.length > 0 && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">
+        {availableHosts.length > 0 && <ul aria-label="Your computers" className="flex flex-col gap-1">
           {availableHosts.map(backend => {
             const connected = backend.status === "connected";
             const isManaged = managed.data?.workers.some(worker => worker.backendId === backend.id) ?? false;
             const remote = backend.id !== "local";
-            return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-              <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? `Remote computer · ${statusLabel(backend)}` : `${statusLabel(backend)} · runs threads here`}</p></div>
+            return <li key={backend.id} data-computer={backend.id} className="relative -mx-2 flex h-14 min-w-0 items-center gap-3 rounded-md px-2 transition-colors duration-100 hover:bg-secondary focus-within:bg-secondary motion-reduce:transition-none">
+              <span className="relative shrink-0"><Tile icon={remote ? <ServerIcon className="size-4 text-muted-foreground-1" /> : <LaptopIcon className="size-4 text-muted-foreground-1" />} />
+                <span role="img" aria-label={statusLabel(backend)} className={`absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-background ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} /></span>
+              <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium text-foreground">{backend.name}</h3><p className="truncate text-sm text-muted-foreground-2">{computerLine({ local: !remote, ...(backend.platform ? { os: backend.platform.os } : {}), status: backend.status })}</p></div>
               {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
               {remote && !connected && backend.status !== "connecting" && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void (isManaged ? reconnectHost(backend) : checkConnection(backend.id))}>{busy === `reconnect:${backend.id}` || busy === `check:${backend.id}` ? "Reconnecting…" : "Reconnect"}</Button>}
               {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-ring-inset"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
@@ -155,18 +159,12 @@ export function WorkersPage() {
             </li>;
           })}
         </ul>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">Threads run on this computer. Add another computer you can reach with SSH to run threads there too.</p>}
         {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {result && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4 py-3 text-sm">
-            <div className="min-w-0"><p className="font-medium">Computer added</p><p className="truncate text-xs text-muted-foreground">Ready to run threads.</p></div>
-            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
-          </div>
-        )}
+        {result && <p role="status" className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground-1">Computer added. Ready to run threads.<Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button></p>}
       </section>
 
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
-        <DialogContent><DialogHeader><DialogTitle>Add computer</DialogTitle></DialogHeader>
+        <DialogContent className="rounded-md"><DialogHeader><DialogTitle>Add computer</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">0 signs in with your SSH keys and installs itself on a Linux computer. The first time can take a few minutes.</p>
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}

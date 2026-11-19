@@ -45,7 +45,7 @@ A repository's `.0/` or `.claude/` folder (settings, `.mcp.json`, skills) never 
 
 ## MCP servers
 
-In the browser app, open **Extensions** and press **Add MCP server**. Type the command that starts it or an https URL. It becomes a local extension that goes through the same review as any other: nothing runs until you read the exact command and approve it, and it is saved turned off. Once enabled, it starts only when a thread first uses it, and its tools are pinned. From the command line:
+In the browser app, open **Extensions** and press **Add**, then **MCP server**. Type the command that starts it or an https URL. It becomes a local extension that goes through the same review as any other: nothing runs until you read the exact command and approve it, and it is saved turned off. Once enabled, it starts only when a thread first uses it, and its tools are pinned. From the command line:
 
 ```sh
 0 skills extensions mcp docs --url https://example.com/mcp
@@ -76,11 +76,10 @@ A connection links 0 to a service such as GitHub. Connections belong to extensio
 
 ### Connect GitHub
 
-1. Run `0` and open **Extensions**. The GitHub card is at the top.
+1. Run `0` and open **Extensions**. GitHub is the first row.
 2. Press **Connect** and pick one way:
-   - **GitHub CLI login** uses the `gh` login already on this computer.
    - **Sign in with GitHub** shows a one-time code to enter at github.com/login/device.
-   - **Fine-grained token** opens GitHub's token page with the permissions pull requests need, then you paste the token.
+   - **Use a token** links to GitHub's token page with the permissions pull requests need, then you paste the token.
 
 GitHub is built in. It cannot be removed, because pull request Sentinels use it, and it updates with the `0` binary. Turning it off pauses pull request Sentinels and asks you to confirm.
 
@@ -88,7 +87,7 @@ GitHub stores the credential in `gh`'s own store. 0 never reads it and no script
 
 ### Connect another service
 
-Install the connector extension (`0 skills add <source>` or **Add extension**). The install prompt shows the connector's declared read and write list, the hosts it may reach and the variable its token fills. After you approve it, its card appears on **Extensions** with one **Connect** button. Paste the token, 0 checks it against the connector's declared health URL when it has one, and stores it on this computer in `~/.0/extensions/connections.json` (readable only by you).
+Install the connector extension (`0 skills add <source>` or **Add** in the browser app). The install prompt shows the connector's declared read and write list, the hosts it may reach and the variable its token fills. After you approve it, its card appears on **Extensions** with one **Connect** button. Paste the token, 0 checks it against the connector's declared health URL when it has one, and stores it on this computer in `~/.0/extensions/connections.json` (readable only by you).
 
 A script in the extension receives the token only when the extension declared that variable name and you approved the prompt. When the bash tool runs a command that names a file inside an enabled extension's folder, the declared and approved variables (the stored token included) are added to the command's environment, and the value is masked in the output. An extension whose approval does not cover a variable it declares does not run. MCP servers of the extension get the token the same way. Model provider keys and every other secret stay out. **Disconnect** deletes the stored token.
 

@@ -64,7 +64,6 @@ export function defaultGitHubMethod(account: GitHubPublicationAccount): GitHubMe
 export function deviceStatusText(auth: GitHubPublicationAccount["deviceAuth"]): string | null {
   if (auth.phase === "running") return auth.userCode ? `Enter code ${auth.userCode} at github.com/login/device` : "Waiting for a code from GitHub";
   if (auth.phase === "timeout") return "The code expired. Try again.";
-  if (auth.phase === "cancelled") return "Sign-in cancelled.";
   if (auth.phase === "failed") return auth.message || "Sign-in failed.";
   return null;
 }

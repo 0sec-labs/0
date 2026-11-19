@@ -39,8 +39,8 @@ export function MemoryPage() {
     onError: cause => setError(errorText(cause, "Couldn’t save this change.")),
   });
   const loading = usePendingGate(query.isPending);
-  if (loading || query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
-  if (query.error) return <><PageHeader title="Memory" /><ErrorState error={query.error} /></>;
+  if (loading || query.isPending) return <><PageHeader title="Memory" summary="What 0 remembers across threads." /><LoadingState label="Loading memory…" /></>;
+  if (query.error) return <><PageHeader title="Memory" summary="What 0 remembers across threads." /><ErrorState error={query.error} /></>;
   const { notes, folders, enabled, proposed = [], overflow = [] } = query.data;
   const notice = overflowNotice(overflow, filter);
   const shown = filterNotes(notes, filter, search);

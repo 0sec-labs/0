@@ -51,7 +51,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
   const subtitle = mode === "settings" && category === "shortcuts" ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;
-  return <div className="flex min-w-0 flex-col gap-10 [&_[data-slot=badge]]:rounded-full [&_[data-slot=badge]]:border-0">
+  return <div className="flex min-w-0 flex-col gap-10">
     <PageHeader ref={headingRef} tabIndex={-1} className="outline-none" title={title} summary={subtitle} />
     <section className="flex min-w-0 flex-col gap-10" aria-label={mode === "settings" ? `${title} settings` : page.label}>{content}</section>
   </div>;

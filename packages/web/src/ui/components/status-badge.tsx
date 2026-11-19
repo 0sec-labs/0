@@ -35,7 +35,7 @@ export function StatusBadge({ tone = "neutral", appearance = "soft", dot = false
 }) {
   const lead = <>{dot && <span aria-hidden="true" data-slot="status-dot" className={cn("size-1.5 shrink-0 rounded-full", DOT[tone])} />}{icon}</>;
   if (appearance === "outline") {
-    return <span data-slot="status-badge" data-tone={tone} className={cn("inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-border-2 bg-card px-2 text-xs", OUTLINE_TEXT[tone], className)} {...props}>{lead}{children}</span>;
+    return <span data-slot="status-badge" data-tone={tone} className={cn("inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border-[0.5px] border-border-2 bg-card px-2 text-xs", OUTLINE_TEXT[tone], className)} {...props}>{lead}{children}</span>;
   }
   return <Badge variant={tone} data-tone={tone} className={className} {...props}>{lead}{children}</Badge>;
 }

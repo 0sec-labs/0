@@ -38,7 +38,7 @@ describe("device sign-in", () => {
     expect(deviceStatusText({ phase: "running", message: "", userCode: "ABCD-1234" })).toBe("Enter code ABCD-1234 at github.com/login/device");
     expect(deviceStatusText({ phase: "running", message: "" })).toBe("Waiting for a code from GitHub");
     expect(deviceStatusText({ phase: "timeout", message: "" })).toMatch(/expired/);
-    expect(deviceStatusText({ phase: "cancelled", message: "" })).toMatch(/cancelled/);
+    expect(deviceStatusText({ phase: "cancelled", message: "" })).toBeNull();
     expect(deviceStatusText({ phase: "failed", message: "" })).toBe("Sign-in failed.");
     expect(deviceStatusText({ phase: "connected", message: "" })).toBeNull();
   });

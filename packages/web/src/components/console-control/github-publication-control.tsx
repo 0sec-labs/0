@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyArrowUpRightIcon as ExternalLink, CapyBranchIcon as GitBranch } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ControlCard, Feedback, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
@@ -14,7 +13,8 @@ import {
 
 export type { GitHubPublicationAccount } from "./github-connection-model";
 interface GitHubAccountResponse { github: GitHubPublicationAccount }
-type Action = "connect" | "sign-in" | "refresh" | "cancel";
+export type GitHubAction = "connect" | "sign-in" | "refresh" | "cancel";
+type Action = GitHubAction;
 
 export function useGitHubPublicationAccount() {
   const { webFetchJson } = useBackendApi();
@@ -30,16 +30,12 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   return <Button type="button" variant="outline" aria-label={label} onClick={() => { void navigator.clipboard?.writeText(text).then(() => setCopied(true), () => undefined); }}>{copied ? "Copied" : "Copy"}</Button>;
 }
 
-/** The single GitHub connection card. Sign-in and token storage always happen on the computer this console is attached to. */
-export function GitHubPublicationControl({ secondary: _secondary = false }: { secondary?: boolean } = {}) {
+/** The GitHub account and its connect actions (sign in, token, refresh, cancel), shared by the Settings card and the Extensions dialog. */
+export function useGitHubConnect() {
   const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const account = useGitHubPublicationAccount();
   const [token, setToken] = useState("");
-  const [picked, setPicked] = useState<GitHubMethod | null>(null);
-  const data = account.data;
-  const method: GitHubMethod = data ? (githubMethods(data).some(item => item.value === picked) ? picked! : defaultGitHubMethod(data)) : "sign-in";
-  const running = data?.deviceAuth.phase === "running";
 
   const mutation = useMutation({
     mutationFn: async (action: Action) => {
@@ -52,14 +48,21 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
       if (action === "cancel") return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", { method: "DELETE", body: "{}" });
       return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", jsonBody(action === "refresh" ? { mode: "refresh" } : {}));
     },
-    onSuccess: (result, action) => {
-      queryClient.setQueryData(queryKeys.consoleGithubPublication(), result.github);
-      if (action === "connect") setPicked(null);
-    },
+    onSuccess: result => { queryClient.setQueryData(queryKeys.consoleGithubPublication(), result.github); },
     onSettled: () => { setToken(""); },
   });
   const busy = mutation.isPending;
   const act = (action: Action) => { mutation.reset(); mutation.mutate(action); };
+
+  const data = account.data;
+  return { account, data, token, setToken, mutation, busy, act, running: data?.deviceAuth.phase === "running" };
+}
+
+/** The single GitHub connection card. Sign-in and token storage always happen on the computer this console is attached to. */
+export function GitHubPublicationControl({ secondary: _secondary = false }: { secondary?: boolean } = {}) {
+  const { account, data, token, setToken, mutation, busy, act, running } = useGitHubConnect();
+  const [picked, setPicked] = useState<GitHubMethod | null>(null);
+  const method: GitHubMethod = data ? (githubMethods(data).some(item => item.value === picked) ? picked! : defaultGitHubMethod(data)) : "sign-in";
 
   if (!data) return <ControlCard title="GitHub"><QueryState pending={account.isPending} error={account.error} retry={account.refetch} /></ControlCard>;
 
@@ -72,7 +75,7 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
   return <ControlCard title="GitHub">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2 text-sm font-medium"><GitBranch className="size-4 shrink-0" /><span id="github-headline" className="min-w-0 break-words">{githubHeadline(data)}</span></div>
-      <Badge variant="outline" className="rounded-md">Computer: {data.computer}</Badge>
+      <span className="text-xs text-muted-foreground-1">On {data.computer}</span>
     </div>
     {expiry && data.connected && <p className="text-xs text-muted-foreground">Expires {expiry}</p>}
     {kind === "needs-permissions" && <div className="flex flex-wrap items-center gap-2">

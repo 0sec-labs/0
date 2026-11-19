@@ -18,6 +18,7 @@ on the GitHub Release tag.
 
 ### Changed
 
+- Extensions and Computers are plain rows like Skills: one Add menu, Connect GitHub in a small dialog, details in a side sheet.
 - `0 -p` prints only the answer on stdout; the tool trace and token count go to stderr on a terminal. `--folder` sets the folder, `-c` and `-r` work after `-p` too, and a failed turn exits 1.
 - `threads list` and `threads show` print text by default (`--format json` for JSON); `threads show <id>` is listed, and `show`, `send` and `continue` take `--wait`, which prints only the reply.
 - Every command that had `--json` also takes `--format text|json`, and the reverse. Usage errors exit 2 and name the command to run; a command with no subcommand prints its help.
