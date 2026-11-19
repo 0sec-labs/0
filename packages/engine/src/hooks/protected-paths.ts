@@ -16,7 +16,9 @@ import { isAbsolute, join, resolve, sep } from "node:path";
 /** First segments under `<home>/.0` that must not be touched by an agent. `0.db*` is matched by prefix. */
 export const PROTECTED_STATE_NAMES: readonly string[] = [
   "extensions", "plugins", "plugin-enablement", "executable-plugins", "harness-trust", "evolution-authority",
-  "tui-settings.json", "workbench.json", "backends.json", "credentials.json", "access-upgrade.json", "cloud.env",
+  "tui-settings.json", "workbench.json", "workbench", "backends.json", "engines.json", "engines", "workers",
+  "github-webhook-secret.json", "findings-api-access", "teams", "chatgpt-plan", "web-connections.json",
+  "credentials.json", "access-upgrade.json", "cloud.env",
 ];
 const isProtectedName = (name: string): boolean => PROTECTED_STATE_NAMES.includes(name) || name === "0.db" || name.startsWith("0.db.");
 
