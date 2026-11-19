@@ -67,7 +67,7 @@ WORKDIR /app/dist
 RUN npm ci --omit=dev --no-audit --no-fund
 
 # ---------- Stage 2: toolbox ----------
-FROM ubuntu:24.04 AS toolbox
+FROM ubuntu:26.04 AS toolbox
 
 ARG INSTALL_SECLISTS=0
 ARG DEBIAN_FRONTEND=noninteractive
