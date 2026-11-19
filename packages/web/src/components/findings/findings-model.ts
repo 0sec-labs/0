@@ -202,8 +202,8 @@ export function buildSections(groups: readonly FindingGroup[], display: Pick<Dis
 
 /* ---------- flattened rows + windowing ---------- */
 
-export const ROW_HEIGHT = 44;
-export const ROW_STRIDE = 46;
+export const ROW_HEIGHT = 46;
+export const ROW_STRIDE = 48;
 export const HEADER_HEIGHT = 36;
 export const HEADER_STRIDE = 40;
 
@@ -342,12 +342,7 @@ export function buildActivity(family: {
 
 /* ---------- persisted view ---------- */
 
-export const PANEL_DEFAULT_WIDTH = 520;
-export const PANEL_MIN_WIDTH = 360;
-export const PANEL_MAX_WIDTH = 760;
-export const clampPanelWidth = (width: number) => Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, Math.round(width)));
-
-export type FindingsView = { display: DisplayOptions; preset: FindingPreset; filters: FindingFilters; collapsed: Record<string, boolean>; panelWidth: number };
+export type FindingsView = { display: DisplayOptions; preset: FindingPreset; filters: FindingFilters; collapsed: Record<string, boolean> };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback;
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -377,6 +372,5 @@ export function mergeView(stored: unknown): FindingsView {
       match: pick(filters.match, ["all", "any"], "all"),
     },
     collapsed,
-    panelWidth: typeof raw.panelWidth === "number" && Number.isFinite(raw.panelWidth) ? clampPanelWidth(raw.panelWidth) : PANEL_DEFAULT_WIDTH,
   };
 }

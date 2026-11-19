@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Columns3, Download, List } from "lucide-react";
 import { CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/ui/components/tooltip";
+import { toast } from "@/ui/components/toast";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { REPORT_FORMATS, useReportDownload } from "@/components/report-export-control";
 import { cn } from "@/lib/utils";
@@ -34,54 +36,63 @@ export type FindingsToolbarProps = {
   searchRef?: React.Ref<HTMLInputElement>;
 };
 
+
 const iconButton = "size-7 text-muted-foreground-1";
 
+export type FindingsTopActionsProps = Pick<FindingsToolbarProps, "display" | "onDisplay" | "search" | "onSearch" | "exportPath" | "exportCount" | "searchRef">;
+
+/** Right side of the page's top bar: search, list/board toggle and export. */
+export function FindingsTopActions({ display, onDisplay, search, onSearch, exportPath, exportCount, searchRef }: FindingsTopActionsProps) {
+  const exporting = useReportDownload(exportPath);
+  useEffect(() => { if (exporting.error) toast({ id: "findings-export-failed", kind: "error", title: "Couldn't export findings", description: exporting.error }); }, [exporting.error]);
+  return (
+    <div className="flex items-center gap-1.5">
+      <label className="relative hidden sm:block">
+        <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground-2" />
+        <input
+          ref={searchRef}
+          type="search"
+          aria-label="Search findings"
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          value={search}
+          onChange={event => onSearch(event.target.value)}
+          placeholder="Search"
+          className="h-7 w-44 rounded-md border-[0.5px] border-border-1 bg-transparent pr-2 pl-7 text-xs text-foreground outline-none transition-[width,background-color] duration-150 placeholder:text-muted-foreground-2 hover:bg-section focus:w-64 focus:bg-section focus-visible:outline-ring-inset"
+        />
+      </label>
+      <div role="group" aria-label="Layout" className="flex items-center rounded-md border-[0.5px] border-border-1 p-px">
+        <Tooltip content="List"><Button variant="ghost" size="icon-xs" aria-label="List layout" aria-pressed={display.layout === "list"} data-selected={display.layout === "list" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "list" })}><List /></Button></Tooltip>
+        <Tooltip content="Board"><Button variant="ghost" size="icon-xs" aria-label="Board layout" aria-pressed={display.layout === "board"} data-selected={display.layout === "board" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "board" })}><Columns3 /></Button></Tooltip>
+      </div>
+      <DropdownMenu>
+        <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" className={iconButton} />}><MoreHorizontal /></DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" className="w-56">
+          <DropdownMenu.Label>Export {exportCount} finding{exportCount === 1 ? "" : "s"}</DropdownMenu.Label>
+          {REPORT_FORMATS.map(([format, label]) => (
+            <DropdownMenu.Item key={format} icon={<Download />} disabled={exportCount === 0 || exporting.busy} onClick={() => void exporting.download(format)}>{label}</DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+/** Capy's second and third rows: state tabs with filter and display buttons at the right, then the active filter chips. */
 export function FindingsToolbar(props: FindingsToolbarProps) {
-  const { total, shown, preset, presetCounts, onPreset, display, onDisplay, filters, onFilters, search, onSearch } = props;
+  const { total, shown, preset, presetCounts, onPreset, display, onDisplay, filters } = props;
   const count = activeFilterCount(filters);
-  const exporting = useReportDownload(props.exportPath);
   return (
     <div className="shrink-0">
-      <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
-        <h1 className="mr-1 flex items-baseline gap-2 text-[13px] font-medium text-foreground">
-          <span className="sr-only">Findings</span>
-          <span className="sr-only" aria-label={`${shown} of ${total} findings`}>{`${shown} of ${total}`}</span>
-        </h1>
+      <div className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2">
+        <h1 className="sr-only">Findings <span aria-label={`${shown} of ${total} findings`}>{`${shown} of ${total}`}</span></h1>
         <PresetTabs preset={preset} counts={presetCounts} total={total} onPreset={onPreset} />
         <div className="ml-auto flex items-center gap-1.5">
-          <label className="relative hidden sm:block">
-            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground-2" />
-            <input
-              ref={props.searchRef}
-              type="search"
-              aria-label="Search findings"
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-              value={search}
-              onChange={event => onSearch(event.target.value)}
-              placeholder="Search"
-              className="h-7 w-40 rounded-md border-[0.5px] border-border-1 bg-transparent pr-2 pl-7 text-xs text-foreground outline-none transition-[width,background-color] duration-150 placeholder:text-muted-foreground-2 hover:bg-section focus:w-56 focus:bg-section focus-visible:outline-ring-inset"
-            />
-          </label>
           <FilterMenu {...props} />
           <DisplayMenu display={display} onDisplay={onDisplay} />
-          <div role="group" aria-label="Layout" className="flex items-center rounded-md border-[0.5px] border-border-1 p-px">
-            <Tooltip content="List"><Button variant="ghost" size="icon-xs" aria-label="List layout" aria-pressed={display.layout === "list"} data-selected={display.layout === "list" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "list" })}><List /></Button></Tooltip>
-            <Tooltip content="Board"><Button variant="ghost" size="icon-xs" aria-label="Board layout" aria-pressed={display.layout === "board"} data-selected={display.layout === "board" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "board" })}><Columns3 /></Button></Tooltip>
-          </div>
-          <DropdownMenu>
-            <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" className={iconButton} />}><MoreHorizontal /></DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end" className="w-56">
-              <DropdownMenu.Label>Export {props.exportCount} finding{props.exportCount === 1 ? "" : "s"}</DropdownMenu.Label>
-              {REPORT_FORMATS.map(([format, label]) => (
-                <DropdownMenu.Item key={format} icon={<Download />} disabled={props.exportCount === 0 || exporting.busy} onClick={() => void exporting.download(format)}>{label}</DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu>
         </div>
       </div>
-      {exporting.error ? <p role="alert" className="px-3 pb-1 text-xs text-destructive">{exporting.error}</p> : null}
       {count > 0 ? <FilterChips {...props} /> : null}
     </div>
   );
@@ -131,7 +142,7 @@ function FilterMenu({ filters, onFilters, categories, missions, missionNames }: 
   const keep = { closeOnClick: false } as const;
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Filter findings" className={cn(iconButton, count > 0 && "text-foreground")} />}>
+      <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Filter findings" className={cn(iconButton, "relative", count > 0 && "text-foreground")} />}>
         <ListFilter />
         {count > 0 ? <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-primary" /> : null}
       </DropdownMenu.Trigger>
@@ -177,11 +188,11 @@ function FilterChip({ label, values, onRemove }: { label: string; values: string
 function FilterChips({ filters, onFilters, missionNames }: FindingsToolbarProps) {
   const multiple = activeFilterCount(filters) > 1;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1.5" role="group" aria-label="Active filters">
+    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2" role="group" aria-label="Active filters">
       {multiple ? (
-        <Button variant="ghost" size="sm" className="h-6 bg-secondary px-2" onClick={() => onFilters({ ...filters, match: filters.match === "all" ? "any" : "all" })}>
-          Match {filters.match === "all" ? "all filters" : "any filter"}
-        </Button>
+        <button type="button" className={cn(chip, "gap-1.5 pr-2 outline-none hover:bg-secondary focus-visible:outline-ring-inset")} onClick={() => onFilters({ ...filters, match: filters.match === "all" ? "any" : "all" })}>
+          <span className="text-muted-foreground-1">Match</span>{filters.match === "all" ? "All filters" : "Any filter"}
+        </button>
       ) : null}
       {filters.severity.length ? <FilterChip label="Severity" values={filters.severity.map(level => SEVERITY_LABELS[level]).join(", ")} onRemove={() => onFilters({ ...filters, severity: [] })} /> : null}
       {filters.status.length ? <FilterChip label="Status" values={filters.status.map(status => STATUS_LABEL[status]).join(", ")} onRemove={() => onFilters({ ...filters, status: [] })} /> : null}

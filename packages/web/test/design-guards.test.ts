@@ -26,7 +26,6 @@ const STYLE_ALLOWED: Record<string, string> = {
   "console/viz/chart-view.tsx": "Series colors come from the chart palette per datum.",
   "console/viz/graph-view.tsx": "Node and edge colors come from severity per datum.",
   "console/viz/timeline-view.tsx": "Marker color comes from severity per datum.",
-  "pages/findings-page.tsx": "Workspace height and panel width are measured at runtime.",
   "console/loading-state.tsx": "Skeleton widths vary per row.",
   "ui/backdrops/index.tsx": "Layer opacity is computed per theme from the contrast guard.",
   "console/context-popover.tsx": "Meter fill width is a runtime percentage.",

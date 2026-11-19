@@ -1,12 +1,12 @@
 # Page shell
 
-One layout primitive, `PageShell` (`packages/web/src/components/page-shell.tsx`), with three variants. Routes declare their variant in `PAGE_ROUTES` (`lib/workspace-navigation.ts`); `RoutedPageShell` is a layout route in `operations-app.tsx` that applies it, so a page renders only its `PageHeader` and content and never sets its own max-width, centring or horizontal padding. `PageHeader` is the one title component (22px/500, summary 13px, actions top right). A page whose layout depends on its own state (Findings: list or board) calls `usePageVariant`.
+One layout primitive, `PageShell` (`packages/web/src/components/page-shell.tsx`), with three variants. Routes declare their variant in `PAGE_ROUTES` (`lib/workspace-navigation.ts`); `RoutedPageShell` is a layout route in `operations-app.tsx` that applies it, so a page renders only its `PageHeader` and content and never sets its own max-width, centring or horizontal padding. `PageHeader` is the one title component (22px/500, summary 13px, actions top right). A page whose layout depends on its own state calls `usePageVariant`.
 
 | Variant | Width | Used by |
 |---|---|---|
-| `list` (default) | 872px, centred, 24px gutters, title at a fixed offset | Agents and Agent detail, Skills (Installed, Browse, detail), Memory, Computers, Extensions, Findings list, doctor, tools, project, fix, models, connections, Members, API keys, not-found |
+| `list` (default) | 872px, centred, 24px gutters, title at a fixed offset | Agents and Agent detail, Skills (Installed, Browse, detail), Memory, Computers, Extensions, doctor, tools, project, fix, models, connections, Members, API keys, not-found |
 | `form` | 672px, same gutters and offset | Settings sections |
-| `full` | edge to edge, header keeps the gutter and offset | Findings board, finding detail page, thread view |
+| `full` | edge to edge, header keeps the gutter and offset | Findings (list and board), finding page, thread view |
 
 The widths are the CSS variables `--page-width-list` and `--page-width-form` (styles.css), mirrored by `PAGE_WIDTHS`; `test/page-shell.test.ts` asserts they match, and `test/design-guards.test.ts` fails when a file under `pages/` sets `max-w-*`/`mx-auto` or when a route is outside the shell or the route table.
 

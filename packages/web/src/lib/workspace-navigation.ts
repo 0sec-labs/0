@@ -67,7 +67,7 @@ export const PAGE_WIDTHS = { list: 872, form: 672 } as const;
 /**
  * Every page route and the layout it uses. The shell is applied centrally (RoutedPageShell), so a page never sets its own width
  * or padding. First match wins; a path that matches nothing is the not-found page, which is `list`.
- * Findings switches to `full` for its board (usePageVariant); every other route is fixed here.
+ * A page whose layout depends on its own state can override it with usePageVariant.
  */
 export const PAGE_ROUTES: readonly { readonly path: string; readonly variant: PageVariant }[] = [
   { path: "/chats", variant: "full" },
@@ -80,7 +80,7 @@ export const PAGE_ROUTES: readonly { readonly path: string; readonly variant: Pa
   { path: "/memory", variant: "list" },
   { path: "/computers", variant: "list" },
   { path: "/extensions", variant: "list" },
-  { path: "/findings", variant: "list" },
+  { path: "/findings", variant: "full" },
   { path: "/findings/:fingerprint", variant: "full" },
   { path: "/settings", variant: "form" },
   { path: "/connections", variant: "list" },

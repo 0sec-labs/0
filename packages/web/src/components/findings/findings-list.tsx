@@ -8,10 +8,13 @@ import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
 import { isAcceptedFinding } from "@/console/panel/views/findings-model";
 import type { FindingGroup, FindingWorkflowStatus } from "@/types";
+import { Link } from "react-router-dom";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
-  ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange, type ListRow
+  ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, missionName, normalizeSeverity, visibleRange, type ListRow, type MissionLabels,
 } from "./findings-model";
+import { useMissionHrefs } from "./use-mission-href";
+import { listMemory } from "./use-findings-view";
 
 export type ContextActions = {
   onOpen: (fingerprint: string) => void;
@@ -23,8 +26,7 @@ export type ContextActions = {
 
 export type FindingsListProps = {
   rows: ListRow[];
-  /** Fingerprint of the open detail panel. */
-  activeFingerprint: string | null;
+  missionNames: MissionLabels;
   /** Keyboard cursor; scrolled into view whenever it changes. */
   cursorFingerprint: string | null;
   selected: ReadonlySet<string>;
@@ -36,9 +38,10 @@ export type FindingsListProps = {
 
 
 export function FindingsList(props: FindingsListProps) {
-  const { rows, activeFingerprint, cursorFingerprint, selected, onOpen, onToggleSelect, onToggleSection, contextActions } = props;
+  const { rows, missionNames, cursorFingerprint, selected, onOpen, onToggleSelect, onToggleSection, contextActions } = props;
   const scroller = useRef<HTMLDivElement>(null);
-  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollTop, setScrollTop] = useState(listMemory.scrollTop);
+  const threadHref = useMissionHrefs();
   const [viewport, setViewport] = useState(600);
   const [menuTarget, setMenuTarget] = useState<FindingGroup | null>(null);
   const layout = useMemo(() => layoutRows(rows), [rows]);
@@ -49,6 +52,7 @@ export function FindingsList(props: FindingsListProps) {
     if (!node) return;
     const measure = () => setViewport(node.clientHeight);
     measure();
+    node.scrollTop = listMemory.scrollTop;
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
@@ -59,7 +63,9 @@ export function FindingsList(props: FindingsListProps) {
     if (frame.current) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = 0;
-      if (scroller.current) setScrollTop(scroller.current.scrollTop);
+      if (!scroller.current) return;
+      listMemory.scrollTop = scroller.current.scrollTop;
+      setScrollTop(scroller.current.scrollTop);
     });
   }, []);
   useEffect(() => () => { if (frame.current) cancelAnimationFrame(frame.current); }, []);
@@ -100,7 +106,7 @@ export function FindingsList(props: FindingsListProps) {
           aria-activedescendant={cursorId}
           tabIndex={0}
           onScroll={onScroll}
-          className="no-scrollbar scroll-fade-y absolute inset-0 overflow-y-auto overscroll-contain px-2 pt-1 outline-none [--sf-size:32px]"
+          className="no-scrollbar scroll-fade-y absolute inset-0 overflow-y-auto overscroll-contain px-3 pt-1 outline-none [--sf-size:32px]"
         >
           <div className="relative" style={{ height: layout.total + 64 }}>
             {rows.slice(start, end).map((row, offset) => {
@@ -113,7 +119,8 @@ export function FindingsList(props: FindingsListProps) {
                   key={row.key}
                   style={style}
                   group={row.group}
-                  active={activeFingerprint === row.group.fingerprint}
+                  thread={missionName(row.group.latest.scanId, missionNames)}
+                  threadHref={threadHref(row.group.latest.scanId)}
                   cursor={cursorFingerprint === row.group.fingerprint}
                   selected={selected.has(row.group.fingerprint)}
                   anySelected={anySelected}
@@ -176,7 +183,8 @@ const SectionHeader = memo(function SectionHeader({ row, style, onToggle }: { ro
 type RowProps = {
   group: FindingGroup;
   style: React.CSSProperties;
-  active: boolean;
+  thread: string;
+  threadHref: string | null;
   cursor: boolean;
   selected: boolean;
   anySelected: boolean;
@@ -184,7 +192,7 @@ type RowProps = {
   onToggleSelect: (fingerprint: string) => void;
 };
 
-const FindingRow = memo(function FindingRow({ group, style, active, cursor, selected, anySelected, onOpen, onToggleSelect }: RowProps) {
+const FindingRow = memo(function FindingRow({ group, style, thread, threadHref, cursor, selected, anySelected, onOpen, onToggleSelect }: RowProps) {
   const { latest, fingerprint } = group;
   const status = findingStatus(group);
   const closed = status === "done" || status === "cancelled";
@@ -193,18 +201,17 @@ const FindingRow = memo(function FindingRow({ group, style, active, cursor, sele
     <div
       id={`finding-row-${fingerprint}`}
       role="option"
-      aria-selected={selected || active}
+      aria-selected={selected}
       data-fingerprint={fingerprint}
-      data-active={active ? "" : undefined}
       style={style}
       onClick={event => {
         if (event.metaKey || event.ctrlKey) { onToggleSelect(fingerprint); return; }
         onOpen(fingerprint);
       }}
       className={cn(
-        "group/row absolute inset-x-0 flex cursor-default items-center gap-2 rounded-md px-2 text-sm transition-colors duration-100 select-none",
+        "group/row absolute inset-x-0 flex cursor-default items-center gap-3 rounded-md px-3 text-[13px] transition-colors duration-100 select-none",
         "hover:bg-secondary",
-        (active || selected) && "bg-section",
+        selected && "bg-section",
         cursor && "outline-ring-inset",
       )}
     >
@@ -216,20 +223,23 @@ const FindingRow = memo(function FindingRow({ group, style, active, cursor, sele
         tabIndex={-1}
         onClick={event => { event.stopPropagation(); onToggleSelect(fingerprint); }}
         className={cn(
-          "grid size-4 shrink-0 place-items-center rounded-sm border-[0.5px] border-border-3 outline-none transition-opacity duration-100 focus-visible:outline-ring-inset",
+          "-ml-1 grid size-4 shrink-0 place-items-center rounded-sm border-[0.5px] border-border-3 outline-none transition-opacity duration-100 focus-visible:outline-ring-inset",
           selected ? "border-transparent bg-primary text-primary-foreground opacity-100" : anySelected ? "opacity-100" : "opacity-0 group-hover/row:opacity-100",
         )}
       >
         {selected ? <Check className="size-3" strokeWidth={3} /> : null}
       </button>
-      <span className="grid size-4 shrink-0 place-items-center"><SeverityIcon severity={normalizeSeverity(latest.severity)} /></span>
-      <span className="w-16 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground-2 @max-lg/list:hidden">{findingCode(fingerprint)}</span>
       <span className="grid size-4 shrink-0 place-items-center"><StatusIcon status={status} /></span>
-      <span className={cn("min-w-[10ch] flex-1 truncate", closed ? "text-muted-foreground-1" : "font-medium text-foreground")} title={latest.title}>{latest.title}</span>
-      {latest.category ? <span className="max-w-32 shrink-0 truncate rounded-md border-[0.5px] border-border-2 px-1.5 py-px text-xs text-muted-foreground-1 @max-xl/list:hidden">{latest.category}</span> : null}
+      <span className="w-16 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground-2 @max-lg/list:hidden">{findingCode(fingerprint)}</span>
+      <span className={cn("min-w-[10ch] flex-1 truncate", closed ? "text-muted-foreground-1" : "text-foreground")} title={latest.title}>{latest.title}</span>
+      {latest.category ? <span className="max-w-40 shrink-0 truncate rounded-md border-[0.5px] border-border-2 px-1.5 py-px text-xs text-muted-foreground-1 @max-2xl/list:hidden">{latest.category}</span> : null}
       {isAcceptedFinding(group) ? <span className="shrink-0 rounded-md border-[0.5px] border-border-2 px-1.5 py-px text-xs text-muted-foreground-1">Accepted</span> : null}
       {group.count > 1 ? <span className="inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-muted-foreground-2" title={`Seen ${group.count} times`}><Repeat2 aria-hidden="true" className="size-3" />{group.count}</span> : null}
-      <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground-2">{age}</span>
+      <span className="grid w-5 shrink-0 place-items-center"><SeverityIcon severity={normalizeSeverity(latest.severity)} /></span>
+      <span className="w-36 shrink-0 truncate text-xs text-muted-foreground-2 @max-4xl/list:hidden">
+        {threadHref ? <Link to={threadHref} onClick={event => event.stopPropagation()} className="rounded-sm outline-none hover:text-foreground hover:underline focus-visible:outline-ring-inset" title={`Open ${thread}`}>{thread}</Link> : thread}
+      </span>
+      <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground-2">{age}</span>
     </div>
   );
 });

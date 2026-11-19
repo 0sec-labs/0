@@ -1,42 +1,24 @@
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { createPortal } from "react-dom";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getFindingPriority } from "@0/engine/shared/finding-priority";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageHeader, usePageVariant } from "@/components/page-shell";
 import { EmptyState } from "@/components/state-panel";
+import { ReportExportControl } from "@/components/report-export-control";
 import { FindingDetail } from "@/components/findings/finding-detail";
 import { FindingsBoard } from "@/components/findings/findings-board";
 import { FindingsBulkBar } from "@/components/findings/findings-bulk-bar";
 import { FindingsList } from "@/components/findings/findings-list";
-import { FindingsToolbar } from "@/components/findings/findings-toolbar";
+import { FindingsToolbar, FindingsTopActions } from "@/components/findings/findings-toolbar";
 import {
-  PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, boardColumns, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus, flattenSections, matchesFilters,
-  matchesFindingSearch, matchesPreset, resolveDrop, STATUS_LABEL, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
-  type DisplayOptions, type FindingFilters, type FindingPreset, type FindingStatus, type FindingsView,
+  findingCode, findingStatus, mergeView, resolveDrop, STATUS_LABEL, missionKey, stepCursor,
+  type FindingFilters, type FindingPreset, type FindingStatus,
 } from "@/components/findings/findings-model";
+import { listMemory, useFindingsView } from "@/components/findings/use-findings-view";
 import { useFindingMutations } from "@/components/findings/use-finding-mutations";
-import { usePersistentState } from "@/lib/use-persistent-state";
-import { cn } from "@/lib/utils";
-import { v } from "@/lib/vocabulary";
+import { CopyButton } from "@/console/panel/views/evidence";
+import { useBreadcrumbActions, useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import type { DashboardResponse, FindingGroup, FindingWorkflowStatus } from "@/types";
-import { STORAGE_KEYS } from "@/lib/storage";
 import { toast } from "@/ui/components/toast";
-
-/** Pages render inside a padded scroll container; lists need a fixed-height region so they can window and scroll internally. */
-function useFillHeight(ref: RefObject<HTMLElement | null>, bottomGap = 20) {
-  const [height, setHeight] = useState<number>();
-  useLayoutEffect(() => {
-    const update = () => {
-      const top = ref.current?.getBoundingClientRect().top ?? 0;
-      setHeight(Math.max(448, Math.floor(window.innerHeight - top - bottomGap)));
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, [ref, bottomGap]);
-  return height;
-}
 
 const isEditable = (target: EventTarget | null) => {
   const element = target as HTMLElement | null;
@@ -45,6 +27,9 @@ const isEditable = (target: EventTarget | null) => {
 };
 const isInteractive = (target: EventTarget | null) => Boolean((target as HTMLElement | null)?.closest?.("button, a, [role='menuitem'], [role='checkbox']"));
 const inOverlay = (target: EventTarget | null) => Boolean((target as HTMLElement | null)?.closest?.("[role='menu'], [role='dialog'], [role='listbox'][data-popup]"));
+const isTyping = (event: KeyboardEvent) => event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing || isEditable(event.target) || inOverlay(event.target);
+
+const pagePath = (fingerprint: string) => `/findings/${encodeURIComponent(fingerprint)}`;
 
 async function copyText(text: string) {
   try { await navigator.clipboard?.writeText(text); } catch { /* Clipboard may be unavailable; nothing else to do. */ }
@@ -52,78 +37,74 @@ async function copyText(text: string) {
 
 export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
   const { fingerprint } = useParams<{ fingerprint?: string }>();
+  const [searchParams] = useSearchParams();
+  // Links from before findings had their own page: /findings?finding=<id>.
+  const legacy = searchParams.get("finding");
+  if (!fingerprint && legacy) return <Navigate to={pagePath(legacy)} replace />;
   return fingerprint ? <FindingFullPage dashboard={dashboard} fingerprint={fingerprint} /> : <FindingsWorkspace dashboard={dashboard} />;
 }
 
-/** `/findings/:fingerprint`: the same detail view as the side panel, centred on its own page. */
+/** `/findings/:fingerprint`: one finding on its own page. The top bar carries the breadcrumb, previous/next in list order, link and export. */
 function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardResponse; fingerprint: string }) {
+  const navigate = useNavigate();
   const mutations = useFindingMutations();
+  const { missionNames, navigable } = useFindingsView(dashboard, listMemory.search);
   const group = dashboard.groups.find(item => item.fingerprint === fingerprint) ?? null;
-  const missions = useMemo(() => missionLabels(dashboard.scans), [dashboard.scans]);
-  const root = useRef<HTMLDivElement>(null);
-  const height = useFillHeight(root);
-  return (
+  const index = navigable.indexOf(fingerprint);
+  const previous = index > 0 ? navigable[index - 1] : undefined;
+  const next = index !== -1 && index < navigable.length - 1 ? navigable[index + 1] : undefined;
+  listMemory.lastOpened = fingerprint;
+
+  useBreadcrumbLabel(findingCode(fingerprint));
+  const exportId = group?.latest.id;
+  const actions = useMemo(() => (
     <>
-      <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden">
-        <FindingDetail
-          key={fingerprint}
-          fingerprint={fingerprint}
-          group={group}
-          variant="page"
-          missionName={group ? missions.get(missionKey(group)) : undefined}
-          mutations={mutations}
-        />
-      </div>
+      {index !== -1 ? <span className="mr-1 text-xs tabular-nums text-muted-foreground-2" aria-label={`Finding ${index + 1} of ${navigable.length}`}>{index + 1} / {navigable.length}</span> : null}
+      <Button variant="ghost" size="icon-sm" className="size-7 text-muted-foreground-1" aria-label="Previous finding" tooltip="Previous finding" disabled={!previous} onClick={() => previous && navigate(pagePath(previous), { replace: true })}><ChevronLeft /></Button>
+      <Button variant="ghost" size="icon-sm" className="size-7 text-muted-foreground-1" aria-label="Next finding" tooltip="Next finding" disabled={!next} onClick={() => next && navigate(pagePath(next), { replace: true })}><ChevronRight /></Button>
+      <CopyButton text={`${window.location.origin}${pagePath(fingerprint)}`} label="link" />
+      {exportId ? <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(exportId)}`} /> : null}
     </>
+  ), [index, navigable.length, previous, next, navigate, fingerprint, exportId]);
+  useBreadcrumbActions(actions);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTyping(event)) return;
+      if (event.key === "j" && next) { event.preventDefault(); navigate(pagePath(next), { replace: true }); }
+      else if (event.key === "k" && previous) { event.preventDefault(); navigate(pagePath(previous), { replace: true }); }
+      else if (event.key === "Escape") { event.preventDefault(); navigate("/findings"); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate, next, previous]);
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="finding-page">
+      <FindingDetail
+        key={fingerprint}
+        fingerprint={fingerprint}
+        group={group}
+        missionName={group ? missionNames.get(missionKey(group)) : undefined}
+        mutations={mutations}
+      />
+    </div>
   );
 }
 
 function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeFingerprint = searchParams.get("finding");
-  const [stored, setStored] = usePersistentState<FindingsView>(STORAGE_KEYS.findingsView, mergeView(undefined));
-  const view = useMemo(() => mergeView(stored), [stored]);
-  const { display, preset, filters, collapsed } = view;
-  usePageVariant(display.layout === "board" ? "full" : "list");
-  const patchView = useCallback((patch: Partial<FindingsView>) => setStored(current => ({ ...mergeView(current), ...patch })), [setStored]);
-  const setDisplay = useCallback((patch: Partial<DisplayOptions>) => setStored(current => { const base = mergeView(current); return { ...base, display: { ...base.display, ...patch } }; }), [setStored]);
-
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(listMemory.search);
   const deferredSearch = useDeferredValue(search);
+  useEffect(() => { listMemory.search = search; }, [search]);
+  const { view, setStored, patchView, setDisplay, groups, missionNames, presetCounts, visible, rows, navigable, categories, missions } = useFindingsView(dashboard, deferredSearch);
+  const { display, preset, filters } = view;
+
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  const [cursor, setCursor] = useState<string | null>(activeFingerprint);
-  const [liveWidth, setLiveWidth] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<string | null>(listMemory.lastOpened);
   const [bulkBusy, setBulkBusy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const height = useFillHeight(root);
   const mutations = useFindingMutations();
-
-  const groups = dashboard.groups;
-  const missionNames = useMemo(() => missionLabels(dashboard.scans), [dashboard.scans]);
-  const activeGroup = useMemo(() => groups.find(group => group.fingerprint === activeFingerprint) ?? null, [groups, activeFingerprint]);
-
-  const searchExtra = useCallback((group: FindingGroup) => { const priority = getFindingPriority(group.latest); return `${priority.label} ${priority.rationale}`; }, []);
-  const base = useMemo(
-    () => groups.filter(group => matchesFindingSearch(group, deferredSearch, deferredSearch.trim() ? searchExtra(group) : "") && matchesFilters(group, filters)),
-    [groups, deferredSearch, filters, searchExtra],
-  );
-  const presetCounts = useMemo(() => ({
-    all: base.length,
-    review: base.filter(group => matchesPreset(group, "review")).length,
-    closed: base.filter(group => matchesPreset(group, "closed")).length,
-  }), [base]);
-  const visible = useMemo(() => base.filter(group => matchesPreset(group, preset)), [base, preset]);
-
-  const sections = useMemo(() => buildSections(visible, display, missionNames), [visible, display, missionNames]);
-  const rows = useMemo(() => flattenSections(sections, collapsed), [sections, collapsed]);
-  const navigable = useMemo(
-    () => display.layout === "board" ? boardColumns(visible, display.orderBy, display.direction).flatMap(column => column.items.map(group => group.fingerprint)) : navigableFingerprints(rows),
-    [display, visible, rows],
-  );
-  const categories = useMemo(() => facetCounts(groups, group => group.latest.category), [groups]);
-  const missions = useMemo(() => facetCounts(groups, missionKey), [groups]);
 
   const visibleSet = useMemo(() => new Set(visible.map(group => group.fingerprint)), [visible]);
   const selected = useMemo(() => new Set([...selection].filter(id => visibleSet.has(id))), [selection, visibleSet]);
@@ -131,19 +112,10 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
 
   const exportPath = useCallback((items: readonly FindingGroup[]) => `/api/findings/export?ids=${encodeURIComponent(items.map(group => group.latest.id).join(","))}`, []);
 
-  const openFinding = useCallback((next: string, replace = false) => {
-    setCursor(next);
-    setSearchParams(current => { const params = new URLSearchParams(current); params.set("finding", next); return params; }, { replace });
-  }, [setSearchParams]);
-  const closePanel = useCallback(() => {
-    setSearchParams(current => { const params = new URLSearchParams(current); params.delete("finding"); return params; }, { replace: true });
-  }, [setSearchParams]);
-  useEffect(() => { if (activeFingerprint) setCursor(activeFingerprint); }, [activeFingerprint]);
-
+  const openFinding = useCallback((next: string) => { listMemory.lastOpened = next; navigate(pagePath(next)); }, [navigate]);
   const toggleSelect = useCallback((id: string) => setSelection(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }), []);
   const toggleSection = useCallback((key: string, nextCollapsed: boolean) => setStored(current => { const merged = mergeView(current); return { ...merged, collapsed: { ...merged.collapsed, [key]: nextCollapsed } }; }), [setStored]);
 
-  const linkFor = (fp: string) => `${window.location.origin}/findings?finding=${encodeURIComponent(fp)}`;
   const addToMission = useCallback((group: FindingGroup) => navigate(`/chats?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
   const moveStatus = useCallback((fp: string, target: FindingStatus) => {
     const group = groups.find(item => item.fingerprint === fp);
@@ -158,12 +130,11 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   }, [groups, mutations.workflow, mutations.triage]);
 
   const contextActions = useMemo(() => ({
-    onOpen: (fp: string) => openFinding(fp),
-    onCopyLink: (fp: string) => void copyText(linkFor(fp)),
+    onOpen: openFinding,
+    onCopyLink: (fp: string) => void copyText(`${window.location.origin}${pagePath(fp)}`),
     onCopyId: (fp: string) => void copyText(findingCode(fp)),
     onSetStatus: moveStatus,
     onAddToMission: addToMission,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [openFinding, moveStatus, addToMission]);
 
   const bulkStatus = async (status: FindingWorkflowStatus) => {
@@ -182,17 +153,16 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
     setSelection(new Set());
   };
 
-  // Keyboard: j/k move and open, Enter opens, x selects, Escape clears then closes, / searches.
-  const latest = useRef({ navigable, cursor, selected, activeFingerprint });
-  latest.current = { navigable, cursor, selected, activeFingerprint };
+  // Keyboard: j/k move the cursor, Enter opens its page, x selects, Escape clears the selection, / searches.
+  const latest = useRef({ navigable, cursor, selected });
+  latest.current = { navigable, cursor, selected };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
-      if (isEditable(event.target) || inOverlay(event.target)) return;
+      if (isTyping(event)) return;
       const state = latest.current;
       if (event.key === "j" || event.key === "k") {
         const next = stepCursor(state.navigable, state.cursor, event.key === "j" ? 1 : -1);
-        if (next) { event.preventDefault(); openFinding(next, Boolean(state.activeFingerprint)); }
+        if (next) { event.preventDefault(); setCursor(next); }
       } else if (event.key === "Enter" && !isInteractive(event.target) && state.cursor) {
         event.preventDefault();
         openFinding(state.cursor);
@@ -202,47 +172,26 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
       } else if (event.key === "/" && !isInteractive(event.target)) {
         event.preventDefault();
         searchRef.current?.focus();
-      } else if (event.key === "Escape") {
-        if (state.selected.size > 0) { event.preventDefault(); setSelection(new Set()); }
-        else if (state.activeFingerprint) { event.preventDefault(); closePanel(); }
+      } else if (event.key === "Escape" && state.selected.size > 0) {
+        event.preventDefault();
+        setSelection(new Set());
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openFinding, closePanel, toggleSelect]);
+  }, [openFinding, toggleSelect]);
 
-  const index = activeFingerprint ? navigable.indexOf(activeFingerprint) : -1;
-  const panelWidth = liveWidth ?? view.panelWidth;
   const hasFilters = search.trim().length > 0 || filters.severity.length + filters.status.length + filters.category.length + filters.mission.length > 0 || preset !== "all";
   const clearAll = () => { setSearch(""); patchView({ preset: "all", filters: { ...filters, severity: [], status: [], category: [], mission: [] } }); };
 
-  const desktop = useMediaQuery("(min-width: 1024px)");
-  // Below lg the panel is a full-height sheet outside the masked scroll area, so its header is never clipped under the app header.
-  const panel = activeFingerprint ? (
-          <aside
-            aria-label="Finding details"
-            style={{ "--panel-w": `${panelWidth}px` } as React.CSSProperties}
-            className="ui-surface-enter fixed inset-y-0 right-0 z-[55] flex w-full min-w-0 overflow-hidden max-w-[min(100vw,var(--panel-w))] border-l-[0.5px] border-border-1 bg-background lg:static lg:z-auto lg:overflow-visible lg:w-[var(--panel-w)] lg:max-w-[60%] lg:shrink-0 lg:bg-transparent"
-          >
-            <PanelResizer width={panelWidth} onLive={setLiveWidth} onCommit={width => { setLiveWidth(null); patchView({ panelWidth: width }); }} />
-            <FindingDetail
-              key={activeFingerprint}
-              fingerprint={activeFingerprint}
-              group={activeGroup}
-              variant="panel"
-              missionName={activeGroup ? missionNames.get(missionKey(activeGroup)) : undefined}
-              mutations={mutations}
-              onClose={closePanel}
-              onPrev={index > 0 ? () => openFinding(navigable[index - 1]!, true) : undefined}
-              onNext={index !== -1 && index < navigable.length - 1 ? () => openFinding(navigable[index + 1]!, true) : undefined}
-            />
-          </aside>
-  ) : null;
+  const exportVisible = exportPath(visible);
+  const topActions = useMemo(() => (
+    <FindingsTopActions display={display} onDisplay={setDisplay} search={search} onSearch={setSearch} exportPath={exportVisible} exportCount={visible.length} searchRef={searchRef} />
+  ), [display, setDisplay, search, exportVisible, visible.length]);
+  useBreadcrumbActions(topActions);
 
   return (
-    <>
-    <PageHeader title="Findings" />
-    <div ref={root} style={{ height }} className="flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace" data-search-owner="findings">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="findings-workspace" data-search-owner="findings">
       <FindingsToolbar
         total={groups.length}
         shown={visible.length}
@@ -258,98 +207,52 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
         missionNames={missionNames}
         search={search}
         onSearch={setSearch}
-        exportPath={exportPath(visible)}
+        exportPath={exportVisible}
         exportCount={visible.length}
         searchRef={searchRef}
       />
-      <div className="relative flex min-h-0 flex-1">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {groups.length === 0 ? (
-            <EmptyState variant="fill" title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button size="sm" variant="accent" render={<Link to="/chats" />}>{v("Start {a mission}")}</Button>} />
-          ) : visible.length === 0 ? (
-            <EmptyState variant="fill" title="Nothing matches" body={hasFilters ? "No findings match the current search or filters." : "Nothing needs attention here right now."} action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
-          ) : display.layout === "board" ? (
-            <FindingsBoard
-              groups={visible}
-              orderBy={display.orderBy}
-              direction={display.direction}
-              activeFingerprint={activeFingerprint}
-              cursorFingerprint={cursor}
-              selected={selected}
-              pendingFingerprint={mutations.workflow.isPending ? mutations.workflow.variables?.fingerprint ?? null : null}
-              onOpen={fp => openFinding(fp)}
-              onToggleSelect={toggleSelect}
-              onMove={moveStatus}
-            />
-          ) : (
-            <FindingsList
-              rows={rows}
-              activeFingerprint={activeFingerprint}
-              cursorFingerprint={cursor}
-              selected={selected}
-              onOpen={fp => openFinding(fp)}
-              onToggleSelect={toggleSelect}
-              onToggleSection={toggleSection}
-              contextActions={contextActions}
-            />
-          )}
-          {selected.size > 0 ? (
-            <FindingsBulkBar
-              count={selected.size}
-              busy={bulkBusy}
-              exportPath={exportPath(selectedGroups)}
-              onStatus={status => void bulkStatus(status)}
-              onDismiss={() => void bulkDismiss()}
-              onAddToMission={selectedGroups.length === 1 ? () => addToMission(selectedGroups[0]!) : undefined}
-              onClear={() => setSelection(new Set())}
-            />
-          ) : null}
-        </div>
-        {panel ? (desktop ? panel : createPortal(panel, document.body)) : null}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {groups.length === 0 ? (
+          <EmptyState variant="fill" title={<>No findings yet. Start a thread with <code className="font-mono">0 threads start</code>.</>} />
+        ) : visible.length === 0 ? (
+          <EmptyState variant="fill" title="Nothing matches" body={hasFilters ? "No findings match the current search or filters." : "Nothing needs attention here right now."} action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
+        ) : display.layout === "board" ? (
+          <FindingsBoard
+            groups={visible}
+            orderBy={display.orderBy}
+            direction={display.direction}
+            activeFingerprint={null}
+            cursorFingerprint={cursor}
+            selected={selected}
+            pendingFingerprint={mutations.workflow.isPending ? mutations.workflow.variables?.fingerprint ?? null : null}
+            onOpen={openFinding}
+            onToggleSelect={toggleSelect}
+            onMove={moveStatus}
+          />
+        ) : (
+          <FindingsList
+            rows={rows}
+            missionNames={missionNames}
+            cursorFingerprint={cursor}
+            selected={selected}
+            onOpen={openFinding}
+            onToggleSelect={toggleSelect}
+            onToggleSection={toggleSection}
+            contextActions={contextActions}
+          />
+        )}
+        {selected.size > 0 ? (
+          <FindingsBulkBar
+            count={selected.size}
+            busy={bulkBusy}
+            exportPath={exportPath(selectedGroups)}
+            onStatus={status => void bulkStatus(status)}
+            onDismiss={() => void bulkDismiss()}
+            onAddToMission={selectedGroups.length === 1 ? () => addToMission(selectedGroups[0]!) : undefined}
+            onClear={() => setSelection(new Set())}
+          />
+        ) : null}
       </div>
     </div>
-    </>
-  );
-}
-
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
-  useEffect(() => {
-    const list = window.matchMedia(query);
-    const update = () => setMatches(list.matches);
-    update();
-    list.addEventListener("change", update);
-    return () => list.removeEventListener("change", update);
-  }, [query]);
-  return matches;
-}
-
-/** 8px drag handle on the panel's left edge; arrow keys resize by 16px. */
-function PanelResizer({ width, onLive, onCommit }: { width: number; onLive: (width: number) => void; onCommit: (width: number) => void }) {
-  const drag = useRef<{ startX: number; startWidth: number; width: number } | null>(null);
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      aria-valuemin={PANEL_MIN_WIDTH}
-      aria-valuemax={PANEL_MAX_WIDTH}
-      aria-valuenow={width}
-      tabIndex={0}
-      onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { startX: event.clientX, startWidth: width, width }; }}
-      onPointerMove={event => {
-        if (!drag.current) return;
-        drag.current.width = clampPanelWidth(drag.current.startWidth + (drag.current.startX - event.clientX));
-        onLive(drag.current.width);
-      }}
-      onPointerUp={() => { if (drag.current) onCommit(drag.current.width); drag.current = null; }}
-      onPointerCancel={() => { drag.current = null; onCommit(width); }}
-      onKeyDown={event => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        onCommit(clampPanelWidth(width + (event.key === "ArrowLeft" ? 16 : -16)));
-      }}
-      className={cn("absolute inset-y-0 left-0 z-10 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none outline-none lg:block", "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent after:transition-colors hover:after:bg-border-3 focus-visible:after:bg-ring")}
-    />
   );
 }

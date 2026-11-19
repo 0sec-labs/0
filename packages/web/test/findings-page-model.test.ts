@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_DISPLAY, EMPTY_FILTERS, HEADER_STRIDE, ROW_STRIDE, activeFilterCount, boardColumns, buildActivity, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus,
+  DEFAULT_DISPLAY, EMPTY_FILTERS, HEADER_STRIDE, ROW_STRIDE, activeFilterCount, boardColumns, buildActivity, buildSections, facetCounts, findingCode, findingStatus,
   flattenSections, layoutRows, matchesFilters, matchesFindingSearch, matchesPreset, mergeView, navigableFingerprints, sortFindings, stepCursor, visibleRange,
   type FindingsView,
 } from "../src/components/findings/findings-model";
@@ -136,15 +136,12 @@ describe("windowing", () => {
 });
 
 describe("persisted view and activity", () => {
-  it("falls back for junk and clamps the panel width", () => {
-    const view = mergeView({ display: { layout: "grid", groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any" }, collapsed: { done: false, x: "y" }, panelWidth: 99999 }) as FindingsView;
+  it("falls back for junk", () => {
+    const view = mergeView({ display: { layout: "grid", groupBy: "category", direction: 4 }, preset: "nope", filters: { severity: ["high", "bogus"], status: ["done", 3], match: "any" }, collapsed: { done: false, x: "y" } }) as FindingsView;
     expect(view.display).toEqual({ layout: "list", groupBy: "category", orderBy: "severity", direction: "desc" });
     expect(view.preset).toBe("all");
     expect(view.filters).toMatchObject({ severity: ["high"], status: ["done"], match: "any" });
     expect(view.collapsed).toEqual({ done: false });
-    expect(view.panelWidth).toBe(760);
-    expect(mergeView(null).panelWidth).toBe(520);
-    expect(clampPanelWidth(10)).toBe(360);
   });
   it("builds a newest-first activity timeline with steps and the review note", () => {
     const events = buildActivity({

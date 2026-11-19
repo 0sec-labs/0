@@ -22,7 +22,7 @@ describe("page shell", () => {
     }
   });
   test("the variants the owner named", () => {
-    const expected: Record<string, PageVariant> = { "/sentinels": "list", "/skills": "list", "/memory": "list", "/computers": "list", "/extensions": "list", "/doctor": "list", "/tools": "list", "/project": "list", "/settings": "form", "/chats/x": "full", "/agents/x": "list", "/nowhere": "list" };
+    const expected: Record<string, PageVariant> = { "/sentinels": "list", "/skills": "list", "/memory": "list", "/computers": "list", "/extensions": "list", "/findings": "full", "/doctor": "list", "/tools": "list", "/project": "list", "/settings": "form", "/chats/x": "full", "/agents/x": "list", "/nowhere": "list" };
     for (const [path, variant] of Object.entries(expected)) expect(variantOf(render(path)), path).toBe(variant);
   });
   test("variants set the width through the shared CSS variables, never a literal", () => {

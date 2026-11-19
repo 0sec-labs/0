@@ -23,7 +23,7 @@ export function PageShell({ variant, className, ...props }: ComponentProps<"div"
 
 const VariantOverride = createContext<(variant: PageVariant | null) => void>(() => undefined);
 
-/** A page whose layout depends on its own state (Findings: list or board) states the variant here; the route table is the default. */
+/** A page whose layout depends on its own state states the variant here; the route table is the default. */
 export function usePageVariant(variant: PageVariant | undefined) {
   const set = useContext(VariantOverride);
   useLayoutEffect(() => { set(variant ?? null); return () => set(null); }, [set, variant]);

@@ -3,11 +3,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getFindingPriority } from "@0/engine/shared/finding-priority";
-import { ChevronLeft, ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
-import { CapyChevronDownIcon as ChevronDown, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyArrowUpRightIcon as ExternalLink, CapyChatIcon as MessageSquare, CapyUserIcon as User, CapyCloseIcon as X } from "@/ui/icons/capy";
+import { ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
+import { CapyChevronDownIcon as ChevronDown, CapyCopyIcon as Copy, CapyChatIcon as MessageSquare, CapyUserIcon as User } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
-import { ReportExportControl } from "@/components/report-export-control";
 import { ErrorState } from "@/components/state-panel";
 import { NotFound } from "@/ui/components/not-found";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,7 @@ import { Disclosure } from "@/components/ui/disclosure";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
-import { CopyButton, EvidenceArtifactRow } from "@/console/panel/views/evidence";
+import { EvidenceArtifactRow } from "@/console/panel/views/evidence";
 import { buildEvidence } from "@/console/panel/views/evidence-model";
 import { formatTime } from "@/lib/format";
 import { formatRelativeAge } from "@/lib/relative-time";
@@ -24,6 +23,7 @@ import { v } from "@/lib/vocabulary";
 import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import type { FindingFamilyResponse, FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
+import { useMissionHrefs } from "./use-mission-href";
 import { provenanceLabel } from "./finding-provenance";
 import {
   SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, SEVERITY_LABELS, STATUS_LABEL, buildActivity, findingCode, findingStatus, normalizeSeverity, type FindingStatus,
@@ -32,14 +32,10 @@ import type { useFindingMutations } from "./use-finding-mutations";
 
 export type FindingDetailProps = {
   fingerprint: string;
-  /** Dashboard summary: lets the panel paint before the family request resolves. */
+  /** Dashboard summary: lets the page paint before the family request resolves. */
   group: FindingGroup | null;
-  variant: "panel" | "page";
   missionName?: string;
   mutations: ReturnType<typeof useFindingMutations>;
-  onClose?: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
 };
 
 function ageLabel(timestamp: number) {
@@ -47,10 +43,8 @@ function ageLabel(timestamp: number) {
   return !age ? "" : age === "now" ? "Just now" : `${age} ago`;
 }
 
-const iconButton = "size-7 text-muted-foreground-1";
-
 export function FindingDetail(props: FindingDetailProps) {
-  const { fingerprint, group, variant, mutations } = props;
+  const { fingerprint, group, mutations } = props;
   const { client, getFindingFamily } = useBackendApi();
   const familyQuery = useQuery({
     queryKey: queryKeys.findingFamily(client.backendId, fingerprint),
@@ -63,42 +57,35 @@ export function FindingDetail(props: FindingDetailProps) {
   const workflow = family?.workflow ?? group?.workflow ?? null;
   const saving = mutations.triage.isPending || mutations.workflow.isPending;
   const mutationError = mutations.triage.error ?? mutations.workflow.error;
-  const shareUrl = `${typeof window === "undefined" ? "" : window.location.origin}/findings?finding=${encodeURIComponent(fingerprint)}`;
 
   if (!latest || !workflow) {
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <PanelHeader {...props} title="Finding" status={null} shareUrl={shareUrl} />
-        <div className="p-4">
-          {familyQuery.isLoading ? <DetailSkeleton /> : familyQuery.error && (familyQuery.error as { status?: number }).status !== 404 ? <ErrorState error={familyQuery.error} /> : <NotFound section="findings" />}
-        </div>
+      <div className="min-h-0 min-w-0 flex-1 p-6">
+        {familyQuery.isLoading ? <DetailSkeleton /> : familyQuery.error && (familyQuery.error as { status?: number }).status !== 404 ? <ErrorState error={familyQuery.error} /> : <NotFound section="findings" />}
       </div>
     );
   }
 
   const status = group ? findingStatus({ ...group, latest, workflow }) : workflow.status;
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <PanelHeader {...props} title={latest.title} status={status} shareUrl={shareUrl} exportId={latest.id} />
-      <div className={cn("no-scrollbar scroll-fade-y min-h-0 flex-1 overflow-y-auto")}>
-        <div className={cn("mx-auto flex w-full flex-col gap-8 px-4 pt-3 pb-16", variant === "page" ? "max-w-(--page-width-list)" : "max-w-3xl")}>
+    <div className="no-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <div className="grid min-h-full grid-cols-1 min-[900px]:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="flex min-w-0 flex-col gap-8 px-6 pt-6 pb-16 min-[900px]:px-10 min-[900px]:pt-8">
           <section aria-label="Summary" className="flex flex-col gap-1.5">
-            <h2 className="min-w-0 text-[22px] leading-7 font-medium text-balance break-words text-foreground">{latest.title}</h2>
+            <h2 className="min-w-0 max-w-4xl text-[22px] leading-7 font-medium break-words text-foreground">{latest.title}</h2>
             <p className="text-xs text-muted-foreground-1"><span className="tabular-nums">{findingCode(fingerprint)}</span> · {ageLabel(latest.timestamp)}</p>
           </section>
-
-          <Properties {...props} group={group} family={family} latest={latest} workflow={workflow} status={status} />
 
           {blockedNotice(family, workflow.phase)}
 
           <section aria-label="Description" className="flex flex-col gap-2">
             <SectionLabel>Description</SectionLabel>
-            <p className="min-w-0 text-[13px] leading-6 whitespace-pre-wrap break-words text-muted-foreground-1">{latest.description || "No description recorded."}</p>
+            <p className="min-w-0 max-w-4xl text-[13px] leading-6 whitespace-pre-wrap break-words text-muted-foreground-1">{latest.description || "No description recorded."}</p>
           </section>
 
           <EvidenceSection group={group} latest={latest} workflow={workflow} fingerprint={fingerprint} />
 
-          <section aria-label="Review" className="flex flex-col gap-3">
+          <section aria-label="Review" className="flex max-w-4xl flex-col gap-3">
             <SectionLabel>Review</SectionLabel>
             <ReviewControls key={fingerprint} fingerprint={fingerprint} initialNote={latest.triageNote ?? ""} triageStatus={latest.triageStatus} saving={saving} mutations={mutations} />
             <FindingImpactEditor key={latest.id} finding={latest} />
@@ -111,6 +98,9 @@ export function FindingDetail(props: FindingDetailProps) {
 
           {family ? <SupportingDetails family={family} /> : null}
         </div>
+        <aside aria-label="Finding properties" className="order-first border-b-[0.5px] border-border-1 px-6 pt-4 pb-4 min-[900px]:order-none min-[900px]:border-b-0 min-[900px]:border-l-[0.5px] min-[900px]:px-5 min-[900px]:pt-8">
+          <Properties {...props} group={group} family={family} latest={latest} workflow={workflow} status={status} />
+        </aside>
       </div>
     </div>
   );
@@ -131,34 +121,9 @@ function SectionLabel({ children }: { children: ReactNode }) {
   return <h3 className="text-xs font-medium text-muted-foreground-1">{children}</h3>;
 }
 
-function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onNext, shareUrl, exportId }: FindingDetailProps & { title: string; status: FindingStatus | null; shareUrl: string; exportId?: string }) {
-  return (
-    <header className="flex h-11 shrink-0 items-center gap-1 border-b-[0.5px] border-border-1 px-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
-        {status ? <StatusIcon status={status} /> : null}
-        <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground-1">{findingCode(fingerprint)}</span>
-        {status ? null : <span className="min-w-0 truncate text-[13px] font-medium">{title}</span>}
-      </div>
-      {onPrev || onNext ? (
-        <>
-          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Previous finding" tooltip="Previous finding" disabled={!onPrev} onClick={onPrev}><ChevronLeft /></Button>
-          <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Next finding" tooltip="Next finding" disabled={!onNext} onClick={onNext}><ChevronRight /></Button>
-        </>
-      ) : null}
-      <CopyButton text={shareUrl} label="link" />
-      {variant === "panel" ? (
-        <Button variant="ghost" size="icon-sm" tooltip="Open finding page" className={iconButton} render={<Link to={`/findings/${encodeURIComponent(fingerprint)}`} aria-label="Open finding page" />}><ExternalLink /></Button>
-      ) : exportId ? (
-        <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(exportId)}`} />
-      ) : null}
-      {onClose ? <Button variant="ghost" size="icon-sm" className={iconButton} aria-label="Close finding panel" tooltip="Close finding panel" onClick={onClose}><X /></Button> : null}
-    </header>
-  );
-}
-
 function Prop({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid min-h-7 grid-cols-[96px_minmax(0,1fr)] items-center gap-2 py-0.5">
+    <div className="grid min-h-7 grid-cols-[104px_minmax(0,1fr)] items-center gap-2 py-0.5">
       <dt className="text-xs text-muted-foreground-1">{label}</dt>
       <dd className="flex min-w-0 items-center gap-1.5 text-[13px] text-foreground">{children}</dd>
     </div>
@@ -166,17 +131,6 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const valueButton = "h-7 max-w-full justify-start gap-2 px-2 text-[13px] font-normal text-foreground";
-
-/** A finding's mission shares the scan id: open it live when it is running, else its saved transcript; no link when neither exists. */
-function useMissionHref(scanId: string): string | null {
-  const { client, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
-  const live = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
-  const saved = useQuery({ queryKey: queryKeys.consoleSaved(client.backendId), queryFn: ({ signal }) => listSavedConsoleSessions(signal), staleTime: 15_000, retry: false });
-  const liveMatch = live.data?.find(item => item.id === scanId || item.savedId === scanId);
-  if (liveMatch) return `/chats/${encodeURIComponent(liveMatch.id)}`;
-  const savedMatch = saved.data?.find(item => item.id === scanId);
-  return savedMatch ? `/chats/saved/${encodeURIComponent(savedMatch.id)}` : null;
-}
 
 function Properties({ group, family, latest, workflow, status, fingerprint, missionName, mutations }: FindingDetailProps & {
   family: FindingFamilyResponse | null;
@@ -190,10 +144,10 @@ function Properties({ group, family, latest, workflow, status, fingerprint, miss
   const confidence = typeof latest.confidence === "number" && Number.isFinite(latest.confidence) ? Math.round(latest.confidence <= 1 ? latest.confidence * 100 : latest.confidence) : null;
   const count = group?.count ?? family?.rows.length ?? 1;
   const sourceLabel = provenanceLabel(family?.provenance ?? group?.provenance);
-  const missionHref = useMissionHref(latest.scanId);
+  const missionHref = useMissionHrefs()(latest.scanId);
   const missionLabelText = missionName ?? `${v("{Mission}")} ${latest.scanId.slice(0, 8)}`;
   return (
-    <dl aria-label="Properties" className="flex flex-col">
+    <dl aria-label="Properties" className="flex flex-col gap-0.5">
       <Prop label="Status">
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button variant="ghost" size="sm" className={valueButton} aria-label={`Status: ${STATUS_LABEL[status]}`} />}>
