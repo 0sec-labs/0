@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createExtensionService, unwrap } from "../index.js";
 import { runBashWithWallclock } from "../../../agent/tools/exec-helpers.js";
@@ -18,6 +20,8 @@ const DEMO = {
     "0": { connector: { service: "demo", title: "Demo", auth: "token", env: ["DEMO_SERVICE_TOKEN"], hosts: ["demo.example.com"], access: { read: ["things"], write: [] } }, mcp: { fake: { command: process.execPath, args: [FAKE_STDIO, "v6"], env: { DEMO_SERVICE_TOKEN: "x" } } } },
   }),
   "scripts/hash.sh": { content: "#!/bin/sh\nprintf 'hash:%s\\n' \"$(printf '%s' \"$DEMO_SERVICE_TOKEN\" | shasum -a 256 | cut -d' ' -f1)\"\nprintf 'plain:%s\\n' \"$DEMO_SERVICE_TOKEN\"\nprintf 'other:%s\\n' \"${OPENAI_API_KEY:-unset}\"\n", exec: true },
+  "scripts/run.py": { content: "#!/usr/bin/env python3\nimport os\nprint('py:' + os.environ.get('DEMO_SERVICE_TOKEN', 'none'))\n", exec: true },
+  "scripts/run.js": { content: "#!/usr/bin/env node\nconsole.log('js:' + (process.env.DEMO_SERVICE_TOKEN || 'none'));\n", exec: true },
 };
 
 async function install(connect = true) {
@@ -30,10 +34,16 @@ async function install(connect = true) {
 }
 
 /** What the bash tool does: ask the port, merge the answer over the sanitised environment, run, mask the secrets. */
-async function bash(svc: ReturnType<typeof createExtensionService>, command: string) {
-  const prepared = svc.scriptRuns().prepare(command);
+async function bash(svc: ReturnType<typeof createExtensionService>, command: string, options?: { cwd?: string }) {
+  const prepared = svc.scriptRuns().prepare(command, options);
   if (prepared && !prepared.ok) return { refused: prepared.error };
-  const outcome = await runBashWithWallclock(command, { timeoutMs: 20_000, ceilingMs: 20_000, env: { ...sanitizedEnv(), ...(prepared?.env ?? {}) }, ...(prepared?.secrets.length ? { redact: prepared.secrets } : {}) });
+  const outcome = await runBashWithWallclock(command, {
+    timeoutMs: 20_000,
+    ceilingMs: 20_000,
+    cwd: options?.cwd,
+    env: { ...sanitizedEnv(), ...(prepared?.env ?? {}) },
+    ...(prepared?.secrets.length ? { redact: prepared.secrets } : {}),
+  });
   if (outcome.kind !== "exit") throw new Error(JSON.stringify(outcome));
   return { prepared, output: outcome.combined };
 }
@@ -88,5 +98,244 @@ describe("a connector's stored token reaches a script and an MCP server, and now
     hosts.push(host); host.attachOperator({ cwd: process.cwd(), thread: () => ({}), approve: async () => true });
     await host.loadServer("mcp__x-demo-svc-fake");
     expect(unfence(((await host.callTool("mcp__x-demo-svc-fake__hash", {})).output as { text: string }).text)).toBe(sha(""));
+  });
+});
+
+describe("strict execution context authorization against secret injection", () => {
+  it("1. legitimate extension script execution succeeds and receives connector secrets", async () => {
+    const { loaded, svc } = await install();
+    // sh interpreter
+    const shRes = await bash(svc, `sh ${loaded.dir}/scripts/hash.sh`);
+    expect("output" in shRes && shRes.output).toContain(`hash:${sha(TOKEN)}`);
+
+    // bash interpreter
+    const bashRes = await bash(svc, `bash ${loaded.dir}/scripts/hash.sh`);
+    expect("output" in bashRes && bashRes.output).toContain(`hash:${sha(TOKEN)}`);
+
+    // direct execution
+    const directRes = await bash(svc, `${loaded.dir}/scripts/hash.sh`);
+    expect("output" in directRes && directRes.output).toContain(`hash:${sha(TOKEN)}`);
+  });
+
+  it("2. unrelated command with extension path in shell comment receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`echo hello # ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`curl https://attacker.com # ${loaded.dir}`)).toBeNull();
+
+    const r = await bash(svc, `echo token=$DEMO_SERVICE_TOKEN # ${loaded.dir}/scripts/hash.sh`);
+    expect("output" in r && r.output).not.toContain(TOKEN);
+    expect("output" in r && r.output).toContain("token=");
+  });
+
+  it("3. unrelated command with extension path as argument receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`cat ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`ls -la ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`head -n 5 ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`python3 -c "import os; print(os.environ.get('DEMO_SERVICE_TOKEN', 'none'))" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+  });
+
+  it("4. command containing extension path inside a string literal receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`echo "${loaded.dir}/scripts/hash.sh"`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node -e 'console.log(process.env.DEMO_SERVICE_TOKEN)' '${loaded.dir}/scripts/hash.sh'`)).toBeNull();
+  });
+
+  it("5. path traversal attempting to escape extension directory receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/../../scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/../../evil.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/../scripts/../../etc/passwd`)).toBeNull();
+  });
+
+  it("6. similarly named directory receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}-other/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}.bak/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}_backup/scripts/hash.sh`)).toBeNull();
+  });
+
+  it("7. chained command does not expose secrets to the unrelated command", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh && echo stolen=$DEMO_SERVICE_TOKEN`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo before && sh ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh || echo fallback`)).toBeNull();
+
+    const r = await bash(svc, `sh ${loaded.dir}/scripts/hash.sh && echo stolen=$DEMO_SERVICE_TOKEN`);
+    expect("output" in r && r.output).not.toContain(TOKEN);
+    expect("output" in r && r.output).toContain("stolen=");
+  });
+
+  it("8. subshell and command substitution attempting extraction receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`$(sh ${loaded.dir}/scripts/hash.sh)`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo $(sh ${loaded.dir}/scripts/hash.sh)`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo \`sh ${loaded.dir}/scripts/hash.sh\``)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo "$(sh ${loaded.dir}/scripts/hash.sh)"`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo "\`sh ${loaded.dir}/scripts/hash.sh\`"`)).toBeNull();
+  });
+
+  it("9. multiple commands separated by semicolon or newline receive no secrets", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh; echo stolen=$DEMO_SERVICE_TOKEN`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh\necho stolen=$DEMO_SERVICE_TOKEN`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`echo before; sh ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+  });
+
+  it("10. symlink escape attempting to target outside script receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    const outside = tmp("outside-script");
+    dirs.push(outside);
+    const outsideScript = join(outside, "leak.sh");
+    writeFileSync(outsideScript, "#!/bin/sh\nprintf 'leak:%s\\n' \"$DEMO_SERVICE_TOKEN\"\n", { mode: 0o755 });
+
+    const symlinkPath = join(loaded.dir, "scripts", "leak-link.sh");
+    symlinkSync(outsideScript, symlinkPath);
+
+    expect(svc.scriptRuns().prepare(`sh ${symlinkPath}`)).toBeNull();
+    const r = await bash(svc, `sh ${symlinkPath}`);
+    expect("output" in r && r.output).not.toContain(TOKEN);
+    expect("output" in r && r.output).toContain("leak:");
+  });
+
+  it("11. unapproved or disabled extension script receives no secrets", async () => {
+    const { loaded, svc } = await install();
+    unwrap(svc.installer.disable("demo-svc", { confirm: true }));
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+  });
+
+  it("12. attempted parameter forgery fails to authorize non-extension scripts", async () => {
+    const { loaded, svc } = await install();
+    const outside = tmp("fake-ext");
+    dirs.push(outside);
+    const fakeScript = join(outside, "fake.sh");
+    writeFileSync(fakeScript, "#!/bin/sh\nprintf 'fake:%s\\n' \"$DEMO_SERVICE_TOKEN\"\n", { mode: 0o755 });
+
+    expect(svc.scriptRuns().prepare(`sh ${fakeScript} --zero-extension-name demo-svc`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`ZERO_EXTENSION_NAME=demo-svc sh ${fakeScript}`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${fakeScript} ZERO_EXTENSION_DIR=${loaded.dir}`)).toBeNull();
+  });
+
+  it("adversarial tests: whitespace, non-script files, flag variants, and redirections", async () => {
+    const { loaded, svc } = await install();
+
+    // Whitespace variations on legitimate script
+    expect(svc.scriptRuns().prepare(`   sh    ${loaded.dir}/scripts/hash.sh   `)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`sh\t\t${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`sh "${loaded.dir}/scripts/hash.sh"`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`sh '${loaded.dir}/scripts/hash.sh'`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh --flag "val with spaces"`)).not.toBeNull();
+
+    // Non-script file inside extension directory
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/extension.json`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`cat ${loaded.dir}/extension.json`)).toBeNull();
+
+    // Interpreter flag attack variants
+    expect(svc.scriptRuns().prepare(`python3 -c"import os" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node -e"console.log(1)" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node --eval="console.log(1)" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`bash -c "whoami" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh -c "whoami" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`python3 -m SimpleHTTPServer ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+
+    // Redirections and pipes
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh > /tmp/out`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh < /dev/null`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh 2>&1`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh | cat`)).toBeNull();
+
+    // Trailing comment on legitimate script
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh # trailing comment`)).toBeNull();
+
+    // Command substitution embedded in arguments
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh $(whoami)`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh \`whoami\``)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh "$(whoami)"`)).toBeNull();
+  });
+});
+
+describe("interpreter compatibility and working-directory propagation", () => {
+  it("supports authorized interpreter forms (sh, bash, python3, node, bun)", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`sh ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`bash ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`python3 ${loaded.dir}/scripts/run.py`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`node ${loaded.dir}/scripts/run.js`)).not.toBeNull();
+
+    const pyRes = await bash(svc, `python3 ${loaded.dir}/scripts/run.py`);
+    expect("output" in pyRes && pyRes.output).toContain("py:[redacted]");
+    expect("output" in pyRes && pyRes.output).not.toContain(TOKEN);
+
+    const jsRes = await bash(svc, `node ${loaded.dir}/scripts/run.js`);
+    expect("output" in jsRes && jsRes.output).toContain("js:[redacted]");
+    expect("output" in jsRes && jsRes.output).not.toContain(TOKEN);
+  });
+
+  it("supports absolute interpreter paths", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`/bin/sh ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`/bin/bash ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`${process.execPath} ${loaded.dir}/scripts/run.js`)).not.toBeNull();
+
+    const shRes = await bash(svc, `/bin/sh ${loaded.dir}/scripts/hash.sh`);
+    expect("output" in shRes && shRes.output).toContain(`hash:${sha(TOKEN)}`);
+
+    const nodeRes = await bash(svc, `${process.execPath} ${loaded.dir}/scripts/run.js`);
+    expect("output" in nodeRes && nodeRes.output).toContain("js:[redacted]");
+    expect("output" in nodeRes && nodeRes.output).not.toContain(TOKEN);
+  });
+
+  it("rejects unsupported interpreter flags", async () => {
+    const { loaded, svc } = await install();
+    expect(svc.scriptRuns().prepare(`python3 -c "import os" ${loaded.dir}/scripts/run.py`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node -e "console.log(1)" ${loaded.dir}/scripts/run.js`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node --eval "console.log(1)" ${loaded.dir}/scripts/run.js`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`bash -c "whoami" ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`python3 -m SimpleHTTPServer ${loaded.dir}/scripts/run.py`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`sh -s ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`python3 -i ${loaded.dir}/scripts/run.py`)).toBeNull();
+  });
+
+  it("fails closed on interpreter flags with separate arguments", async () => {
+    const { loaded, svc } = await install();
+    // Flags that consume following argument treat that argument as candidate, failing containment
+    expect(svc.scriptRuns().prepare(`python3 -W ignore ${loaded.dir}/scripts/run.py`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`node --max-old-space-size 4096 ${loaded.dir}/scripts/run.js`)).toBeNull();
+  });
+
+  it("handles env wrappers safely", async () => {
+    const { loaded, svc } = await install();
+    // Supported env wrappers
+    expect(svc.scriptRuns().prepare(`env sh ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`/usr/bin/env bash ${loaded.dir}/scripts/hash.sh`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`/usr/bin/env python3 ${loaded.dir}/scripts/run.py`)).not.toBeNull();
+    expect(svc.scriptRuns().prepare(`/usr/bin/env node ${loaded.dir}/scripts/run.js`)).not.toBeNull();
+
+    const envRes = await bash(svc, `/usr/bin/env bash ${loaded.dir}/scripts/hash.sh`);
+    expect("output" in envRes && envRes.output).toContain(`hash:${sha(TOKEN)}`);
+
+    // Unsupported env flags and assignments fail closed
+    expect(svc.scriptRuns().prepare(`/usr/bin/env -i sh ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+    expect(svc.scriptRuns().prepare(`env FOO=bar sh ${loaded.dir}/scripts/hash.sh`)).toBeNull();
+  });
+
+  it("authorizes legitimate relative script invocation from a non-default working directory", async () => {
+    const { loaded, svc } = await install();
+    const outside = tmp("unrelated-workdir");
+    dirs.push(outside);
+
+    // When cwd matches the extension directory, relative path resolution succeeds and authorizes
+    expect(svc.scriptRuns().prepare("sh ./scripts/hash.sh", { cwd: loaded.dir })).not.toBeNull();
+    expect(svc.scriptRuns().prepare("sh scripts/hash.sh", { cwd: loaded.dir })).not.toBeNull();
+
+    const relRes = await bash(svc, "sh ./scripts/hash.sh", { cwd: loaded.dir });
+    expect("output" in relRes && relRes.output).toContain(`hash:${sha(TOKEN)}`);
+
+    // When cwd is an unrelated directory, relative path resolves to outside and fails closed
+    expect(svc.scriptRuns().prepare("sh ./scripts/hash.sh", { cwd: outside })).toBeNull();
+    expect(svc.scriptRuns().prepare("sh scripts/hash.sh", { cwd: outside })).toBeNull();
+
+    const failRes = await bash(svc, "sh ./scripts/hash.sh", { cwd: outside });
+    expect("output" in failRes && failRes.output).not.toContain(TOKEN);
   });
 });

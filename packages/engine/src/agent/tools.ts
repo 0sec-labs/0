@@ -473,7 +473,8 @@ export class ToolExecutor {
 
     // A script of an enabled, approved extension gets its declared and approved variables (a connector's stored token
     // included) and nothing else; the value never comes back (see runBashWithWallclock `redact`).
-    const extensionRun = this.ctx.extensionRuns?.prepare(command);
+    const cwd = this.ctx.scopePath ?? this.ctx.workspaceRoot;
+    const extensionRun = this.ctx.extensionRuns?.prepare(command, { cwd });
     if (extensionRun && !extensionRun.ok) return { success: false, output: null, error: `bash refused: ${extensionRun.error}` };
     const env = { ...sanitizedEnv(), TARGET: this.ctx.target, ...this.buildAuthEnvVars(), ...(extensionRun?.env ?? {}) };
 
@@ -482,7 +483,7 @@ export class ToolExecutor {
     const displayCommand = (args.command as string).trim();
     const startedAt = Date.now();
     const outcome = await runBashWithWallclock(command, {
-      timeoutMs, ceilingMs, env, cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot, signal: this._executionContext.getStore()?.signal,
+      timeoutMs, ceilingMs, env, cwd, signal: this._executionContext.getStore()?.signal,
       ...(extensionRun?.secrets.length ? { redact: extensionRun.secrets } : {}),
     });
     const durationMs = Date.now() - startedAt;
