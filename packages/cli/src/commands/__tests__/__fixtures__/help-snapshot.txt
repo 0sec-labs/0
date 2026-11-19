@@ -4,22 +4,24 @@ Usage: 0 [options] [command]
 Security sentinels for your repositories. Run 0 to open the console.
 
 Options:
-  -h, --help            display help for command
-  -p, --print <prompt>  Run one prompt headless: only the answer goes to stdout
-  -c, --continue        With -p: continue the most recent thread
-  -r, --resume <id>     With -p: continue a saved thread
+  -h, --help               display help for command
+  -p, --print <prompt>     Run one prompt headless: only the answer goes to stdout
+  -c, --continue           With -p: continue the most recent thread
+  -r, --resume <id>        With -p: continue a saved thread
 
 Work:
-  findings [options]    Browse findings and change their status
-  threads               Start, follow and stop threads
-  sentinels             Create, run and change Sentinels
+  scan [options] <target>  Scan a folder or git repository for security bugs; prints the findings as
+                           a report
+  findings [options]       Browse findings and change their status
+  threads                  Start, follow and stop threads
+  sentinels                Create, run and change Sentinels
 
 Setup:
-  skills                Skills and extensions: list, add
-  memory                What 0 remembers across threads
-  models                Models and provider connections
-  computers             Remote computers that run 0
-  config                Settings, API keys, team and setup checks (config doctor)
+  skills                   Skills and extensions: list, add
+  memory                   What 0 remembers across threads
+  models                   Models and provider connections
+  computers                Remote computers that run 0
+  config                   Settings, API keys, team and setup checks (config doctor)
 
 Run `0 <command>` to list its subcommands; `0 <command> <subcommand> --help` for flags.
 
@@ -1132,6 +1134,28 @@ Options:
   --by <model|thread>  Group by model (default) or list each thread
   --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
+
+### 0 scan
+Usage: 0 scan [options] <target>
+
+Scan a folder or git repository for security bugs; prints the findings as a report
+
+Options:
+  --budget <usd>             Stop when the estimated spend reaches this many USD; partial findings
+                             are kept (default: "5")
+  --format <format>          Report format: json, md, sarif, html, pdf (default: "md")
+  -o, --output <file>        Write the report to a file instead of stdout
+  --fail-on <severity>       Exit 1 when a finding is at or above this severity (critical, high,
+                             medium, low, info)
+  --skill <id>               Skill that holds the scan method (default: "scan")
+  --model <model>            Model for the scan thread (default: gpt-6-luna)
+  --timeout <seconds>        Maximum seconds to wait for the scan (default: "3600")
+  --engine-url <url>         Attach directly to a running trusted engine
+  --engine-token-env <name>  Environment variable holding the attached engine token
+  --computer <id>            Use a registered remote computer
+  --computers-config <path>  Operator computer connection registry JSON file
+  --db-path <path>           Control database of the local engine to attach to
+  -h, --help                 display help for command
 
 ### 0 sentinels
 Usage: 0 sentinels [options] [command]

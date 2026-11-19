@@ -17,6 +17,10 @@ import { addCommandStubs } from "../program.js";
 type Build = (scratch: Command) => Promise<void>;
 
 const SECTIONS: Readonly<Record<string, Build>> = {
+  async scan(root) {
+    (await import("./scan.js")).registerScanCommand(root);
+  },
+
   async findings(root) {
     const [reports, findings, triage, exportCommand, keys] = await Promise.all([
       import("./reports.js"), import("./findings.js"), import("./triage.js"), import("./findings-export.js"), import("./findings-keys.js"),

@@ -39,7 +39,7 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["findings", "threads", "sentinels"]],
+  ["Work", ["scan", "findings", "threads", "sentinels"]],
   ["Setup", ["skills", "memory", "models", "computers", "config"]],
 ];
 
@@ -84,6 +84,7 @@ const examplesBlock = (lines: readonly string[]): string => `Examples:\n${lines.
 
 /** Short, real examples for the visible commands, keyed by command path. */
 const EXAMPLES: Readonly<Record<string, readonly string[]>> = {
+  scan: ["0 scan ~/code/app", "0 scan ~/code/app --format sarif -o scan.sarif --fail-on high", "0 scan https://github.com/acme/app --budget 2 --format json"],
   findings: ["0 findings list --severity high", "0 findings show 3f2a", '0 findings update 3f2a --status accepted --note "known"'],
   "findings list": ["0 findings list --severity high --status verified", "0 findings list --format json", "0 findings list --format sarif -o findings.sarif"],
   "findings show": ["0 findings show 3f2a"],
@@ -199,6 +200,8 @@ export function applyNewSurface(top: Command): void {
   const description = GROUP_DESCRIPTIONS[top.name()];
   if (!visible || !description) {
     if (TOP_LEVEL_COMMANDS.some((entry) => entry.name === top.name() && entry.hidden)) setHidden(top, true);
+    // A visible command with no subcommands (`scan`) still prints its examples.
+    else if (EXAMPLES[top.name()]) top.addHelpText("after", `\n${examplesBlock(EXAMPLES[top.name()]!)}`);
     return;
   }
   top.description(description);

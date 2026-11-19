@@ -14,16 +14,18 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 
 | Task | Commands | Guide |
 | --- | --- | --- |
+| Scan code | [scan](#scan) | [Findings](/findings/) |
 | Review findings and threads | [findings](#findings) · [findings update](#findings-update) · [threads](#threads) | [Findings](/findings/), [Threads](/threads/) |
 | Automate | [sentinels](#sentinels) · [api](#api) | [Sentinels](/sentinels/) |
 | Set up and extend | [config](#config) · [config doctor](#config-doctor) · [models](#models) · [models connect](#models-connect) · [skills](#skills) · [computers](#computers) | [Models](/models/), [Extensions](/extensions/), [Computers](/computers/) |
 
-## The eight commands
+## The nine commands
 
-`0` with no arguments opens the web console. Everything else is one of eight commands.
+`0` with no arguments opens the web console. Everything else is one of nine commands.
 
 | Command | What it does | Subcommands |
 | --- | --- | --- |
+| `0 scan` | Scan a folder or git repository for security bugs; prints the findings as a report. | none |
 | `0 findings` | Browse findings and change their status. `--format` exports, `--import` loads a report. | `list`, `show`, `update` |
 | `0 threads` | Start, follow and stop threads. | `list`, `send`, `start`, `stop` |
 | `0 sentinels` | Sentinels and, with `--automation`, saved automations. | `list`, `run`, `set` |
@@ -132,6 +134,37 @@ Check this machine and the engine. `config doctor upgrade`, `config doctor workb
 | `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ## Interactive & setup
+
+### scan
+
+Scan a folder or git repository for security bugs and print the findings as a report.
+
+```text
+0 scan [options] <target>
+```
+
+A scan is a thread that follows the `scan` skill, so it appears in `0 threads` and in the web app. The findings are stored under the thread's id and exported from there, so `0 findings export --scan <thread id>` gives the same report later. `target` is a folder or a git URL. The scan needs a running console (`0 --headless`) and reads findings from the local database. Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or the time limit (the report is partial).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `target` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--budget <usd>` | `5` | Stop when the estimated spend reaches this many USD; partial findings are kept |
+| `--format <format>` | `md` | Report format: json, md, sarif, html, pdf |
+| `-o, --output <file>` | — | Write the report to a file instead of stdout |
+| `--fail-on <severity>` | — | Exit 1 when a finding is at or above this severity (critical, high, medium, low, info) |
+| `--skill <id>` | `scan` | Skill that holds the scan method |
+| `--model <model>` | — | Model for the scan thread (default: gpt-6-luna) |
+| `--timeout <seconds>` | `3600` | Maximum seconds to wait for the scan |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
 
 ### web
 

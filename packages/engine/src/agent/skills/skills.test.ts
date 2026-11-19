@@ -50,6 +50,8 @@ const EXPECTED_SKILL_IDS = [
   "develop-this-app",
   // Sentinel preset skills.
   "pr-diff-review",
+  // `0 scan` follows this one.
+  "scan",
 ];
 
 const VALID_ROLES = new Set(["attack", "audit", "review"]);
@@ -197,7 +199,7 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(16);
+      expect(reviewSkills.length).toBe(17);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         "advisory-disclosure",
@@ -213,6 +215,7 @@ describe("Skill Registry", () => {
         "nextjs-appsec",
         "pr-diff-review",
         "python-web-appsec",
+        "scan",
         "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",

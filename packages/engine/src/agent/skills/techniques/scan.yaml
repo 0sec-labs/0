@@ -1,0 +1,72 @@
+id: scan
+name: "Security scan of a code base"
+description: "Scan a folder of source code for exploitable security bugs and record every confirmed one with the finding tool. Use when asked to scan, audit or security-review a repository, package or folder end to end. Map the code, read the risky paths, prove each hypothesis, try to disprove it, then record only what survives."
+summary: "Scan a code base end to end and record evidenced findings."
+category: "Code review"
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - scan
+  - audit
+  - source-review
+  - findings
+triggers:
+  - "scan (this|the) (repo|repository|code|folder|package)"
+  - "security (scan|audit|review) of"
+  - "\\baudit (this|the) (repo|code|package)"
+estimated_tokens: 900
+content: |
+  ## Security scan: method
+
+  Your job is to find real, exploitable security bugs in the folder you were given and to record each one with the `finding` tool. A finding is a claim you can back with code. Report what the code does, not what you could demonstrate on a running system.
+
+  Stay inside the folder. Do not run the code against anything outside it, do not touch the network, and do not change any file unless the user asked for fixes.
+
+  ### 1. Map: list every entry point
+
+  - List the top-level layout, the languages, the build files and the dependency manifests.
+  - Write a numbered list of every entry point: each HTTP route, CLI argument, message or event handler, file or network reader and scheduled job. One line each: what it takes as input, who can call it, and what it reaches.
+  - Note the trust boundaries: where outside input enters, what authenticates it, where it reaches a sink (database, shell, file system, template, deserializer, outbound request, token or crypto call).
+
+  This list is the scope of the scan. You are not done until every line has a verdict.
+
+  ### 2. Check every entry point against every class
+
+  For each entry point follow its input to the sink and check what happens on the way: validation, encoding, authorization, error handling. Ask every time, not only when something looks odd:
+
+  - Does outside input reach a query, command, path, URL, template or deserializer without a control in between (injection, traversal, SSRF)?
+  - Is a secret, key or credential written into the code (a hardcoded signing key, password or token is a finding by itself)?
+  - Does a route take an id and return or change an object without checking that the caller owns it (broken object-level authorization)?
+  - Is authentication missing, or is a token accepted without being properly verified?
+  - Is cryptography weak or misused?
+  - Does a dependency in the manifests have a known advisory in a function this code calls?
+
+  Load a matching skill with `load_skill` when the code uses a pattern it covers. Cover all entry points before going deep on one. If you cannot reach some, say which.
+
+  ### 3. Prove from the code
+
+  For each hypothesis write down the exact file, line and chain of calls, and the input that triggers it. If you can run something safe inside the folder to demonstrate it, do. If you cannot, say that the finding is from reading the code and describe the trigger exactly. Missing dependencies, a stubbed database layer, an app that is never started in this folder, or no runtime proof are reasons to lower the confidence value, never reasons to drop the finding. The code is the thing being reviewed, and a test double does not remove the flaw from the code path.
+
+  ### 4. Look for a real control before dropping a finding
+
+  Before recording a finding, look in the code for something that actually prevents it: a check upstream, a framework default that is on, validation that provably covers the input, a route only an administrator can reach. Read the callers. Drop the finding only when you can point to that control in the code. If it only partly helps, lower the severity and say why. "I could not exploit it here" is not a control.
+
+  ### 5. Record
+
+  Call `finding` once per issue with:
+
+  - a short title that names the flaw and where it is;
+  - severity (critical, high, medium, low, info) based on impact and how easy it is to reach, with the reasoning in the description;
+  - one of the listed categories;
+  - source_path, source_start_line and source_end_line, plus the trigger and impact in the description;
+  - evidence: the request or input, and what the code does with it;
+  - suggested_replacement with a concrete fix when you can write one.
+
+  Do not record the same flaw twice. If one root cause appears in several places, record one finding and list the places. Different flaws on different routes are different findings, even when they are the same class.
+
+  ### 6. Finish
+
+  End with the entry-point list, one verdict per line: the finding it produced, "checked, safe" with the control that makes it safe, or "not reached". Then one short paragraph: what you covered, what you did not, how many findings by severity, and the one or two that matter most. If you found nothing, the list shows what you checked so the reader can judge the coverage.

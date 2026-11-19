@@ -1,0 +1,190 @@
+/**
+ * `0 scan <target>`: a thread that follows the `scan` skill, then its findings as a report.
+ *
+ * No scan logic lives here. The command resolves the target to a folder, starts a thread with
+ * the skill and a budget, waits, and prints what the thread recorded
+ * (docs/design/scan-as-a-thread.md). The thread shows up in `0 threads` like any other.
+ */
+import { execFile } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+import type { Command } from "commander";
+import { exportReport, isReportExportFormat } from "@0/engine";
+import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
+import type { ScanReport } from "@0/engine/shared";
+import { retainedScanSnapshot } from "../web/report-artifacts.js";
+import { scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
+import { finishWithError, UsageError } from "./output.js";
+import { asJson, finishedThread, lastAssistantText, usageLine, type Json } from "./thread-output.js";
+
+const exec = promisify(execFile);
+const FORMATS = ["json", "md", "sarif", "html", "pdf"] as const;
+const SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
+const DEFAULT_BUDGET_USD = 5;
+/** Chosen by measurement: on the same one-file scan it finished in 26s and $0.0014 and recorded its finding first try; glm-5.3-flash took minutes and rejected a dozen `finding` calls. */
+export const DEFAULT_SCAN_MODEL = "gpt-6-luna";
+const DEFAULT_TIMEOUT_SECONDS = 3600;
+const GIT_TARGET = /^(git@|git:\/\/|ssh:\/\/git@)|\.git$|^https:\/\/(github|gitlab)\.com\//;
+
+export interface ScanDeps {
+  open(options: ConsoleTransportOptions): Promise<ConsoleClient>;
+  out(bytes: Uint8Array | string): void;
+  err(text: string): void;
+  sleep(ms: number): Promise<void>;
+  now(): Date;
+  writeBytes(path: string, bytes: Uint8Array): void;
+  /** The findings stored under a thread id, as the shared report type. Reads the local findings database. */
+  loadReport(threadId: string): ScanReport;
+  /** Make a folder out of a git URL. Returns the folder and how to remove it. */
+  clone(url: string): Promise<{ dir: string; dispose(): void }>;
+}
+const defaults: ScanDeps = {
+  open: options => openConsole(options),
+  out: bytes => { process.stdout.write(bytes); },
+  err: text => process.stderr.write(`${text}\n`),
+  sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+  now: () => new Date(),
+  writeBytes: (path, bytes) => writeFileSync(path, bytes, { mode: 0o600 }),
+  loadReport: threadId => retainedScanSnapshot(threadId),
+  async clone(url) {
+    const dir = mkdtempSync(join(tmpdir(), "0-scan-"));
+    // An untrusted repository: no hooks, no external transports, shallow, and `--` before the URL.
+    await exec("git", ["-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never", "clone", "--depth", "1", "--quiet", "--", url, dir]);
+    return { dir, dispose: () => rmSync(dir, { recursive: true, force: true }) };
+  },
+};
+
+interface ScanOptions extends ConsoleTransportOptions {
+  budget: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string;
+}
+
+export interface ResolvedTarget { folder: string; label: string; dispose?: () => void }
+
+/** A folder or a git URL. */
+export async function resolveScanTarget(raw: string, deps: Pick<ScanDeps, "clone">): Promise<ResolvedTarget> {
+  const target = raw.trim();
+  if (!target) throw new UsageError("Supply a folder or a git URL to scan.");
+  if (GIT_TARGET.test(target)) {
+    const cloned = await deps.clone(target);
+    return { folder: cloned.dir, label: target, dispose: cloned.dispose };
+  }
+  const folder = resolve(target);
+  if (!existsSync(folder) || !statSync(folder).isDirectory()) {
+    throw new UsageError(`${target} is not a folder. Pass a folder or a git URL.`);
+  }
+  return { folder, label: folder };
+}
+
+function scanPrompt(label: string, skill: string): string {
+  return [
+    `Scan ${label} for exploitable security bugs. Load the \`${skill}\` skill with load_skill and follow it.`,
+    "Record each confirmed issue with the finding tool, setting source_path, source_start_line and source_end_line, and suggested_replacement when you can give a concrete fix.",
+    "Finish with a short summary of what you covered and what you did not.",
+  ].join("\n");
+}
+
+function validate(target: string | undefined, options: ScanOptions): void {
+  if (!target?.trim()) throw new UsageError("Supply a folder or a git URL to scan.");
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(options.skill)) throw new UsageError("--skill must be a skill id such as scan.");
+  if (!(FORMATS as readonly string[]).includes(options.format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
+  if (options.format === "pdf" && !options.output) throw new UsageError("PDF is binary; supply -o <file>.");
+  const budget = Number(options.budget);
+  if (!Number.isFinite(budget) || budget <= 0 || budget > 1000) throw new UsageError("--budget must be a positive USD amount up to 1000.");
+  const seconds = Number(options.timeout);
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError("--timeout must be a positive number of seconds.");
+  if (options.failOn !== undefined && !(SEVERITIES as readonly string[]).includes(options.failOn)) throw new UsageError(`--fail-on must be one of: ${SEVERITIES.join(", ")}.`);
+}
+
+export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaults): Promise<void> {
+  let resolved: ResolvedTarget | undefined;
+  let client: ConsoleClient | undefined;
+  try {
+    validate(target, options);
+    resolved = await resolveScanTarget(target!, deps);
+    const budget = Number(options.budget);
+    const startedAt = deps.now().toISOString();
+    client = await deps.open(options);
+    const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
+    const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title: `Scan ${resolved.label}`, costCeilingUsd: budget })).session);
+    const id = String(created.id);
+    const path = `/api/console/sessions/${encodeURIComponent(id)}`;
+    try {
+      await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
+      await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
+    } catch (error) {
+      // A thread that never started is no use to anyone; do not leave it in the list.
+      const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
+      const reason = error instanceof Error ? error.message : String(error);
+      const hint = /model/i.test(reason) ? ` Pick another with --model (default ${DEFAULT_SCAN_MODEL}).` : "";
+      throw new Error(`${reason}${hint}${removed ? "" : ` (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`}`);
+    }
+    deps.err(`scanning ${resolved.label} in thread ${id} (budget $${budget})`);
+
+    const deadline = Date.now() + Number(options.timeout) * 1000;
+    let snapshot: Json;
+    let timedOut = false;
+    for (;;) {
+      await deps.sleep(1000);
+      snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+      const session = asJson(snapshot.session);
+      const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (lastAssistantText(snapshot) !== undefined || snapshot.lastOutcome != null));
+      if (finished) break;
+      if (Date.now() > deadline) {
+        // Stop the thread and report what it stored so far; a scan that ran out of time still has findings.
+        timedOut = true;
+        await client.request("POST", `${path}/cancel`, {}).catch(() => undefined);
+        await deps.sleep(2000);
+        snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+        break;
+      }
+    }
+
+    const done = finishedThread(snapshot);
+    const budgetExhausted = asJson(done.session).costCeilingExceeded === true;
+    const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
+    const outcome: ScanOutcome = {
+      target: resolved.label, threadId: id, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
+      ...(costUsd !== undefined ? { costUsd } : {}), budgetExhausted, ...(timedOut ? { timedOut } : {}),
+      failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked,
+      ...(done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),
+    };
+    const stored = deps.loadReport(id);
+
+    let body: Uint8Array | string;
+    if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, stored.findings), null, 2)}\n`;
+    else {
+      const format = options.format === "md" ? "markdown" : options.format;
+      if (!isReportExportFormat(format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
+      body = (await exportReport(toScanReport(outcome, stored), format, `0-scan-${id}`)).body;
+    }
+    if (options.output) {
+      const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
+      deps.writeBytes(options.output, bytes);
+      deps.err(`Wrote ${options.output} (${bytes.byteLength} bytes)`);
+    } else deps.out(body);
+    deps.err(`${stored.findings.length} finding${stored.findings.length === 1 ? "" : "s"}${budgetExhausted ? `, stopped at the $${budget} budget (partial)` : timedOut ? `, stopped at the ${options.timeout}s time limit (partial)` : ""}\n${usageLine(done.usage)}`);
+    const code = scanExitCode(outcome, stored.findings, options.failOn as typeof SEVERITIES[number] | undefined);
+    if (code !== 0) process.exitCode = code;
+  } catch (error) {
+    finishWithError(error, deps, false);
+  } finally {
+    client?.dispose();
+    resolved?.dispose?.();
+  }
+}
+
+export function registerScanCommand(program: Command, deps: ScanDeps = defaults): void {
+  consoleTransportOptions(program.command("scan <target>")
+    .description("Scan a folder or git repository for security bugs; prints the findings as a report")
+    .option("--budget <usd>", "Stop when the estimated spend reaches this many USD; partial findings are kept", String(DEFAULT_BUDGET_USD))
+    .option("--format <format>", `Report format: ${FORMATS.join(", ")}`, "md")
+    .option("-o, --output <file>", "Write the report to a file instead of stdout")
+    .option("--fail-on <severity>", "Exit 1 when a finding is at or above this severity (critical, high, medium, low, info)")
+    .option("--skill <id>", "Skill that holds the scan method", "scan")
+    .option("--model <model>", `Model for the scan thread (default: ${DEFAULT_SCAN_MODEL})`)
+    .option("--timeout <seconds>", "Maximum seconds to wait for the scan", String(DEFAULT_TIMEOUT_SECONDS)))
+    .addHelpText("after", "\nExit codes: 0 done, 1 findings at or above --fail-on or the scan failed, 2 usage error, 3 stopped at the budget.\nThe scan is a thread: follow it with `0 threads list`.")
+    .action(async (target: string, options: ScanOptions) => { await runScan(target, options, deps); });
+}

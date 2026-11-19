@@ -37,8 +37,10 @@ import { registerModelsCommand } from "./models.js";
 import { registerGithubCommand } from "./github.js";
 import { registerUsageCommand } from "./usage.js";
 import { registerAuditLogCommand } from "./audit-log.js";
+import { registerScanCommand } from "./scan.js";
 
 export function registerCommandTree(program: Command): void {
+  registerScanCommand(program);
   // Evidence.
   registerReportsCommand(program);
   registerFindingsCommand(program);
