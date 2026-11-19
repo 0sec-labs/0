@@ -8,6 +8,17 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.40.0",
+    date: "2026-11-19",
+    title: "Scan a code base, as a thread",
+    summary: "0 scan is back: it scans a folder or git repository in a thread and prints the findings as a report. Findings, Extensions and Computers get a cleaner layout.",
+    highlights: [
+      { icon: "ShieldCheck", title: "0 scan", text: "Run 0 scan on a folder or a git URL. It lists every entry point, checks each one and records findings with file and line. Pick json, md, sarif, html or pdf, set a budget, and use --fail-on in CI. In chat, /scan does the same in the current thread." },
+      { icon: "ListChecks", title: "One flaw, one finding", text: "Findings of a scan that point at the same lines are merged, and a scan no longer loses a finding to another scan's. A finding with an unknown category is kept as other." },
+      { icon: "Palette", title: "Cleaner pages", text: "Findings is a full-width list with a page for each finding. Extensions and Computers are plain rows like Skills." },
+    ],
+  },
+  {
     version: "0.39.0",
     date: "2026-11-18",
     title: "Sentinels and a smaller 0",
