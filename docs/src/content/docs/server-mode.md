@@ -19,8 +19,8 @@ Tags:
 ghcr.io/0sec-labs/0security:latest
 ghcr.io/0sec-labs/0security:<sha>
 ghcr.io/0sec-labs/0security:edge      # nightly build of the newest green main commit
-ghcr.io/0sec-labs/0security:v0.40.0   # releases only
-ghcr.io/0sec-labs/0security:0.40.0    # releases only
+ghcr.io/0sec-labs/0security:v0.40.1   # releases only
+ghcr.io/0sec-labs/0security:0.40.1    # releases only
 ghcr.io/0sec-labs/0security:0.40      # releases only, follows the latest 0.37.x
 ```
 
@@ -81,7 +81,7 @@ ZERO_ALLOWED_HOSTS=0.example.com
 docker compose --profile proxy up -d
 ```
 
-Without Compose: `docker run -d --name zero -p 127.0.0.1:48123:48123 -v zero-data:/data -e ZERO_ACCESS_TOKEN=... ghcr.io/0sec-labs/0security:v0.40.0`.
+Without Compose: `docker run -d --name zero -p 127.0.0.1:48123:48123 -v zero-data:/data -e ZERO_ACCESS_TOKEN=... ghcr.io/0sec-labs/0security:v0.40.1`.
 
 Open the address and enter the access token. If you left `ZERO_ACCESS_TOKEN` empty, the first start generates one, prints it once in `docker compose logs zero` and stores it (mode 0600) in `/data/.0/access-token`. With [team accounts](#teams) configured (`ZERO_TEAM_CONFIG`), people sign in with those instead.
 
@@ -128,7 +128,7 @@ Restore by stopping the container, extracting the archive into the volume, and s
 ### Upgrade
 
 ```bash
-# set ZERO_IMAGE_TAG=v0.40.0 in .env (or keep latest), then
+# set ZERO_IMAGE_TAG=v0.40.1 in .env (or keep latest), then
 docker compose pull && docker compose up -d
 ```
 
@@ -148,7 +148,7 @@ The image includes the OpenSSH client, so Settings or `0 computers add --ssh use
 docker run -d ... \
   -v "$PWD/zero_ed25519:/home/ubuntu/.ssh/id_ed25519:ro" \
   -v "$PWD/known_hosts:/home/ubuntu/.ssh/known_hosts:ro" \
-  ghcr.io/0sec-labs/0security:v0.40.0
+  ghcr.io/0sec-labs/0security:v0.40.1
 ```
 
 The container runs as uid 1000. The key file must be readable by that user and not by others: on a Linux host run `sudo chown 1000:1000 zero_ed25519 && chmod 600 zero_ed25519`. OpenSSH refuses a key that is group- or world-readable and owned by the same user, and a key you cannot read at all. Commented lines in the compose file show the same mounts.

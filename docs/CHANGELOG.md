@@ -12,6 +12,14 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-11-19
+
+This patch release fixes the standalone `0` binary, in which every folder looked unreadable.
+
+### Fixed
+
+- In the standalone `0` binary (every release since 0.36.0), a folder could not be read: `threads start --folder`, choosing a folder in the app and `0 scan` failed with "Zero couldn't read that folder". The release smoke test now starts a console from the compiled binary and starts a thread in a folder, so this cannot ship again.
+
 ## [0.40.0] - 2026-11-19
 
 This release brings `0 scan` back as a thread: a scan is a thread that follows the `scan` skill, so it shows up in `0 threads` and in the app, and its findings are exported as json, md, sarif, html or pdf. It also cleans up the CLI and the Findings, Extensions and Computers pages.

@@ -8,6 +8,17 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.40.1",
+    date: "2026-11-19",
+    title: "Folders work in the standalone binary",
+    summary: "A fix for the standalone 0, where every folder looked unreadable. If 0 scan, threads --folder or the folder picker said it couldn't read a folder, update.",
+    highlights: [
+      { icon: "Bug", title: "Folders can be read again", text: "In the downloaded binary, choosing a folder, threads start --folder and 0 scan failed with \"couldn't read that folder\". The folder check mishandled how the compiled program closes a directory. It works now." },
+      { icon: "ShieldCheck", title: "0 scan from the binary", text: "0 scan starts its own console and scans a folder from the downloaded binary, the same as from a source checkout." },
+      { icon: "Wrench", title: "A release check for it", text: "The release build now starts a console from the compiled binary and starts a thread in a folder, so a build that cannot read folders no longer ships." },
+    ],
+  },
+  {
     version: "0.40.0",
     date: "2026-11-19",
     title: "Scan a code base, as a thread",
