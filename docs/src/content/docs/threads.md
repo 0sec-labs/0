@@ -41,6 +41,7 @@ Type `/` for a menu. Each entry mirrors a CLI command, and anything that changes
 | --- | --- |
 | `/threads start`, `/threads list`, `/threads export` | `0 threads send new`, `0 threads list`, `0 threads list <id> --export` |
 | `/findings list`, `/fix [finding-id]` | `0 findings list`, `0 threads send new` |
+| `/scan <folder>` | `0 scan <folder>`; in chat it scans in this thread instead of a new one |
 | `/sentinels list`, `/sentinels create` | `0 sentinels list`, `0 sentinels set --create` |
 | `/computers list`, `/models list`, `/skills list`, `/memory list` | the same words after `0` |
 | `/config get`, `/doctor` | `0 config get`, `0 config doctor` |

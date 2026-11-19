@@ -31,6 +31,7 @@ import {
 } from "react-router-dom";
 import { useQuery, useQueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { findCommand, getCommandByName, SLASH_COMMANDS } from "@0/engine/shared/slash-commands";
+import { scanPrompt } from "@0/engine/shared/scan-prompt";
 import { startingModelChoice } from "@/lib/last-model-choice";
 import type {
   ConsoleSessionSnapshot,
@@ -1018,6 +1019,22 @@ function ConsolePageContent({
           if (result.previewId) setFeedback(result);
           else setNotice(result.error ?? `Feedback saved${result.path ? ` to ${result.path}` : ""}. Nothing was sent.`);
         }
+        return;
+      }
+      if (name === "scan") {
+        if (!command.args.trim()) {
+          setNotice("Use /scan <folder>.");
+          return;
+        }
+        if (!sessionId || active) {
+          setNotice("Wait until 0 finishes, then try again.");
+          return;
+        }
+        await messageWorkspace.send({
+          text: scanPrompt(command.args.trim()),
+          mode: "send",
+          ...(messageWorkerId ? { workerId: messageWorkerId } : {}),
+        });
         return;
       }
       if (name === "explain") {

@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
+import { scanPrompt } from "@0/engine/shared/scan-prompt";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import type { ScanReport } from "@0/engine/shared";
 import { scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
@@ -88,14 +89,6 @@ export async function resolveScanTarget(raw: string, deps: Pick<ScanDeps, "clone
     throw new UsageError(`${target} is not a folder. Pass a folder or a git URL.`);
   }
   return { folder, label: folder };
-}
-
-function scanPrompt(label: string, skill: string): string {
-  return [
-    `Scan ${label} for exploitable security bugs. Load the \`${skill}\` skill with load_skill and follow it.`,
-    "Record each confirmed issue with the finding tool, setting source_path, source_start_line and source_end_line, and suggested_replacement when you can give a concrete fix.",
-    "Finish with a short summary of what you covered and what you did not.",
-  ].join("\n");
 }
 
 function validate(target: string | undefined, options: ScanOptions): void {

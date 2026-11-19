@@ -85,6 +85,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     aliases: ["finds"],
     legacy: ["findings"],
   }),
+  cmd("scan", "Findings", "Scan a folder in this thread", {
+    cli: "scan",
+    usage: "/scan <folder>",
+  }),
   cmd("findings export", "Findings", "Export findings and reports", {
     cli: "findings list --format",
     destination: "/findings",
