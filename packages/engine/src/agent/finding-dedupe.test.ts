@@ -16,7 +16,7 @@ function createTestHarness() {
   const home = mkdtempSync(join(tmpdir(), "0-finding-dedupe-test-"));
   const db = new osecDB(join(home, "scan.db"));
 
-  const createAgentSession = (scanId = "scan-root") => {
+  const createAgentSession = (scanId = "scan-root", extra: Partial<ToolContext> = {}) => {
     try {
       db.createScan({ target: "https://target.test", depth: "default", format: "json" }, scanId);
     } catch {
@@ -29,6 +29,7 @@ function createTestHarness() {
       findings: [], // Each agent session has its own local in-memory findings array
       attackResults: [],
       targetInfo: {},
+      ...extra,
     } as unknown as ToolContext;
     return new ToolExecutor(ctx, db);
   };
@@ -94,6 +95,30 @@ describe("Cross-session finding deduplication (Candidate 1 remediation)", () => 
     const all = db.listFindings({ limit: 10 });
     expect(all).toHaveLength(2);
     expect(all.map((f: any) => f.title).sort()).toEqual([title2, title1].sort());
+  });
+
+  it("with dedupeScope scan, another scan's finding does not swallow this scan's", async () => {
+    const { db, createAgentSession } = createTestHarness();
+    const earlier = createAgentSession("thread-earlier", { dedupeScope: "scan" });
+    const later = createAgentSession("thread-later", { dedupeScope: "scan" });
+    const arguments_ = { title: "Path traversal in /download", severity: "high", category: "path-traversal", description: "d", evidence_request: "GET /download?file=../../etc/passwd", evidence_response: "root:x:0:0" };
+
+    const first = await earlier.execute({ name: "finding", arguments: arguments_ });
+    const second = await later.execute({ name: "finding", arguments: arguments_ });
+
+    expect((second.output as any).findingId).not.toBe((first.output as any).findingId);
+    expect((second.output as any).message ?? "").not.toContain("merged");
+    expect(db.listFindings({ limit: 10 }).map((row: any) => row.scanId).sort()).toEqual(["thread-earlier", "thread-later"]);
+  });
+
+  it("without dedupeScope the same two findings still merge across scans (the original behaviour)", async () => {
+    const { createAgentSession } = createTestHarness();
+    const earlier = createAgentSession("lane-a");
+    const later = createAgentSession("lane-b");
+    const arguments_ = { title: "Path traversal in /download", severity: "high", category: "path-traversal", description: "d", evidence_request: "GET /download?file=../../etc/passwd", evidence_response: "root:x:0:0" };
+    const first = await earlier.execute({ name: "finding", arguments: arguments_ });
+    const second = await later.execute({ name: "finding", arguments: arguments_ });
+    expect((second.output as any).findingId).toBe((first.output as any).findingId);
   });
 
   it("keeps findings in different vulnerability categories separate even with identical titles and endpoints", async () => {

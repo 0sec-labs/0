@@ -39,6 +39,14 @@ describe("retained report artifacts", () => {
     expect(snapshot.warnings[0]?.message).toContain("not retained");
     expect(snapshot.reviewChecks).toBeUndefined();
   });
+  it("leaves out a stored finding that cannot be read and says so, instead of failing the whole report", () => {
+    const db = new osecDB(path);
+    try { db.saveFinding("first", { ...finding("finding-bad"), pocSteps: [{ id: "s1", kind: "exploit", action: { type: "shell" } }] } as never); } finally { db.close(); }
+    const snapshot = retainedScanSnapshot("first", path);
+    expect(snapshot.findings.map(item => item.id)).toContain("finding-a");
+    expect(snapshot.findings.map(item => item.id)).not.toContain("finding-bad");
+    expect(snapshot.warnings.map(warning => warning.message).join("\n")).toMatch(/1 stored finding could not be read.*finding-bad/);
+  });
   it("does not invent a completion timestamp for a running retained record", () => {
     const snapshot = retainedScanSnapshot("second", path);
     expect(snapshot.completedAt).toBe("");

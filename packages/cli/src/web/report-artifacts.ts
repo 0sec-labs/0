@@ -19,28 +19,36 @@ export function retainedScanSnapshot(scanId: string, dbPath?: string, original?:
   try {
     const scan = db.getScan(scanId);
     if (!scan) throw new ReportArtifactError("Scan not found.", 404);
-    const findings = db.getFindings(scanId).map(row => loadFindingFocus(row.id, { dbPath }).finding);
-    if (original) return { ...structuredClone(original), findings, summary: { ...original.summary, ...summary(findings, original.summary.totalAttacks) } };
+    // One malformed row (a model can send a truncated PoC) must not make the whole report unreadable.
+    const findings: Finding[] = [];
+    const unreadable: string[] = [];
+    for (const row of db.getFindings(scanId)) {
+      try { findings.push(loadFindingFocus(row.id, { dbPath }).finding); } catch { unreadable.push(row.id); }
+    }
+    const finish = (report: ScanReport): ScanReport => unreadable.length
+      ? { ...report, warnings: [...report.warnings, { stage: "report", message: `${unreadable.length} stored finding${unreadable.length === 1 ? "" : "s"} could not be read and ${unreadable.length === 1 ? "is" : "are"} not in this report: ${unreadable.join(", ")}.` }] }
+      : report;
+    if (original) return finish({ ...structuredClone(original), findings, summary: { ...original.summary, ...summary(findings, original.summary.totalAttacks) } });
     let retained: Record<string, unknown> = {};
     try { const value = JSON.parse(scan.summary ?? "{}"); if (value && typeof value === "object" && !Array.isArray(value)) retained = value; } catch { /* older summaries are not report documents */ }
     if (ciReportProvenance(scan.summary) && retained.originalReport && typeof retained.originalReport === "object") {
       const source = retained.originalReport as ScanReport;
-      return {
+      return finish({
         target: scan.target, scanDepth: scan.depth as ScanReport["scanDepth"],
         startedAt: scan.startedAt, completedAt: scan.completedAt ?? "", durationMs: scan.durationMs ?? 0,
         findings, summary: summary(findings, typeof source.summary?.totalAttacks === "number" ? source.summary.totalAttacks : 0),
         warnings: [...(Array.isArray(source.warnings) ? source.warnings : []), { stage: "report", message: "Imported CI evidence. Source execution and verification claims have not been independently verified by this engine. Findings are retained as discovered; executable verification instructions were not imported." }],
         executionSuccessful: false, exitReason: "partial",
-      };
+      });
     }
-    return {
+    return finish({
       target: scan.target, scanDepth: ["quick", "default", "deep"].includes(scan.depth) ? scan.depth as ScanReport["scanDepth"] : "default",
       startedAt: scan.startedAt, completedAt: scan.completedAt ?? "", durationMs: scan.durationMs ?? 0,
       findings, summary: summary(findings, typeof retained.totalAttacks === "number" ? retained.totalAttacks : 0),
       warnings: [{ stage: "report", message: "Export reconstructed from retained scan rows. The original report warnings and review checks were not retained in this legacy record." }],
       ...(typeof retained.error === "string" ? { error: retained.error } : {}),
       executionSuccessful: false, exitReason: scan.status === "cancelled" ? "cancelled" as const : "partial" as const,
-    };
+    });
   } finally { db.close(); }
 }
 /** One evidence collection from findings that live in different run databases. */

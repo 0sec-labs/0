@@ -61,6 +61,7 @@ import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, type To
 import { resolveBashWallclockCeilingMs, runBashWithWallclock, buildStrReplaceMeta } from "./tools/exec-helpers.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 import { citedSourceHasKnownMarker } from "./tools/probe-helpers.js";
+import { normalizeAttackCategory } from "../shared/finding-schemas.js";
 import { mcpHostOf, deferredToolsOf, packToolsOf } from "./tools/context-hosts.js";
 
 // ── Tool registry (0#611) ──
@@ -652,13 +653,15 @@ export class ToolExecutor {
 
     const evidenceAnalysis = typeof args.evidence_analysis === "string" ? args.evidence_analysis : undefined;
 
+    const { category, unknownLabel } = normalizeAttackCategory(args.category);
+    const description = (args.description as string) ?? "";
     const finding: Finding = {
       id: randomUUID(),
       templateId: (args.template_id as string) ?? "manual",
       title: (args.title as string) ?? "Untitled finding",
-      description: (args.description as string) ?? "",
+      description: unknownLabel ? `${description}${description ? "\n\n" : ""}Category as given: ${unknownLabel}.` : description,
       severity: (args.severity as Finding["severity"]) ?? "medium",
-      category: (args.category as Finding["category"]) ?? "prompt-injection",
+      category,
       status: "discovered",
       evidence: {
         request: (args.evidence_request as string) ?? "",
@@ -922,15 +925,19 @@ export class ToolExecutor {
     // in the same category via idx_findings_category to bound Levenshtein computation time.
     if (!existing && this.db && this.ctx.persistFindings !== false) {
       try {
-        const persisted = this.db.listFindings({
+        // Threads share one database. A finding of another scan, for this or another target, is not
+        // a duplicate of this one and must not swallow it, or this scan's report loses the finding.
+        const scanOnly = this.ctx.dedupeScope === "scan";
+        const persisted = (this.db.listFindings({
           category: finding.category,
           limit: 500,
         }) as Array<{
           id: string;
+          scanId?: string;
           title: string;
           category: string;
           evidenceRequest: string;
-        }>;
+        }>).filter(row => !scanOnly || row.scanId === this.ctx.scanId);
         const dbDupe = findMatchingFindingCandidate(persisted, finding);
         if (dbDupe) {
           return {

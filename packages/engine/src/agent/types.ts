@@ -459,6 +459,12 @@ export interface ToolContext {
    */
   agentMessaging?: unknown;
   persistFindings?: boolean;
+  /**
+   * Which stored findings count as duplicates of a new one. Unset: every finding in the database
+   * (one run per database, the original design). `"scan"`: only this scan's own, for threads, which
+   * share one database, so another scan's finding must never swallow this scan's.
+   */
+  dedupeScope?: "scan";
   authConfig?: AuthConfig;
   /** Built-in web search only; does not restrict other network tools. */
   webSearchEnabled?: boolean;

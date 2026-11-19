@@ -167,6 +167,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   toolContext.workspaceRoot = workspaceRoot;
   toolContext.skillDiscoveryOptions = config.skillDiscoveryOptions;
+  toolContext.dedupeScope = "scan";
   toolContext.skillAuthoring = config.skillAuthoring;
 
   /** Guard against export/operations during teardown or handoff. */

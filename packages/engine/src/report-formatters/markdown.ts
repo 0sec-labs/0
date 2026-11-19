@@ -29,7 +29,6 @@ export function formatMarkdown(report: ScanReport): string {
   lines.push(`| Field | Value |`);
   lines.push(`|-------|-------|`);
   lines.push(`| Target | ${report.target} |`);
-  lines.push(`| Depth | ${report.scanDepth} |`);
   lines.push(`| Started | ${report.startedAt} |`);
   lines.push(`| Duration | ${(report.durationMs / 1000).toFixed(1)}s |`);
   lines.push("");
@@ -38,7 +37,7 @@ export function formatMarkdown(report: ScanReport): string {
   // Summary
   lines.push("## Summary");
   lines.push("");
-  lines.push(`- **Attacks:** ${report.summary.totalAttacks}`);
+  if (report.summary.totalAttacks > 0) lines.push(`- **Attacks:** ${report.summary.totalAttacks}`);
   lines.push(`- **Findings:** ${report.summary.totalFindings}`);
   for (const label of ["Urgent", "High", "Moderate", "Low", "Not assessed"]) {
     const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length;
