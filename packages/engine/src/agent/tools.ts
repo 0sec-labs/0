@@ -914,7 +914,8 @@ export class ToolExecutor {
     // evidence/severity/confidence on a merge. The first record stays
     // authoritative. Re-running with stronger evidence requires
     // `finding` (an explicit, separate code path).
-    const existing = findMatchingFindingCandidate(this.ctx.findings, finding);
+    const byLocation = this.ctx.dedupeScope === "scan";
+    const existing = findMatchingFindingCandidate(this.ctx.findings, finding, { byLocation });
     // Cross-session dedupe (operator directive): sibling lane agents save into
     // their own scanIds, so the in-memory check above cannot see their
     // findings. Before persisting, fuzzy-match against what the engagement's
@@ -937,8 +938,9 @@ export class ToolExecutor {
           title: string;
           category: string;
           evidenceRequest: string;
+          reviewAnnotation?: unknown;
         }>).filter(row => !scanOnly || row.scanId === this.ctx.scanId);
-        const dbDupe = findMatchingFindingCandidate(persisted, finding);
+        const dbDupe = findMatchingFindingCandidate(persisted, finding, { byLocation });
         if (dbDupe) {
           return {
             success: true,
@@ -1878,7 +1880,8 @@ export class ToolExecutor {
       }
 
       // Check in-memory similarity match
-      const memDupe = findMatchingFindingCandidate(this.ctx.findings, finding);
+      const byLocation = this.ctx.dedupeScope === "scan";
+      const memDupe = findMatchingFindingCandidate(this.ctx.findings, finding, { byLocation });
       if (memDupe) {
         return { status: "duplicate", findingId: memDupe.id };
       }
@@ -1890,16 +1893,19 @@ export class ToolExecutor {
       // 500 records per category is an intentional architectural ceiling to bound event-loop
       // latency during fuzzy title Levenshtein distance calculations.
       try {
-        const persisted = db.listFindings({
+        // Threads share one database: another scan's finding is not a duplicate of this scan's.
+        const persisted = (db.listFindings({
           category: finding.category,
           limit: 500,
         }) as Array<{
           id: string;
+          scanId?: string;
           title: string;
           category: string;
           evidenceRequest: string;
-        }>;
-        const dbDupe = findMatchingFindingCandidate(persisted, finding);
+          reviewAnnotation?: unknown;
+        }>).filter(row => !byLocation || row.scanId === this.ctx.scanId);
+        const dbDupe = findMatchingFindingCandidate(persisted, finding, { byLocation });
         if (dbDupe) {
           return { status: "duplicate", findingId: dbDupe.id };
         }
@@ -1974,7 +1980,7 @@ export class ToolExecutor {
   private mergeSubagentFindings(findings: readonly Finding[], sink = this.ctx.findings): void {
     for (const finding of findings) {
       if (sink.some(existing => existing.id === finding.id)) continue;
-      if (findMatchingFindingCandidate(sink, finding)) continue;
+      if (findMatchingFindingCandidate(sink, finding, { byLocation: this.ctx.dedupeScope === "scan" })) continue;
       sink.push(finding);
     }
   }
