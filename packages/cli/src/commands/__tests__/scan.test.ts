@@ -26,7 +26,7 @@ function fakes(snapshot: unknown, findings: unknown[] = [storedFinding]) {
   const client = { request: vi.fn(async (method: string, path: string, body?: unknown) => { requests.push([method, path, body]); return method === "GET" ? { snapshot } : { session: { id: "t1" } }; }), dispose: vi.fn() };
   const deps: ScanDeps = {
     open: async () => client as never, out: bytes => out.push(bytes), err: text => err.push(text), sleep: async () => {}, now: () => new Date("2026-01-01T00:00:00Z"),
-    writeBytes: vi.fn(), loadReport: vi.fn(() => storedReport(findings) as never), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
+    writeBytes: vi.fn(), loadReport: vi.fn(async () => storedReport(findings) as never), startConsole: vi.fn(async () => () => {}), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
   };
   return { deps, client, requests, out, err };
 }
@@ -65,6 +65,45 @@ describe("runScan", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it("starts a console when none is running, waits for it, and stops it afterwards", async () => {
+    const { deps, client, err } = fakes(finishedSnapshot());
+    const stop = vi.fn();
+    deps.startConsole = vi.fn(async () => stop);
+    let attempts = 0;
+    deps.open = vi.fn(async () => { if (++attempts < 3) throw new Error("No console running. Start one with: 0 --headless"); return client as never; });
+    await runScan(folder(), options(), deps);
+    expect(deps.startConsole).toHaveBeenCalledTimes(1);
+    expect(attempts).toBe(3);
+    expect(err.join("\n")).toMatch(/starting one for this scan/);
+    expect(stop).toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("does not start a console when one is already running", async () => {
+    const { deps } = fakes(finishedSnapshot());
+    await runScan(folder(), options(), deps);
+    expect(deps.startConsole).not.toHaveBeenCalled();
+  });
+
+  it("does not start a console for any other connection error", async () => {
+    const { deps } = fakes(finishedSnapshot());
+    deps.open = vi.fn(async () => { throw new Error("--engine-token-env requires --engine-url."); });
+    await runScan(folder(), options(), deps);
+    expect(deps.startConsole).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("stops the console it started even when the scan fails", async () => {
+    const { deps, client } = fakes(finishedSnapshot());
+    const stop = vi.fn();
+    deps.startConsole = vi.fn(async () => stop);
+    let first = true;
+    deps.open = vi.fn(async () => { if (first) { first = false; throw new Error("No console running."); } return client as never; });
+    client.request.mockImplementation(async (method: string) => { if (method === "PATCH") throw new Error("boom"); return { session: { id: "t1" } }; });
+    await runScan(folder(), options(), deps);
+    expect(stop).toHaveBeenCalled();
+  });
+
   it("uses the default model unless --model is given", async () => {
     for (const [extra, expected] of [[{}, DEFAULT_SCAN_MODEL], [{ model: "other-model" }, "other-model"]] as const) {
       const { deps, requests } = fakes(finishedSnapshot());
@@ -89,7 +128,7 @@ describe("runScan", () => {
   it("reads findings from the store by thread id, not from the transcript", async () => {
     const { deps } = fakes(finishedSnapshot());
     await runScan(folder(), options(), deps);
-    expect(deps.loadReport).toHaveBeenCalledWith("t1");
+    expect(deps.loadReport).toHaveBeenCalledWith(expect.anything(), "t1");
   });
 
   it("reports a clean scan with no findings", async () => {

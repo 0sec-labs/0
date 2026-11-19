@@ -143,7 +143,7 @@ Scan a folder or git repository for security bugs and print the findings as a re
 0 scan [options] <target>
 ```
 
-A scan is a thread that follows the `scan` skill, so it appears in `0 threads` and in the web app. The findings are stored under the thread's id and exported from there, so `0 findings export --scan <thread id>` gives the same report later. `target` is a folder or a git URL. The scan needs a running console (`0 --headless`) and reads findings from the local database. Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or the time limit (the report is partial).
+A scan is a thread that follows the `scan` skill, so it appears in `0 threads` and in the web app. The findings are stored under the thread's id and exported from there, so `0 findings export --scan <thread id>` gives the same report later. `target` is a folder or a git URL. It uses the console that is running, or the engine named by `--engine-url` or `--computer`; with none running it starts a headless console for the scan and stops it afterwards. Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or the time limit (the report is partial).
 
 | Argument | Required | Description |
 | --- | --- | --- |

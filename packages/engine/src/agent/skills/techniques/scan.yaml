@@ -67,6 +67,17 @@ content: |
 
   Do not record the same flaw twice. If one root cause appears in several places, record one finding and list the places. Different flaws on different routes are different findings, even when they are the same class.
 
-  ### 6. Finish
+  ### 6. Check your own verdicts
+
+  Before you finish, re-read every "checked, no finding" verdict. A verdict may rest only on a control you can quote from the code. Change it to a finding (with lower confidence if you like) when the reason is any of these:
+
+  - the database, HTTP or other layer in this folder is a stub, mock or empty implementation ("db.js only returns an empty array" does not make `SELECT ... ${id}` safe: the query string is still built from input and will run against the real driver);
+  - a dependency is not installed or the app is never started here;
+  - you could not run it or demonstrate it;
+  - a missing ownership check "might be handled elsewhere" and you did not find where.
+
+  Then record the findings you added.
+
+  ### 7. Finish
 
   End with the entry-point list, one verdict per line: the finding it produced, "checked, safe" with the control that makes it safe, or "not reached". Then one short paragraph: what you covered, what you did not, how many findings by severity, and the one or two that matter most. If you found nothing, the list shows what you checked so the reader can judge the coverage.

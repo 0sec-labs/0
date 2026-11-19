@@ -9,9 +9,11 @@ Status: first slice built (`0 scan`, the `scan` skill, a versioned JSON report).
 - **Comparison with the old pipeline.** On a six-bug app with two safe decoys (SQL injection, command injection, path traversal, hardcoded JWT secret, SSRF, missing ownership check), the old v0.38 pipeline found 6 of 6 in 185s for $0.027 (one run). The first version of the scan skill found 2 of 6: it told the model to drop findings it could not demonstrate, and the model dropped the SQL injection because the database layer was a stub. After the skill was changed to list every entry point, give each a verdict, and treat stubs and missing dependencies as lower confidence instead of a reason to drop, three concurrent runs found 5, 6 and 6 of 6, with no false positive on either decoy, at about $0.006 each. One app of this size is a small test; the open question below about real repositories stands.
 - **Another scan's finding must not swallow this one.** The duplicate check compared against every stored finding of the same category in the database. Threads share one database, so a repeat scan, or a scan of another customer's code, could be merged into an older finding and then be missing from its own report. Console threads now set `dedupeScope: "scan"`, so only the same scan's findings count.
 - **A category we do not list becomes `other`.** A model wrote a category outside the list, the stored finding failed the strict read, and the whole report failed. The finding tool now keeps the finding as `other` and records the model's label in the description, and the report read skips an unreadable row with a warning instead of failing.
+- **A real repository.** OWASP NodeGoat (an intentionally vulnerable Node app, scanned by git URL) took the old v0.38 pipeline 198s and $0.035 for 5 findings (eval injection, `$where` injection, ReDoS, SSRF, allocations IDOR). `0 scan` took about 2 to 3 minutes and $0.05 to $0.065 and found the same classes plus more of NodeGoat's documented problems: admin-route bypass, plaintext passwords, CSRF, a weak session secret, open redirect, stored XSS and session fixation, depending on the run. Run to run it varies: one run missed the ReDoS the others found. Before the location rule below, 17 findings were about 8 distinct issues.
+- **One flaw, several titles.** Helper agents describe the same flaw in different words, so title and evidence matching did not merge them. Findings of one scan now also merge by place: overlapping cited lines in one file merge whatever the category, and lines within two of each other merge in the same category. This applies to threads only (`dedupeScope: "scan"`), on both the direct save and the helper-agent save; before this, the helper-agent save still compared against the whole database.
 - **No `verify:` on the scan skill.** `--skill`/`verifySkill` only accepts a skill that declares a check, and a scan has none. The prompt tells the thread to load the skill instead.
 - **Timeout and budget stops keep their findings.** On the time limit the thread is cancelled and a partial report is printed (`status: timed_out`, exit 3); the budget stop is `status: budget_exhausted`, exit 3.
-- **Needs a running console.** Like `threads start`, `0 scan` talks to a console (`0 --headless`).
+- **Console and remote engines.** `0 scan` uses the console that is running (or the one named by `--engine-url` or `--computer`). With none running it starts a headless one for the scan and stops it afterwards. The report is read through the engine's `GET /api/scans/:id/export?format=json`, so it works on a remote engine too (the remote path is covered by tests and by the same code the local path runs; it was not run against a real remote engine).
 
 A scan is a thread that follows a scan skill and records findings. There is no separate scan pipeline.
 
@@ -97,8 +99,6 @@ The scan pipeline, `engagement-plan`, the `--module` and alias layers and `--dep
 - **Big code bases.** A single context cannot hold a large repo. Does the skill split the work across sub-agents, or does `0 scan` start one thread per top-level area? Sub-agents exist in threads today; not tested.
 - **Determinism.** Customers in regulated industries will want repeatable runs. Models are not deterministic. What do we promise: the same fingerprint for the same flaw in unchanged code, or only that confirmed findings carry evidence?
 - **Verification without a container.** `verify:` needs Docker or podman to count as Verified. A scan has no check of its own today, so its findings are "discovered", not "verified".
-- **Remote engines.** The report is read from the local findings database. Against `--engine-url` or `--computer` it needs an engine route that returns the full findings.
-- **Console required.** `0 scan` needs a running console, like `threads start`.
 
 ## Plan
 
@@ -106,7 +106,6 @@ Done: the `scan` skill, `0 scan` (folder or git URL, `--budget`, `--format`, `--
 
 Next:
 
-1. Run the comparison on two or three real repositories at fixed commits, not only a planted-bug app.
-2. Port individual stages from the archive only where that comparison shows a gap.
+1. Run the comparison on more real repositories at fixed commits (so far: one planted-bug app and NodeGoat), and measure how much a finding set varies between runs of the same commit.
+2. Port individual stages from the archive only where a comparison shows a gap.
 3. Decide how a large repository is split.
-4. Add the remote-engine read.

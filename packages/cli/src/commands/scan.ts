@@ -5,7 +5,7 @@
  * the skill and a budget, waits, and prints what the thread recorded
  * (docs/design/scan-as-a-thread.md). The thread shows up in `0 threads` like any other.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,7 +14,6 @@ import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import type { ScanReport } from "@0/engine/shared";
-import { retainedScanSnapshot } from "../web/report-artifacts.js";
 import { scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, lastAssistantText, usageLine, type Json } from "./thread-output.js";
@@ -35,8 +34,10 @@ export interface ScanDeps {
   sleep(ms: number): Promise<void>;
   now(): Date;
   writeBytes(path: string, bytes: Uint8Array): void;
-  /** The findings stored under a thread id, as the shared report type. Reads the local findings database. */
-  loadReport(threadId: string): ScanReport;
+  /** The findings stored under a thread id, as the shared report type, from the engine the thread ran on. */
+  loadReport(client: ConsoleClient, threadId: string): Promise<ScanReport>;
+  /** Start a headless console for this scan; returns how to stop it. Used only when none is running. */
+  startConsole(): Promise<() => void>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
@@ -47,7 +48,19 @@ const defaults: ScanDeps = {
   sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
   now: () => new Date(),
   writeBytes: (path, bytes) => writeFileSync(path, bytes, { mode: 0o600 }),
-  loadReport: threadId => retainedScanSnapshot(threadId),
+  async loadReport(client, threadId) {
+    const report = asJson(await client.request("GET", `/api/scans/${encodeURIComponent(threadId)}/export?format=json`));
+    if (!Array.isArray(report.findings)) throw new Error("The engine returned no report for this scan.");
+    return report as unknown as ScanReport;
+  },
+  async startConsole() {
+    // Run the same program again as `--headless`: the script when node runs a .js file, else the compiled binary itself.
+    const entry = process.argv[1];
+    const args = entry && /\.[cm]?js$/.test(entry) ? [entry, "--headless"] : ["--headless"];
+    const child = spawn(process.execPath, args, { stdio: "ignore" });
+    child.on("error", () => {});
+    return () => { child.kill("SIGTERM"); };
+  },
   async clone(url) {
     const dir = mkdtempSync(join(tmpdir(), "0-scan-"));
     // An untrusted repository: no hooks, no external transports, shallow, and `--` before the URL.
@@ -97,15 +110,33 @@ function validate(target: string | undefined, options: ScanOptions): void {
   if (options.failOn !== undefined && !(SEVERITIES as readonly string[]).includes(options.failOn)) throw new UsageError(`--fail-on must be one of: ${SEVERITIES.join(", ")}.`);
 }
 
+const NO_CONSOLE = /No console running/;
+
+/** The engine to run on: the one the options name or that is already running, else a headless one started for this scan. */
+async function connect(options: ConsoleTransportOptions, deps: ScanDeps): Promise<{ client: ConsoleClient; stop?: () => void }> {
+  const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  try { return { client: await deps.open(options) }; }
+  catch (error) { if (!NO_CONSOLE.test(message(error))) throw error; }
+  deps.err("no console is running; starting one for this scan");
+  const stop = await deps.startConsole();
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { return { client: await deps.open(options), stop }; }
+    catch (error) { if (!NO_CONSOLE.test(message(error))) { stop(); throw error; } await deps.sleep(500); }
+  }
+  stop();
+  throw new Error("Could not start a console within 30s. Start one with `0 --headless` and run the scan again.");
+}
+
 export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaults): Promise<void> {
   let resolved: ResolvedTarget | undefined;
   let client: ConsoleClient | undefined;
+  let stopConsole: (() => void) | undefined;
   try {
     validate(target, options);
     resolved = await resolveScanTarget(target!, deps);
     const budget = Number(options.budget);
     const startedAt = deps.now().toISOString();
-    client = await deps.open(options);
+    ({ client, stop: stopConsole } = await connect(options, deps));
     const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
     const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title: `Scan ${resolved.label}`, costCeilingUsd: budget })).session);
     const id = String(created.id);
@@ -150,7 +181,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
       failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked,
       ...(done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),
     };
-    const stored = deps.loadReport(id);
+    const stored = await deps.loadReport(client, id);
 
     let body: Uint8Array | string;
     if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, stored.findings), null, 2)}\n`;
@@ -171,6 +202,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     finishWithError(error, deps, false);
   } finally {
     client?.dispose();
+    stopConsole?.();
     resolved?.dispose?.();
   }
 }
