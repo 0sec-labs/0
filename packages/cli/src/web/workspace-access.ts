@@ -125,6 +125,11 @@ export function permissionMessageFor(path: string | null, options: { platform?: 
 
 const PROBE_TIMEOUT_MS = 3_000;
 
+/** `Dir.close()` returns a promise under Node and nothing under Bun (the compiled `0`), so never chain `.catch` on it. */
+export async function closeQuietly(handle: { close(): unknown }): Promise<void> {
+  try { await handle.close(); } catch { /* already closed */ }
+}
+
 /**
  * Opens the folder the way the engine will (opendir plus the first entry) without waiting forever: a slow iCloud or
  * network folder that is merely slow is accepted. Rejects only on a definite permission or existence error.
@@ -134,7 +139,7 @@ export async function probeFolderReadable(directory: string, options: { timeoutM
   let timer: NodeJS.Timeout | undefined;
   const probe = (async () => {
     const handle = await open(directory);
-    try { await handle.read(); } finally { await handle.close().catch(() => undefined); }
+    try { await handle.read(); } finally { await closeQuietly(handle); }
     return "readable" as const;
   })();
   probe.catch(() => undefined);
