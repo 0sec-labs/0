@@ -172,6 +172,32 @@ describe("runScan", () => {
     expect(process.exitCode).toBe(3);
   });
 
+  it("keeps scanning when a few status requests fail", async () => {
+    const { deps, client, out, err } = fakes(finishedSnapshot());
+    let gets = 0;
+    client.request.mockImplementation(async (method: string) => {
+      if (method !== "GET") return { session: { id: "t1" } };
+      if (++gets <= 3) throw new Error("Backend transport failed.");
+      return { snapshot: finishedSnapshot() };
+    });
+    await runScan(folder(), options(), deps);
+    expect(gets).toBe(4);
+    expect(JSON.parse(String(out[0]))).toMatchObject({ status: "complete" });
+    expect(process.exitCode).toBeUndefined();
+    expect(err.join("\n")).not.toMatch(/Lost contact/);
+  });
+
+  it("gives up after a long run of failed status requests and names the thread", async () => {
+    const { deps, client, err } = fakes(finishedSnapshot());
+    client.request.mockImplementation(async (method: string) => {
+      if (method !== "GET") return { session: { id: "t1" } };
+      throw new Error("Backend transport failed.");
+    });
+    await runScan(folder(), options(), deps);
+    expect(err.join("\n")).toMatch(/Lost contact with the console.*thread t1.*findings export --scan t1/);
+    expect(process.exitCode).toBe(1);
+  });
+
   it("cancels a thread that outlives --timeout and still reports what it stored, exit 3", async () => {
     const { deps, requests, out } = fakes({ session: { id: "t1", status: "working" }, usage: {}, messages: [] });
     await runScan(folder(), options({ timeout: "0.001" }), deps);

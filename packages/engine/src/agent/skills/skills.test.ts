@@ -52,6 +52,9 @@ const EXPECTED_SKILL_IDS = [
   "pr-diff-review",
   // `0 scan` follows this one.
   "scan",
+  // Methods that work from the shell and the finding tool alone.
+  "variant-hunting",
+  "assumption-mining",
 ];
 
 const VALID_ROLES = new Set(["attack", "audit", "review"]);
@@ -199,10 +202,11 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(17);
+      expect(reviewSkills.length).toBe(19);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         "advisory-disclosure",
+        "assumption-mining",
         "blind-exploitation",
         "cardano-eutxo-validators",
         "cloud-iac-review",
@@ -219,6 +223,7 @@ describe("Skill Registry", () => {
         "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",
+        "variant-hunting",
         "workflow-hardening",
       ]);
     });

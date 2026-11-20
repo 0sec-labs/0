@@ -1,0 +1,70 @@
+id: variant-hunting
+name: "Variant hunting: the same bug at other sites"
+description: "Given a security fix (a commit or diff) or a described bug, find the same class of bug at the other places in the code that were not fixed. Use after a fix, when told to look for variants, siblings or an incomplete fix of a known bug. Enumerate every site with search commands, then check each one; record each unfixed variant with the finding tool."
+summary: "From one fixed bug, find the same bug elsewhere in the code."
+category: "Code review"
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - variants
+  - incomplete-fix
+  - regression
+  - source-review
+triggers:
+  - "variants? of"
+  - "same (bug|flaw|issue|vulnerability) (elsewhere|in other|at other)"
+  - "incomplete fix"
+  - "(look|hunt|search) for (other|more) (instances|sites|places)"
+  - "fix(ed)? (only|just) one"
+estimated_tokens: 900
+content: |
+  ## Variant hunting: method
+
+  A fix closes one site. The same mistake usually exists at other sites written by the same person, copied, or reached by a different path. Your job is to find the sites the fix did not touch. Search the code with commands so the list of sites is complete; use your judgement only to decide, site by site, whether each one is really affected.
+
+  Stay inside the folder. Do not edit any file and do not run the code against anything outside the folder. Put a proposed fix in `suggested_replacement` on the finding.
+
+  ### 1. Understand the fix
+
+  - If you were given a commit or a diff, read it: `git show <commit>` (or the diff text). If you were only given a description of a bug, find the code it describes first.
+  - Write down three things in your own words: the **bug class** (for example SQL injection, path traversal, missing authorization, unchecked length), the **unsafe pattern** the fix removed (the exact shape of the sink and where its input comes from), and the **guard** the fix added (what now makes it safe).
+
+  ### 2. Turn the pattern into searches
+
+  Write four to eight search patterns for `rg` (or `grep -rn`) that match the same sink shape, not only the exact text of the fixed line:
+
+  - the same function or API at every call site;
+  - the sibling APIs that do the same job (another query helper, another file read, another shell wrapper);
+  - the same shape written another way (template string, concatenation, `+`, format call, a helper that builds the string);
+  - the same idea in other languages or layers of the repo (backend and scripts, a second service, generated or vendored copies);
+  - the sibling operations of the fixed handler (if `get` was fixed, check `list`, `update`, `delete`, `export`, `bulk`).
+
+  Exclude tests, fixtures and build output, but say that you did. Run every pattern. Keep the full list of hits with `file:line`, in a file in your working notes, so you can check it off.
+
+  ### 3. Check every hit
+
+  Go through the list one hit at a time. For each, decide one of:
+
+  - **Variant:** the input reaches the sink and the guard from the fix is missing or does not cover it. Follow the input from its entry point to the sink and write the chain down.
+  - **Guarded:** the same guard, or an equivalent one, is on the path. Quote it with `file:line`.
+  - **Not reachable:** the sink is never called with outside input. Say what proves it (the callers, all of which you read).
+  - **Unsure:** you could not tell. Say what you would need.
+
+  A variant is recorded even if it sits in a stub, a helper that is not wired up yet, or a code path that looks rarely used. "It is probably not called" is not a verdict: find the callers.
+
+  ### 4. Look beyond the text of the fix
+
+  - Was the fix applied in one caller, while the function it calls is still unsafe for its other callers? Fix location matters: a guard added to one route does not protect the others.
+  - Does the fix handle one input form (a string) but not the others (an array, an object, a different encoding, a different case)?
+  - Is there a second implementation of the same thing (an older copy, a v1 and a v2 route, a retry or fallback path)?
+
+  ### 5. Record
+
+  Call `finding` once for each variant with: a title that names the flaw and where it is; severity based on impact and reach; one of the listed categories; `source_path`, `source_start_line` and `source_end_line`; a description that says "variant of <the fix>" and gives the chain from input to sink; the evidence; and a `suggested_replacement` that applies the same guard the fix used. If several sites share one helper, record the helper once and list the callers.
+
+  ### 6. Finish
+
+  End with the table of hits, one row each: `file:line`, the verdict (variant, guarded, not reachable, unsure), and the finding it produced or the guard or proof that clears it. Then say which searches you ran, what you excluded, and anything you could not check. A site missing from the table is a site you did not check.

@@ -1,0 +1,70 @@
+id: assumption-mining
+name: "Assumption mining: find what the code silently relies on"
+description: "Audit a code base by listing the implicit assumptions each function depends on (the input was already validated, the caller owns the object, the value is never null, the size is bounded, the caller holds the lock), then look for a reachable caller that does not establish the assumption. Use when asked to audit a subsystem, hunt logic bugs, or when pattern searches find nothing. Record each broken assumption with the finding tool."
+summary: "List what each function silently relies on, then find a caller that breaks it."
+category: "Code review"
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - assumptions
+  - logic-bugs
+  - authorization
+  - source-review
+triggers:
+  - "implicit assumptions?"
+  - "assumption mining"
+  - "relies on|trusts that"
+  - "logic (bugs?|flaws?)"
+  - "audit (this|the) (subsystem|module|component)"
+estimated_tokens: 900
+content: |
+  ## Assumption mining: method
+
+  Many serious bugs are not a bad line of code. A function relies on something it does not check itself, and some caller reaches it without that being true. The usual pattern searches cannot find these, because there is no unsafe call to search for. You find them by writing the assumptions down, then looking for the context that breaks each one.
+
+  Stay inside the folder. Do not edit any file and do not run the code against anything outside the folder. Put a proposed fix in `suggested_replacement` on the finding.
+
+  ### 1. Choose the subsystem and list its functions
+
+  If you were not told where to look, pick the parts where a broken assumption costs most: authentication and sessions, authorization and ownership checks, file and path handling, parsing and deserialization, anything that builds a query, command or URL from input, and any shared helper called from many places. List the functions of the part with commands (`rg`, a directory listing), so the list is complete.
+
+  ### 2. Mine the assumptions
+
+  For each function, read it and write down what it relies on without checking. Look for:
+
+  - **Validation done elsewhere:** "the id is already an integer", "the path is already inside the upload directory", "the HTML is already sanitized".
+  - **Ownership and permission:** "the caller already checked that this user owns this object", "the middleware already set the user".
+  - **State and order:** "init ran first", "the token was already verified", "this is only called after the lock is taken".
+  - **Values and sizes:** "never null", "never empty", "less than the buffer size", "already deduplicated".
+  - **Origin of data:** "this value comes from our own config, not from the request".
+
+  One line per assumption: the function, what it relies on, and who is supposed to establish it. A function with no assumptions you can name is not finished: read it again.
+
+  ### 3. Find the context that breaks it
+
+  For each assumption, list every caller with a search command, then read each caller. Ask:
+
+  - Does this caller establish the assumption itself, or rely on someone upstream?
+  - Is there a caller that **does not** establish it: a second route, an admin or bulk endpoint, an async job, a retry or error path, an import or webhook, a newer code path added later, a test helper that is also a real entry point?
+  - Can the assumption become false between the check and the use (the value changes, the object is swapped, the state moves on)?
+
+  An assumption that every caller establishes is fine. One caller that does not is a bug. Cover all callers before you go deep on any one.
+
+  ### 4. Prove it from the code
+
+  For each broken assumption write the chain: the entry point, the calls in between, the function, what it does with the unchecked value, and what an attacker gains. Quote the lines. If the caller is "probably not reachable", read who calls the caller until you know. Missing runtime proof lowers your confidence value, not your decision to record.
+
+  ### 5. Look for a real control before dropping one
+
+  A broken assumption is dropped only when you can point at a control in the code that makes it true on that path (a check in the caller, a type that cannot hold the bad value, a wrapper every route goes through). Quote it. "It is unlikely" is not a control.
+
+  ### 6. Record
+
+  Call `finding` once for each broken assumption with: a title that names the assumption and the caller that breaks it; severity from the impact and how easy it is to reach; one of the listed categories (missing authorization, injection and similar fit most); `source_path`, `source_start_line` and `source_end_line` for the function or the offending caller; the assumption, the chain, the evidence and the impact in the description; and a `suggested_replacement` that establishes the assumption at the right place, in the function when every caller needs it. One root cause with several callers is one finding listing the callers.
+
+  ### 7. Finish
+
+  End with the assumption list, one row each: the function, the assumption, the callers you checked, and the verdict (broken by a caller, established everywhere with the control quoted, or not checked). Then say which parts you covered and which you did not. If you found nothing, the list shows what you checked.

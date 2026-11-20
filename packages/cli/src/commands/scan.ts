@@ -25,6 +25,8 @@ const DEFAULT_BUDGET_USD = 5;
 /** Chosen by measurement: on the same one-file scan it finished in 26s and $0.0014 and recorded its finding first try; glm-5.3-flash took minutes and rejected a dozen `finding` calls. */
 export const DEFAULT_SCAN_MODEL = "gpt-6-luna";
 const DEFAULT_TIMEOUT_SECONDS = 3600;
+/** Consecutive failed status requests before the scan gives up on the console (about a minute with the backoff). */
+const MAX_FAILED_POLLS = 12;
 const GIT_TARGET = /^(git@|git:\/\/|ssh:\/\/git@)|\.git$|^https:\/\/(github|gitlab)\.com\//;
 
 export interface ScanDeps {
@@ -155,11 +157,23 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     deps.err(`scanning ${resolved.label} in thread ${id} (budget $${budget})`);
 
     const deadline = Date.now() + Number(options.timeout) * 1000;
-    let snapshot: Json;
+    let snapshot: Json = {};
     let timedOut = false;
+    let failedPolls = 0;
     for (;;) {
       await deps.sleep(1000);
-      snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+      try {
+        snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+        failedPolls = 0;
+      } catch (error) {
+        // A console busy with several scans, or a provider timing out, can miss a status request while the thread keeps working.
+        // Give up only after a run of failures, and say where the thread is.
+        if (++failedPolls > MAX_FAILED_POLLS) {
+          throw new Error(`Lost contact with the console while scanning: ${error instanceof Error ? error.message : String(error)}. The scan may still be running as thread ${id}; its findings are kept (\`0 findings export --scan ${id}\`).`);
+        }
+        await deps.sleep(Math.min(5000, 1000 * failedPolls));
+        continue;
+      }
       const session = asJson(snapshot.session);
       const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (lastAssistantText(snapshot) !== undefined || snapshot.lastOutcome != null));
       if (finished) break;
@@ -168,7 +182,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
         timedOut = true;
         await client.request("POST", `${path}/cancel`, {}).catch(() => undefined);
         await deps.sleep(2000);
-        snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+        snapshot = await client.request("GET", path).then(value => asJson(asJson(value).snapshot), () => snapshot);
         break;
       }
     }

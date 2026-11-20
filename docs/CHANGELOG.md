@@ -12,6 +12,14 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Two built-in skills that work from the shell and the `finding` tool alone. `variant-hunting` takes a fix (a commit or diff), names the bug class and the unsafe pattern, searches the whole tree for the same shape and checks every hit. `assumption-mining` lists what each function silently relies on and looks for a caller that does not establish it. On planted examples they found all 3 unfixed variants and both broken assumptions, with no false positive on a guarded decoy.
+
+### Fixed
+
+- `0 scan` keeps going when a few status requests to a busy console fail, as happens with several scans at once or a slow model provider. It gives up after about a minute of failures and names the thread, whose findings are kept (`0 findings export --scan <thread id>`).
+
 ## [0.40.1] - 2026-11-19
 
 This patch release fixes the standalone `0` binary, in which every folder looked unreadable.
