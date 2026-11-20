@@ -63,7 +63,7 @@ A saved thread opens at `/chats/saved/<id>` read-only, with its transcript and p
 
 **Memory** is what 0 remembers across threads: short plain notes such as an accepted or rejected fix, a convention, how to run the tests, or something to avoid. Open **Memory** to list, search, add, edit and forget notes, or turn Memory off for new threads.
 
-At the start of each turn the model reads the notes, newest first, up to about 2,000 tokens. The notes are labelled as untrusted context: they never override system rules or your request. The model has one `memory` tool with three actions: `remember`, `update` and `forget`. A repository cannot supply notes.
+At the start of each turn the model reads every note, this folder's first. This is not search: all notes are pasted in, so Memory holds about 2,000 tokens, and a note that would not fit is refused ("Memory is full"; forget one first). A saved note is always one the model sees. The notes are labelled as untrusted context: they never override system rules or your request. The model has one `memory` tool with three actions: `remember`, `update` and `forget`. A repository cannot supply notes.
 
 - **You** commit immediately: "remember that ...", `0 memory add` and the Add button save at once.
 - **0** saves a note it chose to keep, unless the thread has read untrusted content (web pages, repository files, shell output, extension results). Then nothing is saved: it tells you in the thread, and you can add the note yourself.

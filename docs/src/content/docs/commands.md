@@ -1731,7 +1731,7 @@ List, add, remove, export and import what 0 remembers across threads
 0 memory
 ```
 
-Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note is in Memory or it is not. A thread that read web pages, files or tool output cannot add one. Secrets are never saved.
+Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note is in Memory or it is not. Memory holds about 2,000 tokens and a note that would not fit is refused. A thread that read web pages, files or tool output cannot add one. Secrets are never saved.
 
 ```bash
 0 memory list

@@ -216,3 +216,36 @@ describe("file format", () => {
       .toMatchObject({ source: "user", lastInjected: "2026-02-02" });
   });
 });
+
+describe("the memory limit", () => {
+  const long = (tag: string) => `${tag} ${"w".repeat(470)}`;
+  const fill = (add: (text: string) => unknown): number => { let saved = 0; for (let i = 0; i < 60; i++) { try { add(long(String(i))); saved++; } catch (error) { expect(error).toBeInstanceOf(MemoryError); expect((error as Error).message).toContain("Memory is full"); break; } } return saved; };
+
+  it("refuses a note that would not fit what the model is shown, so every saved note is one it sees", () => {
+    const saved = fill(text => store.add({ text, scope: "global" }));
+    expect(saved).toBeGreaterThan(5); expect(saved).toBeLessThan(60);
+    expect(memoryContext(store).text).not.toMatch(/not shown/);
+    expect(store.list()).toHaveLength(saved);
+  });
+  it("counts global notes against a folder's budget, and a folder's notes only against that folder", () => {
+    const folderA = join(home, "a"); const folderB = join(home, "b");
+    const savedGlobal = fill(text => store.add({ text, scope: "global" }));
+    expect(() => store.add({ text: long("in a"), scope: "folder", folder: folderA })).toThrow(/Memory is full/);
+    store.clear(); expect(savedGlobal).toBeGreaterThan(0);
+    const savedA = fill(text => store.add({ text, scope: "folder", folder: folderA }));
+    expect(() => store.add({ text: long("in a"), scope: "folder", folder: folderA })).toThrow(/Memory is full/);
+    expect(() => store.add({ text: long("in b"), scope: "folder", folder: folderB })).not.toThrow();
+    expect(savedA).toBeGreaterThan(5);
+  });
+  it("refuses an edit that makes a note too long to fit, and allows a shorter one", () => {
+    const first = store.add({ text: "short", scope: "global" });
+    fill(text => store.add({ text, scope: "global" }));
+    expect(() => store.edit(first.id, long("grown"))).toThrow(/Memory is full/);
+    expect(store.edit(first.id, "still short")?.text).toBe("still short");
+  });
+  it("tells a thread that a note was not saved because Memory is full", () => {
+    fill(text => store.add({ text, scope: "global" }));
+    const result = runMemoryTool(store, undefined, { action: "remember", note: long("one more") }, { guard: createThreadGuard("t") });
+    expect(result).toMatchObject({ saved: false }); expect(result.message).toContain("Memory is full");
+  });
+});

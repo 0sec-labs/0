@@ -37,13 +37,16 @@ describe("0 memory review and export", () => {
     await run("memory", "list"); expect(out.join("\n")).not.toMatch(/propos|review/i);
     await expect(run("memory", "proposed", "list")).rejects.toThrow();
   });
-  it("says how many notes were left out of what the model sees, and why", async () => {
+  it("refuses a note that would not fit what the model is shown, so a saved note is always one it sees", async () => {
     const store = createFileNoteStore();
-    store.add({ text: "a".repeat(490), source: "user", created: "2026-01-01T00:00:00.000Z" });
-    for (let i = 0; i < 20; i++) store.add({ text: `${String(i).padStart(2, "0")} ${"b".repeat(480)}`, source: "user", created: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00.000Z` });
-    await run("memory", "list", "--json");
-    const body = json(); expect(body.overflow.count).toBeGreaterThan(0); expect(body.overflow.reason).toContain("budget");
-    await run("memory", "list"); expect(out.join("\n")).toMatch(/\* \d+ notes? not shown \(memory budget full\)\. Not shown to the model/);
+    let saved = 0;
+    for (let i = 0; i < 40; i++) {
+      try { store.add({ text: `${String(i).padStart(2, "0")} ${"b".repeat(480)}`, source: "user" }); saved++; } catch { break; }
+    }
+    expect(saved).toBeGreaterThan(5); expect(saved).toBeLessThan(40);
+    await run("memory", "add", `one more ${"c".repeat(480)}`, "--global"); expect(code).toBe(1); expect(err.join("")).toContain("Memory is full");
+    await run("memory", "list", "--json"); expect(json().notes).toHaveLength(saved); expect(json()).not.toHaveProperty("overflow");
+    await run("memory", "list"); expect(out.join("\n")).not.toMatch(/not shown|budget/i);
   });
   it("adds a user note (source user, live), refuses a secret", async () => {
     await run("memory", "add", "Use pnpm", "--global", "--json"); expect(json().note).toMatchObject({ source: "user" });

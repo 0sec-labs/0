@@ -14,7 +14,7 @@ on the GitHub Release tag.
 
 ### Changed
 
-- Memory is one list: a note is in it or it is not. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
+- Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.
 
 ### Removed

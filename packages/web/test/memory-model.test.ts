@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNotes, folderLabel, noteDetail, overflowNotice, type MemoryNote } from "../src/memory-model";
+import { filterNotes, folderLabel, noteDetail, type MemoryNote } from "../src/memory-model";
 
 const note = (over: Partial<MemoryNote>): MemoryNote => ({ id: "m_1", text: "Run tests with pnpm test", scope: "global", source: "user", created: "2026-01-01T00:00:00.000Z", ...over });
 
@@ -20,14 +20,6 @@ describe("memory model", () => {
   });
   it("labels a repository identity as owner/name", () => {
     expect(folderLabel("git:github.com/acme/app")).toBe("acme/app");
-  });
-  it("says in a few words how many notes do not fit, for the selected filter", () => {
-    const overflow = [{ count: 2, ids: ["m_1", "m_2"], reason: "the memory budget of 2000 tokens is full; older notes are left out first" }, { folder: "/a", count: 3, ids: ["m_2", "m_3", "m_4"] }];
-    expect(overflowNotice([], "all")).toBe("");
-    expect(overflowNotice(overflow, "all")).toBe("4 older notes over the limit, not used.");
-    expect(overflowNotice(overflow, "global")).toBe("2 older notes over the limit, not used.");
-    expect(overflowNotice(overflow, "/b")).toBe("2 older notes over the limit, not used.");
-    expect(overflowNotice([{ count: 1, ids: ["m_1"] }], "all")).toBe("1 older note over the limit, not used.");
   });
   it("filters by folder, everywhere or all, and by search text", () => {
     const notes = [note({ id: "m_1" }), note({ id: "m_2", scope: "folder", folder: "/a", text: "Prefer small PRs" }), note({ id: "m_3", scope: "folder", folder: "/b", text: "Use tabs" })];

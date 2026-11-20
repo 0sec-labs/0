@@ -865,7 +865,7 @@ Options:
   -h, --help             display help for command
 
 Commands:
-  list [options]         List notes, and say which ones do not fit what the model is shown
+  list [options]         List notes
   add [options] <text>   Remember a note
   remove [options] <id>  Forget a note
   help [command]         display help for command
@@ -943,7 +943,7 @@ Options:
 ### 0 memory list
 Usage: 0 memory list [options]
 
-List notes, and say which ones do not fit what the model is shown
+List notes
 
 Options:
   --folder <path>    Only notes for this folder

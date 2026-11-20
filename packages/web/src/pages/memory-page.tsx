@@ -15,7 +15,7 @@ import { ConfirmDialog, FormDialog } from "@/ui/components/confirm-dialog";
 import { Cell, Tile } from "@/components/skills/cells";
 import { MemoryMenu } from "@/components/memory-portability";
 import { errorText } from "@/lib/api-error";
-import { NOTE_KIND_LABELS, filterNotes, folderLabel, noteDetail, overflowNotice, type MemoryNote, type MemoryResponse, type NoteKind } from "@/memory-model";
+import { NOTE_KIND_LABELS, filterNotes, folderLabel, noteDetail, type MemoryNote, type MemoryResponse, type NoteKind } from "@/memory-model";
 
 type Draft = { id?: string; text: string; scope: "global" | "folder"; folder: string; kind: NoteKind | "" };
 const blank: Draft = { text: "", scope: "global", folder: "", kind: "" };
@@ -40,8 +40,7 @@ export function MemoryPage() {
   const loading = usePendingGate(query.isPending);
   if (loading || query.isPending) return <><PageHeader title="Memory" /><LoadingState label="Loading memory…" /></>;
   if (query.error) return <><PageHeader title="Memory" /><ErrorState error={query.error} /></>;
-  const { notes, folders, enabled, overflow = [] } = query.data;
-  const notice = overflowNotice(overflow, filter);
+  const { notes, folders, enabled } = query.data;
   const shown = filterNotes(notes, filter, search);
   const save = () => { if (!draft) return; const body = JSON.stringify({ text: draft.text, scope: draft.scope, folder: draft.folder, kind: draft.kind || undefined });
     change.mutate(() => draft.id ? webFetchJson(`/api/console/memory/${encodeURIComponent(draft.id)}`, { method: "PATCH", body: JSON.stringify({ text: draft.text }) }) : webFetchJson("/api/console/memory", { method: "POST", body })); };
@@ -57,7 +56,6 @@ export function MemoryPage() {
       <select id="memory-folder" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={filter} onChange={event => setFilter(event.target.value)}>
         <option value="all">All notes</option><option value="global">Everywhere</option>{folders.map(folder => <option key={folder} value={folder}>{folderLabel(folder)}</option>)}</select></div>}
     {error && !draft && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
-    {notice && <p role="status" className="mt-3 text-sm text-muted-foreground">{notice}</p>}
     {shown.length === 0 ? <EmptyState title={notes.length ? "No notes match." : "Nothing remembered yet."} illustration={<CapyDatabaseIcon className="size-6 text-muted-foreground" />} />
       : <ul className="mt-4 divide-y-[0.5px] divide-[var(--card-hairline)]">{shown.map(note => <Cell key={note.id} to="#" tile={<Tile icon={<CapyDatabaseIcon className="size-4" />} />} name={note.text} description={noteDetail(note)} interactive={!readOnly}
         onOpen={readOnly ? undefined : () => { setDraft({ id: note.id, text: note.text, scope: note.scope, folder: note.folder ?? "", kind: note.kind ?? "" }); setError(""); }}

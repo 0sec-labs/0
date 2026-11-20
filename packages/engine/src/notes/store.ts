@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { homeStateDir } from "../shared/index.js";
 import { cleanText, folderKey, formatNote, isKind, noteId, parseNotes, type Note, type NoteKind, type NoteScope, type NoteSource } from "./core.js";
 import { screenText } from "./guard.js";
+import { fitToBudget } from "./rank.js";
 import { folderIdentity } from "./identity.js";
 
 export interface NoteInput {
@@ -90,6 +91,12 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
     return clean;
   }
 
+  /** Memory is pasted into every thread up to a budget. A note that would not fit is refused, so a saved note is always one the model sees. */
+  function assertFits(candidate: Note, replacing?: string): void {
+    const view = all().filter(note => note.id !== replacing && (note.scope === "global" || (candidate.folder !== undefined && note.folder === candidate.folder)));
+    if (fitToBudget([...view, candidate], candidate.folder ? { folder: candidate.folder } : {}).omitted.length) throw new MemoryError("Memory is full. Forget a note first.");
+  }
+
   return {
     list(filter = {}) {
       const query = filter.query?.toLowerCase();
@@ -121,6 +128,7 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
       }
       const note: Note = { id, text, scope, source: input.source ?? "user", created: input.created ?? now(),
         ...(folder ? { folder } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.thread ? { thread: input.thread } : {}) };
+      assertFits(note);
       const file = scope === "global" ? globalFile : folderFileFor(folder!);
       writeNotes(file, [...readFile(file, scope, folder), note], folder);
       return note;
@@ -130,6 +138,7 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
       const target = find(id);
       if (!target) return undefined;
       const edited: Note = { ...target.note, text: clean };
+      assertFits(edited, id);
       if (edit.by === "model") {
         edited.source = "model";
         if (edit.thread) edited.thread = edit.thread;

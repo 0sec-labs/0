@@ -1,5 +1,5 @@
 // HTTP face of the one Memory for the web page: list, add, edit, delete, turn off, export, import.
-import { MemoryError, NOTE_KINDS, exportArchive, importArchive, isArchive, isKind, memoryOverview, openMemory, type NoteStore } from "@0/engine";
+import { MemoryError, NOTE_KINDS, exportArchive, importArchive, isArchive, isKind, openMemory, type NoteStore } from "@0/engine";
 
 type Reply = { status: number; data: unknown };
 const BASE = "/api/console/memory";
@@ -18,11 +18,8 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
       const folder = query.get("folder") || undefined;
       const all = store.list();
       const folders = [...new Set(all.flatMap(note => note.folder ? [note.folder] : []))].sort();
-      // What a thread in each folder (and one in no folder) would be shown; notes that do not fit are listed with the reason.
-      const overflow = [undefined, ...folders].flatMap(where => { const view = memoryOverview(store, where); return view.omitted.length ? [{ ...(where ? { folder: where } : {}), count: view.omitted.length, ids: view.omitted.map(note => note.id), reason: view.reason }] : []; });
       return { status: 200, data: { enabled: store.enabled(), kinds: NOTE_KINDS, folders,
-        notes: store.list({ ...(folder ? { folder } : {}), ...(query.get("q") ? { query: query.get("q")! } : {}) }),
-        overflow } };
+        notes: store.list({ ...(folder ? { folder } : {}), ...(query.get("q") ? { query: query.get("q")! } : {}) }) } };
     }
     if (sub === "" && method === "POST") {
       const noteText = text(data["text"]);

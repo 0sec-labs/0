@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { NOTE_KINDS, applyExportSection, canonicalFolder, exportArchive, exportable, importArchive, isArchive, isKind, lineChanges, memoryOverview, openMemory, overflowLine, renderExportSection, type Note, type NoteKind, type NoteStore } from "@0/engine";
+import { NOTE_KINDS, applyExportSection, canonicalFolder, exportArchive, exportable, importArchive, isArchive, isKind, lineChanges, openMemory, renderExportSection, type Note, type NoteKind, type NoteStore } from "@0/engine";
 import { EXIT_FAILURE, EXIT_USAGE, UsageError, defaultIo, emit, renderTable, requireYes, type CommandIo } from "./console-output.js";
 
 interface Common { json?: boolean; dbPath?: string }
@@ -32,16 +32,11 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
     return value;
   };
 
-  common(memory.command("list").description("List notes, and say which ones do not fit what the model is shown").option("--folder <path>", "Only notes for this folder").option("--global", "Only global notes").option("--search <text>", "Only notes containing this text"))
+  common(memory.command("list").description("List notes").option("--folder <path>", "Only notes for this folder").option("--global", "Only global notes").option("--search <text>", "Only notes containing this text"))
     .action((options: Common & { folder?: string; global?: boolean; search?: string }) => run(options, store => {
       const notes = store.list({ ...(options.folder ? { folder: options.folder } : {}), ...(options.global ? { scope: "global" as const } : {}), ...(options.search ? { query: options.search } : {}) });
-      const view = memoryOverview(store, options.folder ?? process.cwd());
-      const left = new Set(view.omitted.map(note => note.id));
-      const overflow = { count: view.omitted.length, ids: [...left], ...(view.reason ? { reason: view.reason } : {}) };
-      emit(io, options, { enabled: store.enabled(), notes, overflow }, () => [
-        notes.length ? renderTable(notes.map(note => [note.id + (left.has(note.id) ? " *" : ""), place(note), note.kind ?? "", note.text.slice(0, 90)]), ["ID", "WHERE", "KIND", "NOTE"]) : "Nothing remembered yet.",
-        ...(left.size ? [`* ${overflowLine(left.size)} Not shown to the model: ${view.reason}.`] : []),
-      ].join("\n"));
+      emit(io, options, { enabled: store.enabled(), notes }, () =>
+        notes.length ? renderTable(notes.map(note => [note.id, place(note), note.kind ?? "", note.text.slice(0, 90)]), ["ID", "WHERE", "KIND", "NOTE"]) : "Nothing remembered yet.");
     }));
 
   common(memory.command("add <text>").description("Remember a note").option("--folder <path>", "Folder the note is about (default: this folder)").option("--global", "Remember it everywhere").option("--kind <kind>", `One of ${NOTE_KINDS.join(", ")}`))

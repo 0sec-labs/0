@@ -45,10 +45,14 @@ describe("memory API", () => {
     expect((listed.notes as Array<{ id: string }>).map(n => n.id)).toEqual([a.id]);
     expect(call(`/api/console/memory/${a.id}/accept`, "POST", {}).status).toBe(405);
   });
-  it("reports notes that do not fit what the model is shown", () => {
-    for (let i = 0; i < 20; i++) call("/api/console/memory", "POST", { text: `${i} ${"x".repeat(470)}`, scope: "global" });
-    const data = call("/api/console/memory", "GET").data as { overflow: Array<{ count: number; reason: string; folder?: string }> };
-    expect(data.overflow[0]).toMatchObject({ reason: expect.stringContaining("budget") }); expect(data.overflow[0]!.count).toBeGreaterThan(0);
+  it("refuses a note that would not fit, and reports no overflow", () => {
+    let last = 200;
+    for (let i = 0; i < 40 && last === 200; i++) last = call("/api/console/memory", "POST", { text: `${i} ${"x".repeat(470)}`, scope: "global" }).status;
+    expect(last).toBe(400);
+    const listed = call("/api/console/memory", "GET").data as Record<string, unknown>;
+    expect(listed).not.toHaveProperty("overflow");
+    expect((listed.notes as unknown[]).length).toBeGreaterThan(5);
+    expect(call("/api/console/memory", "POST", { text: `one more ${"y".repeat(470)}`, scope: "global" }).data).toMatchObject({ error: expect.stringContaining("Memory is full") });
   });
   it("refuses a secret from the page", () => {
     expect(call("/api/console/memory", "POST", { text: "token: abcdefghijklmnop1234", scope: "global" }).status).toBe(400);
