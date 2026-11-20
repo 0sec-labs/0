@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
-test('the Memory page lists every note, filters by folder, shows the empty line and forgets a note',async()=>{
+test('the Memory page lists every note, filters by folder, forgets a note, and has no Proposed section',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.memory-page-test-'));
   let server,browser;
   try{
@@ -22,6 +22,9 @@ test('the Memory page lists every note, filters by folder, shows the empty line 
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.getByText('Run tests with pnpm test',{exact:true}).waitFor();
     await page.getByText('Triage: React escapes output',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('heading',{name:'Proposed'}).count(),0);
+    assert.equal(await page.getByText(/suggested by a thread/i).count(),0);
+    assert.equal(await page.getByRole('button',{name:/^(Accept|Reject)$/}).count(),0);
     await page.getByLabel('Show').selectOption('/work/app');
     assert.equal(await page.getByText('Run tests with pnpm test',{exact:true}).count(),0);
     await page.getByLabel('Show').selectOption('all');
@@ -30,32 +33,6 @@ test('the Memory page lists every note, filters by folder, shows the empty line 
     await page.getByRole('dialog').getByRole('button',{name:'Forget',exact:true}).evaluate(button=>button.click());
     await page.waitForFunction(()=>window.calls.length===1,null,{timeout:5000});
     assert.equal((await page.evaluate(()=>window.calls)).length,1);
-    assert.deepEqual(errors,[]);
-  }finally{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(directory,{recursive:true,force:true});}
-});
-
-test('the Memory page shows proposed notes first, accepts and rejects them, and says what the model is not shown',async()=>{
-  const directory=await mkdtemp(resolve(dashboard,'.memory-proposed-test-'));
-  let server,browser;
-  try{
-    const stub=resolve(directory,'api.ts');
-    await writeFile(stub,`const client={backendId:'local'};let notes=[{id:'m_1',text:'Run tests with pnpm test',scope:'global',source:'user',status:'live',created:'2026-01-01T00:00:00Z'}];let proposed=[{id:'m_p1',text:'Deploys need the staging flag',scope:'global',source:'model',status:'proposed',tainted:true,created:'2026-01-03T00:00:00Z'},{id:'m_p2',text:'Skip the flaky suite',scope:'global',source:'model',status:'proposed',created:'2026-01-04T00:00:00Z'}];window.calls=[];export const localControlFetch=async()=>new Response('{}',{status:404});export const useBackendApi=()=>({client,webFetchJson:async(path,options)=>{if(options?.method){window.calls.push(options.method+' '+path+' '+(options.body??''));const id=path.split('/')[4];if(path.endsWith('/accept')){const hit=proposed.find(n=>n.id===id);proposed=proposed.filter(n=>n.id!==id);if(hit)notes=[...notes,{...hit,status:'live',reviewed:true,text:JSON.parse(options.body).text??hit.text}]}else if(options.method==='DELETE'){proposed=proposed.filter(n=>n.id!==id)}return {}}return {enabled:true,kinds:['fix-decision','convention','command','avoid'],folders:[],notes,proposed,overflow:[{count:2,ids:['m_9','m_8'],reason:'the memory budget of 2000 tokens is full; older notes are left out first'}]}}});`);
-    const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {MemoryRouter} from 'react-router-dom';import {MemoryPage} from './src/pages/memory-page';createRoot(document.getElementById('root')).render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryPage/></QueryClientProvider></MemoryRouter>);`,resolveDir:dashboard,loader:'tsx'},bundle:true,platform:'browser',format:'esm',jsx:'automatic',write:false,loader:{'.css':'empty','.svg':'dataurl','.png':'dataurl'},alias:{'@/api':stub,'@':resolve(dashboard,'src')},logLevel:'silent'});
-    server=createServer((request,response)=>{response.writeHead(200,{'Content-Type':request.url==='/fixture.js'?'application/javascript':'text/html'});response.end(request.url==='/fixture.js'?bundle.outputFiles[0].contents:'<div id="root"></div><script type="module" src="/fixture.js"></script>')});
-    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    browser=await chromium.launch({headless:true});
-    const page=await browser.newPage();
-    const errors=[];page.on('pageerror',error=>errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.getByRole('heading',{name:'Proposed'}).waitFor();
-    await page.getByText('Deploys need the staging flag',{exact:true}).waitFor();
-    await page.getByText('2 notes are not shown to the model',{exact:false}).waitFor();
-    await page.getByRole('button',{name:'Accept',exact:true}).first().click();
-    await page.waitForFunction(()=>window.calls.some(call=>call.startsWith('POST /api/console/memory/m_p1/accept')),null,{timeout:5000});
-    await page.getByRole('button',{name:'Reject',exact:true}).first().click();
-    await page.waitForFunction(()=>window.calls.some(call=>call.startsWith('DELETE /api/console/memory/m_p2')),null,{timeout:5000});
-    await page.getByRole('heading',{name:'Proposed'}).waitFor({state:'detached'});
-    await page.getByText('Deploys need the staging flag',{exact:true}).waitFor();
     assert.deepEqual(errors,[]);
   }finally{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(directory,{recursive:true,force:true});}
 });
