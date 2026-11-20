@@ -1229,6 +1229,19 @@ Options:
   --format <format>  Output: text or json (choices: "text", "json")
   -h, --help         display help for command
 
+### 0 sentinels export (hidden)
+Usage: 0 sentinels export [options] <id>
+
+Write a Sentinel as a YAML definition file, so a team can start from what it already has
+
+Arguments:
+  id                Sentinel ID (full or prefix) or exact name
+
+Options:
+  --out <folder>    Write <name>.yaml into this folder instead of standard output
+  --db-path <path>  Database to read; stop its running console first
+  -h, --help        display help for command
+
 ### 0 sentinels files (hidden)
 Usage: 0 sentinels files [options] [command]
 
@@ -1360,6 +1373,24 @@ Show a Sentinel (full or prefix ID)
 Options:
   --db-path <path>   Control database (default: the user database)
   --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
+
+### 0 sentinels sync (hidden)
+Usage: 0 sentinels sync [options] <folder>
+
+Make Sentinels match the YAML files in a folder. Shows what would change; --apply writes it.
+
+Arguments:
+  folder             Folder of Sentinel definitions (*.yaml), for example .0/sentinels
+
+Options:
+  --apply            Write the changes (without it, only the plan is shown)
+  --check            Exit 1 when the database differs from the files
+  --commit <sha>     Commit the files came from; recorded on each Sentinel
+  --enable           Enable the triggers this sync creates (only for a change that was already
+                     reviewed)
+  --db-path <path>   Database to change; stop its running console first
+  --format <format>  Output: text or json (default: "text")
   -h, --help         display help for command
 
 ### 0 sentinels triggers (hidden)

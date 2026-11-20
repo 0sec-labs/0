@@ -19,6 +19,8 @@ const MAX_PR_DIFF_CHARS = 14_000;
 const prCommentMinGapMs = () => { const value = Number(process.env.ZERO_PR_COMMENT_MIN_GAP_MS); return Number.isFinite(value) && value >= 0 ? value : 60_000; };
 const PR_COMMENT_MAX_PER_HOUR = 30;
 const PR_COMMENT_MAX_FINDINGS = 10;
+/** `gh pr list` pages through the API itself; this is the most open pull requests one poll reads. */
+const MAX_POLLED_PULL_REQUESTS = 1000;
 const prCommentMarker = (sentinelId: string) => `<!-- 0-agent-pr-review:${sentinelId} -->`;
 const execute = promisify(execFile);
 /** The local folder (the engine's working directory) whose origin remote is this repository, if any. Never clones or fetches. */
@@ -294,7 +296,7 @@ export class SentinelRunner {
     const isEnabled = () => this.#store.getTrigger(trigger.id)?.enabled === true;
     let prs: Array<{ number: number; headRefOid: string; title: string; url: string; baseRefName: string; headRefName: string; isCrossRepository: boolean; isDraft?: boolean; state?: string }>;
     try {
-      const { stdout } = await this.#gh.run(["pr", "list", "--repo", github.repo, "--state", "open", "--limit", "50", "--json", "number,headRefOid,title,url,baseRefName,headRefName,isCrossRepository,isDraft,state", ...(github.baseBranch ? ["--base", github.baseBranch] : [])]);
+      const { stdout } = await this.#gh.run(["pr", "list", "--repo", github.repo, "--state", "open", "--limit", String(MAX_POLLED_PULL_REQUESTS), "--json", "number,headRefOid,title,url,baseRefName,headRefName,isCrossRepository,isDraft,state", ...(github.baseBranch ? ["--base", github.baseBranch] : [])]);
       const parsed: unknown = JSON.parse(stdout);
       if (!Array.isArray(parsed)) throw new Error("Unexpected gh output.");
       prs = parsed.filter((pr): pr is (typeof prs)[number] => !!pr && typeof pr.number === "number" && typeof pr.headRefOid === "string")

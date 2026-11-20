@@ -21,6 +21,9 @@ on the GitHub Release tag.
 
 - With `--comment` on, a Sentinel's pull request review also posts inline suggestion blocks on changed lines that a finding has a replacement for (at most 10 per run, none on forks); a comment is removed when a later push no longer has its finding.
 
+- Sentinels can be defined as YAML files in a git repository: `0 sentinels sync <folder>` shows what would change and `--apply` writes it (new Sentinels paused, new triggers disabled, a changed model or skill list sent back to review, nothing deleted; `--check` for CI), and `0 sentinels export <id>` writes an existing Sentinel as a file.
+- The pull request poll reads up to 1,000 open pull requests instead of 50.
+
 ### Changed
 
 - Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.

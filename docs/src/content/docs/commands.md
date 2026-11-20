@@ -2681,7 +2681,49 @@ Create, inspect and control Sentinels.
 0 sentinels
 ```
 
-Subcommands: [list](#sentinels-list) · [run](#sentinels-run) · [set](#sentinels-set) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [activations](#sentinels-activations) · [files](#sentinels-files) · [triggers](#sentinels-triggers) · [webhook](#sentinels-webhook).
+Subcommands: [list](#sentinels-list) · [run](#sentinels-run) · [set](#sentinels-set) · [sync](#sentinels-sync) · [export](#sentinels-export) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [activations](#sentinels-activations) · [files](#sentinels-files) · [triggers](#sentinels-triggers) · [webhook](#sentinels-webhook).
+
+#### sentinels sync
+
+Make Sentinels match the YAML files in a folder. Shows what would change; --apply writes it.
+
+```text
+0 sentinels sync [options] <folder>
+```
+
+Each `*.yaml` file is one Sentinel: name, mission, instructions, skills, model, folder, and automations with their triggers (see [Sentinels as files](/sentinels/#sentinels-as-files)). Without `--apply` nothing is written. A new Sentinel is created paused and a new trigger disabled, a changed model or skill list sends an active Sentinel back to review, and a Sentinel that is not in the folder is left alone. Stop a running console on the same database first.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `folder` | Yes | Folder of Sentinel definitions (*.yaml), for example .0/sentinels |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--apply` | — | Write the changes (without it, only the plan is shown) |
+| `--check` | — | Exit 1 when the database differs from the files |
+| `--commit <sha>` | — | Commit the files came from; recorded on each Sentinel |
+| `--enable` | — | Enable the triggers this sync creates (only for a change that was already reviewed) |
+| `--db-path <path>` | — | Database to change; stop its running console first |
+| `--format <format>` | `text` | Output: text or json |
+
+#### sentinels export
+
+Write a Sentinel as a YAML definition file, so a team can start from what it already has
+
+```text
+0 sentinels export [options] <id>
+```
+
+Prints the definition, or writes `<name>.yaml` into `--out`. Syncing the exported file back changes nothing.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes | Sentinel ID (full or prefix) or exact name |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <folder>` | — | Write &lt;name&gt;.yaml into this folder instead of standard output |
+| `--db-path <path>` | — | Database to read; stop its running console first |
 
 #### sentinels list
 
