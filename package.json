@@ -19,6 +19,8 @@
     "docs:sync": "node scripts/sync-cli-docs.mjs --write",
     "check:docs-commands": "node scripts/check-docs-commands.mjs",
     "check:no-npm-publish": "node scripts/check-no-npm-publish.mjs",
+    "check:script-quotes": "node scripts/check-script-quotes.mjs",
+    "test:script-quotes": "node --test scripts/check-script-quotes.test.mjs",
     "test:no-npm-publish": "node --test scripts/check-no-npm-publish.test.mjs",
     "check:workflow-triggers": "node scripts/check-workflow-triggers.mjs",
     "test:workflow-triggers": "node --test scripts/check-workflow-triggers.test.mjs",
