@@ -96,6 +96,32 @@ export function togetherBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
 export const OPENCODE_DEFAULT_BASE_URL = "https://opencode.ai/zen/v1";
 export const OPENCODE_DEFAULT_MODEL = "muse-spark-1.3-contributor-free";
 
+// Amazon Bedrock authenticates through the AWS credential chain (or a Bedrock
+// bearer token), not an API key. The chain is resolved by the AWS SDK at request
+// time; 0 only decides whether Bedrock looks configured. Never auto-selected:
+// reach it with ZERO_SELECTED_PROVIDER=bedrock or a `bedrock:<model>` fallback.
+export const BEDROCK_DEFAULT_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0";
+/** Placeholder stored where other providers keep an API key; carries no secret. */
+export const BEDROCK_CREDENTIAL_CHAIN_MARKER = "aws-credential-chain";
+const BEDROCK_DEFAULT_REGION = "us-east-1";
+
+export function bedrockRegion(env: Readonly<NodeJS.ProcessEnv>): string | undefined {
+  return env.AWS_REGION?.trim() || env.AWS_DEFAULT_REGION?.trim() || undefined;
+}
+
+export function bedrockBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
+  // BEDROCK_BASE_URL points at a VPC endpoint or an internal proxy that speaks the Bedrock runtime API.
+  return env.BEDROCK_BASE_URL?.trim() || `https://bedrock-runtime.${bedrockRegion(env) ?? BEDROCK_DEFAULT_REGION}.amazonaws.com`;
+}
+
+/** Cheap, offline check for any signal that an AWS credential source is configured. */
+export function hasBedrockCredentialSignals(env: Readonly<NodeJS.ProcessEnv>): boolean {
+  const set = (name: string): boolean => Boolean(env[name]?.trim());
+  return set("AWS_BEARER_TOKEN_BEDROCK") || set("AWS_PROFILE") || (set("AWS_ACCESS_KEY_ID") && set("AWS_SECRET_ACCESS_KEY"))
+    || set("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") || set("AWS_CONTAINER_CREDENTIALS_FULL_URI") || set("AWS_WEB_IDENTITY_TOKEN_FILE")
+    || set("AWS_REGION") || set("AWS_DEFAULT_REGION");
+}
+
 export type WireApi =
   | "chat_completions"
   | "responses"

@@ -1,7 +1,7 @@
 import { type RuntimeConfig } from "../types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
-import { AZURE_FOUNDRY_DEPLOYMENT_IDS, TOGETHER_DEFAULT_MODEL, togetherBaseUrl, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, isRemovedProvider, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { BEDROCK_DEFAULT_MODEL, AZURE_FOUNDRY_DEPLOYMENT_IDS, TOGETHER_DEFAULT_MODEL, togetherBaseUrl, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, isRemovedProvider, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { resolveFailoverProvider } from "./fallback.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 import { readChatGptCodexAuthFile, readChatGptCodexEnv } from "./codex-auth.js";
@@ -85,7 +85,7 @@ export const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = 
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL,
+  together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, bedrock: BEDROCK_DEFAULT_MODEL,
 };
 
 /**

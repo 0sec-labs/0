@@ -49,7 +49,7 @@ import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, 
 import { isLocalAdmissionFailure, type RequestAdmission } from "../request-admission.js";
 import { diag } from "../../diagnostics/channel.js";
 import { createPolicyFetch, type FailoverReason, type PolicyState } from "./policy.js";
-import { defaultReasoningEffort, normalizeModelForProvider, parseCodexAzureConfig, type ApiProvider } from "../llm-api/provider-config.js";
+import { BEDROCK_CREDENTIAL_CHAIN_MARKER, bedrockRegion, defaultReasoningEffort, normalizeModelForProvider, parseCodexAzureConfig, type ApiProvider } from "../llm-api/provider-config.js";
 import { AUTO_MODEL_SENTINEL, DEFAULT_PROVIDER_MODELS, type ApiRuntimeDiagnostics } from "../llm-api/provider-detect.js";
 import { fromPiAssistant, mapPiStopReason, mapPiUsage, toPiContext, type PiTargetIdentity } from "./convert.js";
 import { buildPiRoute, resolvePiRoute, routeForModel, type PiRoute } from "./route.js";
@@ -273,7 +273,7 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
     const identity = this.connectionIdentity();
     if (!route || !identity) throw new Error("The selected runtime has no captured connection identity.");
     const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
-      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE|GEMINI)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|RUNTIME$))/.test(entry[0])));
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE|GEMINI|AWS|BEDROCK)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|RUNTIME$))/.test(entry[0])));
     const config: RuntimeConfig = { type: "api", timeout: this.config.timeout, provider: route.zeroProvider as RuntimeConfig["provider"], model: route.model, ...this.modelSelection() };
     return structuredClone({
       config, env, provider: route.zeroProvider as ApiProvider, apiKey: route.apiKey, baseUrl: route.rawBaseUrl, model: route.model,
@@ -425,6 +425,10 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
 
   private async materialize(route: PiRoute): Promise<{ models: Models; model: Model<Api> }> {
     const models = await this.getModels();
+    if (route.piProvider === "amazon-bedrock" && !models.getProvider("amazon-bedrock")) {
+      const { amazonBedrockProvider } = await import("@earendil-works/pi-ai/providers/amazon-bedrock");
+      (models as unknown as { setProvider(p: unknown): void }).setProvider(amazonBedrockProvider());
+    }
     const key = `${route.piProvider}|${route.api}|${route.baseUrl}|${route.model}`;
     if (this.materialized?.key === key) return { models, model: this.materialized.model };
     let model: Model<Api>;
@@ -538,6 +542,9 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
     const timer = setTimeout(() => timeout.abort(), this.config.timeout || 120_000);
     const call = composeCallAbort(timeout.signal, signal);
     const apiKey = this.route?.apiKey ?? this.config.apiKey ?? "test-key";
+    // Bedrock: the AWS SDK resolves its own credential chain. Only a real bearer token is passed as apiKey.
+    const bedrockChain = this.route?.zeroProvider === "bedrock";
+    const bedrockToken = bedrockChain && apiKey !== BEDROCK_CREDENTIAL_CHAIN_MARKER ? apiKey : undefined;
     const redact = (text: string): string => (apiKey.length >= 8 ? text.split(apiKey).join("[redacted]") : text);
     const state: PolicyState = {};
     try {
@@ -550,7 +557,8 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
       const baseFetch = this.requestOptions.fetch;
       const options: SimpleStreamOptions & ModelsRequestTransforms = {
         ...this.requestOptions,
-        apiKey,
+        ...(bedrockChain ? (bedrockToken ? { apiKey: bedrockToken } : {}) : { apiKey }),
+        ...(bedrockChain ? { env: awsProviderEnv(this.env), ...(bedrockRegion(this.env) ? { region: bedrockRegion(this.env) } : {}) } : {}),
         signal: call.signal,
         sessionId: this.conversationId,
         maxTokens: Math.min(model.maxTokens, completionTokenLimit(this.env, model.maxTokens), this.requestOptions.maxTokens ?? Number.POSITIVE_INFINITY),
@@ -692,6 +700,11 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
       ...(failed && result.error ? { error: result.error } : {}),
     };
   }
+}
+
+/** AWS_* settings forwarded to pi's provider-scoped env so config.env wins over the process env. */
+function awsProviderEnv(env: Readonly<NodeJS.ProcessEnv>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && /^AWS_/.test(e[0])));
 }
 
 async function isRetryable(message: AssistantMessage): Promise<boolean> {

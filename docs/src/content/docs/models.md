@@ -36,6 +36,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 | xAI Grok | `XAI_API_KEY` |
 | OpenCode Zen | `OPENCODE_API_KEY` (`OPENCODE_BASE_URL` to change endpoint) |
 | Together AI | `TOGETHER_API_KEY` ([details](#together-ai)) |
+| Amazon Bedrock | AWS credential chain, pinned with `ZERO_SELECTED_PROVIDER=bedrock` ([details](#amazon-bedrock)) |
 
 Pass `ZERO_*` variables with `env`, for example `env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=... 0 config doctor`.
 
@@ -133,6 +134,29 @@ env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL="your-deployment-id" \
 
 Include `/openai/v1` in a Responses base URL. The model picker lists deployments from your Azure resource through an existing Azure CLI sign-in; it never starts a login. With a key alone, enter the deployment ID by hand. 0 probes the endpoint once for its region; that is a diagnostic, not a residency guarantee.
 
+### Amazon Bedrock
+
+0 calls Bedrock directly with the AWS SDK, so no proxy sits between 0 and your AWS account. Authentication is the standard AWS credential chain: environment keys, `AWS_PROFILE` (including SSO), an ECS task role, a web identity token or an instance role. Alternatively set `AWS_BEARER_TOKEN_BEDROCK` for a Bedrock API key. No AWS secret is stored in 0's credential file.
+
+Bedrock is never picked from ambient AWS variables. Pin it and name the model:
+
+```bash
+export AWS_PROFILE="audit-prod"
+export AWS_REGION="eu-central-1"
+env ZERO_SELECTED_PROVIDER=bedrock \
+  ZERO_MODEL="eu.anthropic.claude-sonnet-4-5-20250929-v1:0" \
+  0 -p "Review ./authorized-repo"
+```
+
+| Setting | Resolution |
+| --- | --- |
+| Credentials | The AWS SDK chain. `AWS_BEARER_TOKEN_BEDROCK` wins when set. |
+| Region | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then the profile's region, then `us-east-1`. |
+| Endpoint | `BEDROCK_BASE_URL` for a VPC endpoint or an internal proxy; otherwise the regional `bedrock-runtime` endpoint. |
+| Model | A Bedrock model ID or cross-region inference profile ID your account can invoke. The default is `global.anthropic.claude-sonnet-4-5-20250929-v1:0`. |
+
+The model must support tool use through the Converse API. Bedrock runs on the pi-ai layer; `ZERO_RUNTIME=legacy` does not apply to it. `bedrock:<model>` also works in [`ZERO_LLM_FALLBACK`](#failover) when AWS credentials are configured. Prices for Bedrock models are shown as unknown. The model picker does not list Bedrock models yet; pass the ID with `--model` or `ZERO_MODEL`. To reach Bedrock through a LiteLLM proxy instead, use an [OpenAI-compatible gateway](#custom-and-local-providers).
+
 ### Together AI
 
 Connect **Together AI** or export `TOGETHER_API_KEY`. The default endpoint is `https://api.together.ai/v1`; set `TOGETHER_BASE_URL` to change it.
@@ -185,7 +209,7 @@ A rejected or unreachable provider is never picked as the default model for new 
 <span id="provider-pinning"></span>
 ### Pin a provider
 
-`ZERO_SELECTED_PROVIDER` accepts `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode` and `together`.
+`ZERO_SELECTED_PROVIDER` accepts `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`, `together` and `bedrock`.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
