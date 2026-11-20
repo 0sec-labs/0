@@ -9,9 +9,6 @@ export {
 
 export type { ScanEvent } from "./events/scan-event.js";
 export {
-  finalize,
-} from "./context.js";
-export {
   sendPrompt,
   extractResponseText,
   fetchScoped,
@@ -54,16 +51,9 @@ export { snapshotSmolvmWorkspace } from "./runtime/smolvm-workspace.js";
 export { runSmolvmWorkbench } from "./runtime/smolvm-workbench.js";
 export type { SmolvmWorkbenchOptions, SmolvmWorkbenchResult, SmolvmWorkbenchApprovedImage } from "./runtime/smolvm-workbench.js";
 export { resolveSmolvmRuntime, approveSmolvmWorkbenchImage, getSmolvmWorkbenchStatus } from "./runtime/smolvm-provision.js";
-export {
-  runMcpSecurityChecks,
-} from "./mcp.js";
-export {
-  runLlmIpiAudit,
-} from "./llm-ipi-audit.js";
 
 
 // Agent runner
-export { runAnalysisAgent } from "./agent-runner.js";
 
 // Package audit
 
@@ -95,7 +85,6 @@ export type { DeploymentContext } from "./shared/index.js";
 // axes the seedless `deep-review` command wires into runHuntScan (G-A).
 // Deterministic source-file walkers (shared by the review pipeline + the
 // seedless deep-review candidate enumeration + its 5000-file scope cap).
-export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // Hunt memory flywheel (ZERO_HUNT_FLYWHEEL=1, ported from 0verse's
 // flywheel.py): a preseeded 5-layer memory that PRIMES the best-of-N judge
 // ordering + attempt-budget cost-router — it never confirms; see
@@ -141,11 +130,6 @@ export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // Threat-model planner stage — pre-candidate-selection trust-boundary lanes.
 
 // Unified pipeline: prepare + static analysis
-export {
-  expandHomePath,
-  isExistingLocalTargetPath,
-  isExplicitLocalTargetPath,
-} from "./path-resolution.js";
 
 
 // Unified pipeline
@@ -160,9 +144,6 @@ export type {
 
 // External seed findings (0#368). Parser + reader for ND-JSON leads
 // supplied by upstream probes like GemmaForge (`gemmaforge.leads/v1`).
-export {
-  readSeedFindings,
-} from "./seed-findings.js";
 
 // Agent system
 export { runAgentLoop, runNativeAgentLoop, ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, features, estimateCost } from "./agent/index.js";
@@ -230,21 +211,6 @@ export type {
 // Strategy racing (best-of-N)
 
 // Vulnerability intelligence tools (0#439)
-export {
-  buildIntelDossier,
-  lookupCve,
-  searchAdvisories,
-  searchSimilar,
-  searchTargetHistory,
-  inferTargetHistoryInputFromRepo,
-  advisorySweep,
-  lookupAdvisory,
-} from "./intel/index.js";
-export type {
-  IntelDossier,
-  IntelTargetHistory,
-  VulnerabilityIntel,
-} from "./intel/index.js";
 
 // Structured verification pipeline — `verify()` is the unified entrypoint;
 // the trio (runStructuredVerify / runSelfConsistencyVerify) remain as the
@@ -268,9 +234,6 @@ export type {
 // from the recorded `layerVerdicts` rather than the current env. See
 // `triage/provenance.ts` for why that distinction is load-bearing.
 
-export type {
-  Remediation,
-} from "./remediation.js";
 
 // Adversarial eval runner (fast AI safety scorecard)
 
@@ -518,10 +481,7 @@ export type {
 
 
 // Transport-independent workflow execution and owned lifecycle.
-export * from "./workflow-runner.js";
-export * from "./workflow-service.js";
 export * from "./engine-service.js";
-export { budgetNativeRuntime } from "./scan-plan.js";
 export * from "./notes/index.js";
 
 export * from "./report-export.js";
