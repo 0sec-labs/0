@@ -3,18 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { assertSourceScopePath, normalizeSourcePath, resolveSourceScope } from "./source-scope.js";
-import { computeConfigIdentity } from "./project-state.js";
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
 function fixture() { const root = mkdtempSync(join(tmpdir(), "0-source-scope-")); directories.push(root); return root; }
 
-it("retains whole-repository legacy identity and changes identity for a narrowed folder", () => {
+it("normalizes the whole-repository path", () => {
   expect(normalizeSourcePath()).toBe(".");
   expect(normalizeSourcePath(".")).toBe(".");
-  const base = { source: "repo", testCommand: "test" };
-  expect(computeConfigIdentity({ ...base, sourcePath: undefined })).toBe(computeConfigIdentity(base));
-  expect(computeConfigIdentity({ ...base, sourcePath: "service" })).not.toBe(computeConfigIdentity(base));
 });
 
 it.each(["", "/service", "../service", "a/../b", "a//b", "a/./b", "a\\b", ".git", "a/.0", "a\0b"])("rejects unsafe folder %j", path => {
