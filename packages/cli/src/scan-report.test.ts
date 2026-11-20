@@ -1,7 +1,7 @@
 import type { Finding, ScanReport } from "@0/engine/shared";
 import { describe, expect, it } from "vitest";
 import { exportReport } from "@0/engine";
-import { locationKey, repoRelativePath, scanExitCode, scanJson, toScanReport, type ScanOutcome } from "./scan-report.js";
+import { locationKey, mergePasses, repoRelativePath, scanExitCode, scanJson, toScanReport, type MergedFinding, type ScanOutcome } from "./scan-report.js";
 
 const stored = (overrides: Partial<Finding> = {}): Finding => ({
   id: "f1", templateId: "manual", title: "SQL injection in /users", description: "", severity: "high", category: "sql-injection", status: "discovered", timestamp: 1,
@@ -107,5 +107,48 @@ describe("a report that reads the same in CI", () => {
     expect(result.partialFingerprints.primary).toMatch(/^loc:[0-9a-f]{24}$/);
     expect(result.partialFingerprints.primary).toBe(b.results[0].partialFingerprints.primary);
     expect(JSON.stringify(a)).not.toMatch(/\/home\/runner|\/Users\/dev/);
+  });
+});
+
+
+describe("mergePasses", () => {
+  const f = (id: string, path: string, line: number, over: Partial<Finding> = {}) => stored({ id, title: `title ${id}`, reviewAnnotation: { path, startLine: line }, ...over });
+
+  it("merges findings that cite the same place in different passes, and counts the passes", () => {
+    const merged = mergePasses([[f("a", "src/x.ts", 10)], [f("b", "src/x.ts", 12)], [f("c", "src/x.ts", 40)]]);
+    expect(merged).toHaveLength(2);
+    expect(merged.find(m => m.reviewAnnotation?.startLine === 40)!.foundInPasses).toBe(1);
+    expect(merged.find(m => m.reviewAnnotation?.startLine !== 40)!.foundInPasses).toBe(2);
+  });
+  it("keeps the most severe version, then the most detailed", () => {
+    const merged = mergePasses([[f("a", "src/x.ts", 10, { severity: "medium", description: "short" })], [f("b", "src/x.ts", 10, { severity: "critical", description: "x" })], [f("c", "src/x.ts", 10, { severity: "critical", description: "a much longer description" })]]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.id).toBe("c");
+  });
+  it("never merges a pass with itself, so two flaws close together in one pass stay two", () => {
+    expect(mergePasses([[f("a", "src/x.ts", 10), f("b", "src/x.ts", 11)]])).toHaveLength(2);
+    expect(mergePasses([[f("a", "src/x.ts", 10), f("b", "src/x.ts", 11)], [f("c", "src/x.ts", 10)]])).toHaveLength(2);
+  });
+  it("does not merge different files, and compares paths after making them relative", () => {
+    expect(mergePasses([[f("a", "src/x.ts", 10)], [f("b", "src/y.ts", 10)]])).toHaveLength(2);
+    expect(mergePasses([[f("a", "/work/repo/src/x.ts", 10)], [f("b", "src/x.ts", 10)]], ["/work/repo"])).toHaveLength(1);
+  });
+  it("merges findings with no location only when the title matches", () => {
+    const bare = (id: string, title: string) => stored({ id, title, reviewAnnotation: undefined });
+    expect(mergePasses([[bare("a", "Weak crypto")], [bare("b", "weak crypto")]])).toHaveLength(1);
+    expect(mergePasses([[bare("a", "Weak crypto")], [bare("b", "Other")]])).toHaveLength(2);
+  });
+  it("says nothing about passes for a single pass", () => {
+    const [only] = mergePasses([[f("a", "src/x.ts", 10)]]) as MergedFinding[];
+    expect(only!.foundInPasses).toBeUndefined();
+  });
+  it("tells the reader, in every format, how many passes found a finding", () => {
+    const merged = mergePasses([[f("a", "src/x.ts", 10)], [f("b", "src/x.ts", 10)], []]);
+    const report = toScanReport({ ...outcome, passes: { requested: 3, completed: 3, failed: 0 } }, base(merged));
+    expect(report.findings[0]!.description).toMatch(/Found in 2 of 3 scan passes\./);
+  });
+  it("warns when some passes could not finish", () => {
+    const report = toScanReport({ ...outcome, passes: { requested: 3, completed: 2, failed: 1 } }, base([]));
+    expect(report.warnings.map(w => w.message).join(" ")).toMatch(/1 of 3 scan passes could not finish/);
   });
 });

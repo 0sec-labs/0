@@ -14,9 +14,9 @@ import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import { scanPrompt, type ScanReport } from "@0/engine/shared";
-import { scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
+import { mergePasses, scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
-import { asJson, finishedThread, lastAssistantText, usageLine, type Json } from "./thread-output.js";
+import { asJson, finishedThread, lastAssistantText, usageLine, type FinishedThread, type Json } from "./thread-output.js";
 
 const exec = promisify(execFile);
 const FORMATS = ["json", "md", "sarif", "html", "pdf"] as const;
@@ -27,6 +27,9 @@ export const DEFAULT_SCAN_MODEL = "gpt-6-luna";
 const DEFAULT_TIMEOUT_SECONDS = 3600;
 /** Consecutive failed status requests before the scan gives up on the console (about a minute with the backoff). */
 const MAX_FAILED_POLLS = 12;
+/** Passes that run at the same time: more only crowds the model provider and the console. */
+const MAX_PARALLEL_PASSES = 3;
+const MAX_PASSES = 5;
 const GIT_TARGET = /^(git@|git:\/\/|ssh:\/\/git@)|\.git$|^https:\/\/(github|gitlab)\.com\//;
 
 export interface ScanDeps {
@@ -80,7 +83,7 @@ const defaults: ScanDeps = {
 };
 
 interface ScanOptions extends ConsoleTransportOptions {
-  budget: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string;
+  budget: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
 }
 
 export interface ResolvedTarget {
@@ -131,6 +134,8 @@ function validate(target: string | undefined, options: ScanOptions): void {
   if (options.format === "pdf" && !options.output) throw new UsageError("PDF is binary; supply -o <file>.");
   const budget = Number(options.budget);
   if (!Number.isFinite(budget) || budget <= 0 || budget > 1000) throw new UsageError("--budget must be a positive USD amount up to 1000.");
+  const passes = Number(options.passes);
+  if (!Number.isInteger(passes) || passes < 1 || passes > MAX_PASSES) throw new UsageError(`--passes must be a whole number from 1 to ${MAX_PASSES}.`);
   const seconds = Number(options.timeout);
   if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError("--timeout must be a positive number of seconds.");
   if (options.failOn !== undefined && !(SEVERITIES as readonly string[]).includes(options.failOn)) throw new UsageError(`--fail-on must be one of: ${SEVERITIES.join(", ")}.`);
@@ -153,6 +158,73 @@ async function connect(options: ConsoleTransportOptions, deps: ScanDeps): Promis
   throw new Error("Could not start a console within 30s. Start one with `0 --headless` and run the scan again.");
 }
 
+interface PassContext { client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
+interface PassResult { threadId: string; done: FinishedThread; stored: ScanReport; budgetExhausted: boolean; timedOut: boolean; costUsd?: number }
+
+/** One scan thread: start it, wait for it, and read what it stored. Throws when the thread cannot run or the console is lost. */
+async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
+  const { client, deps, resolved, options, total, budget, deadline } = ctx;
+  const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
+  const title = total > 1 ? `Scan ${resolved.label} (pass ${index + 1} of ${total})` : `Scan ${resolved.label}`;
+  const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title, costCeilingUsd: budget })).session);
+  const id = String(created.id);
+  const path = `/api/console/sessions/${encodeURIComponent(id)}`;
+  try {
+    await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
+    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
+  } catch (error) {
+    // A thread that never started is no use to anyone; do not leave it in the list.
+    const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
+    const reason = error instanceof Error ? error.message : String(error);
+    const hint = /model/i.test(reason) ? ` Pick another with --model (default ${DEFAULT_SCAN_MODEL}).` : "";
+    throw new Error(`${reason}${hint}${removed ? "" : ` (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`}`);
+  }
+  deps.err(`scanning ${resolved.label} in thread ${id} (${total > 1 ? `pass ${index + 1} of ${total}, ` : ""}budget $${Number(budget.toFixed(4))})`);
+
+  let snapshot: Json = {};
+  let timedOut = false;
+  let failedPolls = 0;
+  for (;;) {
+    await deps.sleep(1000);
+    try {
+      snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
+      failedPolls = 0;
+    } catch (error) {
+      // A console busy with several scans, or a provider timing out, can miss a status request while the thread keeps working.
+      // Give up only after a run of failures, and say where the thread is.
+      if (++failedPolls > MAX_FAILED_POLLS) {
+        throw new Error(`Lost contact with the console while scanning: ${error instanceof Error ? error.message : String(error)}. The scan may still be running as thread ${id}; its findings are kept (\`0 findings export --scan ${id}\`).`);
+      }
+      await deps.sleep(Math.min(5000, 1000 * failedPolls));
+      continue;
+    }
+    const session = asJson(snapshot.session);
+    const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (lastAssistantText(snapshot) !== undefined || snapshot.lastOutcome != null));
+    if (finished) break;
+    if (Date.now() > deadline) {
+      // Stop the thread and report what it stored so far; a scan that ran out of time still has findings.
+      timedOut = true;
+      await client.request("POST", `${path}/cancel`, {}).catch(() => undefined);
+      await deps.sleep(2000);
+      snapshot = await client.request("GET", path).then(value => asJson(asJson(value).snapshot), () => snapshot);
+      break;
+    }
+  }
+  const done = finishedThread(snapshot);
+  const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
+  return { threadId: id, done, stored: await deps.loadReport(client, id), budgetExhausted: asJson(done.session).costCeilingExceeded === true, timedOut, ...(costUsd !== undefined ? { costUsd } : {}) };
+}
+
+/** Run `count` tasks, at most `limit` at a time, in order of index. */
+async function inPool<T>(count: number, limit: number, task: (index: number) => Promise<T>): Promise<T[]> {
+  const results: T[] = new Array(count);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, count) }, async () => {
+    while (next < count) { const index = next++; results[index] = await task(index); }
+  }));
+  return results;
+}
+
 export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaults): Promise<void> {
   let resolved: ResolvedTarget | undefined;
   let client: ConsoleClient | undefined;
@@ -161,57 +233,30 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     validate(target, options);
     resolved = await resolveScanTarget(target!, deps);
     const budget = Number(options.budget);
+    const total = Number(options.passes);
     const startedAt = deps.now().toISOString();
     const before = await deps.changedFiles(resolved.folder);
     ({ client, stop: stopConsole } = await connect(options, deps));
-    const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
-    const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title: `Scan ${resolved.label}`, costCeilingUsd: budget })).session);
-    const id = String(created.id);
-    const path = `/api/console/sessions/${encodeURIComponent(id)}`;
-    try {
-      await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
-      await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
-    } catch (error) {
-      // A thread that never started is no use to anyone; do not leave it in the list.
-      const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
-      const reason = error instanceof Error ? error.message : String(error);
-      const hint = /model/i.test(reason) ? ` Pick another with --model (default ${DEFAULT_SCAN_MODEL}).` : "";
-      throw new Error(`${reason}${hint}${removed ? "" : ` (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`}`);
-    }
-    deps.err(`scanning ${resolved.label} in thread ${id} (budget $${budget})`);
+    // --budget is the total: each pass gets an equal share, so the cost stays predictable however many passes run.
+    const ctx: PassContext = { client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
 
-    const deadline = Date.now() + Number(options.timeout) * 1000;
-    let snapshot: Json = {};
-    let timedOut = false;
-    let failedPolls = 0;
-    for (;;) {
-      await deps.sleep(1000);
-      try {
-        snapshot = asJson(asJson(await client.request("GET", path)).snapshot);
-        failedPolls = 0;
-      } catch (error) {
-        // A console busy with several scans, or a provider timing out, can miss a status request while the thread keeps working.
-        // Give up only after a run of failures, and say where the thread is.
-        if (++failedPolls > MAX_FAILED_POLLS) {
-          throw new Error(`Lost contact with the console while scanning: ${error instanceof Error ? error.message : String(error)}. The scan may still be running as thread ${id}; its findings are kept (\`0 findings export --scan ${id}\`).`);
-        }
-        await deps.sleep(Math.min(5000, 1000 * failedPolls));
-        continue;
+    const passErrors: string[] = [];
+    const results = (await inPool(total, MAX_PARALLEL_PASSES, async (index): Promise<PassResult | undefined> => {
+      // The time limit covers all passes: one that has not started when it runs out is not started.
+      if (index > 0 && Date.now() > ctx.deadline) { passErrors.push(`pass ${index + 1} did not start before the time limit`); return undefined; }
+      try { return await runPass(ctx, index); }
+      catch (error) {
+        // One scan has nothing else to fall back on. With several, the others still count.
+        if (total === 1) throw error;
+        passErrors.push(`pass ${index + 1}: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
       }
-      const session = asJson(snapshot.session);
-      const finished = ["failed", "closed", "waiting"].includes(String(session.status)) || (session.status === "ready" && (lastAssistantText(snapshot) !== undefined || snapshot.lastOutcome != null));
-      if (finished) break;
-      if (Date.now() > deadline) {
-        // Stop the thread and report what it stored so far; a scan that ran out of time still has findings.
-        timedOut = true;
-        await client.request("POST", `${path}/cancel`, {}).catch(() => undefined);
-        await deps.sleep(2000);
-        snapshot = await client.request("GET", path).then(value => asJson(asJson(value).snapshot), () => snapshot);
-        break;
-      }
-    }
+    })).filter((result): result is PassResult => result !== undefined);
+    if (!results.length) throw new Error(`No scan pass finished. ${passErrors.join(" ")}`);
+    for (const message of passErrors) deps.err(message);
 
-    const done = finishedThread(snapshot);
+    const failedPasses = total - results.length;
+    const merged = mergePasses(results.map(result => result.stored.findings), resolved.roots);
     // The thread has the same tools as any thread, so it could edit the code it reads. Say so if it did.
     const after = before ? await deps.changedFiles(resolved.folder) : undefined;
     const changed = before && after ? [...after].filter(line => !before.has(line)) : [];
@@ -219,30 +264,37 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
       ? `The scan changed ${changed.length} file${changed.length === 1 ? "" : "s"} in the target (${changed.slice(0, 5).map(line => line.slice(3)).join(", ")}${changed.length > 5 ? ", ..." : ""}). A scan must not edit the code it reads; review and revert them.`
       : undefined;
     if (changedError) deps.err(changedError);
-    const budgetExhausted = asJson(done.session).costCeilingExceeded === true;
-    const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
+
+    const budgetExhausted = results.some(result => result.budgetExhausted);
+    const timedOut = results.some(result => result.timedOut);
+    const cost = results.reduce((sum, result) => sum + (result.costUsd ?? 0), 0);
+    const costKnown = results.some(result => result.costUsd !== undefined);
+    // The summary of the pass that found the most is the best account of what was covered.
+    const lead = results.reduce((best, result) => (result.stored.findings.length > best.stored.findings.length ? result : best), results[0]!);
+    const failed = results.every(result => (result.done.failed && !result.budgetExhausted && !result.timedOut) || result.done.claimBlocked) || changedError !== undefined;
+    const firstError = results.map(result => (!result.budgetExhausted && !result.timedOut ? result.done.error : undefined)).find(Boolean);
     const outcome: ScanOutcome = {
-      target: resolved.reportTarget, roots: resolved.roots, threadId: id, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
-      ...(costUsd !== undefined ? { costUsd } : {}), budgetExhausted, ...(timedOut ? { timedOut } : {}),
-      failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked || changedError !== undefined,
-      ...(changedError ? { error: changedError } : done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),
+      target: resolved.reportTarget, roots: resolved.roots, threadId: results[0]!.threadId, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
+      ...(costKnown ? { costUsd: cost } : {}), budgetExhausted, ...(timedOut ? { timedOut } : {}), failed,
+      ...(changedError ? { error: changedError } : failed && firstError ? { error: firstError } : {}), ...(lead.done.reply ? { summary: lead.done.reply } : {}),
+      ...(total > 1 ? { passes: { requested: total, completed: results.length, failed: failedPasses }, threadIds: results.map(result => result.threadId) } : {}),
     };
-    const stored = await deps.loadReport(client, id);
 
     let body: Uint8Array | string;
-    if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, stored.findings), null, 2)}\n`;
+    if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, merged), null, 2)}\n`;
     else {
       const format = options.format === "md" ? "markdown" : options.format;
       if (!isReportExportFormat(format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
-      body = (await exportReport(toScanReport(outcome, stored), format, `0-scan-${id}`)).body;
+      body = (await exportReport(toScanReport(outcome, { ...results[0]!.stored, findings: merged }), format, `0-scan-${results[0]!.threadId}`)).body;
     }
     if (options.output) {
       const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
       deps.writeBytes(options.output, bytes);
       deps.err(`Wrote ${options.output} (${bytes.byteLength} bytes)`);
     } else deps.out(body);
-    deps.err(`${stored.findings.length} finding${stored.findings.length === 1 ? "" : "s"}${budgetExhausted ? `, stopped at the $${budget} budget (partial)` : timedOut ? `, stopped at the ${options.timeout}s time limit (partial)` : ""}\n${usageLine(done.usage)}`);
-    const code = scanExitCode(outcome, stored.findings, options.failOn as typeof SEVERITIES[number] | undefined);
+    const usage = results.length === 1 ? usageLine(results[0]!.done.usage) : `Usage: ${results.length} passes, cost ${costKnown ? `$${cost.toFixed(4)}` : "unknown"}`;
+    deps.err(`${merged.length} finding${merged.length === 1 ? "" : "s"}${total > 1 ? ` from ${results.length} of ${total} passes` : ""}${budgetExhausted ? `, stopped at the $${budget} budget (partial)` : timedOut ? `, stopped at the ${options.timeout}s time limit (partial)` : ""}\n${usage}`);
+    const code = scanExitCode(outcome, merged, options.failOn as typeof SEVERITIES[number] | undefined);
     if (code !== 0) process.exitCode = code;
   } catch (error) {
     finishWithError(error, deps, false);
@@ -260,6 +312,7 @@ export function registerScanCommand(program: Command, deps: ScanDeps = defaults)
     .option("--format <format>", `Report format: ${FORMATS.join(", ")}`, "md")
     .option("-o, --output <file>", "Write the report to a file instead of stdout")
     .option("--fail-on <severity>", "Exit 1 when a finding is at or above this severity (critical, high, medium, low, info)")
+    .option("--passes <n>", `Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to ${MAX_PASSES}`, "1")
     .option("--skill <id>", "Skill that holds the scan method", "scan")
     .option("--model <model>", `Model for the scan thread (default: ${DEFAULT_SCAN_MODEL})`)
     .option("--timeout <seconds>", "Maximum seconds to wait for the scan", String(DEFAULT_TIMEOUT_SECONDS)))

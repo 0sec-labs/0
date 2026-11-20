@@ -155,6 +155,7 @@ A scan is a thread that follows the `scan` skill, so it appears in `0 threads` a
 | `--format <format>` | `md` | Report format: json, md, sarif, html, pdf |
 | `-o, --output <file>` | — | Write the report to a file instead of stdout |
 | `--fail-on <severity>` | — | Exit 1 when a finding is at or above this severity (critical, high, medium, low, info) |
+| `--passes <n>` | `1` | Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to 5 |
 | `--skill <id>` | `scan` | Skill that holds the scan method |
 | `--model <model>` | — | Model for the scan thread (default: gpt-6-luna) |
 | `--timeout <seconds>` | `3600` | Maximum seconds to wait for the scan |

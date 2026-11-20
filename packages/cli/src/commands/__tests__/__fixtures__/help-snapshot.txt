@@ -1147,6 +1147,9 @@ Options:
   -o, --output <file>        Write the report to a file instead of stdout
   --fail-on <severity>       Exit 1 when a finding is at or above this severity (critical, high,
                              medium, low, info)
+  --passes <n>               Scan this many times and merge the findings (a scan misses some issues
+                             that another run finds); the budget is split between them, up to 5
+                             (default: "1")
   --skill <id>               Skill that holds the scan method (default: "scan")
   --model <model>            Model for the scan thread (default: gpt-6-luna)
   --timeout <seconds>        Maximum seconds to wait for the scan (default: "3600")

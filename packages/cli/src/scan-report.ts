@@ -33,6 +33,10 @@ export interface ScanOutcome {
   error?: string;
   /** The thread's closing summary: coverage and what was not reached. */
   summary?: string;
+  /** Set when more than one pass ran: how many were asked for, finished with a report, and could not finish. */
+  passes?: { requested: number; completed: number; failed: number };
+  /** Every pass's thread, first to last. */
+  threadIds?: readonly string[];
 }
 
 /** A path inside the scanned folder, relative to it with forward slashes; undefined when it points outside. */
@@ -68,12 +72,57 @@ function reportFinding(finding: Finding, roots: readonly string[]): Finding {
   };
 }
 
+/** A finding that more than one pass found, merged: how many of the passes did. */
+export type MergedFinding = Finding & { foundInPasses?: number };
+
+/** Cited lines of one file that overlap or lie within this many lines of each other are one flaw. */
+const MERGE_LINE_GAP = 3;
+
+interface Cluster { path: string | undefined; title: string; start: number; end: number; passes: Set<number>; best: Finding }
+
+const weight = (finding: Finding): number => (SEVERITIES.length - rank(finding.severity)) * 1_000_000 + finding.description.length + finding.evidence.request.length + finding.evidence.response.length + (finding.evidence.analysis?.length ?? 0);
+
+/**
+ * The findings of several passes over the same code as one list. Two findings are one flaw when they cite the same file at
+ * overlapping or nearby lines (or, with no location, have the same title), and a pass never merges with itself, so two
+ * different flaws close together in one pass stay two. The merged finding is the most severe, most detailed version and
+ * records how many passes found it. A flaw only some passes find is a useful signal, and the union is the point.
+ */
+export function mergePasses(passes: readonly (readonly Finding[])[], roots: readonly string[] = []): MergedFinding[] {
+  const clusters: Cluster[] = [];
+  passes.forEach((findings, pass) => {
+    for (const raw of findings) {
+      const finding = reportFinding(raw, roots);
+      const location = finding.reviewAnnotation;
+      const start = location?.startLine ?? 0;
+      const end = location?.endLine ?? start;
+      const title = finding.title.trim().toLowerCase();
+      const match = clusters.find(cluster => !cluster.passes.has(pass) && (location && cluster.path
+        ? cluster.path === location.path && start <= cluster.end + MERGE_LINE_GAP && cluster.start <= end + MERGE_LINE_GAP
+        : !location && !cluster.path && cluster.title === title));
+      if (match) {
+        match.passes.add(pass);
+        match.start = Math.min(match.start, start);
+        match.end = Math.max(match.end, end);
+        if (weight(finding) > weight(match.best)) match.best = finding;
+      } else clusters.push({ path: location?.path, title, start, end, passes: new Set([pass]), best: finding });
+    }
+  });
+  return clusters.map(cluster => (passes.length > 1 ? { ...cluster.best, foundInPasses: cluster.passes.size } : cluster.best));
+}
+
 const count = (findings: readonly Finding[], severity: ScanSeverity) => findings.filter(finding => finding.severity === severity).length;
 const byRank = (findings: readonly Finding[]): Finding[] => [...findings].sort((a, b) => rank(a.severity) - rank(b.severity) || a.title.localeCompare(b.title));
 
 /** The shared report type the exporter understands (md, sarif, html, pdf), with this scan's facts on top of the stored rows. */
 export function toScanReport(outcome: ScanOutcome, stored: ScanReport): ScanReport {
-  const findings = byRank(stored.findings.map(finding => reportFinding(finding, outcome.roots ?? [])));
+  const total = outcome.passes?.requested ?? 1;
+  const findings = byRank(stored.findings.map(finding => {
+    const shaped = reportFinding(finding, outcome.roots ?? []);
+    const found = (finding as MergedFinding).foundInPasses;
+    // The exporters have no field for it, so say it where every format shows it.
+    return total > 1 && found ? { ...shaped, description: `${shaped.description}\n\nFound in ${found} of ${total} scan passes.` } : shaped;
+  }));
   return {
     ...stored,
     // A remote-style label makes the exporters write repo-relative paths (a folder label is read as a checkout location).
@@ -84,7 +133,7 @@ export function toScanReport(outcome: ScanOutcome, stored: ScanReport): ScanRepo
     findings,
     summary: { totalAttacks: 0, totalFindings: findings.length, critical: count(findings, "critical"), high: count(findings, "high"), medium: count(findings, "medium"), low: count(findings, "low"), info: count(findings, "info") },
     // The stored rows carry a note that the export was rebuilt from a legacy record; a scan is not one.
-    warnings: outcome.budgetExhausted ? [{ stage: "report" as const, message: `Stopped at the $${outcome.budgetUsd} budget; findings are partial.` }] : outcome.timedOut ? [{ stage: "report" as const, message: "Stopped at the time limit; findings are partial." }] : [],
+    warnings: [...(outcome.passes && outcome.passes.failed > 0 ? [{ stage: "report" as const, message: `${outcome.passes.failed} of ${outcome.passes.requested} scan passes could not finish; the findings may be incomplete.` }] : [])].concat(outcome.budgetExhausted ? [{ stage: "report" as const, message: `Stopped at the $${outcome.budgetUsd} budget; findings are partial.` }] : outcome.timedOut ? [{ stage: "report" as const, message: "Stopped at the time limit; findings are partial." }] : []),
     executionSuccessful: !outcome.failed,
     ...(outcome.costUsd !== undefined ? { estimatedCostUsd: outcome.costUsd } : {}),
     ...(outcome.budgetExhausted ? { costCeilingExceeded: true, exitReason: "cost_ceiling_exceeded" as const } : {}),
@@ -103,6 +152,8 @@ export function scanJson(outcome: ScanOutcome, stored: readonly Finding[]): Reco
     completedAt: outcome.completedAt,
     budgetUsd: outcome.budgetUsd,
     ...(outcome.costUsd !== undefined ? { costUsd: outcome.costUsd } : {}),
+    ...(outcome.threadIds && outcome.threadIds.length > 1 ? { threadIds: outcome.threadIds } : {}),
+    ...(outcome.passes && outcome.passes.requested > 1 ? { passes: outcome.passes } : {}),
     status: outcome.failed ? "failed" : outcome.budgetExhausted ? "budget_exhausted" : outcome.timedOut ? "timed_out" : "complete",
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.summary ? { summary: outcome.summary } : {}),
@@ -116,6 +167,8 @@ export function scanJson(outcome: ScanOutcome, stored: readonly Finding[]): Reco
       severity: finding.severity,
       category: finding.category,
       status: finding.status,
+      // With several passes: how many of them found this flaw. A flaw only one pass found is real but less certain.
+      ...((finding as MergedFinding).foundInPasses !== undefined ? { foundInPasses: (finding as MergedFinding).foundInPasses } : {}),
       description: finding.description || finding.evidence.analysis || "",
       ...(finding.reviewAnnotation ? { location: { path: finding.reviewAnnotation.path, startLine: finding.reviewAnnotation.startLine, ...(finding.reviewAnnotation.endLine !== undefined ? { endLine: finding.reviewAnnotation.endLine } : {}) } } : {}),
       evidence: finding.evidence,

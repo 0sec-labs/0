@@ -30,7 +30,7 @@ function fakes(snapshot: unknown, findings: unknown[] = [storedFinding]) {
   };
   return { deps, client, requests, out, err };
 }
-const options = (extra: Record<string, unknown> = {}) => ({ budget: "5", format: "json", timeout: "60", skill: "scan", ...extra }) as never;
+const options = (extra: Record<string, unknown> = {}) => ({ budget: "5", format: "json", timeout: "60", skill: "scan", passes: "1", ...extra }) as never;
 
 describe("resolveScanTarget", () => {
   it("accepts a folder", async () => {
@@ -237,7 +237,7 @@ describe("runScan", () => {
   });
 
   it("rejects bad options before opening a thread", async () => {
-    for (const bad of [{ budget: "0" }, { budget: "abc" }, { format: "xml" }, { failOn: "urgent" }, { timeout: "-1" }, { skill: "../x" }, { format: "pdf" }]) {
+    for (const bad of [{ budget: "0" }, { budget: "abc" }, { format: "xml" }, { failOn: "urgent" }, { timeout: "-1" }, { skill: "../x" }, { format: "pdf" }, { passes: "0" }, { passes: "6" }, { passes: "1.5" }, { passes: "abc" }]) {
       const { deps, client } = fakes(finishedSnapshot());
       await runScan(folder(), options(bad), deps);
       expect(client.request, JSON.stringify(bad)).not.toHaveBeenCalled();
@@ -252,5 +252,107 @@ describe("runScan", () => {
     deps.clone = vi.fn(async () => ({ dir: folder(), dispose }));
     await runScan("https://github.com/a/b", options(), deps);
     expect(dispose).toHaveBeenCalled();
+  });
+});
+
+describe("runScan with several passes", () => {
+  const finding = (id: string, title: string, severity: string, path: string, line: number) => ({ id, templateId: "manual", title, description: `${title} description`, severity, category: "sql-injection", status: "discovered", timestamp: 1, evidence: { request: "r", response: "s" }, reviewAnnotation: { path, startLine: line } });
+  /** A console whose threads are t1, t2, ... each with its own stored findings. */
+  function multi(perThread: Record<string, unknown[]>, options2: { failThreads?: string[] } = {}) {
+    const created: Array<Record<string, unknown>> = [];
+    const out: Array<Uint8Array | string> = [];
+    const err: string[] = [];
+    let counter = 0;
+    const client = { request: vi.fn(async (method: string, path: string, body?: unknown) => {
+      if (method === "POST" && path === "/api/console/sessions") { created.push(body as Record<string, unknown>); return { session: { id: `t${++counter}` } }; }
+      if (method === "GET") {
+        const id = /sessions\/(t\d+)/.exec(path)![1]!;
+        if (options2.failThreads?.includes(id)) throw new Error("Backend transport failed.");
+        return { snapshot: finishedSnapshot() };
+      }
+      return {};
+    }), dispose: vi.fn() };
+    const deps: ScanDeps = {
+      open: async () => client as never, out: bytes => out.push(bytes), err: text => err.push(text), sleep: async () => {}, now: () => new Date("2026-01-01T00:00:00Z"),
+      writeBytes: vi.fn(), loadReport: vi.fn(async (_client, id: string) => storedReport(perThread[id] ?? []) as never), startConsole: vi.fn(async () => () => {}),
+      changedFiles: vi.fn(async () => undefined), clone: vi.fn(),
+    };
+    return { deps, created, out, err, client };
+  }
+
+  it("runs the passes, splits the budget between them and merges what they found", async () => {
+    const { deps, created, out } = multi({
+      t1: [finding("a1", "SQL injection in users", "high", "src/users.ts", 10), finding("b1", "Path traversal", "high", "src/files.ts", 5)],
+      t2: [finding("a2", "User id reaches a query", "critical", "src/users.ts", 11)],
+      t3: [finding("a3", "Query built from the id", "medium", "src/users.ts", 12), finding("c3", "Open redirect", "medium", "src/go.ts", 3)],
+    });
+    await runScan(folder(), options({ passes: "3", budget: "6" }), deps);
+    expect(created).toHaveLength(3);
+    for (const body of created) expect(body).toMatchObject({ costCeilingUsd: 2 });
+    expect(created.map(body => body.title)).toEqual(expect.arrayContaining([expect.stringContaining("pass 1 of 3"), expect.stringContaining("pass 3 of 3")]));
+    const report = JSON.parse(String(out[0]));
+    expect(report).toMatchObject({ threadId: "t1", threadIds: ["t1", "t2", "t3"], passes: { requested: 3, completed: 3, failed: 0 }, status: "complete", budgetUsd: 6 });
+    const bySeverity = Object.fromEntries(report.findings.map((f: { location: { path: string }; severity: string; foundInPasses: number }) => [f.location.path, [f.severity, f.foundInPasses]]));
+    expect(bySeverity).toEqual({ "src/users.ts": ["critical", 3], "src/files.ts": ["high", 1], "src/go.ts": ["medium", 1] });
+    expect(report.counts.total).toBe(3);
+  });
+
+  it("starts at most three passes at once", async () => {
+    const { deps, client } = multi({});
+    let running = 0; let peak = 0;
+    const original = client.request.getMockImplementation()!;
+    client.request.mockImplementation(async (method: string, path: string, body?: unknown) => {
+      if (method === "POST" && path === "/api/console/sessions") { running++; peak = Math.max(peak, running); }
+      const result = await original(method, path, body);
+      if (method === "GET") running--;
+      return result;
+    });
+    await runScan(folder(), options({ passes: "5" }), deps);
+    expect(peak).toBeLessThanOrEqual(3);
+    expect(client.request.mock.calls.filter(([method, path]) => method === "POST" && path === "/api/console/sessions")).toHaveLength(5);
+  });
+
+  it("keeps the other passes when one cannot finish, and says so", async () => {
+    const { deps, out, err } = multi({ t1: [finding("a1", "SQL injection", "high", "src/users.ts", 10)], t3: [finding("a3", "SQL injection", "high", "src/users.ts", 10)] }, { failThreads: ["t2"] });
+    await runScan(folder(), options({ passes: "3" }), deps);
+    const report = JSON.parse(String(out[0]));
+    expect(report.passes).toEqual({ requested: 3, completed: 2, failed: 1 });
+    expect(report.findings[0].foundInPasses).toBe(2);
+    expect(err.join("\n")).toMatch(/pass 2: Lost contact/);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("fails when no pass can finish", async () => {
+    const { deps, err } = multi({}, { failThreads: ["t1", "t2"] });
+    await runScan(folder(), options({ passes: "2" }), deps);
+    expect(err.join("\n")).toMatch(/No scan pass finished/);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("applies --fail-on to the merged findings, and checks the target for edits once", async () => {
+    const { deps } = multi({ t1: [], t2: [finding("a2", "SQL injection", "high", "src/users.ts", 10)] });
+    deps.changedFiles = vi.fn(async () => new Set<string>());
+    await runScan(folder(), options({ passes: "2", failOn: "high" }), deps);
+    expect(process.exitCode).toBe(1);
+    expect(deps.changedFiles).toHaveBeenCalledTimes(2);
+  });
+
+  it("says which pass each thread is, and one scan does not mention passes", async () => {
+    const many = multi({});
+    await runScan(folder(), options({ passes: "2", budget: "3" }), many.deps);
+    expect(many.err.join("\n")).toMatch(/in thread t1 \(pass 1 of 2, budget \$1\.5\)/);
+    const one = multi({});
+    await runScan(folder(), options({ passes: "1", budget: "3" }), one.deps);
+    expect(one.err.join("\n")).toMatch(/in thread t1 \(budget \$3\)/);
+    expect(one.err.join("\n")).not.toMatch(/pass 1 of/);
+  });
+
+  it("does not describe one pass as several: no pass fields, no per-finding count", async () => {
+    const { deps, out } = multi({ t1: [finding("a1", "SQL injection", "high", "src/users.ts", 10)] });
+    await runScan(folder(), options({ passes: "1" }), deps);
+    const report = JSON.parse(String(out[0]));
+    expect(report.passes).toBeUndefined();
+    expect(report.threadIds).toBeUndefined();
+    expect(report.findings[0].foundInPasses).toBeUndefined();
   });
 });
