@@ -12,7 +12,7 @@
     "tree-sitter-c"
   ],
   "scripts": {
-    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter '!@0/docs' -r build && pnpm run build:bundle",
+    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter \"!@0/docs\" -r build && pnpm run build:bundle",
     "build:bundle": "node ./scripts/bundle-cli.mjs",
     "build:docs": "pnpm --filter @0/docs build",
     "docs:check": "node scripts/sync-cli-docs.mjs --check && node scripts/bump-docs-pins.mjs --check",
@@ -30,7 +30,7 @@
     "test:docs-commands": "node --test scripts/check-docs-commands.test.mjs",
     "dev": "node scripts/dev-web.mjs",
     "setup:0verse": "node scripts/setup-0verse.mjs",
-    "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
+    "lint": "pnpm --filter \"!@0/docs\" -r exec tsc --noEmit",
     "check:architecture": "node scripts/check-architecture.mjs",
     "test": "pnpm test:public",
     "test:changed": "node scripts/test-changed.mjs",
