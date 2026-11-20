@@ -18,6 +18,9 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- A scan's SARIF works in GitHub code scanning. Paths are relative to the repository root instead of `file:///` URLs with the runner's checkout path, the rule is the finding's category instead of `manual`, and the finding key comes from its file and first line instead of the title and the checkout path, which changed on every run. In the JSON report `target` is the folder's name or the git URL, never an absolute path, and `location.path` is relative to the scanned folder.
+- A scan of a git URL no longer sends a user name and password in the URL to the thread, the model or the report.
+- The scan skill leaves out `node_modules`, `vendor`, build output and generated files.
 - `0 scan` keeps going when a few status requests to a busy console fail, as happens with several scans at once or a slow model provider. It gives up after about a minute of failures and names the thread, whose findings are kept (`0 findings export --scan <thread id>`).
 
 ## [0.40.1] - 2026-11-19

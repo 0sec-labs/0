@@ -6,9 +6,9 @@
  * (docs/design/scan-as-a-thread.md). The thread shows up in `0 threads` like any other.
  */
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
@@ -83,21 +83,45 @@ interface ScanOptions extends ConsoleTransportOptions {
   budget: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string;
 }
 
-export interface ResolvedTarget { folder: string; label: string; dispose?: () => void }
+export interface ResolvedTarget {
+  /** Where the code is on this machine. */
+  folder: string;
+  /** What the thread, the title and the messages call the target: the folder's path, or a git URL without credentials. */
+  label: string;
+  /** What the report calls it: the same on every machine (the folder's name, or the git URL without credentials). */
+  reportTarget: string;
+  /** Finding paths are made relative to these. */
+  roots: string[];
+  dispose?: () => void;
+}
+
+/** A git URL without the user name and password a CI job puts in it, which must not reach a thread, a model or a report. */
+export function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.username && !parsed.password) return url;
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.href;
+  } catch { return url; }
+}
+
+const realPath = (path: string): string => { try { return realpathSync(path); } catch { return path; } };
 
 /** A folder or a git URL. */
 export async function resolveScanTarget(raw: string, deps: Pick<ScanDeps, "clone">): Promise<ResolvedTarget> {
   const target = raw.trim();
   if (!target) throw new UsageError("Supply a folder or a git URL to scan.");
   if (GIT_TARGET.test(target)) {
+    const shown = withoutCredentials(target);
     const cloned = await deps.clone(target);
-    return { folder: cloned.dir, label: target, dispose: cloned.dispose };
+    return { folder: cloned.dir, label: shown, reportTarget: shown, roots: [...new Set([cloned.dir, realPath(cloned.dir)])], dispose: cloned.dispose };
   }
   const folder = resolve(target);
   if (!existsSync(folder) || !statSync(folder).isDirectory()) {
     throw new UsageError(`${target} is not a folder. Pass a folder or a git URL.`);
   }
-  return { folder, label: folder };
+  return { folder, label: folder, reportTarget: basename(folder) || folder, roots: [...new Set([folder, realPath(folder)])] };
 }
 
 function validate(target: string | undefined, options: ScanOptions): void {
@@ -198,7 +222,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     const budgetExhausted = asJson(done.session).costCeilingExceeded === true;
     const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
     const outcome: ScanOutcome = {
-      target: resolved.label, threadId: id, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
+      target: resolved.reportTarget, roots: resolved.roots, threadId: id, startedAt, completedAt: deps.now().toISOString(), budgetUsd: budget,
       ...(costUsd !== undefined ? { costUsd } : {}), budgetExhausted, ...(timedOut ? { timedOut } : {}),
       failed: (done.failed && !budgetExhausted && !timedOut) || done.claimBlocked || changedError !== undefined,
       ...(changedError ? { error: changedError } : done.error && !budgetExhausted && !timedOut ? { error: done.error } : {}), ...(done.reply ? { summary: done.reply } : {}),

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SCAN_MODEL, resolveScanTarget, runScan, type ScanDeps } from "../scan.js";
+import { DEFAULT_SCAN_MODEL, resolveScanTarget, runScan, withoutCredentials, type ScanDeps } from "../scan.js";
 
 const dirs: string[] = [];
 const folder = () => { const dir = mkdtempSync(join(tmpdir(), "scan-test-")); dirs.push(dir); return dir; };
@@ -42,6 +42,29 @@ describe("resolveScanTarget", () => {
     const target = await resolveScanTarget("https://github.com/a/b", { clone });
     expect(clone).toHaveBeenCalledWith("https://github.com/a/b");
     expect(target.folder).toBe("/tmp/x");
+  });
+  it("names a folder target by its folder name, and keeps its real path to make finding paths relative", async () => {
+    const dir = folder();
+    const target = await resolveScanTarget(dir, { clone: vi.fn() });
+    expect(target.reportTarget).toBe(dir.split("/").pop());
+    expect(target.reportTarget).not.toContain("/");
+    expect(target.roots).toContain(dir);
+  });
+  it("never lets a git URL's credentials reach the clone label, the thread or the report", async () => {
+    const clone = vi.fn(async () => ({ dir: "/tmp/x", dispose: () => {} }));
+    const target = await resolveScanTarget("https://ci-user:s3cret-token@github.com/acme/app.git", { clone });
+    expect(clone).toHaveBeenCalledWith("https://ci-user:s3cret-token@github.com/acme/app.git");
+    expect(target.label).toBe("https://github.com/acme/app.git");
+    expect(target.reportTarget).toBe("https://github.com/acme/app.git");
+    expect(JSON.stringify(target)).not.toContain("s3cret-token");
+    expect(withoutCredentials("git@github.com:acme/app.git")).toBe("git@github.com:acme/app.git");
+    expect(withoutCredentials("not a url")).toBe("not a url");
+  });
+  it("sends the thread and the title the target without credentials", async () => {
+    const { deps, requests } = fakes(finishedSnapshot());
+    deps.clone = vi.fn(async () => ({ dir: folder(), dispose: vi.fn() }));
+    await runScan("https://ci:s3cret@github.com/acme/app.git", options(), deps);
+    expect(JSON.stringify(requests)).not.toContain("s3cret");
   });
   it("does not guess what a package name or prefix means", async () => {
     for (const name of ["npm:lodash", "lodash"]) await expect(resolveScanTarget(name, { clone: vi.fn() })).rejects.toThrow(/not a folder/);

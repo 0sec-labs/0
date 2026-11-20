@@ -27,7 +27,7 @@ content: |
 
   ### 1. Map: list every entry point
 
-  - List the top-level layout, the languages, the build files and the dependency manifests.
+  - List the top-level layout, the languages, the build files and the dependency manifests. Leave out dependency and build folders (`node_modules`, `vendor`, `dist`, `build`, `target`, `.git`, caches) and generated or minified files: they are not the code under review, and a real checkout is mostly them. Read lock files only for dependency versions.
   - Write a numbered list of every entry point: each HTTP route, CLI argument, message or event handler, file or network reader and scheduled job. One line each: what it takes as input, who can call it, and what it reaches.
   - Note the trust boundaries: where outside input enters, what authenticates it, where it reaches a sink (database, shell, file system, template, deserializer, outbound request, token or crypto call).
 

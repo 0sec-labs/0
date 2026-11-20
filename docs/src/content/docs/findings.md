@@ -70,7 +70,43 @@ Exit codes: `0` done, `1` a finding at or above `--fail-on` or the scan failed, 
 
 `0 scan` uses the console that is running, or the engine named by `--engine-url` or `--computer`. With none running it starts one for the scan and stops it afterwards. The scan needs a model with working tool calls: in one test a small model sent most `finding` calls without their title and evidence and took minutes. Results also vary a little from run to run, so a clean scan is not proof there is nothing to find.
 
-The JSON report has `schemaVersion: 1`, the scan's `status` (`complete`, `budget_exhausted`, `timed_out` or `failed`), `counts` by severity, the model's closing `summary`, and for each finding its `fingerprint`, `severity`, `category`, `location`, `evidence`, `cvssScore` when given and `suggestedFix` when it wrote one. The `fingerprint` is the same for the same flaw in unchanged code, so use it to match findings between scans. The same report, in any format, is available later with `0 findings export --scan <thread id>`.
+The JSON report has `schemaVersion: 1`, the scan's `status` (`complete`, `budget_exhausted`, `timed_out` or `failed`), `counts` by severity, the model's closing `summary`, and for each finding its `severity`, `category`, `location` (a path relative to the scanned folder, with start and end line), `evidence`, `cvssScore` when given and `suggestedFix` when it wrote one. `target` is the same on every machine: the folder's name, or the git URL without any credentials. A finding's `fingerprint` is a hash of its file and first line, so the same place in unchanged code keeps it from scan to scan, whatever the model wrote; it is absent when the finding cites no location. A model does not cite exactly the same lines every run, so match findings between scans loosely (same file, nearby lines) rather than by equality alone. The same report, in any format, is available later with `0 findings export --scan <thread id>`.
+
+### Scan in CI
+
+`0 scan` needs nothing from your machine: no sign-in and no desktop. In a CI job it starts its own console, scans, writes the report and stops the console. It needs a model connection, which on a runner is an API key in the environment (`OPENAI_API_KEY` works with the default model; see [Models](/models/) for other providers).
+
+```yaml
+name: scan
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
+      - run: ~/.0/bin/0 scan . --format sarif -o scan.sarif --fail-on high --budget 3
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: scan.sarif
+```
+
+- **Gate:** `--fail-on high` fails the job when a finding is `high` or worse, and the exit code is `3` when the budget or time ran out (the report is partial). `if: always()` uploads the report either way.
+- **Report:** the SARIF has paths relative to the repository root, the category as the rule, and a location-based key, so findings attach to the right lines in code scanning and do not depend on where the runner checked the code out.
+- **Cost and time:** a scan stops at `--budget` (default 5). Small projects cost cents and take about a minute; a large one takes minutes and uses the budget. Run it on pushes to the main branch or nightly, not on every pull request.
+- **Results vary:** a scan is a model reading your code, so two runs on the same commit do not find exactly the same set. The serious issues come up reliably; the rest less so. A green scan is not proof that nothing is there.
+- **Checkout:** the scan must not change the code it reads. If it does, in a git checkout, it is reported as failed and names the files.
+- **Pin the version** by downloading a release binary and its `checksums.txt` from the [releases page](https://github.com/0sec-labs/0security/releases) instead of using `install.sh`, which installs the latest.
 
 Export findings without opening the browser:
 
