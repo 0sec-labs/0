@@ -11,9 +11,9 @@ import { ThemePicker } from "./theme-gallery";
 import { useAppearance, useResolvedMode } from "./use-appearance";
 
 /** A titled card. The ids are the anchors the command palette, search and `/theme` link to (`#setting-web-...`). */
-function Section({ id, title, description, children }: { id: string; title: string; description: string; children: ReactNode }) {
+function Section({ id, title, description, children }: { id: string; title: string; description?: string; children: ReactNode }) {
   return <section id={id} tabIndex={-1} aria-labelledby={`${id}-heading`} data-slot="appearance-section" className="flex scroll-mt-6 flex-col gap-4 rounded-md border-[0.5px] border-border-1 bg-card p-4 outline-none focus-visible:outline-ring-inset lg:scroll-mt-60">
-    <div><h2 id={`${id}-heading`} className="text-sm font-medium text-foreground">{title}</h2><p className="text-sm text-muted-foreground-2">{description}</p></div>
+    <div><h2 id={`${id}-heading`} className="text-sm font-medium text-foreground">{title}</h2>{description ? <p className="text-sm text-muted-foreground-2">{description}</p> : null}</div>
     {children}
   </section>;
 }
@@ -36,21 +36,21 @@ function DensityHint({ compact }: { compact: boolean }) {
 export function AppearancePage({ compact, onCompact }: { compact?: boolean; onCompact?: (next: boolean) => void }) {
   const { settings, set } = useAppearance();
   const resolved = useResolvedMode();
-  const motionLine = "Slows or stops the background and other movement.";
+  const motionLine = "Slows or stops movement.";
   return <div className="flex flex-col gap-4" data-slot="appearance-page">
-    <Section id="setting-web-theme" title="Mode" description="Follow your system, or always use light or dark.">
+    <Section id="setting-web-theme" title="Mode">
       <ModeTiles value={settings.mode} themeId={settings.theme} modes={modesForTheme(settings.theme)} onChange={set.mode} />
     </Section>
-    <Section id="setting-web-color-theme" title="Theme" description="The colours of the whole console.">
+    <Section id="setting-web-color-theme" title="Theme">
       <ThemePicker value={settings.theme} mode={resolved} onChange={set.theme} />
     </Section>
-    <Section id="setting-web-accent" title="Accent" description="The colour of buttons, links and the focus ring.">
+    <Section id="setting-web-accent" title="Accent">
       <AccentSwatches value={settings.accent} themeId={settings.theme} onChange={set.accent} />
     </Section>
-    <Section id="setting-web-background" title="Background" description="The quiet picture behind a new thread. Hover a tile to see it move.">
+    <Section id="setting-web-background" title="Background" description="Behind a new thread.">
       <BackdropTiles value={settings.background} onChange={set.background} />
     </Section>
-    <Section id="setting-web-font-size" title="Text and layout" description="How big text is and how tightly a thread is spaced.">
+    <Section id="setting-web-font-size" title="Text and layout">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm text-foreground">Font size</span><Segmented label="Font size" value={settings.fontSize} options={FONT_SIZES.map(size => ({ value: size.id, label: size.label }))} onChange={set.fontSize} /></div>
         {compact !== undefined && onCompact && <div id="setting-density" tabIndex={-1} className="flex scroll-mt-6 flex-col gap-3 outline-none lg:scroll-mt-60">

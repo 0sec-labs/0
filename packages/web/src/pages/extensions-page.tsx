@@ -68,7 +68,7 @@ export function ExtensionsPage() {
   const failed = api.overview.error ? errorText(api.overview.error, "Could not load extensions.") : data?.error ?? "";
 
   return <>
-    <PageHeader title="Extensions" summary="Connect 0 to your tools and services."
+    <PageHeader title="Extensions"
       actions={<>
         <div className="relative w-55"><SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-(--icon-sm) -translate-y-1/2 text-muted-foreground-2" /><Input type="search" aria-label="Search extensions" className="pl-8" placeholder="Search extensions" autoComplete="off" data-1p-ignore data-lpignore="true" value={query} onChange={event => setQuery(event.target.value)} /></div>
         {api.canChange && <DropdownMenu><DropdownMenu.Trigger render={<Button size="sm" variant="secondary" disabled={busy} />}><Plus className="size-4" />Add</DropdownMenu.Trigger>

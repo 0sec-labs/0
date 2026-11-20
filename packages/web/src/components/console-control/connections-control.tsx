@@ -174,7 +174,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     </div>}</SortableRow>;
   };
 
-  const connectionsCard = <SettingsSection id="your-connections" title="Providers" quiet={focused} description={focused ? undefined : `Subscriptions and API keys that run models on ${hostName}`}>
+  const connectionsCard = <SettingsSection id="your-connections" title="Providers" quiet={focused} >
     <CardHeaderRow title={rows.length === 0 ? "No connections" : `${rows.length} ${rows.length === 1 ? "connection" : "connections"}`}><Button type="button" variant="ghost" size="icon-sm" aria-label="Add connection" onClick={() => openSheet()}><Plus /></Button></CardHeaderRow>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={rows.map(row => row.key)} strategy={verticalListSortingStrategy}>{rows.map(rowView)}</SortableContext></DndContext>
     {spreadProviders.map(provider => <div key={`spread:${provider.id}`} className="flex items-center justify-between gap-6 p-4"><div className="min-w-0"><h3 className="text-sm font-medium text-foreground">Spread usage across my {providerTitle(provider)} accounts</h3><p className="text-sm text-muted-foreground-2">{v("Each new {mission} starts on the next account in the order above. {Missions} already running keep theirs.")}</p></div><Switch aria-label={`Spread usage across my ${providerTitle(provider)} accounts`} checked={extras.state?.spread[provider.id] === true} disabled={extras.spread.isPending} onCheckedChange={enabled => extras.spread.mutate({ providerId: provider.id, enabled })} /></div>)}
