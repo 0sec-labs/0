@@ -10,7 +10,7 @@ import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
 import { handleInstructionsRequest } from "./operator-instructions.js";
 import { handleWorkspaceHostRequest } from "./workspace-host-routes.js";
-import { audit, auditActor, auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
+import { audit, auditActor, auditConsoleRequest, type AuditCaller, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth, parseAuthMode } from "./github-auth.js";
@@ -354,6 +354,7 @@ export async function handleApiRequest(
   controlToken: string,
   engineBearer?: string,
   resolveScanDatabase?: (scanId: string) => string | undefined,
+  caller?: AuditCaller,
 ): Promise<boolean> {
   const { osecDB } = await import("@0/engine/storage");
   if (req.method !== "GET" && req.method !== "HEAD") invalidateReadCache();
@@ -591,7 +592,7 @@ export async function handleApiRequest(
 
   const familyPath = parseFindingFamilyPath(pathname);
   if (familyPath) {
-    await handleFindingFamilyRequest(req, res, familyPath.fingerprint, familyPath.action, dbPath, controlToken, engineBearer);
+    await handleFindingFamilyRequest(req, res, familyPath.fingerprint, familyPath.action, dbPath, controlToken, engineBearer, caller);
     return true;
   }
 

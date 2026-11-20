@@ -560,7 +560,10 @@ export function registerDashboardCommand(program: Command): void {
               }
               const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills, webhookConsole);
               if (consoleHandled) return;
-              const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
+              const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined, (() => {
+                const member = engineRequest ? null : teamAuth.resolveSession(req);
+                return { engineRequest, teamEnabled: teamAuth.enabled, ...(member ? { displayName: member.displayName, userId: member.userId } : {}) };
+              })());
               if (!handled) json(res, 404, { error: "Not found" });
               return;
             }

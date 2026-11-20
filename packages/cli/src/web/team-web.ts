@@ -3,9 +3,15 @@ import { z } from "zod";
 import { TeamAuth, TeamAuthError, getSessionId, type TeamIdentity } from "./team-auth.js";
 import { CollaborationService, type CollaborationResourceKind } from "./collaboration.js";
 import type { ConsoleGateway } from "./console-gateway.js";
+import { audit, auditActor } from "./audit.js";
 
 type Reply = { status: number; data?: unknown; headers?: Record<string, string | string[]>; redirect?: string };
 const readOnly = (method: string) => method === "GET" || method === "HEAD";
+
+/** Sign-in is attributed to the named member; no credential, token or cookie value is recorded. */
+function auditSignIn(user: TeamIdentity, kind: "password" | "sso", client: string): void {
+  audit({ actor: auditActor({ engineRequest: false, teamEnabled: true, displayName: user.displayName }), action: "access.login", subject: "console", detail: { id: user.userId, kind, role: user.role, client } });
+}
 
 /** The browser control token authorizes the transport, never a team identity. */
 export function authorizeTeamApi(auth: TeamAuth, req: IncomingMessage, path: string): TeamIdentity | null {
@@ -33,7 +39,9 @@ export async function handleTeamRequest(req: IncomingMessage, url: URL, auth: Te
   if (path === "session" && method === "GET") return { status: 200, data: auth.status(req) };
   if (!auth.enabled) throw new TeamAuthError("Team mode is not configured.", 404);
   if (path === "auth/login" && method === "POST") {
-    const login = await auth.login(await readBody(), req.socket.remoteAddress ?? "loopback");
+    const client = req.socket.remoteAddress ?? "loopback";
+    const login = await auth.login(await readBody(), client);
+    auditSignIn(login.user, "password", client);
     return { status: 200, data: { user: login.user }, headers: { "Set-Cookie": login.setCookie } };
   }
   if (path === "auth/sso" && method === "GET") {
@@ -41,10 +49,22 @@ export async function handleTeamRequest(req: IncomingMessage, url: URL, auth: Te
     return { status: 302, redirect: sso.url, headers: { "Set-Cookie": sso.setCookie } };
   }
   if (path === "auth/callback" && method === "GET") {
-    const login = await auth.callback(url.searchParams, req);
+    const client = req.socket.remoteAddress ?? "loopback";
+    let login: Awaited<ReturnType<TeamAuth["callback"]>>;
+    try { login = await auth.callback(url.searchParams, req); }
+    catch (error) {
+      if (error instanceof TeamAuthError) audit({ actor: "anonymous", action: "access.login_failed", subject: "console", outcome: "denied", detail: { kind: "sso", reason: error.statusCode === 403 ? "not_a_member" : "verification_failed", status: error.statusCode, client } });
+      throw error;
+    }
+    auditSignIn(login.user, "sso", client);
     return { status: 302, redirect: login.redirect, headers: { "Set-Cookie": login.setCookies } };
   }
-  if (path === "auth/logout" && method === "POST") return { status: 200, data: { ok: true }, headers: { "Set-Cookie": auth.logout(req).setCookie } };
+  if (path === "auth/logout" && method === "POST") {
+    const user = auth.resolveSession(req); // resolve before the session is destroyed
+    const reply = { status: 200, data: { ok: true }, headers: { "Set-Cookie": auth.logout(req).setCookie } };
+    if (user) audit({ actor: auditActor({ engineRequest: false, teamEnabled: true, displayName: user.displayName }), action: "access.logout", subject: "console", detail: { id: user.userId, kind: "team", role: user.role } });
+    return reply;
+  }
   if (!auth.resolveSession(req)) throw new TeamAuthError("Sign in to this workspace.");
   if (!collaboration) throw new TeamAuthError("Team resource not found.", 404);
   const session = getSessionId(req)!;
