@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SCAN_MODEL, resolveScanTarget, runScan, withoutCredentials, type ScanDeps } from "../scan.js";
+import { DEFAULT_SCAN_MODEL, headlessConsoleArgs, resolveScanTarget, runScan, withoutCredentials, type ScanDeps } from "../scan.js";
 
 const dirs: string[] = [];
 const folder = () => { const dir = mkdtempSync(join(tmpdir(), "scan-test-")); dirs.push(dir); return dir; };
@@ -31,6 +31,15 @@ function fakes(snapshot: unknown, findings: unknown[] = [storedFinding]) {
   return { deps, client, requests, out, err };
 }
 const options = (extra: Record<string, unknown> = {}) => ({ budget: "5", format: "json", timeout: "60", skill: "scan", passes: "1", ...extra }) as never;
+
+describe("headlessConsoleArgs", () => {
+  it("runs the script when node runs a .js file, or the compiled binary itself, always on a free port", () => {
+    expect(headlessConsoleArgs("/app/dist/index.js")).toEqual(["/app/dist/index.js", "--headless", "--port", "0"]);
+    expect(headlessConsoleArgs("/app/dist/index.mjs")).toEqual(["/app/dist/index.mjs", "--headless", "--port", "0"]);
+    expect(headlessConsoleArgs("/$bunfs/root/0")).toEqual(["--headless", "--port", "0"]);
+    expect(headlessConsoleArgs(undefined)).toEqual(["--headless", "--port", "0"]);
+  });
+});
 
 describe("resolveScanTarget", () => {
   it("accepts a folder", async () => {

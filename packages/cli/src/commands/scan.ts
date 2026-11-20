@@ -32,6 +32,15 @@ const MAX_PARALLEL_PASSES = 3;
 const MAX_PASSES = 5;
 const GIT_TARGET = /^(git@|git:\/\/|ssh:\/\/git@)|\.git$|^https:\/\/(github|gitlab)\.com\//;
 
+/**
+ * The arguments that run this same program as a headless console for one scan. `--port 0` takes any free port, so another
+ * console on the default port (a second user, another job on a shared runner, one started from a different home) cannot make
+ * this one exit with "already running" and leave the scan without a console.
+ */
+export function headlessConsoleArgs(entry: string | undefined): string[] {
+  return [...(entry && /\.[cm]?js$/.test(entry) ? [entry] : []), "--headless", "--port", "0"];
+}
+
 export interface ScanDeps {
   open(options: ConsoleTransportOptions): Promise<ConsoleClient>;
   out(bytes: Uint8Array | string): void;
@@ -68,9 +77,7 @@ const defaults: ScanDeps = {
   },
   async startConsole() {
     // Run the same program again as `--headless`: the script when node runs a .js file, else the compiled binary itself.
-    const entry = process.argv[1];
-    const args = entry && /\.[cm]?js$/.test(entry) ? [entry, "--headless"] : ["--headless"];
-    const child = spawn(process.execPath, args, { stdio: "ignore" });
+    const child = spawn(process.execPath, headlessConsoleArgs(process.argv[1]), { stdio: "ignore" });
     child.on("error", () => {});
     return () => { child.kill("SIGTERM"); };
   },
