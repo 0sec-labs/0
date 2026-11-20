@@ -9,7 +9,5 @@ export const osecWorkspaceAliases = {
   // Subpaths first: alias keys match as prefixes, so "@0/engine" must come last.
   "@0/engine/storage": fromRoot("./packages/engine/src/storage/index.ts"),
   "@0/engine/shared": fromRoot("./packages/engine/src/shared/index.ts"),
-  "@0/engine/templates": fromRoot("./packages/engine/src/templates/index.ts"),
-  "@0/engine/redteam": fromRoot("./packages/engine/src/redteam/index.ts"),
   "@0/engine": fromRoot("./packages/engine/src/index.ts"),
 };

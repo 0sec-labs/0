@@ -95,7 +95,7 @@ function tryFile(p, files) {
   return null;
 }
 
-const ENGINE_SUBPATHS = ["storage", "shared", "templates", "redteam"];
+const ENGINE_SUBPATHS = ["storage", "shared"];
 /** Candidate repo-relative paths for an import specifier seen in `fromFile` (or `null` fromFile = repo-root/test bundler context). */
 export function specCandidates(spec, fromFile) {
   const dir = fromFile ? posix.dirname(fromFile) : "";

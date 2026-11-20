@@ -17,10 +17,11 @@ is named `@0/cli`; it registers the `0` command.
 
 | Area | Source |
 | --- | --- |
-| <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/zap.png" alt=""> Agent execution | `src/agent/`, `src/console/`, `src/runtime/` |
-| <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/code.png" alt=""> Scanning and review | `src/stages/`, `src/review/`, `src/triage/` |
-| <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/verified.png" alt=""> Evidence and verification | `src/verify/`, `src/bench/` |
-| <img height="14" src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/beaker.png" alt=""> Plugins and self-extension | `src/plugins/` |
+| Agent execution | `src/agent/`, `src/console/`, `src/runtime/` |
+| Findings, reports and review | `src/storage/`, `src/report-formatters/`, `src/review-checks.ts` |
+| Verification | `src/verifier/`, `src/verification-spec/` |
+| Memory | `src/notes/` |
+| Plugins and extensions | `src/plugins/` |
 | Coordination | `src/events/`, `src/hub/` |
 
 The package is ESM. Its build generates the skill manifest, compiles TypeScript
@@ -33,10 +34,11 @@ Selected exports from `src/index.ts`:
 
 | Entry point | Purpose |
 | --- | --- |
-| `scan`, `agenticScan` | Target scanning |
-| `packageAudit` | Package auditing |
-| `createRuntime` | Runtime construction |
-| `runAnalysisAgent` | Agent execution |
+| `createRuntime`, `createNativeApiRuntime` | Runtime construction |
+| `createConsoleSession` | A thread: the agent loop with tools, Memory and findings |
+| `createFileNoteStore` | Memory notes |
+| `@0/engine/storage` | Findings, threads, Sentinels (SQLite) |
+| `@0/engine/shared` | Schemas, SARIF and report types |
 
 Use the [quick start](https://github.com/0sec-labs/0security#quick-start) to run an
 assessment. For programmatic integration, follow the exported TypeScript types
@@ -152,22 +154,12 @@ Provider metadata does not establish credentials or account access.
 
 ## Verification
 
-`src/verify/` contains deterministic replay runners (local, Docker and QEMU),
-kernel replay, patch validation, reproduction bundles and minimization. Each
-workflow has its own prerequisites. Local shell replay is host execution, not an
-OS sandbox.
-
-Use the canonical `VerificationResultSchema` from `@0/engine/shared` for ordinary
-replay JSON: `reproduced`, `not_reproduced`, `skipped`, or `error`, with declared
-assertions and hashed artifact descriptors. Kernel and bundle outputs have
-separate contracts. A source finding, model consensus or a saved candidate is
-not automatically runtime proof.
-
-The agentic scanner's native verifier gives each candidate a five-turn session
-with the original evidence and analysis excerpts. The structured four-step
-verifier is a tool-free assessment used for opt-in consensus; it does not execute
-a PoC. `HuntScanOptions.runtimeVerify` is an injectable hunt gate; core ships no
-provisioned runtime verifier.
+`src/verifier/` and `src/verification-spec/` hold the verification contracts and
+checks that a finding goes through. Use the canonical `VerificationResultSchema`
+from `@0/engine/shared` for replay JSON: `reproduced`, `not_reproduced`,
+`skipped`, or `error`, with declared assertions and hashed artifact descriptors.
+A source finding, model consensus or a saved candidate is not automatically
+runtime proof.
 
 See [blind verification](https://docs.0.security/blind-verification/) and
 [replay results](https://docs.0.security/verification-result/) for contracts and

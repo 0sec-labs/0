@@ -15,7 +15,7 @@ it.skipIf(process.platform === "win32" || !bunAvailable)("qualifies Bun gateway 
   const root = mkdtempSync(join(tmpdir(), "0-gateway-host-"));
   const repository = fileURLToPath(new URL("../../../..", import.meta.url));
   const entry = join(root, "qualification.ts"), sentinel = join(root, "effects");
-  const aliases = Object.fromEntries([["@0/engine", "index.ts"], ["@0/engine/storage", "storage/index.ts"], ["@0/engine/shared", "shared/index.ts"], ["@0/engine/templates", "templates/index.ts"], ["@0/engine/redteam", "redteam/index.ts"]].map(([name, file]) => [name, resolve(repository, `packages/engine/src/${file}`)]));
+  const aliases = Object.fromEntries([["@0/engine", "index.ts"], ["@0/engine/storage", "storage/index.ts"], ["@0/engine/shared", "shared/index.ts"]].map(([name, file]) => [name, resolve(repository, `packages/engine/src/${file}`)]));
   writeFileSync(entry, `
 import{existsSync,readFileSync}from'node:fs';import assert from'node:assert/strict';
 

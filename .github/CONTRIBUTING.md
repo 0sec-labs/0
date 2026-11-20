@@ -108,18 +108,6 @@ Releases are gated on the release commit's own green `Main` and Release dry run 
 7. Release only a commit whose own `Main` run is green and whose Release dry run passed. A green neighbour does not count, because `Main` runs for superseded commits are cancelled. `Main` always runs every group on a code commit and on the `vX.Y.Z` tag itself; the Release dry run triggers on release-related paths and nightly, so for a release commit that touches none of them run it by hand (`Release` workflow, `dry_run: true`) before tagging.
 8. After the tag, `Main` re-runs on it; its success publishes `:X.Y.Z`, `:X.Y` and `:latest` (highest version only), and the nightly Release run re-checks the documented install paths (binary, source, container). The `Release` workflow itself publishes nothing until its `main-gate` job sees a green `Main` run for the tag on the tag commit.
 
-## Attack templates
-
-Templates live in `packages/engine/src/templates/attacks/`. Add only authorized,
-non-sensitive examples. Mirror an existing YAML template: include a stable
-`id`, `name`, category, severity, description, applicable `depth` values,
-payload IDs/prompts, and detection rules. The `AttackTemplate` type lives in
-`packages/engine/src/shared/types.ts`.
-
-The template package's `prebuild` regenerates `src/embedded.ts` from YAML.
-Run `pnpm --filter @0/engine build` and include that generated update;
-do not maintain a second hand-edited copy of a template in the embedded file.
-
 ## Pull requests
 
 Describe the behavior changed, the tests run, and any safety impact.
