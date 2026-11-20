@@ -1,3 +1,4 @@
+import { analyticsOptedOut } from "../telemetry/analytics-level.js";
 import { hasKnownPricing, modelNormalizationStages, normalizeModel, registerModelPricing, type ModelRates } from "./pricing.js";
 
 /**
@@ -96,6 +97,11 @@ async function fetchCatalog(impl: PricingDiscoveryFetch): Promise<Map<string, Mo
 export async function discoverAndRegisterPricing(model: string, fetchImpl?: PricingDiscoveryFetch): Promise<void> {
   try {
     if (!model || hasKnownPricing(model)) return;
+    // The public OpenRouter catalog is a third-party lookup. With an opt-out
+    // set (ZERO_OFFLINE, ZERO_NO_TELEMETRY, DO_NOT_TRACK) nothing may leave
+    // for it, so an enterprise gateway sees the only outbound model traffic.
+    // An injected fetch is a caller's own transport and is not gated.
+    if (!isFetch(fetchImpl) && !configuredFetch && analyticsOptedOut()) return;
     const impl = isFetch(fetchImpl) ? fetchImpl : configuredFetch ?? globalThis.fetch;
     const catalog = await loadCatalog(impl);
     let rates: ModelRates | undefined;

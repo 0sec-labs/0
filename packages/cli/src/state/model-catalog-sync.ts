@@ -22,6 +22,7 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { analyticsOptedOut } from "@0/engine";
 import { homeStateDir, modelProvider, registerModelPricing } from "@0/engine/shared";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
@@ -245,6 +246,9 @@ export async function syncModelCatalog(
     return existing;
   }
 
+  // Models.dev is a third-party host. An opt-out (ZERO_OFFLINE, ZERO_NO_TELEMETRY,
+  // DO_NOT_TRACK) keeps the picker on its cache and bundled snapshot instead.
+  if (!opts.fetchImpl && !opts.url && analyticsOptedOut()) return null;
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") return null;
   const url = opts.url ?? MODELS_DEV_URL;
