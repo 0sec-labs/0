@@ -93,8 +93,14 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
 
   /** Memory is pasted into every thread up to a budget. A note that would not fit is refused, so a saved note is always one the model sees. */
   function assertFits(candidate: Note, replacing?: string): void {
-    const view = all().filter(note => note.id !== replacing && (note.scope === "global" || (candidate.folder !== undefined && note.folder === candidate.folder)));
-    if (fitToBudget([...view, candidate], candidate.folder ? { folder: candidate.folder } : {}).omitted.length) throw new MemoryError("Memory is full. Forget a note first.");
+    const current = all();
+    const folders = candidate.scope === "global"
+      ? [undefined, ...new Set(current.map(note => note.folder).filter((folder): folder is string => folder !== undefined))]
+      : [candidate.folder];
+    for (const folder of folders) {
+      const view = current.filter(note => note.id !== replacing && (note.scope === "global" || (folder !== undefined && note.folder === folder)));
+      if (fitToBudget([...view, candidate], folder ? { folder } : {}).omitted.length) throw new MemoryError("Memory is full. Forget a note first.");
+    }
   }
 
   return {
