@@ -93,6 +93,15 @@ export async function createWorkspaceServices(options: Options) {
         const db = new osecDB(options.dbPath);
         try { return toShareSafeFindings(db.getFindings(id).slice(0, 200).map(findingFromRow)); } finally { db.close(); }
       },
+      suggestions: id => {
+        const db = new osecDB(options.dbPath);
+        try {
+          return db.getFindings(id).slice(0, 200).flatMap(row => {
+            const annotation = db.getFindingReviewFields(row.id).reviewAnnotation;
+            return annotation?.suggestion ? [{ id: row.id, title: row.title, severity: row.severity, path: annotation.path, startLine: annotation.startLine, ...(annotation.endLine ? { endLine: annotation.endLine } : {}), suggestion: annotation.suggestion }] : [];
+          });
+        } finally { db.close(); }
+      },
     }, scheduler: true });
     return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, github, sentinels, dispose };
   } catch (cause) { await dispose().catch(() => {}); throw cause; }

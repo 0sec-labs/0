@@ -85,6 +85,8 @@ By default a run **posts nothing to GitHub**. Results are in the Sentinel's acti
 | Option | UI label | CLI flag | Effect |
 | --- | --- | --- | --- |
 | `commentOnPr` | Comment on the pull request | `--comment` | When a run completes, posts one summary comment with the reviewed commit and each finding's severity, title and repository-relative location. No proof-of-concept steps, evidence, descriptions or local paths. The comment carries a hidden marker per Sentinel, so a later push edits it in place. At most one comment per pull request per minute and 30 per hour. |
+
+With comments on, a finding that carries a replacement for lines the pull request changed also gets an inline review comment with a suggestion block, which the author applies with "Commit suggestion". Each finding is commented once; when a later push no longer has the finding, its comment is removed. At most 10 per run, none on pull requests from forks, and a finding outside the diff stays in the summary only.
 | `includeForks` | Include pull requests from forks | `--include-forks` | Without it, fork pull requests are skipped and recorded as a skipped activation with the reason `fork pull request`. With it, the run uses the same limits as every pull request run (below), and the activation and any comment say it is untrusted. |
 
 Draft pull requests are skipped the same way, with the reason `draft pull request`, and are reviewed once when marked ready for review. Changing a trigger's repository, branch or options turns it off and records a new baseline, so turning on comments or forks needs a fresh approval.
