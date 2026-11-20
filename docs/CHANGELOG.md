@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-19
+
+This release makes `0 scan` usable in CI and fuller: several passes merged into one report, a SARIF that works in GitHub code scanning, and two more skills.
+
 ### Added
 
 - `0 scan --passes <n>` (up to 5) scans the same code several times, three at a time, and merges the findings by place, so the report is the union of what the runs found. `--budget` is the total and is split evenly. Each merged finding carries `foundInPasses` in the JSON and a "Found in k of n scan passes" line in every format, and the JSON has `passes` and every pass's `threadIds`. On NodeGoat three single scans found 8, 11 and 14 issues (18 distinct in all); three passes together reported 16, 8 of them found by every pass, for $0.25.

@@ -8,6 +8,18 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.41.0",
+    date: "2026-11-19",
+    title: "Scan in CI, and scan more than once",
+    summary: "0 scan can run several passes and merge them, its SARIF now works in GitHub code scanning, and two new skills hunt variants of a fixed bug and broken assumptions.",
+    highlights: [
+      { icon: "ShieldCheck", title: "Several passes", text: "0 scan --passes 3 scans the same code three times and merges the findings, because one run misses issues another finds. The budget is split between the passes, and each finding says how many found it." },
+      { icon: "Gauge", title: "Works in CI", text: "The SARIF has paths relative to the repository, the category as the rule, and a key that stays the same from run to run, so GitHub code scanning shows findings on the right lines. A job needs only an API key; the docs have a workflow." },
+      { icon: "Puzzle", title: "Two new skills", text: "variant-hunting takes a fix and finds the same bug at the other places. assumption-mining lists what each function silently relies on and looks for a caller that breaks it." },
+      { icon: "Bug", title: "Steadier scans", text: "A scan keeps going when a busy console misses a status request, leaves out node_modules and build folders, and never sends a git URL's password to the model." },
+    ],
+  },
+  {
     version: "0.40.1",
     date: "2026-11-19",
     title: "Folders work in the standalone binary",
