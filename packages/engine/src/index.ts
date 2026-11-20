@@ -139,11 +139,6 @@ export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // hard-to-fuzz stateful parsers of untrusted input that are NOT recently swept
 // (where source review beats fuzzing). Opt-in; default OFF = size-only ranking.
 // Threat-model planner stage — pre-candidate-selection trust-boundary lanes.
-export {
-  extractSpecInvariants,
-  runSpecdriftPlan,
-  runSpecdriftScan,
-} from "./specdrift/index.js";
 
 // Unified pipeline: prepare + static analysis
 export {
@@ -331,10 +326,6 @@ export {
 // Autonomous CVE PoC adaptation (issue #272 v0 part 2). The scraper that
 // produces `CveArtifacts` lives on a sibling branch and is wired in at
 // merge time via the typed `CveArtifactProvider` seam.
-export type {
-  CveArtifactProvider,
-  CveArtifacts,
-} from "./cve/index.js";
 
 // Shared scanner event bus and local presentation adapter.
 export {
@@ -442,24 +433,6 @@ export type { VerifySpec, VerifierResult, ContainerRunner } from "./verifier/ind
 // DEFAULT_STEP_TIMEOUT_MS) are re-exported under prefixed aliases so
 // callers can pick a side without ambiguity.
 // in the cli package; this surface is the programmatic entry point.
-export {
-  loadH1Credentials,
-  H1AuthMissingError,
-  H1Client,
-  H1Error,
-  H1AuthError,
-  H1ForbiddenError,
-  H1RateLimitError,
-  H1NetworkError,
-  listPrograms,
-  getProgram,
-  getStructuredScopes,
-  automationVerdict,
-  summariseScopes,
-} from "./h1/index.js";
-export type {
-  H1Program,
-} from "./h1/index.js";
 
 // Cloud credentials and the independent Windows evidence-worker transport.
 export {
@@ -470,13 +443,6 @@ export {
 // write-ups, and affected-version metadata for a given CVE id by hitting
 // NVD, GHSA, OSV, distro trackers, and GitHub search. Building/running
 // the PoC is the next slice (depends on #271 Tier-1 plumbing).
-export {
-  findCveArtifacts,
-  normaliseCveId,
-} from "./cve/index.js";
-export type {
-  ScrapedCveArtifacts,
-} from "./cve/index.js";
 
 // Disclosure bundle assembly (finding → GHSA-ready advisory markdown)
 
@@ -487,13 +453,6 @@ export type {
 // PR-shaped finding output (0#377). `emitFindingsAsPRs` turns reproduced
 // findings into one GitHub PR each (repro + suggested patch from a fix-template
 // registry); non-reproduced findings roll up into a single hypotheses.md.
-export {
-  emitFindingsAsPRs,
-  isReproduced,
-} from "./emit/index.js";
-export type {
-  EvidenceArtifact,
-} from "./emit/index.js";
 
 
 // ── Interactive operator console: unified conversational front-end that drives
@@ -528,19 +487,10 @@ export type {
 
 // Protocol-conformance capability (issue #972) — Tier-1 HTTP spec-vs-impl
 // differential: LLM hypothesizes divergences, a deterministic oracle confirms.
-export {
-  runHttpConformanceCheck,
-  createLiveHttpSender,
-} from "./protocol/index.js";
-export type {
-  HttpConformanceResult,
-  ConformanceAttempt,
-} from "./protocol/index.js";
 
 // Research packs (xnu-fuzz, adgraph, identity) are NOT re-exported here so the
 // default import graph and the `core` edition stay free of them. Import them via
 // the `@0/engine/xnu-fuzz`, `@0/engine/adgraph` and `@0/engine/identity` subpaths.
-export * from "./attack/index.js";
 
 // Local, redacted reproducibility manifests for verified findings.
 

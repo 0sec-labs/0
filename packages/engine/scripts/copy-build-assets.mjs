@@ -27,7 +27,6 @@ const copyByExt = (fromDir, ext, toDir) => {
 
 copyDir("src/triage/kernel-vm", "dist/triage/kernel-vm");
 copyByExt("src/bench", ".json", "dist/bench");
-copyByExt("src/xnu-fuzz/opener", ".c", "dist/xnu-fuzz/opener");
 copyByExt("src/stages/data", ".json", "dist/stages/data");
 copyByExt("src/review/data", ".json", "dist/review/data");
 copyByExt("src/stages", ".cjs", "dist/stages");
