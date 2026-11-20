@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- `0 findings import <file|->` brings another scanner's SARIF 2.1.0 results in as findings (FoxGuard, CodeQL, Semgrep and others). Each finding keeps the scanner's name, rule, severity, CWE and file and line, shows the scanner as a chip in the Findings list, and is marked as imported and unverified. Importing the same file again changes nothing. Absolute paths become repo-relative under `--root` (default: the current directory); paths outside it are dropped.
+
 ### Changed
 
 - Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
@@ -19,6 +23,7 @@ on the GitHub Release tag.
 
 ### Removed
 
+- About 27,000 lines of engine code that nothing used: ten unfinished engines (mobile, recon, attack, emit, h1, cve, protocol, specdrift, adgraph, xnu-fuzz), old scanners and helpers, the old runners, the attack-template loader, the red-team harness and its `0-llm` bin, the core/full build edition, and the matching package exports (`./identity`, `./adgraph`, `./xnu-fuzz`, `./kernel`, `./templates`, `./redteam`).
 - `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.
 
 ### Fixed

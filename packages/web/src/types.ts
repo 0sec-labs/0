@@ -71,6 +71,8 @@ export type FindingRecord = {
   workflowStatus?: FindingWorkflowStatus;
   workflowAssignee?: string | null;
   workflowUpdatedAt?: string | null;
+  /** Scanner the finding was imported from; absent for findings 0 found. */
+  tool?: string | null;
   timestamp: number;
   score?: number | null;
   confidence?: number | null;

@@ -22,12 +22,12 @@ const SECTIONS: Readonly<Record<string, Build>> = {
   },
 
   async findings(root) {
-    const [reports, findings, triage, exportCommand, keys] = await Promise.all([
-      import("./reports.js"), import("./findings.js"), import("./triage.js"), import("./findings-export.js"), import("./findings-keys.js"),
+    const [reports, findings, triage, exportCommand, keys, importCommand] = await Promise.all([
+      import("./reports.js"), import("./findings.js"), import("./triage.js"), import("./findings-export.js"), import("./findings-keys.js"), import("./findings-import.js"),
     ]);
     reports.registerReportsCommand(root);
     findings.registerFindingsCommand(root);
-    nest(root, "findings", [triage.registerTriageCommand, exportCommand.registerFindingsExportCommand, keys.registerFindingsKeysCommand]);
+    nest(root, "findings", [triage.registerTriageCommand, exportCommand.registerFindingsExportCommand, keys.registerFindingsKeysCommand, importCommand.registerFindingsImportCommand]);
     adoptCommands(root, "findings");
   },
 

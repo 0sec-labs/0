@@ -5,6 +5,7 @@ import type { Finding, ScanConfig, ScanReport } from "../../shared/index.js";
 import * as schema from "../schema.js";
 import { type SQLiteScanId } from "../types.js";
 import { Repository } from "./base.js";
+import { serializeFindingReviewAnnotation } from "../finding-helpers.js";
 
 export class ScanRepository extends Repository {
 
@@ -37,7 +38,8 @@ export class ScanRepository extends Repository {
     summary: Record<string, unknown>;
     provenance: { digest: string; importedAt: string } & Record<string, unknown>;
   }): { scanId: string; alreadyImported: boolean } {
-    if (!/^ci-[a-f0-9]{64}$/.test(input.scanId) || input.scanId !== `ci-${input.provenance.digest}`) {
+    const prefix = input.scanId.startsWith("sarif-") ? "sarif" : "ci";
+    if (!/^(?:ci|sarif)-[a-f0-9]{64}$/.test(input.scanId) || input.scanId !== `${prefix}-${input.provenance.digest}`) {
       throw new Error("Invalid imported report identity.");
     }
     return this.transaction(() => {
@@ -77,6 +79,8 @@ export class ScanRepository extends Repository {
           scanId: input.scanId, id: finding.id, fingerprint: finding.fingerprint, templateId: finding.templateId,
           title: finding.title, description: finding.description, severity: finding.severity,
           category: finding.category, timestamp: finding.timestamp,
+          tool: finding.tool ?? null,
+          reviewAnnotation: serializeFindingReviewAnnotation(finding.reviewAnnotation),
           evidenceRequest: finding.evidence.request, evidenceResponse: finding.evidence.response, evidenceAnalysis: finding.evidence.analysis ?? null,
           status: "discovered", triageStatus: "new", workflowStatus: "backlog", workflowAssignee: null,
         }).run();

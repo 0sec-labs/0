@@ -639,6 +639,23 @@ Options:
   --json                 Print the result of writing a file as JSON
   -h, --help             display help for command
 
+### 0 findings import (hidden)
+Usage: 0 findings import [options] <file>
+
+Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is
+executed.
+
+Arguments:
+  file               SARIF file, or - to read standard input
+
+Options:
+  --tool <name>      Label for the scanner, overriding the name in the file
+  --root <dir>       Folder that was scanned; absolute paths under it become repo-relative (default:
+                     the current directory)
+  --db-path <path>   Destination database; stop its running console before importing
+  --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
+
 ### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]
 

@@ -822,7 +822,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [import](#findings-import) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -922,6 +922,28 @@ Reset a finding family back to new
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--note <text>` | — | Optional triage note |
+
+#### findings import
+
+Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is executed.
+
+```text
+0 findings import [options] <file>
+```
+
+Each result becomes a finding that keeps the scanner's name, rule, severity, CWE and file and line. The scan it creates is marked as imported and unverified, and importing the same file again changes nothing. Absolute paths become repo-relative under `--root`; paths outside it are dropped. Stop a running console on the same database first.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | SARIF file, or - to read standard input |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--tool <name>` | — | Label for the scanner, overriding the name in the file |
+| `--root <dir>` | — | Folder that was scanned; absolute paths under it become repo-relative (default: the current directory) |
+| `--db-path <path>` | — | Destination database; stop its running console before importing |
+| `--json` | — | Print the result as JSON |
+| `--format <format>` | — | Output: text or json Choices: text, json. |
 
 #### findings export
 
