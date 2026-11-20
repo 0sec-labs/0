@@ -822,7 +822,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [import](#findings-import) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -942,8 +942,37 @@ Each result becomes a finding that keeps the scanner's name, rule, severity, CWE
 | `--tool <name>` | — | Label for the scanner, overriding the name in the file |
 | `--root <dir>` | — | Folder that was scanned; absolute paths under it become repo-relative (default: the current directory) |
 | `--db-path <path>` | — | Destination database; stop its running console before importing |
-| `--json` | — | Print the result as JSON |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
+
+#### findings fix
+
+Fix one finding in an isolated git work tree and open a pull request for review
+
+```text
+0 findings fix [options] <finding>
+```
+
+A thread follows the `fix-finding` skill in a separate work tree of the repository, so your checkout is never touched. It makes the smallest change it can; then the command runs each `--test` check, commits on a branch named `0/fix-<id>` and opens a pull request, as a draft when a check fails. Running it again for the same finding updates the same pull request. Nothing is pushed to the base branch and nothing is merged: a person reviews and merges. Use `--test` for the project's tests and, to re-run the scanner that raised the finding, its own command (for example `foxguard .`). It edits files on this machine, so it needs the local console and does not accept `--computer` or `--engine-url`.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `finding` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--repo <dir>` | — | Git repository the finding is in (default: the current directory) |
+| `--base <branch>` | — | Branch to start from and open the pull request against (default: the remote's default branch) |
+| `--test <command>` | — | Check to run after the change; repeat for several. A failing check makes the pull request a draft |
+| `--no-pr` | — | Commit on the fix branch but do not push or open a pull request |
+| `--budget <usd>` | `3` | Stop when the estimated spend reaches this many USD |
+| `--model <model>` | — | Model for the fix thread (default: gpt-6-luna) |
+| `--timeout <seconds>` | `1800` | Maximum seconds to wait for the fix |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
 
 #### findings export
 

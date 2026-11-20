@@ -593,22 +593,26 @@ Usage: 0 findings [options] [command]
 Browse findings and change their status
 
 Options:
-  --db-path <path>       Path to SQLite database
-  --scan <scanId>        Filter by scan ID
-  --severity <severity>  Filter by severity: critical, high, medium, low, info
-  --category <category>  Filter by attack category
-  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported, fixed,
-                         false-positive
-  --triage <triage>      Filter by triage: new, accepted, suppressed
-  --limit <n>            Max findings/groups to show (default: "50")
-  --all                  Show raw finding rows instead of grouped fingerprints (default: false)
-  -h, --help             display help for command
+  --db-path <path>         Path to SQLite database
+  --scan <scanId>          Filter by scan ID
+  --severity <severity>    Filter by severity: critical, high, medium, low, info
+  --category <category>    Filter by attack category
+  --status <status>        Filter by status: discovered, verified, confirmed, scored, reported,
+                           fixed, false-positive
+  --triage <triage>        Filter by triage: new, accepted, suppressed
+  --limit <n>              Max findings/groups to show (default: "50")
+  --all                    Show raw finding rows instead of grouped fingerprints (default: false)
+  -h, --help               display help for command
 
 Commands:
-  list [options]         List findings from the database
-  show [options] <id>    Show detailed information about a finding
-  update [options] <id>  Change a finding's status
-  help [command]         display help for command
+  list [options]           List findings from the database
+  show [options] <id>      Show detailed information about a finding
+  update [options] <id>    Change a finding's status
+  import [options] <file>  Import findings from another scanner's SARIF 2.1.0 file (use - for
+                           stdin). Nothing in the file is executed.
+  fix [options] <finding>  Fix one finding in an isolated git work tree and open a pull request for
+                           review
+  help [command]           display help for command
 
 ### 0 findings accept (hidden)
 Usage: 0 findings accept [options] <id>
@@ -639,22 +643,43 @@ Options:
   --json                 Print the result of writing a file as JSON
   -h, --help             display help for command
 
-### 0 findings import (hidden)
+### 0 findings fix
+Usage: 0 findings fix [options] <finding>
+
+Fix one finding in an isolated git work tree and open a pull request for review
+
+Options:
+  --repo <dir>               Git repository the finding is in (default: the current directory)
+  --base <branch>            Branch to start from and open the pull request against (default: the
+                             remote's default branch)
+  --test <command>           Check to run after the change; repeat for several. A failing check
+                             makes the pull request a draft
+  --no-pr                    Commit on the fix branch but do not push or open a pull request
+  --budget <usd>             Stop when the estimated spend reaches this many USD (default: "3")
+  --model <model>            Model for the fix thread (default: gpt-6-luna)
+  --timeout <seconds>        Maximum seconds to wait for the fix (default: "1800")
+  --engine-url <url>         Attach directly to a running trusted engine
+  --engine-token-env <name>  Environment variable holding the attached engine token
+  --computer <id>            Use a registered remote computer
+  --computers-config <path>  Operator computer connection registry JSON file
+  --db-path <path>           Control database of the local engine to attach to
+  -h, --help                 display help for command
+
+### 0 findings import
 Usage: 0 findings import [options] <file>
 
 Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is
 executed.
 
 Arguments:
-  file               SARIF file, or - to read standard input
+  file              SARIF file, or - to read standard input
 
 Options:
-  --tool <name>      Label for the scanner, overriding the name in the file
-  --root <dir>       Folder that was scanned; absolute paths under it become repo-relative (default:
-                     the current directory)
-  --db-path <path>   Destination database; stop its running console before importing
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
+  --tool <name>     Label for the scanner, overriding the name in the file
+  --root <dir>      Folder that was scanned; absolute paths under it become repo-relative (default:
+                    the current directory)
+  --db-path <path>  Destination database; stop its running console before importing
+  -h, --help        display help for command
 
 ### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]

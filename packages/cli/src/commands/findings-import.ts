@@ -27,14 +27,13 @@ export function registerFindingsImportCommand(parent: Command): void {
     .option("--tool <name>", "Label for the scanner, overriding the name in the file")
     .option("--root <dir>", "Folder that was scanned; absolute paths under it become repo-relative (default: the current directory)")
     .option("--db-path <path>", "Destination database; stop its running console before importing")
-    .option("--json", "Print the result as JSON")
-    .action((file: string, options: { tool?: string; root?: string; dbPath?: string; json?: boolean }) => {
+    .action((file: string, options: { tool?: string; root?: string; dbPath?: string; format?: string }) => {
       try {
         const dbPath = resolveOsecDbPath(options.dbPath);
         assertLocalEngineAvailable(options.dbPath);
         const result = importSarif({ sarifJson: readInput(file), dbPath, ...(options.tool ? { tool: options.tool } : {}), roots: [resolve(options.root ?? process.cwd())] });
-        if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+        if (options.format === "json") process.stdout.write(`${JSON.stringify(result)}\n`);
         else process.stdout.write(`${result.alreadyImported ? "Already imported" : "Imported"} ${result.findings} finding${result.findings === 1 ? "" : "s"} (${result.scanId.slice(0, 18)}…).\n`);
-      } catch (error) { finishWithError(error, { err: text => process.stderr.write(`${text}\n`) }, options.json); }
+      } catch (error) { finishWithError(error, { err: text => process.stderr.write(`${text}\n`) }, options.format === "json"); }
     });
 }

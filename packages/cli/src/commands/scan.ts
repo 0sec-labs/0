@@ -37,8 +37,8 @@ const GIT_TARGET = /^(git@|git:\/\/|ssh:\/\/git@)|\.git$|^https:\/\/(github|gitl
  * console on the default port (a second user, another job on a shared runner, one started from a different home) cannot make
  * this one exit with "already running" and leave the scan without a console.
  */
-export function headlessConsoleArgs(entry: string | undefined): string[] {
-  return [...(entry && /\.[cm]?js$/.test(entry) ? [entry] : []), "--headless", "--port", "0"];
+export function headlessConsoleArgs(entry: string | undefined, dbPath?: string): string[] {
+  return [...(entry && /\.[cm]?js$/.test(entry) ? [entry] : []), "--headless", "--port", "0", ...(dbPath ? ["--db-path", dbPath] : [])];
 }
 
 export interface ScanDeps {
@@ -51,13 +51,13 @@ export interface ScanDeps {
   /** The findings stored under a thread id, as the shared report type, from the engine the thread ran on. */
   loadReport(client: ConsoleClient, threadId: string): Promise<ScanReport>;
   /** Start a headless console for this scan; returns how to stop it. Used only when none is running. */
-  startConsole(): Promise<() => void>;
+  startConsole(dbPath?: string): Promise<() => void>;
   /** What `git status` lists in the folder, or undefined when it is not a git work tree. A scan must leave it as it found it. */
   changedFiles(folder: string): Promise<Set<string> | undefined>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
-const defaults: ScanDeps = {
+export const defaultScanDeps: ScanDeps = {
   open: options => openConsole(options),
   out: bytes => { process.stdout.write(bytes); },
   err: text => process.stderr.write(`${text}\n`),
@@ -75,9 +75,9 @@ const defaults: ScanDeps = {
       return new Set(stdout.split("\n").filter(Boolean));
     } catch { return undefined; }
   },
-  async startConsole() {
+  async startConsole(dbPath) {
     // Run the same program again as `--headless`: the script when node runs a .js file, else the compiled binary itself.
-    const child = spawn(process.execPath, headlessConsoleArgs(process.argv[1]), { stdio: "ignore" });
+    const child = spawn(process.execPath, headlessConsoleArgs(process.argv[1], dbPath), { stdio: "ignore" });
     child.on("error", () => {});
     return () => { child.kill("SIGTERM"); };
   },
@@ -151,12 +151,12 @@ function validate(target: string | undefined, options: ScanOptions): void {
 const NO_CONSOLE = /No console running/;
 
 /** The engine to run on: the one the options name or that is already running, else a headless one started for this scan. */
-async function connect(options: ConsoleTransportOptions, deps: ScanDeps): Promise<{ client: ConsoleClient; stop?: () => void }> {
+export async function connect(options: ConsoleTransportOptions, deps: Pick<ScanDeps, "open" | "err" | "sleep" | "startConsole">): Promise<{ client: ConsoleClient; stop?: () => void }> {
   const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
   try { return { client: await deps.open(options) }; }
   catch (error) { if (!NO_CONSOLE.test(message(error))) throw error; }
   deps.err("no console is running; starting one for this scan");
-  const stop = await deps.startConsole();
+  const stop = await deps.startConsole(options.dbPath);
   for (let attempt = 0; attempt < 60; attempt++) {
     try { return { client: await deps.open(options), stop }; }
     catch (error) { if (!NO_CONSOLE.test(message(error))) { stop(); throw error; } await deps.sleep(500); }
@@ -168,26 +168,9 @@ async function connect(options: ConsoleTransportOptions, deps: ScanDeps): Promis
 interface PassContext { client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
 interface PassResult { threadId: string; done: FinishedThread; stored: ScanReport; budgetExhausted: boolean; timedOut: boolean; costUsd?: number }
 
-/** One scan thread: start it, wait for it, and read what it stored. Throws when the thread cannot run or the console is lost. */
-async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
-  const { client, deps, resolved, options, total, budget, deadline } = ctx;
-  const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
-  const title = total > 1 ? `Scan ${resolved.label} (pass ${index + 1} of ${total})` : `Scan ${resolved.label}`;
-  const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title, costCeilingUsd: budget })).session);
-  const id = String(created.id);
+/** Poll a thread until it finishes, the deadline passes (it is then cancelled) or the console is lost for too long. */
+export async function waitForThread(client: ConsoleClient, deps: Pick<ScanDeps, "sleep">, id: string, deadline: number): Promise<{ snapshot: Json; timedOut: boolean }> {
   const path = `/api/console/sessions/${encodeURIComponent(id)}`;
-  try {
-    await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
-    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
-  } catch (error) {
-    // A thread that never started is no use to anyone; do not leave it in the list.
-    const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
-    const reason = error instanceof Error ? error.message : String(error);
-    const hint = /model/i.test(reason) ? ` Pick another with --model (default ${DEFAULT_SCAN_MODEL}).` : "";
-    throw new Error(`${reason}${hint}${removed ? "" : ` (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`}`);
-  }
-  deps.err(`scanning ${resolved.label} in thread ${id} (${total > 1 ? `pass ${index + 1} of ${total}, ` : ""}budget $${Number(budget.toFixed(4))})`);
-
   let snapshot: Json = {};
   let timedOut = false;
   let failedPolls = 0;
@@ -217,6 +200,30 @@ async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
       break;
     }
   }
+  return { snapshot, timedOut };
+}
+
+/** One scan thread: start it, wait for it, and read what it stored. Throws when the thread cannot run or the console is lost. */
+async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
+  const { client, deps, resolved, options, total, budget, deadline } = ctx;
+  const runtime = { runtime: { model: options.model ?? DEFAULT_SCAN_MODEL } };
+  const title = total > 1 ? `Scan ${resolved.label} (pass ${index + 1} of ${total})` : `Scan ${resolved.label}`;
+  const created = asJson(asJson(await client.request("POST", "/api/console/sessions", { ...runtime, title, costCeilingUsd: budget })).session);
+  const id = String(created.id);
+  const path = `/api/console/sessions/${encodeURIComponent(id)}`;
+  try {
+    await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
+    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
+  } catch (error) {
+    // A thread that never started is no use to anyone; do not leave it in the list.
+    const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
+    const reason = error instanceof Error ? error.message : String(error);
+    const hint = /model/i.test(reason) ? ` Pick another with --model (default ${DEFAULT_SCAN_MODEL}).` : "";
+    throw new Error(`${reason}${hint}${removed ? "" : ` (thread ${id} was created; remove it with \`0 threads delete ${id} --yes\`)`}`);
+  }
+  deps.err(`scanning ${resolved.label} in thread ${id} (${total > 1 ? `pass ${index + 1} of ${total}, ` : ""}budget $${Number(budget.toFixed(4))})`);
+
+  const { snapshot, timedOut } = await waitForThread(client, deps, id, deadline);
   const done = finishedThread(snapshot);
   const costUsd = typeof done.usage.costUsd === "number" ? done.usage.costUsd : undefined;
   return { threadId: id, done, stored: await deps.loadReport(client, id), budgetExhausted: asJson(done.session).costCeilingExceeded === true, timedOut, ...(costUsd !== undefined ? { costUsd } : {}) };
@@ -232,7 +239,7 @@ async function inPool<T>(count: number, limit: number, task: (index: number) => 
   return results;
 }
 
-export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaults): Promise<void> {
+export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaultScanDeps): Promise<void> {
   let resolved: ResolvedTarget | undefined;
   let client: ConsoleClient | undefined;
   let stopConsole: (() => void) | undefined;
@@ -312,7 +319,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
   }
 }
 
-export function registerScanCommand(program: Command, deps: ScanDeps = defaults): void {
+export function registerScanCommand(program: Command, deps: ScanDeps = defaultScanDeps): void {
   consoleTransportOptions(program.command("scan <target>")
     .description("Scan a folder or git repository for security bugs; prints the findings as a report")
     .option("--budget <usd>", "Stop when the estimated spend reaches this many USD; partial findings are kept", String(DEFAULT_BUDGET_USD))
