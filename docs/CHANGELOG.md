@@ -12,6 +12,20 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Memory is one list: a note is in it or it is not. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
+- Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.
+
+### Removed
+
+- `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.
+
+### Fixed
+
+- The console that `0 scan` starts for itself takes a free port, so another console on the default port can no longer stop the scan from finding its own.
+- The scan skill tells the model not to use the memory tool.
+
 ## [0.41.0] - 2026-11-19
 
 This release makes `0 scan` usable in CI and fuller: several passes merged into one report, a SARIF that works in GitHub code scanning, and two more skills.

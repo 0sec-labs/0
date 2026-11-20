@@ -16,13 +16,12 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
   try {
     if (sub === "" && method === "GET") {
       const folder = query.get("folder") || undefined;
-      const all = store.list({ status: "all" });
+      const all = store.list();
       const folders = [...new Set(all.flatMap(note => note.folder ? [note.folder] : []))].sort();
       // What a thread in each folder (and one in no folder) would be shown; notes that do not fit are listed with the reason.
       const overflow = [undefined, ...folders].flatMap(where => { const view = memoryOverview(store, where); return view.omitted.length ? [{ ...(where ? { folder: where } : {}), count: view.omitted.length, ids: view.omitted.map(note => note.id), reason: view.reason }] : []; });
       return { status: 200, data: { enabled: store.enabled(), kinds: NOTE_KINDS, folders,
         notes: store.list({ ...(folder ? { folder } : {}), ...(query.get("q") ? { query: query.get("q")! } : {}) }),
-        proposed: store.list({ status: "proposed", ...(folder ? { folder } : {}) }),
         overflow } };
     }
     if (sub === "" && method === "POST") {
@@ -40,11 +39,6 @@ export function handleMemoryRequest(path: string, method: string, input: unknown
       const archive = data["archive"];
       if (!isArchive(archive)) return { status: 400, data: { error: "That file is not a 0 memory file." } };
       return { status: 200, data: importArchive(store, archive) };
-    }
-    const accept = /^(m_[a-z0-9]+)\/accept$/.exec(sub)?.[1];
-    if (accept && method === "POST") {
-      const note = store.accept(accept, text(data["text"]));
-      return note ? { status: 200, data: { note } } : { status: 404, data: { error: "That proposal is gone." } };
     }
     const id = /^(m_[a-z0-9]+)$/.exec(sub)?.[1];
     if (id && method === "PATCH") {

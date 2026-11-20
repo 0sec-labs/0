@@ -17,7 +17,7 @@ export function folderPlace(folder: string, home = homedir()): string {
 const place = (note: Note) => (note.scope === "global" ? "global" : note.folder ? folderPlace(note.folder) : "folder");
 
 export function registerMemoryCommand(program: Command, io: CommandIo = defaultIo()): void {
-  const memory = program.command("memory").description("List, add, remove, review, export and import what 0 remembers across threads");
+  const memory = program.command("memory").description("List, add, remove, export and import what 0 remembers across threads");
   const run = async (options: Common, fn: (store: NoteStore) => void | Promise<void>) => {
     try { await fn(openMemory({ ...(options.dbPath ? { dbPath: options.dbPath } : {}) })); }
     catch (error) {
@@ -37,12 +37,10 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
       const notes = store.list({ ...(options.folder ? { folder: options.folder } : {}), ...(options.global ? { scope: "global" as const } : {}), ...(options.search ? { query: options.search } : {}) });
       const view = memoryOverview(store, options.folder ?? process.cwd());
       const left = new Set(view.omitted.map(note => note.id));
-      const proposed = store.list({ status: "proposed" }).length;
       const overflow = { count: view.omitted.length, ids: [...left], ...(view.reason ? { reason: view.reason } : {}) };
-      emit(io, options, { enabled: store.enabled(), notes, overflow, proposed }, () => [
+      emit(io, options, { enabled: store.enabled(), notes, overflow }, () => [
         notes.length ? renderTable(notes.map(note => [note.id + (left.has(note.id) ? " *" : ""), place(note), note.kind ?? "", note.text.slice(0, 90)]), ["ID", "WHERE", "KIND", "NOTE"]) : "Nothing remembered yet.",
         ...(left.size ? [`* ${overflowLine(left.size)} Not shown to the model: ${view.reason}.`] : []),
-        ...(proposed ? [`${proposed} proposed note${proposed === 1 ? "" : "s"} waiting for review: 0 memory proposed list`] : []),
       ].join("\n"));
     }));
 
@@ -72,30 +70,13 @@ export function registerMemoryCommand(program: Command, io: CommandIo = defaultI
     }));
   }
 
-  const proposed = memory.command("proposed").description("Review notes 0 proposed after reading web pages, files or tool output (they are not used until accepted)");
-  common(proposed.command("list").description("List proposed notes")).action((options: Common) => run(options, store => {
-    const notes = store.list({ status: "proposed" });
-    emit(io, options, { notes }, () => notes.length ? renderTable(notes.map(note => [note.id, place(note), note.kind ?? "", note.text.slice(0, 90)]), ["ID", "WHERE", "KIND", "NOTE"]) : "Nothing proposed.");
-  }));
-  common(proposed.command("accept <id>").description("Accept a proposed note so it is used in new threads").option("--text <text>", "Correct the wording while accepting"))
-    .action((id: string, options: Common & { text?: string }) => run(options, store => {
-      const note = store.accept(id, options.text);
-      if (!note) throw new Error(`No proposed note ${id}.`);
-      emit(io, options, { note }, () => `Accepted ${id}.`);
-    }));
-  common(proposed.command("reject <id>").description("Discard a proposed note")).action((id: string, options: Common) => run(options, store => {
-    if (!store.list({ status: "proposed" }).some(note => note.id === id)) throw new Error(`No proposed note ${id}.`);
-    store.remove(id);
-    emit(io, options, { rejected: id }, () => `Rejected ${id}.`);
-  }));
-
   common(memory.command("export").description("Write notes to a file: JSON for 0 (default), or with --to a reviewable AGENTS.md section").option("--folder <path>", "Only this folder (default for --to: this folder)")
-    .option("-o, --output <file>", "Write the JSON export to a file instead of stdout").option("--to <file>", "Add accepted notes to this markdown file (for example AGENTS.md) as a section you review and commit").option("--markdown", "Print the markdown section instead of JSON"))
+    .option("-o, --output <file>", "Write the JSON export to a file instead of stdout").option("--to <file>", "Add your notes to this markdown file (for example AGENTS.md) as a section you review and commit").option("--markdown", "Print the markdown section instead of JSON"))
     .action((options: Common & { folder?: string; output?: string; to?: string; markdown?: boolean }) => run(options, store => {
       if (options.to || options.markdown) {
         const folder = options.folder ?? process.cwd();
         const notes = exportable(store.list({ folder }));
-        if (!notes.length) throw new Error(`No accepted or user-written notes for ${canonicalFolder(folder)}; nothing to export.`);
+        if (!notes.length) throw new Error(`No notes you wrote for ${canonicalFolder(folder)}; nothing to export.`);
         const section = renderExportSection(notes);
         if (!options.to) { io.out(section); return; }
         const file = resolve(options.to);

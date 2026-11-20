@@ -3,8 +3,7 @@
 // A thread is TAINTED once any tool other than a short list of known-local ones has returned:
 // web pages, browser, HTTP, repository file content, shell output, MCP and extension results,
 // sub-agent output. Fail closed: a tool the list does not know taints. The user's own prompt
-// and answers to ask_operator do not taint. A tainted thread's model-written notes are proposals.
-import type { NoteStatus } from "./core.js";
+// and answers to ask_operator do not taint. A tainted thread cannot add, change or forget a note.
 
 /** Tools whose results carry nothing from outside the user and the host. Adding one is a reviewed decision. */
 export const TRUSTED_TOOLS: ReadonlySet<string> = new Set([
@@ -42,4 +41,3 @@ export function createThreadGuard(thread: string, options: { tainted?: boolean }
 }
 
 /** Model-initiated notes commit only from a clean thread; everything else waits for review. */
-export const modelNoteStatus = (guard: Pick<ThreadGuard, "tainted">): NoteStatus => (guard.tainted ? "proposed" : "live");

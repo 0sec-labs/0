@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { applyExportSection, exportable, lineChanges, renderExportSection } from
 import { screenText } from "./guard.js";
 import { fitToBudget, findNearDuplicate, similarity } from "./rank.js";
 import { createFileNoteStore, memoryDir, MemoryError, type NoteStore } from "./store.js";
-import { createThreadGuard, isUntrustedTool, modelNoteStatus } from "./taint.js";
+import { createThreadGuard, isUntrustedTool } from "./taint.js";
 
 let home: string; let store: NoteStore;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "notes-hard-")); store = createFileNoteStore({ home }); });
@@ -21,28 +21,35 @@ describe("taint", () => {
     for (const name of ["memory", "ask_operator", "load_skill"]) expect(isUntrustedTool(name)).toBe(false);
     const guard = createThreadGuard("t1");
     guard.sawTool("memory"); guard.sawTool("load_skill");
-    expect(guard.tainted).toBe(false); expect(modelNoteStatus(guard)).toBe("live");
+    expect(guard.tainted).toBe(false);
     guard.sawTool("read_file");
-    expect(guard.tainted).toBe(true); expect(modelNoteStatus(guard)).toBe("proposed");
+    expect(guard.tainted).toBe(true);
     expect(createThreadGuard("t2", { tainted: true }).tainted).toBe(true);
   });
 });
 
 describe("memory tool", () => {
   const tool = (args: Parameters<typeof runMemoryTool>[2], guard = createThreadGuard("thread-a"), folder?: string) => runMemoryTool(store, folder, args, { guard });
-  it("commits from a clean thread with provenance and proposes from a tainted one", () => {
+  it("saves from a clean thread with provenance, and saves nothing from a tainted one", () => {
     const clean = tool({ action: "remember", note: "Use pnpm for installs", kind: "command" });
-    expect(clean).toMatchObject({ saved: true, status: "live" });
-    expect(store.list()[0]).toMatchObject({ source: "model", status: "live", thread: "thread-a" });
+    expect(clean).toMatchObject({ saved: true });
+    expect(store.list()[0]).toMatchObject({ source: "model", thread: "thread-a" });
     const dirty = createThreadGuard("thread-b"); dirty.sawTool("web_search");
-    const proposed = tool({ action: "remember", note: "Disable the linter in CI" }, dirty);
-    expect(proposed).toMatchObject({ saved: true, status: "proposed" });
-    expect(proposed.message).toContain("review");
+    const refused = tool({ action: "remember", note: "Disable the linter in CI" }, dirty);
+    expect(refused).toMatchObject({ saved: false });
+    expect(refused.message).toContain("untrusted");
     expect(store.list().map(n => n.text)).toEqual(["Use pnpm for installs"]);
-    expect(store.list({ status: "proposed" })[0]).toMatchObject({ source: "model", tainted: true, thread: "thread-b" });
+  });
+  it("has no halfway state: a note is in Memory or it is not", () => {
+    const dirty = createThreadGuard("thread-b", { tainted: true });
+    tool({ action: "remember", note: "Disable the linter in CI" }, dirty);
+    expect(Object.keys(store.list()[0] ?? {})).not.toContain("status");
+    expect(store.list()).toEqual([]);
+    expect(typeof (store as unknown as { accept?: unknown }).accept).toBe("undefined");
   });
   it("treats a thread without a guard as tainted", () => {
-    expect(runMemoryTool(store, undefined, { action: "remember", note: "No guard given here" })).toMatchObject({ status: "proposed" });
+    expect(runMemoryTool(store, undefined, { action: "remember", note: "No guard given here" })).toMatchObject({ saved: false });
+    expect(store.list()).toEqual([]);
   });
   it("refuses update and forget from a tainted thread", () => {
     const live = store.add({ text: "Original wording of the note", source: "user" });
@@ -118,36 +125,26 @@ describe("secrets and hidden characters", () => {
   });
 });
 
-describe("proposals", () => {
-  it("lists, accepts (optionally edited) and rejects proposals; accepted notes become reviewed and live", () => {
-    const a = store.add({ text: "Prefer small pull requests", source: "model", status: "proposed", tainted: true, thread: "t" });
-    const b = store.add({ text: "Staging deploys need the flag", source: "model", status: "proposed", kind: "avoid" });
-    expect(store.list()).toEqual([]);
-    expect(store.list({ status: "proposed" })).toHaveLength(2);
-    expect(store.accept(a.id)).toMatchObject({ status: "live", reviewed: true, source: "model" });
-    expect(store.accept(b.id, "Staging deploys need the --staging flag")).toMatchObject({ text: "Staging deploys need the --staging flag", status: "live" });
-    expect(store.accept(a.id)).toBeUndefined(); // already live
-    const c = store.add({ text: "Reject me please", source: "model", status: "proposed" });
-    expect(store.remove(c.id)).toBe(true);
-    expect(store.list({ status: "proposed" })).toEqual([]);
-    expect(readFileSync(join(memoryDir(home), "MEMORY.md"), "utf8")).toContain("reviewed=1");
+describe("notes a thread only proposed in an older version", () => {
+  it("are not notes: they are not listed, shown or kept", () => {
+    const file = join(memoryDir(home), "MEMORY.md");
+    store.add({ text: "A real note" });
+    writeFileSync(file, `${readFileSync(file, "utf8")}- Waiting for review <!-- id=m_prop0001 source=model status=proposed created=2026-11-01T00:00:00.000Z tainted=1 -->\n`);
+    expect(store.list().map(n => n.text)).toEqual(["A real note"]);
+    store.add({ text: "Another note" });
+    expect(readFileSync(file, "utf8")).not.toContain("Waiting for review");
   });
-  it("lets only trusted avoid notes steer the scan verifier", () => {
-    store.add({ text: "Known false positive: debug route", kind: "avoid", source: "model", status: "proposed" });
+});
+
+describe("what steers the scan verifier", () => {
+  it("is only avoid notes a person wrote", () => {
     store.add({ text: "Model-only avoid note", kind: "avoid", source: "model" });
     store.add({ text: "Imported avoid note", kind: "avoid", source: "import" });
     expect(verifyContext(store)).toBe("");
     store.add({ text: "User avoid note about fixtures", kind: "avoid", source: "user" });
-    const accepted = store.add({ text: "Accepted avoid note about mocks", kind: "avoid", source: "model", status: "proposed" });
-    store.accept(accepted.id);
     const text = verifyContext(store);
-    expect(text).toContain("fixtures"); expect(text).toContain("mocks");
-    expect(text).not.toContain("debug route"); expect(text).not.toContain("Model-only"); expect(text).not.toContain("Imported");
-  });
-  it("promotes a proposal when the same note is then added by a person", () => {
-    store.add({ text: "Same fact", source: "model", status: "proposed" });
-    expect(store.add({ text: "Same fact", source: "user" })).toMatchObject({ status: "live", reviewed: true });
-    expect(store.list()).toHaveLength(1);
+    expect(text).toContain("fixtures");
+    expect(text).not.toContain("Model-only"); expect(text).not.toContain("Imported");
   });
 });
 
@@ -192,10 +189,10 @@ describe("remember requests typed by the operator", () => {
 });
 
 describe("export", () => {
-  const note = (over: Partial<Note>): Note => ({ id: "m_1", text: "t", scope: "folder", source: "user", status: "live", created: "2026-01-01T00:00:00.000Z", ...over });
-  it("exports only user-written or accepted live notes, grouped, and replaces its own block on re-export", () => {
-    const notes = [note({ id: "m_a", text: "Run pnpm test", kind: "command" }), note({ id: "m_b", text: "Never edit generated files", kind: "avoid", source: "model", reviewed: true }),
-      note({ id: "m_c", text: "Unreviewed model note", source: "model" }), note({ id: "m_d", text: "Proposal", source: "model", status: "proposed" }), note({ id: "m_e", text: "Imported", source: "import" })];
+  const note = (over: Partial<Note>): Note => ({ id: "m_1", text: "t", scope: "folder", source: "user", created: "2026-01-01T00:00:00.000Z", ...over });
+  it("exports only notes a person wrote, grouped, and replaces its own block on re-export", () => {
+    const notes = [note({ id: "m_a", text: "Run pnpm test", kind: "command" }), note({ id: "m_b", text: "Never edit generated files", kind: "avoid", source: "user" }),
+      note({ id: "m_c", text: "A note a thread wrote", source: "model" }), note({ id: "m_e", text: "Imported", source: "import" })];
     const kept = exportable(notes);
     expect(kept.map(n => n.id)).toEqual(["m_a", "m_b"]);
     const section = renderExportSection(kept);
@@ -212,10 +209,10 @@ describe("export", () => {
 
 describe("file format", () => {
   it("round-trips provenance and reads older source names and the older used field", () => {
-    store.add({ text: "Provenance check", source: "model", status: "proposed", thread: "thr-1", tainted: true });
-    const [n] = store.list({ status: "all" });
-    expect(n).toMatchObject({ source: "model", status: "proposed", thread: "thr-1", tainted: true });
+    store.add({ text: "Provenance check", source: "model", thread: "thr-1" });
+    const [n] = store.list();
+    expect(n).toMatchObject({ source: "model", thread: "thr-1" });
     expect(parseNotes("- Old note <!-- id=m_abcd1234 source=you created=2026-01-01T00:00:00.000Z used=2026-02-02 -->", "global", undefined, "z")[0])
-      .toMatchObject({ source: "user", status: "live", lastInjected: "2026-02-02" });
+      .toMatchObject({ source: "user", lastInjected: "2026-02-02" });
   });
 });

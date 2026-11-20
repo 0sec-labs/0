@@ -1,5 +1,5 @@
 // One-time, idempotent import of every older memory store into the one Memory. Old data is only
-// read, never changed or deleted. Notes from old stores are marked source "import" (triage notes, which people wrote, are also marked reviewed).
+// read, never changed or deleted. Notes from old stores are marked source "import" (triage notes, which people wrote, are marked as yours).
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homeStateDir } from "../shared/index.js";
@@ -95,7 +95,7 @@ export function migrateOldMemory(store: NoteStore, options: MigrationOptions = {
       if (seen.has(key)) { report.duplicates++; continue; }
       seen.add(key);
       const before = store.list({ query: item.text }).some(note => note.text === item.text && note.folder === (item.folder ?? undefined));
-      try { store.add({ text: item.text, scope: item.folder ? "folder" : "global", folder: item.folder, kind: item.kind, source: "import", created: item.created, ...(reviewed ? { reviewed } : {}) }); }
+      try { store.add({ text: item.text, scope: item.folder ? "folder" : "global", folder: item.folder, kind: item.kind, source: reviewed ? "user" : "import", created: item.created }); }
       catch { report.skipped++; continue; } // a secret-looking or empty note is not imported
       if (before) report.duplicates++; else report.imported++;
     }

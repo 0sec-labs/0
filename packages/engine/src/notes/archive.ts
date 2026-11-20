@@ -1,5 +1,5 @@
 // Portable export/import of notes, shared by the CLI and the web API. Reads the older
-// version 1 archive (lessons with a `summary`) too. Imported notes are always source "import", live, and not reviewed: a file cannot vouch for itself.
+// version 1 archive (lessons with a `summary`) too. Imported notes are always source "import": a file cannot vouch for itself.
 import { isKind, type Note } from "./core.js";
 import { canonicalFolder, type NoteStore } from "./store.js";
 

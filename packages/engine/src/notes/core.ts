@@ -9,22 +9,14 @@ export type NoteKind = (typeof NOTE_KINDS)[number];
 export type NoteScope = "folder" | "global";
 /** user: typed by a person. model: written by 0 through the memory tool. import: arrived from an archive or an older store. */
 export type NoteSource = "user" | "model" | "import";
-/** proposed notes wait for review and are never shown to the model or the scan verifier. */
-export type NoteStatus = "live" | "proposed";
-
 export interface Note {
   id: string;
   text: string;
   scope: NoteScope;
   source: NoteSource;
-  status: NoteStatus;
   created: string;
   /** Thread that wrote the note (model notes). */
   thread?: string;
-  /** The writing thread had read untrusted content (web, files, MCP, extensions). */
-  tainted?: boolean;
-  /** A person accepted this note after it was proposed. */
-  reviewed?: boolean;
   /** Last day the note was put in a prompt. Informational: ranking never uses it. */
   lastInjected?: string;
   /** Folder identity the note belongs to (folder scope only): `git:<host>/<path>` or an absolute path. */
@@ -60,16 +52,16 @@ export function parseSource(value: unknown, fallback: NoteSource = "user"): Note
   return value === "user" || value === "you" ? "user" : value === "model" || value === "0" ? "model" : value === "import" ? "import" : fallback;
 }
 
-/** A person wrote it or accepted it: the only notes allowed to steer a scan verifier. */
-export const isTrusted = (note: Note): boolean => note.status === "live" && (note.source === "user" || note.reviewed === true);
+/** A person wrote it: the only notes allowed to steer a scan verifier or leave in an export. */
+export const isTrusted = (note: Note): boolean => note.source === "user";
 
 const META = /\s*<!--\s*(.*?)\s*-->\s*$/;
 const token = (value: string): string => value.replace(/[^\w.:@/-]/g, "_").slice(0, 80);
 
-/** `- text <!-- id=m_x kind=command source=user status=live created=ISO thread=t tainted=1 -->`; metadata is optional on hand-written lines. */
+/** `- text <!-- id=m_x kind=command source=user created=ISO thread=t -->`; metadata is optional on hand-written lines. */
 export function formatNote(note: Note): string {
-  const meta = [`id=${note.id}`, note.kind ? `kind=${note.kind}` : "", `source=${note.source}`, note.status === "proposed" ? "status=proposed" : "", `created=${note.created}`,
-    note.thread ? `thread=${token(note.thread)}` : "", note.tainted ? "tainted=1" : "", note.reviewed ? "reviewed=1" : "", note.lastInjected ? `injected=${note.lastInjected}` : ""];
+  const meta = [`id=${note.id}`, note.kind ? `kind=${note.kind}` : "", `source=${note.source}`, `created=${note.created}`,
+    note.thread ? `thread=${token(note.thread)}` : "", note.lastInjected ? `injected=${note.lastInjected}` : ""];
   return `- ${note.text} <!-- ${meta.filter(Boolean).join(" ")} -->`;
 }
 
@@ -87,12 +79,12 @@ export function parseNotes(markdown: string, scope: NoteScope, folder: string | 
     }
     const text = cleanText(body);
     if (!text) continue;
+    // Older files kept notes a thread had only proposed. They were never accepted and never used, so they are not notes.
+    if (meta["status"] === "proposed") continue;
     const note: Note = { id: /^m_[a-z0-9]{4,}$/.test(meta["id"] ?? "") ? meta["id"]! : noteId(text, scope, folder), text, scope,
-      source: parseSource(meta["source"]), status: meta["status"] === "proposed" ? "proposed" : "live", created: meta["created"] ?? fallbackCreated };
+      source: parseSource(meta["source"]), created: meta["created"] ?? fallbackCreated };
     if (isKind(meta["kind"])) note.kind = meta["kind"];
     if (meta["thread"]) note.thread = meta["thread"];
-    if (meta["tainted"] === "1") note.tainted = true;
-    if (meta["reviewed"] === "1") note.reviewed = true;
     const injected = meta["injected"] ?? meta["used"];
     if (injected) note.lastInjected = injected;
     if (folder) note.folder = folder;

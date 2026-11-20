@@ -38,7 +38,7 @@ export function recordRepairLearning(
     const text = verified
       ? `Repair of "${finding.title}" (${finding.category}) was verified after ${repair.attempts} attempt(s); the pattern fixed the root cause and kept legitimate behavior.`
       : `Repair of "${finding.title}" (${finding.category}) ${repair.status} after ${repair.attempts} attempt(s): ${repair.reason ?? "no reason"}. Do not repeat the same approach without new evidence.`;
-    openMemory().add({ text, scope: "folder", folder: repoRoot, kind: verified ? "fix-decision" : "avoid", source: "model", tainted: true }); // written from scan data: context for the model, never trusted by the verifier
+    openMemory().add({ text, scope: "folder", folder: repoRoot, kind: verified ? "fix-decision" : "avoid", source: "model" }); // written from scan data: context for the model, never trusted by the verifier
   } catch {
     // A memory write failure must never block a verified repair.
   }

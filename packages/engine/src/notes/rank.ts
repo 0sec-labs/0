@@ -8,7 +8,7 @@ const time = (value: string | undefined): number => { const ms = value ? Date.pa
 
 /** Live notes for the current folder first, then global; inside each, newest first. Nothing here depends on when a note was last shown. */
 export function rankNotes(notes: readonly Note[], folder?: string): Note[] {
-  const relevant = notes.filter(note => note.status === "live" && (note.scope === "global" || (folder !== undefined && note.folder === folder)));
+  const relevant = notes.filter(note => (note.scope === "global" || (folder !== undefined && note.folder === folder)));
   const rank = (note: Note) => (note.scope === "folder" ? 1e15 : 0) + time(note.created);
   return relevant.sort((a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id));
 }

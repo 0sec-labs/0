@@ -8,7 +8,7 @@ export const EXPORT_END = "<!-- 0 memory: end -->";
 const TITLES: Record<NoteKind | "other", string> = { command: "Commands", convention: "Conventions", "fix-decision": "Decisions", avoid: "Avoid", other: "Notes" };
 const ORDER: Array<NoteKind | "other"> = ["command", "convention", "fix-decision", "avoid", "other"];
 
-/** Only live notes a person wrote or accepted. Proposals, unreviewed model notes and imports stay out. */
+/** Only notes a person wrote. Notes a thread wrote and imports stay out. */
 export const exportable = (notes: readonly Note[]): Note[] => notes.filter(note => isTrusted(note));
 
 export function renderExportSection(notes: readonly Note[]): string {

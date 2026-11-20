@@ -1852,9 +1852,8 @@ describe("runNativeAgentLoop — Memory", () => {
     await runNativeAgentLoop({ config: cfg(), runtime, db: null, memoryStore: store });
     expect(seen[0]).toContain("Routes live in module.ts"); expect(seen[0]).toContain("untrusted");
     expect(tools).toContain("memory");
-    // A scan loop reads repository content all the time, so its notes wait for review.
-    expect(store.list({ folder: home }).map((note) => note.text)).not.toContain("Tests run with pnpm test");
-    expect(store.list({ folder: home, status: "proposed" }).map((note) => note.text)).toEqual(["Tests run with pnpm test"]);
+    // A scan loop reads repository content all the time, so it cannot add notes.
+    expect(store.list({ folder: home }).map((note) => note.text)).toEqual(["Routes live in module.ts"]);
   });
 
   it("stays cold for verify, when the run opts out, and when the environment vetoes it", async () => {

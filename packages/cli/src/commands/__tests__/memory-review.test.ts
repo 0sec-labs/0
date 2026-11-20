@@ -30,19 +30,12 @@ async function run(...args: string[]): Promise<void> {
 const json = () => JSON.parse(out.join("\n"));
 
 describe("0 memory review and export", () => {
-  it("lists, accepts (with edited text) and rejects proposed notes; proposals are not in the live list", async () => {
+  it("has no review step: no proposed command, and the list says nothing about proposals", async () => {
     const store = createFileNoteStore();
-    const a = store.add({ text: "Deploys use the staging flag", source: "model", status: "proposed", tainted: true });
-    const b = store.add({ text: "Skip the flaky suite", source: "model", status: "proposed" });
-    await run("memory", "list", "--json"); expect(json()).toMatchObject({ notes: [], proposed: 2 });
-    await run("memory", "list"); expect(out.join("\n")).toContain("2 proposed notes waiting for review");
-    await run("memory", "proposed", "list", "--json"); expect(json().notes.map((n: { id: string }) => n.id).sort()).toEqual([a.id, b.id].sort());
-    await run("memory", "proposed", "accept", a.id, "--text", "Deploys use the --staging flag", "--json");
-    expect(json().note).toMatchObject({ status: "live", reviewed: true, text: "Deploys use the --staging flag" });
-    await run("memory", "proposed", "reject", b.id); expect(out.join("")).toContain(`Rejected ${b.id}`);
-    await run("memory", "proposed", "reject", b.id); expect(code).toBe(1);
-    await run("memory", "proposed", "accept", "m_nothere"); expect(code).toBe(1);
-    await run("memory", "list", "--json"); expect(json()).toMatchObject({ proposed: 0 }); expect(json().notes).toHaveLength(1);
+    store.add({ text: "Deploys use the staging flag", source: "model" });
+    await run("memory", "list", "--json"); expect(json().notes).toHaveLength(1); expect(json()).not.toHaveProperty("proposed");
+    await run("memory", "list"); expect(out.join("\n")).not.toMatch(/propos|review/i);
+    await expect(run("memory", "proposed", "list")).rejects.toThrow();
   });
   it("says how many notes were left out of what the model sees, and why", async () => {
     const store = createFileNoteStore();
@@ -53,21 +46,20 @@ describe("0 memory review and export", () => {
     await run("memory", "list"); expect(out.join("\n")).toMatch(/\* \d+ notes? not shown \(memory budget full\)\. Not shown to the model/);
   });
   it("adds a user note (source user, live), refuses a secret", async () => {
-    await run("memory", "add", "Use pnpm", "--global", "--json"); expect(json().note).toMatchObject({ source: "user", status: "live" });
+    await run("memory", "add", "Use pnpm", "--global", "--json"); expect(json().note).toMatchObject({ source: "user" });
     await run("memory", "add", `key ${["sk", "abcdefghijklmnop", "qrstuvwxyz123456"].join("-")}`, "--global"); expect(code).toBe(1); expect(err.join("")).toContain("looks like a secret");
   });
-  it("exports accepted notes to an AGENTS.md section, keeps hand-written text, and never imports back", async () => {
+  it("exports your notes to an AGENTS.md section, keeps hand-written text, and never imports back", async () => {
     const repo = join(work, "app"); mkdirSync(repo);
     execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
     execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/app.git"], { cwd: repo });
     const store = createFileNoteStore();
     store.add({ text: "Run pnpm test", folder: repo, kind: "command", source: "user" });
     store.add({ text: "Unreviewed model note", folder: repo, source: "model" });
-    store.add({ text: "Proposed note", folder: repo, source: "model", status: "proposed" });
     const target = join(repo, "AGENTS.md"); writeFileSync(target, "# Agents\n\nBe kind.\n");
     await run("memory", "export", "--folder", repo, "--to", target);
     const text = readFileSync(target, "utf8");
-    expect(text).toContain("Be kind."); expect(text).toContain("- Run pnpm test"); expect(text).not.toContain("Unreviewed"); expect(text).not.toContain("Proposed note");
+    expect(text).toContain("Be kind."); expect(text).toContain("- Run pnpm test"); expect(text).not.toContain("Unreviewed");
     expect(out.join("\n")).toContain("+ - Run pnpm test");
     await run("memory", "export", "--folder", repo, "--to", target); expect(readFileSync(target, "utf8")).toBe(text); // idempotent
     await run("memory", "export", "--folder", repo, "--markdown"); expect(out.join("\n")).toContain("## Notes from 0 memory");

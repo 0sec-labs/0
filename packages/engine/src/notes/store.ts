@@ -6,29 +6,26 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homeStateDir } from "../shared/index.js";
-import { cleanText, folderKey, formatNote, isKind, noteId, parseNotes, type Note, type NoteKind, type NoteScope, type NoteSource, type NoteStatus } from "./core.js";
+import { cleanText, folderKey, formatNote, isKind, noteId, parseNotes, type Note, type NoteKind, type NoteScope, type NoteSource } from "./core.js";
 import { screenText } from "./guard.js";
 import { folderIdentity } from "./identity.js";
 
 export interface NoteInput {
-  text: string; scope?: NoteScope; folder?: string; kind?: NoteKind; source?: NoteSource; created?: string;
-  status?: NoteStatus; thread?: string; tainted?: boolean; reviewed?: boolean;
+  text: string; scope?: NoteScope; folder?: string; kind?: NoteKind; source?: NoteSource; created?: string; thread?: string;
 }
-export interface NoteFilter { folder?: string; scope?: NoteScope; query?: string; /** Default: live notes only. */ status?: NoteStatus | "all" }
-export interface EditOptions { /** Who is changing it. A model edit drops the user/accepted trust the note had. */ by?: NoteSource; thread?: string; tainted?: boolean }
+export interface NoteFilter { folder?: string; scope?: NoteScope; query?: string }
+export interface EditOptions { /** Who is changing it. A model edit drops the trust a person's note had. */ by?: NoteSource; thread?: string }
 
 export interface NoteStore {
   list(filter?: NoteFilter): Note[];
   add(input: NoteInput): Note;
   edit(id: string, text: string, options?: EditOptions): Note | undefined;
-  /** Turn a proposal into a live, reviewed note, optionally with corrected text. */
-  accept(id: string, text?: string): Note | undefined;
   remove(id: string): boolean;
   /** Remove every note, or the notes of one folder. Returns how many were removed. */
   clear(folder?: string): number;
   /** Record that notes were put in a prompt. Lazy: a file is rewritten at most once per note per day. */
   markInjected(ids: readonly string[], at?: string): void;
-  /** Notes the model has written (live or proposed) on the given UTC day, for the daily limit. */
+  /** Notes the model has written on the given UTC day, for the daily limit. */
   modelWritesOn(day: string): number;
   enabled(): boolean;
   setEnabled(on: boolean): void;
@@ -97,9 +94,8 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
     list(filter = {}) {
       const query = filter.query?.toLowerCase();
       const folderFilter = filter.folder ? folderIdentity(filter.folder) : undefined;
-      const status = filter.status ?? "live";
       const seen = new Set<string>();
-      return all().filter(note => (status === "all" || note.status === status) && (!filter.scope || note.scope === filter.scope) && (!folderFilter || note.folder === folderFilter)
+      return all().filter(note => (!filter.scope || note.scope === filter.scope) && (!folderFilter || note.folder === folderFilter)
         && (!query || note.text.toLowerCase().includes(query)) && !seen.has(note.id) && !!seen.add(note.id))
         .sort((a, b) => b.created.localeCompare(a.created) || a.id.localeCompare(b.id));
     },
@@ -115,13 +111,7 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
         entry.note.folder === folder &&
         entry.note.text.toLowerCase() === text.toLowerCase()
       );
-      const status = input.status ?? "live";
-      if (existing) {
-        if (existing.note.status !== "proposed" || status !== "live") return existing.note;
-        const promoted: Note = { ...existing.note, status: "live", reviewed: true };
-        rewriteOf(existing, notes => notes.map(entry => entry.id === existing.note.id ? promoted : entry));
-        return promoted;
-      }
+      if (existing) return existing.note;
       const occupied = new Set(currentEntries.map(entry => entry.note.id));
       let id = noteId(text, scope, folder);
       let salt = 1;
@@ -129,9 +119,8 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
         id = noteId(text, scope, folder, salt);
         salt++;
       }
-      const note: Note = { id, text, scope, source: input.source ?? "user", status, created: input.created ?? now(),
-        ...(folder ? { folder } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.thread ? { thread: input.thread } : {}),
-        ...(input.tainted ? { tainted: true } : {}), ...(input.reviewed ? { reviewed: true } : {}) };
+      const note: Note = { id, text, scope, source: input.source ?? "user", created: input.created ?? now(),
+        ...(folder ? { folder } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.thread ? { thread: input.thread } : {}) };
       const file = scope === "global" ? globalFile : folderFileFor(folder!);
       writeNotes(file, [...readFile(file, scope, folder), note], folder);
       return note;
@@ -142,19 +131,11 @@ export function createFileNoteStore(options: FileStoreOptions = {}): NoteStore {
       if (!target) return undefined;
       const edited: Note = { ...target.note, text: clean };
       if (edit.by === "model") {
-        edited.source = "model"; delete edited.reviewed;
+        edited.source = "model";
         if (edit.thread) edited.thread = edit.thread;
-        if (edit.tainted) edited.tainted = true;
       }
       rewriteOf(target, notes => notes.map(note => note.id === id ? edited : note));
       return edited;
-    },
-    accept(id, text) {
-      const target = find(id);
-      if (!target || target.note.status !== "proposed") return undefined;
-      const accepted: Note = { ...target.note, status: "live", reviewed: true, ...(text !== undefined ? { text: screened(text) } : {}) };
-      rewriteOf(target, notes => notes.map(note => note.id === id ? accepted : note));
-      return accepted;
     },
     remove(id) {
       const target = find(id);

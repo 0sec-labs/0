@@ -37,16 +37,13 @@ describe("memory API", () => {
     call("/api/console/memory/clear", "POST", {});
     expect(call("/api/console/memory/import", "POST", { archive }).data).toEqual({ added: 1, total: 1 });
   });
-  it("lists proposals apart from notes, accepts (optionally edited) and rejects them", () => {
+  it("has no proposals and no accept route: a note is in Memory or it is not", () => {
     const store = createFileNoteStore({ home });
-    const a = store.add({ text: "Proposed by a thread", source: "model", status: "proposed", tainted: true });
-    const b = store.add({ text: "Another proposal", source: "model", status: "proposed" });
-    const listed = call("/api/console/memory", "GET").data as { notes: unknown[]; proposed: Array<{ id: string }> };
-    expect(listed.notes).toEqual([]); expect(listed.proposed.map(n => n.id).sort()).toEqual([a.id, b.id].sort());
-    expect((call(`/api/console/memory/${a.id}/accept`, "POST", { text: "Proposed, then corrected" }).data as { note: { status: string; text: string } }).note).toMatchObject({ status: "live", text: "Proposed, then corrected" });
-    expect(call(`/api/console/memory/${a.id}/accept`, "POST", {}).status).toBe(404);
-    expect(call(`/api/console/memory/${b.id}`, "DELETE").status).toBe(200);
-    expect((call("/api/console/memory", "GET").data as { proposed: unknown[]; notes: unknown[] })).toMatchObject({ proposed: [], notes: [expect.anything()] });
+    const a = store.add({ text: "Saved by a thread", source: "model" });
+    const listed = call("/api/console/memory", "GET").data as Record<string, unknown>;
+    expect(listed).not.toHaveProperty("proposed");
+    expect((listed.notes as Array<{ id: string }>).map(n => n.id)).toEqual([a.id]);
+    expect(call(`/api/console/memory/${a.id}/accept`, "POST", {}).status).toBe(405);
   });
   it("reports notes that do not fit what the model is shown", () => {
     for (let i = 0; i < 20; i++) call("/api/console/memory", "POST", { text: `${i} ${"x".repeat(470)}`, scope: "global" });

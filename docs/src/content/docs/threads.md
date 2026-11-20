@@ -66,7 +66,7 @@ A saved thread opens at `/chats/saved/<id>` read-only, with its transcript and p
 At the start of each turn the model reads the notes, newest first, up to about 2,000 tokens. The notes are labelled as untrusted context: they never override system rules or your request. The model has one `memory` tool with three actions: `remember`, `update` and `forget`. A repository cannot supply notes.
 
 - **You** commit immediately: "remember that ...", `0 memory add` and the Add button save at once.
-- **0** commits a note it chose to keep, unless the thread has read untrusted content (web pages, repository files, shell output, extension results). Then the note goes to the **Proposed** inbox on the Memory page until you accept it.
+- **0** saves a note it chose to keep, unless the thread has read untrusted content (web pages, repository files, shell output, extension results). Then nothing is saved: it tells you in the thread, and you can add the note yourself.
 - **Secrets**: a note that looks like a key, token or password is refused.
 
 Notes are plain Markdown in `~/.0/memory/MEMORY.md`. Nothing is written into your repository. `ZERO_DISABLE_MEMORY=1` turns Memory off. From the terminal: `0 memory list`, `0 memory add "<note>"`, `0 memory remove <id>`.

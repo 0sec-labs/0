@@ -9,7 +9,7 @@ import { createFileNoteStore, memoryDir } from "./store.js";
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "notes-")); });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
-const note = (over: Partial<Note>): Note => ({ id: "m_aaaaaaaa", text: "x", scope: "global", source: "user", status: "live", created: "2026-01-01T00:00:00.000Z", ...over });
+const note = (over: Partial<Note>): Note => ({ id: "m_aaaaaaaa", text: "x", scope: "global", source: "user", created: "2026-01-01T00:00:00.000Z", ...over });
 
 describe("core", () => {
   it("keeps notes to one clean line and hides comment markers", () => {
@@ -25,7 +25,7 @@ describe("core", () => {
   });
   it("ranks the current folder first, then recency, and drops other folders", () => {
     const ranked = rankNotes([note({ id: "m_g1", created: "2026-05-01T00:00:00.000Z" }), note({ id: "m_f1", scope: "folder", folder: "/a", created: "2026-01-01T00:00:00.000Z" }),
-      note({ id: "m_f2", scope: "folder", folder: "/b" }), note({ id: "m_g2", created: "2026-01-01T00:00:00.000Z", lastInjected: "2026-06-01" }), note({ id: "m_p", status: "proposed" })], "/a");
+      note({ id: "m_f2", scope: "folder", folder: "/b" }), note({ id: "m_g2", created: "2026-01-01T00:00:00.000Z", lastInjected: "2026-06-01" })], "/a");
     expect(ranked.map(n => n.id)).toEqual(["m_f1", "m_g1", "m_g2"]); // never by last shown, and proposals are not ranked
   });
   it("fits the budget without truncating a note", () => {
@@ -151,16 +151,16 @@ describe("content deduplication and stable id allocation", () => {
     expect(ids.size).toBe(3);
   });
 
-  it("7. accept(id, correctedText) does not introduce the same defect", () => {
+  it("7. editing a note's text does not introduce the same defect", () => {
     const store = createFileNoteStore({ home });
-    const proposed = store.add({ text: "Draft Fact", status: "proposed", source: "model" });
-    const originalId = proposed.id;
+    const first = store.add({ text: "Draft Fact", source: "model" });
+    const originalId = first.id;
 
-    const accepted = store.accept(originalId, "Final Fact");
-    expect(accepted?.id).toBe(originalId);
-    expect(accepted?.text).toBe("Final Fact");
+    const edited = store.edit(originalId, "Final Fact");
+    expect(edited?.id).toBe(originalId);
+    expect(edited?.text).toBe("Final Fact");
 
-    // Adding "Final Fact" dedupes to the accepted note
+    // Adding "Final Fact" dedupes to the edited note
     const addedFinal = store.add({ text: "Final Fact" });
     expect(addedFinal.id).toBe(originalId);
     expect(store.list().filter(n => n.text === "Final Fact")).toHaveLength(1);
@@ -180,7 +180,7 @@ describe("content deduplication and stable id allocation", () => {
     expect(globalNote.scope).toBe("global");
     expect(folderNote.scope).toBe("folder");
 
-    const allNotes = store.list({ status: "all" });
+    const allNotes = store.list();
     expect(allNotes.filter(n => n.text === "Shared Convention")).toHaveLength(2);
   });
 
@@ -196,26 +196,18 @@ describe("content deduplication and stable id allocation", () => {
     expect(store.list({ folder: "/work/app-b" })).toHaveLength(1);
   });
 
-  it("10. proposed-to-live promotion behavior remains correct", () => {
+  it("10. adding the same text again returns the note that is already there", () => {
     const store = createFileNoteStore({ home });
-    const proposed = store.add({ text: "Heuristic rule", status: "proposed", source: "model" });
-    expect(proposed.status).toBe("proposed");
-    expect(store.list()).toHaveLength(0); // live only by default
-
-    // User adds the same rule -> promoted to live & reviewed
-    const live = store.add({ text: "Heuristic rule", status: "live", source: "user" });
-    expect(live.id).toBe(proposed.id);
-    expect(live.status).toBe("live");
-    expect(live.reviewed).toBe(true);
+    const first = store.add({ text: "Heuristic rule", source: "model" });
+    const again = store.add({ text: "Heuristic rule", source: "user" });
+    expect(again.id).toBe(first.id);
     expect(store.list()).toHaveLength(1);
 
-    // Also test promotion of a proposed note whose text was edited
-    const p2 = store.add({ text: "Initial text", status: "proposed", source: "model" });
-    store.edit(p2.id, "Edited text");
-    const live2 = store.add({ text: "Edited text", status: "live", source: "user" });
-    expect(live2.id).toBe(p2.id);
-    expect(live2.status).toBe("live");
-    expect(live2.reviewed).toBe(true);
+    // The same holds for text that was edited into place
+    const second = store.add({ text: "Initial text", source: "model" });
+    store.edit(second.id, "Edited text");
+    expect(store.add({ text: "Edited text", source: "user" }).id).toBe(second.id);
+    expect(store.list()).toHaveLength(2);
   });
 
   it("11. edited notes and collision-resolved IDs survive store reload", () => {

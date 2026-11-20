@@ -5,7 +5,7 @@ import { isKind, isTrusted, type Note, type NoteKind } from "./core.js";
 import { screenText } from "./guard.js";
 import { MEMORY_HEADER, fitToBudget, findNearDuplicate, overflowLine, renderPrompt, type BudgetReport } from "./rank.js";
 import { canonicalFolder, MemoryError, createFileNoteStore, type NoteStore } from "./store.js";
-import { DAILY_REMEMBER_LIMIT, createThreadGuard, modelNoteStatus, type ThreadGuard } from "./taint.js";
+import { DAILY_REMEMBER_LIMIT, createThreadGuard, type ThreadGuard } from "./taint.js";
 
 export const MEMORY_DISABLED_ENV = ["ZERO_DISABLE_MEMORY", "ZERO_DISABLE_HUNT_MEMORY"] as const;
 export const memoryDisabledByEnv = (env: NodeJS.ProcessEnv = process.env): boolean => MEMORY_DISABLED_ENV.some(name => /^(1|true)$/i.test(env[name] ?? ""));
@@ -35,10 +35,11 @@ export function parseRememberRequest(message: string): string | undefined {
 }
 
 export interface MemoryToolArgs { action: "remember" | "update" | "forget"; note?: string; kind?: string; scope?: "folder" | "global"; id?: string }
-export interface MemoryToolResult { id?: string; removed?: boolean; saved?: boolean; status?: "live" | "proposed"; message: string }
+export interface MemoryToolResult { id?: string; removed?: boolean; saved?: boolean; message: string }
 export interface MemoryToolOptions { guard?: ThreadGuard; now?: () => Date; dailyLimit?: number }
 
 const FROZEN = "Not changed: this thread read untrusted content (web, files, tool output), so it cannot change saved notes. Ask the user to change it in Memory.";
+const NOT_SAVED = "Not saved: this thread read untrusted content (web, files, tool output), so it cannot add notes. Ask the user to add it in Memory.";
 
 /** `remember` saves one note, `update` replaces the text of one by id, `forget` removes one. Without a guard the thread counts as tainted. */
 export function runMemoryTool(store: NoteStore, folder: string | undefined, args: MemoryToolArgs, options: MemoryToolOptions = {}): MemoryToolResult {
@@ -65,23 +66,23 @@ function run(store: NoteStore, folder: string | undefined, args: MemoryToolArgs,
   if (args.action === "update") {
     if (!args.id) throw new Error("update needs the id of a note.");
     if (guard.tainted) return { saved: false, message: FROZEN };
-    if (!store.list({ status: "all" }).some(note => note.id === args.id)) return { saved: false, message: `No note ${args.id}.` };
+    if (!store.list().some(note => note.id === args.id)) return { saved: false, message: `No note ${args.id}.` };
     const limited = capped();
     if (limited) return limited;
     const note = store.edit(args.id, args.note, { by: "model", thread: guard.thread });
-    return note ? { id: note.id, saved: true, status: note.status, message: `Updated ${note.id}.` } : { saved: false, message: `No note ${args.id}.` };
+    return note ? { id: note.id, saved: true, message: `Updated ${note.id}.` } : { saved: false, message: `No note ${args.id}.` };
   }
+  // A note is in Memory or it is not: a thread that read untrusted content cannot add one, the same as it cannot change or forget one.
+  if (guard.tainted) return { saved: false, message: NOT_SAVED };
   const kind: NoteKind | undefined = isKind(args.kind) ? args.kind : undefined;
   const scope = args.scope === "global" || !folder ? "global" : "folder";
   const identity = scope === "folder" ? canonicalFolder(folder!) : undefined;
-  const near = findNearDuplicate(store.list({ status: "all" }).filter(note => note.scope === scope && note.folder === identity), screen.text);
-  if (near) return { id: near.id, saved: false, status: near.status, message: `Not saved: a near-identical note already exists (${near.id}${near.status === "proposed" ? ", waiting for review" : ""}). Use action update with that id to change it.` };
+  const near = findNearDuplicate(store.list().filter(note => note.scope === scope && note.folder === identity), screen.text);
+  if (near) return { id: near.id, saved: false, message: `Not saved: a near-identical note already exists (${near.id}). Use action update with that id to change it.` };
   const limited = capped();
   if (limited) return limited;
-  const status = modelNoteStatus(guard);
-  const note = store.add({ text: screen.text, scope, ...(scope === "folder" ? { folder } : {}), ...(kind ? { kind } : {}), source: "model", status, thread: guard.thread, tainted: guard.tainted });
-  return { id: note.id, saved: true, status: note.status, message: note.status === "proposed"
-    ? `Saved for review as ${note.id}: this thread read untrusted content, so the note stays a proposal until the user accepts it in Memory. It is not active yet.` : `Remembered ${note.id}.` };
+  const note = store.add({ text: screen.text, scope, ...(scope === "folder" ? { folder } : {}), ...(kind ? { kind } : {}), source: "model", thread: guard.thread });
+  return { id: note.id, saved: true, message: `Remembered ${note.id}.` };
 }
 
 export { MEMORY_HEADER, overflowLine };
