@@ -5,6 +5,7 @@ export * from "./pricing.js";
 export * from "./verification.js";
 export * from "./finding-schemas.js";
 export * from "./sarif-import.js";
+export * from "./attacker-impact.js";
 export * from "./fix-prompt.js";
 export * from "./scanners.js";
 export * from "./workflow.js";

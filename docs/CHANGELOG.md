@@ -32,6 +32,9 @@ on the GitHub Release tag.
 
 - A GitHub Action (`uses: 0sec-labs/0security@v<version>`) that scans a pull request and uploads the findings to GitHub code scanning: it installs the release you pin (checksum-verified), runs `0 scan --diff` against the base branch, uploads the SARIF with `0 findings upload`, and fails the job at `fail-on`. See [Pull request checks](https://docs.0.security/ci/). It needs a release that contains `action.yml`, so it works from the next tag.
 
+- A scan now says what each finding means: "what an attacker can do", who can do it (no login, a logged-in user, a local user) and what they get (run code, read data, change data, take down the service). The scan skill asks for it on every finding, and it appears in Markdown and HTML reports, in the SARIF message GitHub shows on an alert, and in the JSON. It states only what the code shows; business impact stays "not assessed" when the code does not say what the service does.
+- Imported findings can be addressed by the short id that `0 findings list` shows (their ids all started with the same 70 characters, so a prefix never matched one); a unique prefix, shown part or end of the id all work.
+
 ### Changed
 
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.

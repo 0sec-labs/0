@@ -11,6 +11,7 @@ import {
   resolveOsecRunStorage,
 } from "@0/engine/storage";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
+import { resolveFindingId, shortFindingId, shortFingerprint } from "../finding-id.js";
 
 type FindingsListOptions = {
   dbPath?: string;
@@ -118,13 +119,7 @@ function withFindingsListOptions(command: Command, options: { defaultLimit?: str
 }
 
 function resolveFindingByPrefix(rows: FindingRow[], id: string): FindingRow | undefined {
-  const exact = rows.find((row) => row.id === id);
-  if (exact) return exact;
-  const matches = rows.filter((row) => row.id.startsWith(id));
-  if (matches.length > 1) {
-    throw new Error(`Finding prefix '${id}' is ambiguous.`);
-  }
-  return matches[0];
+  return resolveFindingId(rows, id);
 }
 
 /** Opens the database that holds this finding (scans keep one database per run); the shared one when none does. */
@@ -225,7 +220,7 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
   if (opts.all) {
     for (const f of rows.slice(0, limit)) {
       renderPriority(f);
-      console.log(`  ${chalk.gray(f.id.slice(0, 8))}  ${chalk.gray(f.category)}  ${chalk.gray(`scan:${f.scanId.slice(0, 8)}`)}  ${chalk.gray(`fp:${(f.fingerprint ?? f.id).slice(0, 10)}`)}`);
+      console.log(`  ${chalk.gray(shortFindingId(f.id))}  ${chalk.gray(f.category)}  ${chalk.gray(`scan:${f.scanId.slice(0, 8)}`)}  ${chalk.gray(`fp:${shortFingerprint(f.fingerprint ?? f.id)}`)}`);
       console.log("");
     }
     return;
@@ -233,7 +228,7 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
   for (const group of groups.slice(0, limit)) {
     const f = group.latest;
     renderPriority(f);
-    console.log(`  ${chalk.gray(`fp:${group.fingerprint.slice(0, 10)}`)}  ${chalk.gray(f.category)}  ${chalk.gray(`${group.count} hits / ${group.scans} scans`)}  ${chalk.gray(`latest:${f.scanId.slice(0, 8)}`)}`);
+    console.log(`  ${chalk.gray(`fp:${shortFingerprint(group.fingerprint)}`)}  ${chalk.gray(f.category)}  ${chalk.gray(`${group.count} hits / ${group.scans} scans`)}  ${chalk.gray(`latest:${f.scanId.slice(0, 8)}`)}`);
     if (f.triageNote) console.log(`  ${chalk.gray("note:")} ${chalk.dim(f.triageNote)}`);
     console.log("");
   }
@@ -255,7 +250,7 @@ async function mutateTriage(
     db.updateFindingTriage(finding.id, triageStatus, triageNote);
     const related = finding.fingerprint ? db.getRelatedFindings(finding.fingerprint) as FindingRow[] : [finding];
     console.log(
-      `${chalk.green("Updated")} ${chalk.white(related.length.toString())} ${chalk.gray("findings in family")} ${chalk.gray(`fp:${(finding.fingerprint ?? finding.id).slice(0, 10)}`)} ${chalk.gray(`→ ${triageStatus}`)}`
+      `${chalk.green("Updated")} ${chalk.white(related.length.toString())} ${chalk.gray("findings in family")} ${chalk.gray(`fp:${shortFingerprint(finding.fingerprint ?? finding.id)}`)} ${chalk.gray(`→ ${triageStatus}`)}`
     );
   } finally {
     db.close();

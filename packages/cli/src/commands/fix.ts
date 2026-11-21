@@ -16,6 +16,7 @@ import { fixPrompt, type FixPromptFinding } from "@0/engine/shared";
 import { osecDB, resolveOsecDbPath } from "@0/engine/storage";
 import { consoleTransportOptions, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import { connect, DEFAULT_SCAN_MODEL, defaultScanDeps, waitForThread, type ScanDeps } from "./scan.js";
+import { resolveFindingId } from "../finding-id.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, usageLine } from "./thread-output.js";
 
@@ -41,11 +42,11 @@ export interface FixDeps extends Pick<ScanDeps, "open" | "err" | "sleep" | "star
 }
 
 function resolveRow(rows: Array<Record<string, unknown>>, id: string): Record<string, unknown> {
-  const exact = rows.find(row => row.id === id);
-  if (exact) return exact;
-  const matches = rows.filter(row => typeof row.id === "string" && row.id.startsWith(id));
-  if (matches.length === 1) return matches[0]!;
-  throw new UsageError(matches.length ? `'${id}' matches ${matches.length} findings; use more of the id.` : `Finding '${id}' not found.`);
+  try {
+    const row = resolveFindingId(rows as Array<{ id: string } & Record<string, unknown>>, id);
+    if (row) return row;
+  } catch (error) { throw new UsageError(error instanceof Error ? error.message : String(error)); }
+  throw new UsageError(`Finding '${id}' not found.`);
 }
 
 const defaults: FixDeps = {

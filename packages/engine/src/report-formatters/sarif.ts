@@ -1,5 +1,5 @@
 import { posix, win32 } from "node:path";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
+import { attackerImpactSentence, getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
 import type { PocStep, ScanReport, Finding, Severity } from "../shared/index.js";
 import { VERSION } from "../shared/index.js";
 
@@ -153,7 +153,7 @@ function findingToResult(finding: Finding, target: string): SarifResult {
   const result: SarifResult = {
     ruleId: finding.templateId,
     level: severityToLevel(finding.severity),
-    message: { text: finding.description },
+    message: { text: [finding.description, attackerImpactSentence(finding) ? `What an attacker can do: ${attackerImpactSentence(finding)}` : ""].filter(Boolean).join("\n\n") },
     locations: [{ physicalLocation: findingLocation(finding, target) }],
     partialFingerprints: {
       primary: stableFingerprint(finding, target),

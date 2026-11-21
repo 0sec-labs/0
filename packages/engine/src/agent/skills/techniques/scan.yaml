@@ -74,6 +74,7 @@ content: |
   - one of the listed categories;
   - source_path, source_start_line and source_end_line, plus the trigger and impact in the description;
   - evidence: the request or input, and what the code does with it;
+  - impact_assessment (a JSON string), so a reader sees what the flaw means without reading the code: `blast_radius` is one or two plain sentences on what an attacker can do and what they end up with ("An unauthenticated caller can run any shell command as the service account, so they take over the server and read its secrets and the database"), not a restatement of the bug class; `reachability_tier` is who can reach it (remote-unauth, remote-auth, local-unpriv and so on); `weaponizability` is what it gives them (rce, info-leak, integrity-tampering, dos-crash, lpe-to-root); `business_impact` only from what the code shows is reachable (payment, personal data, admin functions, other tenants' data) and `unassessed` when the code does not say what the service does; `rationale` is the code fact each of those rests on. Claim no consequence you cannot trace to this code;
   - suggested_replacement with a concrete fix when you can write one.
 
   Do not record the same flaw twice. If one root cause appears in several places, record one finding and list the places. Different flaws on different routes are different findings, even when they are the same class.

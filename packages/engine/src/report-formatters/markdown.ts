@@ -1,4 +1,4 @@
-import { getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
+import { describeAttackerImpact, getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
 import type { ScanReport, Finding, FindingRemediation, PocStep } from "../shared/index.js";
 
 /**
@@ -204,6 +204,12 @@ function formatFinding(finding: Finding): string {
   lines.push("");
   lines.push(`- **Business priority:** ${priority.label}`);
   lines.push(`- **Business impact rationale:** ${priority.rationale}`);
+  const attacker = describeAttackerImpact(finding);
+  if (attacker) {
+    lines.push(`- **What an attacker can do:** ${attacker.can}`);
+    lines.push(`- **Who can do it:** ${attacker.who}`);
+    lines.push(`- **What they get:** ${attacker.gets}`);
+  }
   lines.push(`- **Technical severity:** ${finding.severity}`);
   lines.push(`- **Category:** ${finding.category}`);
   lines.push(`- **Status:** ${finding.status}`);
