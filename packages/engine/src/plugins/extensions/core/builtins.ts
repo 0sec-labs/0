@@ -27,7 +27,15 @@ export interface BuiltinExtension {
 export const GITHUB_CONNECTOR: ConnectorDecl = {
   service: "github", title: "GitHub", description: "Review repositories, security alerts and pull requests.", category: "Code",
   auth: "cli-login", methods: ["cli-login", "oauth-device", "token"], env: [], hosts: ["github.com", "api.github.com"],
-  read: ["pull requests", "pull request diffs", "repository contents", "repository list"],
+  read: [
+    "pull requests",
+    "pull request diffs",
+    "repository contents",
+    "repository list",
+    "code scanning alerts",
+    "Dependabot alerts",
+    "secret scanning alerts",
+  ],
   write: ["comments on pull requests"],
   health: { type: "adapter" }, connectLabel: "Connect", surface: null,
 };

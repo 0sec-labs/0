@@ -177,3 +177,20 @@ export function importSarif(options: { sarifJson: string; dbPath: string; tool?:
   try { return { ...db.importCiReport(input), findings: input.findings.length, dbPath: db.databasePath }; }
   finally { db.close(); }
 }
+
+export {
+  fetchGithubAlerts,
+  prepareGithubAlertsImport,
+  importGithubAlerts,
+  parseAlertKinds,
+  type GithubAlertKind,
+  type GithubAlertState,
+  type GithubAlertsDeps,
+  type FetchGithubAlertsOptions,
+  type ImportGithubAlertsOptions,
+  type GithubAlertsImportResult,
+  type GithubCodeScanningAlert,
+  type GithubDependabotAlert,
+  type GithubSecretScanningAlert,
+  type FetchedGithubAlerts,
+} from "./github-alerts.js";

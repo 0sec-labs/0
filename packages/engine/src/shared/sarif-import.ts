@@ -67,7 +67,7 @@ export function repoRelativePath(uri: unknown, roots: readonly string[] = []): s
   return parts.join("/");
 }
 
-const CWE_CATEGORY: Record<number, AttackCategory> = {
+export const CWE_CATEGORY: Record<number, AttackCategory> = {
   22: "path-traversal", 23: "path-traversal", 36: "path-traversal", 73: "path-traversal",
   78: "command-injection", 77: "command-injection", 88: "command-injection",
   79: "xss", 80: "xss", 83: "xss", 87: "xss",
@@ -82,7 +82,7 @@ const CWE_CATEGORY: Record<number, AttackCategory> = {
   120: "stack-buffer-overflow", 121: "stack-buffer-overflow", 122: "heap-overflow", 190: "integer-overflow", 362: "race-condition",
 };
 
-function cweNumbers(...sources: unknown[]): number[] {
+export function cweNumbers(...sources: unknown[]): number[] {
   const found = new Set<number>();
   for (const source of sources) {
     for (const entry of list(source)) {

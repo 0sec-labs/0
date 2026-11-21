@@ -607,8 +607,8 @@ Commands:
   list [options]           List findings from the database
   show [options] <id>      Show detailed information about a finding
   update [options] <id>    Change a finding's status
-  import [options] <file>  Import findings from another scanner's SARIF 2.1.0 file (use - for
-                           stdin). Nothing in the file is executed.
+  import [options] [file]  Import findings from another scanner's SARIF 2.1.0 file (use - for stdin)
+                           or from GitHub security alerts. Nothing in the file is executed.
   fix [options] <finding>  Fix one finding in an isolated git work tree and open a pull request for
                            review
   help [command]           display help for command
@@ -665,20 +665,26 @@ Options:
   -h, --help                 display help for command
 
 ### 0 findings import
-Usage: 0 findings import [options] <file>
+Usage: 0 findings import [options] [file]
 
-Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is
-executed.
+Import findings from another scanner's SARIF 2.1.0 file (use - for stdin) or from GitHub security
+alerts. Nothing in the file is executed.
 
 Arguments:
-  file              SARIF file, or - to read standard input
+  file                   SARIF file, or - to read standard input
 
 Options:
-  --tool <name>     Label for the scanner, overriding the name in the file
-  --root <dir>      Folder that was scanned; absolute paths under it become repo-relative (default:
-                    the current directory)
-  --db-path <path>  Destination database; stop its running console before importing
-  -h, --help        display help for command
+  --github <owner/repo>  Import security alerts from a GitHub repository via GitHub connection
+  --state <state>        Filter alerts by state: open, dismissed, fixed, all (default: "open")
+  --types <types>        Comma-separated alert kinds: code-scanning, dependabot, secret-scanning,
+                         all (default: "all")
+  --ref <branch>         Filter code-scanning alerts by branch or git ref
+  --tool <name>          Label for the scanner, overriding the name in the file
+  --root <dir>           Folder that was scanned; absolute paths under it become repo-relative
+                         (default: the current directory)
+  --db-path <path>       Destination database; stop its running console before importing
+  --format <format>      Output format: text or json (default: "text")
+  -h, --help             display help for command
 
 ### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]
