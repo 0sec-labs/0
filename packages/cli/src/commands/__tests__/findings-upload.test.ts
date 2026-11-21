@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { gunzipSync } from "node:zlib";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { packSarif, runUpload, type UploadDeps } from "../findings-upload.js";
 
 const SARIF = JSON.stringify({ version: "2.1.0", runs: [{ tool: { driver: { name: "0" } }, results: [] }] });
@@ -23,6 +23,10 @@ function fakes(over: { statuses?: Array<{ processing_status: string; errors?: st
 }
 
 describe("0 findings upload", () => {
+  // GitHub Actions sets these; the command prefers them over git, so a CI run would otherwise see its own commit.
+  beforeEach(() => { vi.stubEnv("GITHUB_SHA", undefined); vi.stubEnv("GITHUB_REF", undefined); });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
   it("sends the SARIF compressed, to the repository and commit it is for, and waits until it is processed", async () => {
     const { deps, calls } = fakes({ statuses: [{ processing_status: "pending" }, { processing_status: "complete" }] });
     const result = await runUpload("scan.sarif", { wait: true }, deps);
