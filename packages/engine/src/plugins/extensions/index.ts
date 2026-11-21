@@ -92,7 +92,7 @@ export function createExtensionService(options: { home?: string; clock?: Clock; 
     overview: project => extensionOverview(store, project ? projectKeyOf(project) : null, { pins, observed }),
     mcpStatus(name) { const r = service.info(name); return r.ok ? ok(mcpServerStatuses(r.value.manifest, pins.pins(name, r.value.entry.active!), observed.read(name, r.value.entry.active!))) : r; },
     mcpHost: o => new ExtensionMcpHost({ extensions: loadable(store, o.project ? projectKeyOf(o.project) : null, secrets).extensions, snapshots, connector: o.connector ?? new SdkMcpConnector(new StdioMcpConnector()), pins, observed, gate: o.gate, ...(o.base ? { base: o.base } : {}), ...(o.parentEnv ? { parentEnv: o.parentEnv } : {}) }),
-    scriptRuns: project => createScriptRuns({ store, secrets, projectKey: project ? projectKeyOf(project) : null }),
+    scriptRuns: project => createScriptRuns({ store, secrets, projectKey: project ? projectKeyOf(project) : null, cwd: project }),
     info(name) {
       const state = store.read(); if (!state.ok) return state;
       const entry = state.value.extensions[name];

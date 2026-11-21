@@ -378,7 +378,7 @@ export type DelegatedFindingUpdateResult =
  * variables does it get? `null` means the command is not an extension's. Implemented by the extension runtime.
  */
 export interface ExtensionRunPort {
-  prepare(command: string): { ok: true; env: Record<string, string>; secrets: readonly string[] } | { ok: false; error: string } | null;
+  prepare(command: string, options?: { cwd?: string }): { ok: true; env: Record<string, string>; secrets: readonly string[] } | { ok: false; error: string } | null;
 }
 
 export interface ToolContext {
