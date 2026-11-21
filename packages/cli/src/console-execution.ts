@@ -44,9 +44,7 @@ export function createIsolatedConsoleSession(
   const models = [...new Set([model, ...Object.values(routing?.agentModels ?? {}).filter(value => value !== "auto")])];
   if (!runtime.workbenchCredentialResolver) throw new Error("The selected runtime cannot bind its account to the host provider broker.");
   const broker = createWorkbenchProviderBroker({ provider, models, resolveCredentials: runtime.workbenchCredentialResolver() });
-  // The isolated workbench has no Memory: notes live on the host, and nothing is read or written from inside the VM.
   const { runtime: _runtime, ...guestConfig } = config;
-  guestConfig.codebaseLearning = false;
   const approvedWorkspace = realpathSync(workbench.workspaceRoot ?? options.workspaceRoot ?? config.workspaceRoot ?? process.cwd());
   const scanId = config.scanId ?? `console-${randomUUID()}`;
   try {

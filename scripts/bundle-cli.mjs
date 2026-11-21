@@ -7,35 +7,6 @@ import { resolveBuildPostHogKey } from "./built-in-posthog-key.mjs";
 
 const outdir = process.env.ZERO_BUNDLE_OUTDIR || "dist";
 
-// Build edition: `full` (default) bundles everything. `core` leaves the research
-// packs (identity/entragraph, adgraph, xnu-fuzz) out of the bundle; their CLI
-// commands print a pointer to the full edition instead (see
-// packages/cli/src/commands/research-pack.ts).
-const EDITION = process.env.ZERO_EDITION || "full";
-if (EDITION !== "full" && EDITION !== "core") {
-  throw new Error(`ZERO_EDITION must be "core" or "full" (got "${EDITION}")`);
-}
-const RESEARCH_PACK_DIST = /packages\/engine\/dist\/(?:identity|adgraph|xnu-fuzz)\/.*\.js$/;
-const researchPackExclusionPlugin = {
-  name: "exclude-research-packs",
-  setup(build) {
-    build.onResolve({ filter: /^@0\/engine\/(?:identity|adgraph|xnu-fuzz)$/ }, (args) => ({ path: args.path, external: true }));
-    // Engine-internal lazy imports of the same modules resolve to dist files; replace
-    // them with an empty module so none of that code lands in the bundle.
-    // The research adapter registry still imports xnu-fuzz statically; keep those four
-    // names resolvable as stubs that fail loudly if a core build ever reaches them.
-    build.onLoad({ filter: RESEARCH_PACK_DIST }, (args) => {
-      const stubbed = /\/xnu-fuzz\/index\.js$/.test(args.path)
-        ? ["TartVmLane", "enumerateTargetModelFromKext", "generateInputsForSelector", "makeRng"]
-        : [];
-      const contents = stubbed
-        .map((name) => `export const ${name} = function ${name}() { throw new Error("This command is part of the full edition (research pack: xnu-fuzz)."); };`)
-        .join("\n");
-      return { contents: contents || "export {};\n", loader: "js" };
-    });
-  },
-};
-
 rmSync(outdir, { force: true, recursive: true });
 mkdirSync(outdir, { recursive: true });
 
@@ -131,16 +102,14 @@ const buildResult = await build({
     __ZERO_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
     __ZERO_BUILT_IN_SENTRY_DSN__: JSON.stringify(BUILT_IN_SENTRY_DSN),
     __ZERO_BUILT_IN_POSTHOG_KEY__: JSON.stringify(BUILT_IN_POSTHOG_KEY),
-    __ZERO_EDITION__: JSON.stringify(EDITION),
   },
-  plugins: EDITION === "core" ? [releaseOnlyAddonPlugin, researchPackExclusionPlugin] : [releaseOnlyAddonPlugin],
+  plugins: [releaseOnlyAddonPlugin],
 });
 
 // Keep renderer code outside the shipped command/browser-server graph.
 const rendererInputs = Object.keys(buildResult.metafile.inputs).filter(path => /node_modules\/(?:@opentui\/|react(?:-dom|-reconciler)?\/)/.test(path));
 if (rendererInputs.length) throw new Error(`Terminal renderer code entered the production CLI: ${rendererInputs.join(", ")}`);
 
-cpSync("packages/engine/src/templates/attacks", `${outdir}/attacks`, { recursive: true });
 cpSync("packages/web/dist", `${outdir}/dashboard`, { recursive: true });
 
 // JIT methodology skills: packages/engine/src/agent/skills/index.ts walks its own

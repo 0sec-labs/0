@@ -18,6 +18,7 @@ export type DBFindingRow = {
   workflowStatus?: string | null;
   workflowAssignee?: string | null;
   workflowUpdatedAt?: string | null;
+  tool?: string | null;
   timestamp: number;
   score?: number | null;
   confidence?: number | null;

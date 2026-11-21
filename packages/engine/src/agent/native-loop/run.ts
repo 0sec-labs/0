@@ -29,7 +29,6 @@ import { eventBus } from "../../events/bus.js";
 import { diag } from "../../diagnostics/channel.js";
 import { reduceCoordinatorState, superviseCoordinator, formatFindingTailLine, type CoordinatorState, type CoordinatorIntervention } from "../coordinator-rails.js";
 import { sendOperatorMessage, type MessagingRuntime } from "../agent-messaging.js";
-import { createThreadGuard, memoryContext, memoryDisabledByEnv, openMemory, runMemoryTool, type NoteStore } from "../../notes/index.js";
 import { toolCallPreview } from "../tool-preview.js";
 import { newCorrelationId, buildToolCallLogEntry, buildToolCallsPayload, type ToolCallLogEntry } from "../action-log.js";
 import { registerSignalCleanup } from "../signal-cleanup.js";
@@ -237,16 +236,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     ? AbortSignal.any([opts.signal, executionAbort.signal])
     : executionAbort.signal;
 
-  // Memory: the notes 0 remembers across threads. Opt-in per run (an injected store or codebaseLearning).
-  const memoryOn = (opts.memoryStore !== undefined || config.codebaseLearning === true) && !memoryDisabledByEnv();
-  let memoryStore: NoteStore | undefined = memoryOn ? opts.memoryStore : undefined;
-  function getMemory(): NoteStore | undefined {
-    if (!memoryOn) return undefined;
-    try { return memoryStore ??= openMemory(); } catch (err) {
-      diag.warn("memory_unavailable", "could not open Memory; continuing without it", { scanId: config.scanId, error: err instanceof Error ? err.message : String(err) });
-      return undefined;
-    }
-  }
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
   const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole({ webSearchEnabled: config.webSearchEnabled });
@@ -254,28 +243,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     ? roleTools.filter(tool => tool.name !== "spawn_agent")
     : roleTools;
 
-  // ── Memory in scoped source work ──
-  // Eligible when Memory is on AND either the caller opted in (agent-runner passes codebaseLearning:
-  // purpose==="research" for scoped audit/review) OR it is a source-scoped attack/discovery role and the
-  // flag is not explicitly disabled. Purpose "verify" stays cold.
-  const memoryActive =
-    memoryOn && !!config.scopePath && config.role !== "verify" &&
-    (config.codebaseLearning === true ||
-      (config.codebaseLearning !== false &&
-        (config.role === "attack" || config.role === "discovery")));
-  if (memoryActive) {
-    const store = getMemory();
-    if (store) {
-      // An autonomous loop reads repository files and target output all the time: its notes are proposals for a person to review.
-      const guard = createThreadGuard(config.scanId, { tainted: true });
-      toolCtx.memory = (args) => runMemoryTool(store, config.scopePath, args, { guard });
-    }
-  }
-
   const tools: ToolDefinition[] = (() => {
-    let t = baseTools.filter((tool) => tool.name !== "memory");
-    if (memoryActive && toolCtx.memory) t = [...t, TOOL_DEFINITIONS.memory];
-    return filterWorkflowAgentTools(t);
+    return filterWorkflowAgentTools(baseTools);
   })();
   toolCtx.delegationTools = tools;
 
@@ -376,18 +345,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       role: "user",
       content: [{ type: "text", text: buildInitialPrompt(config) }],
     });
-
-    if (memoryActive) {
-      try {
-        const store = getMemory();
-        const context = store ? memoryContext(store, config.scopePath) : undefined;
-        if (context?.text) messages.push({ role: "user", content: [{ type: "text", text: context.text }] });
-      } catch (error) {
-        diag.warn("memory_query_failed", "Continuing without Memory notes", {
-          scanId: config.scanId, error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
 
     // 0#771 — on a fresh start, inject this target's prior-scan footholds
     // (hash + redacted preview only) alongside the normal in-scan loot render.

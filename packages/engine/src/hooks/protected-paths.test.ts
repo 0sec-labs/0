@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, realpathSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -141,5 +141,171 @@ describe("protected paths: running a file inside an installed extension", () => 
       `python3 -c "open('${ext}/scripts/x','w').write('y')"`, "ls ~/.0/extensions", "ls ~/.0/extensions/chat-notify",
     ]) expect(run(command), command).toBe("deny");
     expect(run("write", "file-write", [`${ext}/scripts/notify.sh`])).toBe("deny");
+  });
+});
+
+describe("protected paths: sensitive state under ~/.0", () => {
+  const withHome = <T>(fn: () => T): T => {
+    const old = process.env["HOME"];
+    process.env["HOME"] = HOME;
+    try {
+      return fn();
+    } finally {
+      if (old === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = old;
+    }
+  };
+
+  const evaluateBash = (command: string, cwd = "/work") => withHome(() =>
+    protectedPathsBeforeCommandPolicy.evaluate({
+      kind: "bash", command, argv: command.split(/\s+/), cwd, hosts: [], paths: [], thread: {},
+    })
+  );
+
+  const evaluateToolPaths = (paths: string[], kind: "file-write" | "file-read" = "file-write") => withHome(() =>
+    protectedPathsBeforeCommandPolicy.evaluate({
+      kind, command: kind === "file-write" ? "str_replace" : "read", argv: [], cwd: "/work", hosts: [], paths, thread: {},
+    })
+  );
+
+  describe("newly protected sensitive files and directories are denied", () => {
+    const sensitivePaths = [
+      "engines.json",
+      "engines/local.json",
+      "workers/remote.env",
+      "workers/managed.json",
+      "github-webhook-secret.json",
+      "findings-api-access/token",
+      "teams/workspace-a/keys",
+      "chatgpt-plan/accounts.json",
+      "chatgpt-plan/write.lock",
+      "web-connections.json",
+      "workbench/state.json",
+    ];
+
+    it.each(sensitivePaths)("denies reading ~/.0/%s", path => {
+      expect(evaluateBash(`cat ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`cat /home/op/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`cat $HOME/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`cat "\${HOME}/.0/${path}"`)).toMatchObject({ decision: "deny" });
+    });
+
+    it.each(sensitivePaths)("denies writing to ~/.0/%s via redirection", path => {
+      expect(evaluateBash(`echo 'hacked' > ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`echo 'payload' >> ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+    });
+
+    it.each(sensitivePaths)("denies deleting ~/.0/%s", path => {
+      expect(evaluateBash(`rm ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`rm -rf ~/.0/${path.split("/")[0]}`)).toMatchObject({ decision: "deny" });
+    });
+
+    it.each(sensitivePaths)("denies copying or moving ~/.0/%s", path => {
+      expect(evaluateBash(`cp ~/.0/${path} /work/stolen.txt`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`mv ~/.0/${path} /work/stolen.txt`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`cp /tmp/evil ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`mv /tmp/evil ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+    });
+
+    it.each(sensitivePaths)("denies modifying ~/.0/%s with utilities (sed, tee, python, node)", path => {
+      expect(evaluateBash(`sed -i 's/a/b/' ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`echo evil | tee ~/.0/${path}`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`python3 -c "open('/home/op/.0/${path}').read()"`)).toMatchObject({ decision: "deny" });
+      expect(evaluateBash(`node -e "require('fs').readFileSync('/home/op/.0/${path}')"`)).toMatchObject({ decision: "deny" });
+    });
+
+    it("denies access through directory traversal", () => {
+      expect(evaluateBash("cat /work/../home/op/.0/engines.json")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cat /work/../../home/op/.0/github-webhook-secret.json")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cat /work/../home/op/.0/workers/remote.env")).toMatchObject({ decision: "deny" });
+    });
+
+    it("denies access after cd into directory under ~/.0", () => {
+      expect(evaluateBash("cd ~/.0/workers && cat remote.env")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cd /home/op/.0/engines && cat local.json")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cd ~/.0 && cat engines.json")).toMatchObject({ decision: "deny" });
+    });
+
+    it("denies glob patterns matching newly protected paths", () => {
+      expect(evaluateBash("cat ~/.0/eng*/local.json")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cat ~/.0/work*")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cat ~/.0/github-webhook*")).toMatchObject({ decision: "deny" });
+      expect(evaluateBash("cat ~/.0/chatgpt*")).toMatchObject({ decision: "deny" });
+    });
+
+    it.each(sensitivePaths)("denies separate tool paths for ~/.0/%s", path => {
+      expect(evaluateToolPaths([`/home/op/.0/${path}`], "file-write")).toMatchObject({ decision: "deny" });
+      expect(evaluateToolPaths([`~/.0/${path}`], "file-read")).toMatchObject({ decision: "deny" });
+    });
+  });
+
+  describe("workspace operations remain allowed (negative tests)", () => {
+    it.each([
+      "cat /work/engines.json",
+      "cat ./engines.json",
+      "echo '{\"engines\":[]}' > /work/engines.json",
+      "cat /work/src/workers/worker.ts",
+      "mkdir -p /work/workers && echo 'ok' > /work/workers/test.txt",
+      "rm /work/engines.json",
+      "cp /work/engines.json /work/engines.backup.json",
+      "mv /work/engines.json /work/engines.renamed.json",
+      "sed -i 's/foo/bar/' /work/engines.json",
+      "cat /work/github-webhook-secret.json",
+      "cat /work/web-connections.json",
+      "cat /work/teams/report.md",
+      "cat /work/chatgpt-plan/notes.txt",
+      "cat /work/workbench/main.c",
+      "cat /work/findings-api-access/keys.txt",
+      "git status",
+      "npm run build",
+      "pnpm test",
+    ])("allows workspace operation: %s", command => {
+      expect(evaluateBash(command)).toEqual({ decision: "allow" });
+    });
+
+    it("allows tool paths targeting workspace files", () => {
+      expect(evaluateToolPaths(["/work/engines.json"], "file-write")).toEqual({ decision: "allow" });
+      expect(evaluateToolPaths(["/work/workers/worker.ts"], "file-read")).toEqual({ decision: "allow" });
+      expect(evaluateToolPaths(["/work/github-webhook-secret.json"], "file-write")).toEqual({ decision: "allow" });
+    });
+  });
+
+  describe("symlink resolution to sensitive paths", () => {
+    let tmpDir: string;
+    let fakeHome: string;
+    let workDir: string;
+
+    beforeAll(() => {
+      tmpDir = realpathSync(mkdtempSync(join(tmpdir(), "pp-sens-")));
+      fakeHome = join(tmpDir, "h");
+      workDir = join(tmpDir, "w");
+      mkdirSync(join(fakeHome, ".0", "workers"), { recursive: true });
+      writeFileSync(join(fakeHome, ".0", "engines.json"), "{}");
+      mkdirSync(workDir, { recursive: true });
+      symlinkSync(join(fakeHome, ".0", "workers"), join(workDir, "link-workers"));
+      symlinkSync(join(fakeHome, ".0", "engines.json"), join(workDir, "link-engines.json"));
+    });
+
+    afterAll(() => {
+      rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("detects symlinks resolving to newly protected sensitive state", () => {
+      expect(
+        findProtectedPathUse("cat link-workers/remote.env", [], {
+          home: fakeHome,
+          cwd: workDir,
+          real: realpathLoose,
+        })
+      ).not.toBeNull();
+
+      expect(
+        findProtectedPathUse("cat link-engines.json", [], {
+          home: fakeHome,
+          cwd: workDir,
+          real: realpathLoose,
+        })
+      ).not.toBeNull();
+    });
   });
 });

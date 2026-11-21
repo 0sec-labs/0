@@ -65,7 +65,7 @@ export default defineConfig({
     "/team-workspaces": "/server-mode/#teams",
     "/budget-management": "/configuration/#cost-estimates",
     "/improvement-plane": "/",
-    "/learning": "/threads/#memory",
+    "/learning": "/threads/",
     "/validators": "/findings/#verified-and-not-verified",
     "/blind-verification": "/findings/#verified-and-not-verified",
     "/adversarial-evals": "/",

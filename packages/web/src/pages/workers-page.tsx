@@ -134,7 +134,7 @@ export function WorkersPage() {
 
   return (
     <>
-      <PageHeader title="Computers" summary="Where your threads run. Add another computer you can reach with SSH." actions={<Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" className="size-4" />Add computer</Button>} />
+      <PageHeader title="Computers" summary="Where threads run." actions={<Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" className="size-4" />Add computer</Button>} />
 
       <section aria-label="Computers" className="flex flex-col gap-4">
         {loadingBackends && <LoadingState label="Loading computers…" rows={2} />}
@@ -166,7 +166,7 @@ export function WorkersPage() {
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
         <DialogContent className="rounded-md"><DialogHeader><DialogTitle>Add computer</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">0 signs in with your SSH keys and installs itself on a Linux computer. The first time can take a few minutes.</p>
+            <p className="text-sm text-muted-foreground">Signs in with your SSH keys and installs 0 on a Linux computer.</p>
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
             {(hosts.data?.hosts ?? []).length > 0 ? <>
               <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search saved computers" className="pl-8" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search computers saved in your SSH settings" /></div>
@@ -182,8 +182,8 @@ export function WorkersPage() {
               <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey, ...(trustHost ? { trustNewHost: true } : {}) }, "manual"); }}>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>Address (user@host, or a name from your SSH settings)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>Code to work on (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
-                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Let that computer use my OpenAI key (only for computers you own)</span></label>
-                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={trustHost} onChange={event => setTrustHost(event.target.checked)} disabled={busy !== null} /><span>This is the first time I connect to it: trust it and remember its identity</span></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Share my OpenAI key (your own computers only)</span></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={trustHost} onChange={event => setTrustHost(event.target.checked)} disabled={busy !== null} /><span>First connection: trust and remember it</span></label>
                 <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Adding… this can take a few minutes" : "Add computer"}</Button>
               </form>
             </Disclosure>

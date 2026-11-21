@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SentinelScheduleSchema, nextSentinelFire, describeSentinelSchedule, parseCron, type SentinelSchedule } from "./sentinel-triggers.js";
+import { SentinelGithubPrConfigSchema, SentinelScheduleSchema, nextSentinelFire, describeSentinelSchedule, parseCron, type SentinelSchedule } from "./sentinel-triggers.js";
 
 const schedule = (value: Record<string, unknown>): SentinelSchedule => SentinelScheduleSchema.parse(value);
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -51,5 +51,14 @@ describe("Sentinel schedules", () => {
   it("describes schedules for the UI", () => {
     expect(describeSentinelSchedule(schedule({ frequency: "weekdays", time: "09:00", timezone: "UTC" }))).toBe("Weekdays at 09:00 (UTC)");
     expect(describeSentinelSchedule(schedule({ frequency: "minutes", every: 30 }))).toBe("Every 30 minutes");
+  });
+});
+
+describe("the repository of a pull request trigger", () => {
+  it("is owner/name, and never a path", () => {
+    const parse = (repo: string) => SentinelGithubPrConfigSchema.safeParse({ repo }).success;
+    expect(parse("o/r")).toBe(true);
+    expect(parse("my-org/my.repo_1")).toBe(true);
+    for (const repo of ["../x", "o/..", "./x", "o/.", "o/r/extra", "o r/x", ""]) expect(parse(repo)).toBe(false);
   });
 });

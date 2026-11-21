@@ -141,6 +141,17 @@ const evidenceSchema = z.object({
   analysis: z.string().optional(),
 });
 
+/**
+ * A category the model chose, as one of ours. A label we do not have (a model will write
+ * "broken-access-control" or "idor") becomes `other` and the caller keeps the model's label, so the
+ * finding is stored rather than rejected when it is read back.
+ */
+export function normalizeAttackCategory(value: unknown): { category: z.infer<typeof attackCategoryEnum>; unknownLabel?: string } {
+  const parsed = attackCategoryEnum.safeParse(typeof value === "string" ? value.trim().toLowerCase() : value);
+  if (parsed.success) return { category: parsed.data };
+  return typeof value === "string" && value.trim() ? { category: "other", unknownLabel: value.trim() } : { category: "other" };
+}
+
 export const findingSchema = z
   .object({
     id: z.string().min(1),

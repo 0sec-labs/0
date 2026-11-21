@@ -135,14 +135,14 @@ function OtherFiles({ sentinel, readOnly }: { sentinel: Sentinel; readOnly: bool
   </Section>;
 }
 
-/** The right-hand pane of a Sentinel's thread: status, triggers, instructions, memory and the last week in one line. */
+/** The right-hand pane of a Sentinel's thread: status, triggers, instructions, notes and the last week in one line. */
 export function SentinelPane({ sentinel, readOnly }: { sentinel: Sentinel; readOnly: boolean }) {
   const locked = readOnly || sentinel.status === "archived";
   return <div className="flex flex-col gap-6 p-4" data-testid="agent-pane">
     <StatusLine sentinel={sentinel} readOnly={readOnly} />
     <Triggers sentinel={sentinel} readOnly={readOnly} />
     <Section title="Instructions"><SentinelDocument sentinelId={sentinel.id} path="AGENTS.md" empty="No instructions yet." readOnly={locked} /></Section>
-    <Section title="Memory">{sentinel.memory.enabled ? <SentinelDocument sentinelId={sentinel.id} path="NOTES.md" empty="Nothing saved yet." readOnly={locked} /> : <p className="text-sm text-muted-foreground-1">Memory is off. Turn it on in Profile.</p>}</Section>
+    <Section title="Notes"><SentinelDocument sentinelId={sentinel.id} path="NOTES.md" empty="Nothing saved yet." readOnly={locked} /></Section>
     <OtherFiles sentinel={sentinel} readOnly={locked} />
     <Week sentinel={sentinel} />
   </div>;

@@ -52,6 +52,9 @@ function severityToLevel(severity: Severity): "error" | "warning" | "note" {
 }
 
 function stableFingerprint(finding: Finding, target: string): string {
+  // A location key ("loc:...") already says where the flaw is and is the same on every machine and every run; the title,
+  // which a model words differently each time, and the target would only make the alert look new.
+  if (finding.fingerprint?.startsWith("loc:")) return finding.fingerprint;
   return [
     finding.fingerprint,
     finding.templateId,

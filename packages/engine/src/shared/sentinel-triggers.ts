@@ -40,7 +40,7 @@ export const SentinelScheduleSchema = z.strictObject({
 export type SentinelSchedule = z.output<typeof SentinelScheduleSchema>;
 
 export const SentinelGithubPrConfigSchema = z.strictObject({
-  repo: z.string().trim().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, "Use owner/name."),
+  repo: z.string().trim().regex(/^(?!\.{1,2}\/)[A-Za-z0-9_.-]{1,100}\/(?!\.{1,2}$)[A-Za-z0-9_.-]{1,100}$/, "Use owner/name."),
   baseBranch: z.string().trim().min(1).max(200).optional(),
   pollMs: z.number().int().min(MIN_GITHUB_POLL_MS).max(3_600_000).default(120_000),
   /** Post one summary comment on each pull request (edited in place on later pushes). Off by default: runs stay in the Sentinel. */

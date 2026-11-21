@@ -14,21 +14,22 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 
 | Task | Commands | Guide |
 | --- | --- | --- |
+| Scan code | [scan](#scan) | [Findings](/findings/) |
 | Review findings and threads | [findings](#findings) · [findings update](#findings-update) · [threads](#threads) | [Findings](/findings/), [Threads](/threads/) |
 | Automate | [sentinels](#sentinels) · [api](#api) | [Sentinels](/sentinels/) |
 | Set up and extend | [config](#config) · [config doctor](#config-doctor) · [models](#models) · [models connect](#models-connect) · [skills](#skills) · [computers](#computers) | [Models](/models/), [Extensions](/extensions/), [Computers](/computers/) |
 
-## The eight commands
+## The nine commands
 
-`0` with no arguments opens the web console. Everything else is one of eight commands.
+`0` with no arguments opens the web console. Everything else is one of nine commands.
 
 | Command | What it does | Subcommands |
 | --- | --- | --- |
+| `0 scan` | Scan a folder or git repository for security bugs; prints the findings as a report. | none |
 | `0 findings` | Browse findings and change their status. `--format` exports, `--import` loads a report. | `list`, `show`, `update` |
 | `0 threads` | Start, follow and stop threads. | `list`, `send`, `start`, `stop` |
 | `0 sentinels` | Sentinels and, with `--automation`, saved automations. | `list`, `run`, `set` |
 | `0 skills` | Skills, extensions, MCP servers and connectors. | `list`, `add`, `run` |
-| `0 memory` | What 0 remembers across threads. | `list`, `add`, `remove` |
 | `0 models` | Models and provider connections. | `list`, `set`, `connect` |
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
 | `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
@@ -132,6 +133,45 @@ Check this machine and the engine. `config doctor upgrade`, `config doctor workb
 | `--format <format>` | — | Output: text or json Choices: text, json. |
 
 ## Interactive & setup
+
+### scan
+
+Scan a folder or git repository for security bugs and print the findings as a report.
+
+```text
+0 scan [options] <target>
+```
+
+`--diff <ref>` reviews a change instead of the whole folder: only the files that differ from the ref (committed or not) and the code they connect to, for example `0 scan . --diff origin/main --format sarif -o scan.sarif` in a pull request job. The folder must be a git work tree. An empty diff starts no thread and writes an empty report.
+
+With FoxGuard installed (it ships next to `0`; `ZERO_FOXGUARD_PATH` points elsewhere), the scan first runs it on the folder, which takes seconds and costs nothing, and gives its hits to the thread as leads: the thread checks each one against the code, records only the real ones and says which it rejected. A pattern scanner flags some safe code and cannot see logic bugs such as a missing ownership check, so the thread still reviews the entry points itself. `--prepass off` skips it. `--scanner` adds or replaces scanners (`foxguard`, `semgrep`, `opengrep`; repeat the flag for several); a scanner that is not installed is skipped. A Semgrep rule pack such as `p/default` is downloaded when it runs.
+
+A scan is a thread that follows the `scan` skill, so it appears in `0 threads` and in the web app. The findings are stored under the thread's id and exported from there, so `0 findings export --scan <thread id>` gives the same report later. `target` is a folder or a git URL. It uses the console that is running, or the engine named by `--engine-url` or `--computer`; with none running it starts a headless console for the scan and stops it afterwards. Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or the time limit (the report is partial).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `target` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--budget <usd>` | `5` | Stop when the estimated spend reaches this many USD; partial findings are kept |
+| `--format <format>` | `md` | Report format: json, md, sarif, html, pdf |
+| `-o, --output <file>` | — | Write the report to a file instead of stdout |
+| `--fail-on <severity>` | — | Exit 1 when a finding is at or above this severity (critical, high, medium, low, info) |
+| `--passes <n>` | `1` | Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to 5 |
+| `--diff <ref>` | — | Review only the files that differ from this git ref (for example origin/main), and what they connect to; an empty diff scans nothing |
+| `--prepass <mode>` | `auto` | auto runs the pattern scanners first when they are installed and gives their hits to the scan as leads; off skips them |
+| `--scanner <id>` | — | Pattern scanner for the pre-pass (foxguard, semgrep, opengrep); repeat to use several (default: foxguard) |
+| `--skill <id>` | `scan` | Skill that holds the scan method |
+| `--model <model>` | — | Model for the scan thread (default: gpt-6-luna) |
+| `--timeout <seconds>` | `3600` | Maximum seconds to wait for the scan |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
 
 ### web
 
@@ -788,7 +828,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [export](#findings-export) · [keys](#findings-keys) · [upload](#findings-upload) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -888,6 +928,80 @@ Reset a finding family back to new
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--note <text>` | — | Optional triage note |
+
+#### findings import
+
+Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is executed.
+
+```text
+0 findings import [options] <file>
+```
+
+Each result becomes a finding that keeps the scanner's name, rule, severity, CWE and file and line. The scan it creates is marked as imported and unverified, and importing the same file again changes nothing. Absolute paths become repo-relative under `--root`; paths outside it are dropped. Stop a running console on the same database first.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | SARIF file, or - to read standard input |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--tool <name>` | — | Label for the scanner, overriding the name in the file |
+| `--root <dir>` | — | Folder that was scanned; absolute paths under it become repo-relative (default: the current directory) |
+| `--db-path <path>` | — | Destination database; stop its running console before importing |
+
+#### findings fix
+
+Fix one finding in an isolated git work tree and open a pull request for review
+
+```text
+0 findings fix [options] <finding>
+```
+
+A thread follows the `fix-finding` skill in a separate work tree of the repository, so your checkout is never touched. It makes the smallest change it can; then the command runs each `--test` check, commits on a branch named `0/fix-<id>` and opens a pull request, as a draft when a check fails. Running it again for the same finding updates the same pull request. Nothing is pushed to the base branch and nothing is merged: a person reviews and merges. Use `--test` for the project's tests and, to re-run the scanner that raised the finding, its own command (for example `foxguard .`). It edits files on this machine, so it needs the local console and does not accept `--computer` or `--engine-url`.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `finding` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--repo <dir>` | — | Git repository the finding is in (default: the current directory) |
+| `--base <branch>` | — | Branch to start from and open the pull request against (default: the remote's default branch) |
+| `--test <command>` | — | Check to run after the change; repeat for several. A failing check makes the pull request a draft |
+| `--no-pr` | — | Commit on the fix branch but do not push or open a pull request |
+| `--budget <usd>` | `3` | Stop when the estimated spend reaches this many USD |
+| `--model <model>` | — | Model for the fix thread (default: gpt-6-luna) |
+| `--timeout <seconds>` | `1800` | Maximum seconds to wait for the fix |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+
+#### findings upload
+
+Upload a SARIF file to GitHub code scanning, so findings show in the Security tab and on pull requests
+
+```text
+0 findings upload [options] <file>
+```
+
+Put the scan in a pull request check: `0 scan . --diff origin/main --format sarif -o scan.sarif`, then `0 findings upload scan.sarif`. The repository, commit and ref come from the clone (`GITHUB_SHA` and `GITHUB_REF` in Actions). The file is compressed, uploaded with `gh`, and checked until GitHub has processed it; a refused file is reported with GitHub's reason. GitHub matches alerts by fingerprint, so an upload for a later commit updates them. `gh` needs permission to write security events (`security-events: write` in Actions).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | SARIF 2.1.0 file, for example from `0 scan --format sarif -o scan.sarif` |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--repo <owner/name>` | — | Repository (default: the current clone's) |
+| `--commit <sha>` | — | Commit the results are for (default: HEAD, or GITHUB_SHA in Actions) |
+| `--ref <ref>` | — | refs/heads/&lt;branch&gt; or refs/pull/&lt;n&gt;/merge (default: the current branch, or GITHUB_REF in Actions) |
+| `--tool <name>` | — | Name the tool shown in GitHub |
+| `--no-wait` | — | Return when GitHub has accepted the upload instead of waiting for it to be processed |
+| `--format <format>` | `text` | Output: text or json |
 
 #### findings export
 
@@ -995,93 +1109,6 @@ Revoke a key. Requires `--yes`.
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print JSON |
 | `--format <format>` | — | Output: text or json Choices: text, json. |
-
-### findings triage
-
-Triage findings and manage learned FP memories
-
-```text
-0 findings triage
-```
-
-Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
-
-#### findings triage memory
-
-Manage Semgrep-style triage memories
-
-```text
-0 findings triage memory
-```
-
-Subcommands: [add](#findings-triage-memory-add) · [list](#findings-triage-memory-list) · [remove](#findings-triage-memory-remove).
-
-#### findings triage memory add
-
-Create a memory from an existing finding
-
-```text
-0 findings triage memory add [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--finding <id>` **required** | — | Finding ID (full or prefix) to derive the memory from |
-| `--reason <text>` **required** | — | Why this finding is a false positive |
-| `--scope <scope>` | `target` | Memory scope: global \| target \| package |
-| `--scope-value <value>` | — | Scope identifier (target URL or package name) |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage memory list
-
-List all triage memories
-
-```text
-0 findings triage memory list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage memory remove
-
-Delete a memory by id
-
-```text
-0 findings triage memory remove [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes | Note ID |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage mark-fp
-
-Mark a finding as false positive and auto-create a memory
-
-```text
-0 findings triage mark-fp [options] <finding-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `finding-id` | Yes | Finding ID (full or prefix) |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--reason <text>` **required** | — | Why this finding is a false positive |
-| `--scope <scope>` | `target` | Memory scope: global \| target \| package |
-| `--scope-value <value>` | — | Scope identifier (target URL or package name) |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### Real kernel VM verification
-
-Imported crash logs record a prior run. For a new reproduction, follow Kernel VM Verification and its execution and evidence requirements.
 
 ### config db
 
@@ -1688,225 +1715,6 @@ Remove a skill that was added from GitHub or the catalog
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 | `--format <format>` | — | Output: text or json Choices: text, json. |
-
-### memory
-
-List, add, remove, export and import what 0 remembers across threads
-
-```text
-0 memory
-```
-
-Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note you add here is saved at once. A note 0 wants to keep after reading web pages, files or tool output waits in the proposed inbox until you accept it. Secrets are never saved.
-
-```bash
-0 memory list
-0 memory add "Run tests with pnpm test" --kind command
-0 memory proposed list
-0 memory proposed accept m_1a2b3c4d
-0 memory export --to AGENTS.md
-```
-
-Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [proposed](#memory-proposed) · [export](#memory-export) · [import](#memory-import).
-
-#### memory list
-
-List notes
-
-```text
-0 memory list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only notes for this folder |
-| `--global` | — | Only global notes |
-| `--search <text>` | — | Only notes containing this text |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory add
-
-Remember a note
-
-```text
-0 memory add [options] <text>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `text` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Folder the note is about (default: this folder) |
-| `--global` | — | Remember it everywhere |
-| `--kind <kind>` | — | One of fix-decision, convention, command, avoid |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory remove
-
-Forget a note
-
-```text
-0 memory remove [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory clear
-
-Forget every note, or every note for one folder
-
-```text
-0 memory clear [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only this folder |
-| `--yes` | — | Confirm |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory disable
-
-Stop using notes in new threads (they stay on disk)
-
-```text
-0 memory disable [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory enable
-
-Use notes in new threads again
-
-```text
-0 memory enable [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory proposed
-
-Review notes 0 proposed after reading web pages, files or tool output (they are not used until accepted)
-
-```text
-0 memory proposed
-```
-
-Subcommands: [list](#memory-proposed-list) · [accept](#memory-proposed-accept) · [reject](#memory-proposed-reject).
-
-#### memory proposed list
-
-List proposed notes
-
-```text
-0 memory proposed list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory proposed accept
-
-Accept a proposed note so it is used in new threads. `--text` corrects the wording while accepting.
-
-```text
-0 memory proposed accept [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--text <text>` | — | Correct the wording while accepting |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory proposed reject
-
-Discard a proposed note
-
-```text
-0 memory proposed reject [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory export
-
-Write notes to a file: JSON for 0 by default, or with `--to` an AGENTS.md section for a person to review and commit. Only notes you wrote or accepted are exported. 0 never imports notes from a repository.
-
-```text
-0 memory export [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only this folder (default for --to: this folder) |
-| `-o, --output <file>` | — | Write the JSON export to a file instead of stdout |
-| `--to <file>` | — | Add accepted notes to this markdown file (for example AGENTS.md) as a section you review and commit |
-| `--markdown` | — | Print the markdown section instead of JSON |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory import
-
-Add the notes from an export file
-
-```text
-0 memory import [options] <file>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `file` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-## Automations
 
 ### automation
 
@@ -2659,7 +2467,49 @@ Create, inspect and control Sentinels.
 0 sentinels
 ```
 
-Subcommands: [list](#sentinels-list) · [run](#sentinels-run) · [set](#sentinels-set) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [activations](#sentinels-activations) · [files](#sentinels-files) · [triggers](#sentinels-triggers) · [webhook](#sentinels-webhook).
+Subcommands: [list](#sentinels-list) · [run](#sentinels-run) · [set](#sentinels-set) · [sync](#sentinels-sync) · [export](#sentinels-export) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [activations](#sentinels-activations) · [files](#sentinels-files) · [triggers](#sentinels-triggers) · [webhook](#sentinels-webhook).
+
+#### sentinels sync
+
+Make Sentinels match the YAML files in a folder. Shows what would change; --apply writes it.
+
+```text
+0 sentinels sync [options] <folder>
+```
+
+Each `*.yaml` file is one Sentinel: name, mission, instructions, skills, model, folder, and automations with their triggers (see [Sentinels as files](/sentinels/#sentinels-as-files)). Without `--apply` nothing is written. A new Sentinel is created paused and a new trigger disabled, a changed model or skill list sends an active Sentinel back to review, and a Sentinel that is not in the folder is left alone. Stop a running console on the same database first.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `folder` | Yes | Folder of Sentinel definitions (*.yaml), for example .0/sentinels |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--apply` | — | Write the changes (without it, only the plan is shown) |
+| `--check` | — | Exit 1 when the database differs from the files |
+| `--commit <sha>` | — | Commit the files came from; recorded on each Sentinel |
+| `--enable` | — | Enable the triggers this sync creates (only for a change that was already reviewed) |
+| `--db-path <path>` | — | Database to change; stop its running console first |
+| `--format <format>` | `text` | Output: text or json |
+
+#### sentinels export
+
+Write a Sentinel as a YAML definition file, so a team can start from what it already has
+
+```text
+0 sentinels export [options] <id>
+```
+
+Prints the definition, or writes `<name>.yaml` into `--out`. Syncing the exported file back changes nothing.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes | Sentinel ID (full or prefix) or exact name |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <folder>` | — | Write &lt;name&gt;.yaml into this folder instead of standard output |
+| `--db-path <path>` | — | Database to read; stop its running console first |
 
 #### sentinels list
 

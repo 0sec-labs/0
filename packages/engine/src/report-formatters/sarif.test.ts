@@ -63,3 +63,22 @@ describe("formatSarif", () => {
   });
 
 });
+
+describe("formatSarif finding keys", () => {
+  const report = (fingerprint: string | undefined, title: string, target: string): ScanReport => ({
+    target, scanDepth: "default", startedAt: "2026-11-08T04:00:00.000Z", completedAt: "2026-11-08T04:01:00.000Z", durationMs: 60_000, warnings: [],
+    summary: { totalAttacks: 0, totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+    findings: [{ id: "f", templateId: "sql-injection", title, description: "d", severity: "high", category: "sql-injection", status: "discovered", evidence: { request: "", response: "" }, timestamp: 1, ...(fingerprint ? { fingerprint } : {}) }],
+  });
+  const key = (r: ScanReport) => JSON.parse(formatSarif(r)).runs[0].results[0].partialFingerprints.primary as string;
+
+  it("uses a location key alone, so the title and the target do not change it", () => {
+    expect(key(report("loc:abc123", "One wording", "source:repo"))).toBe("loc:abc123");
+    expect(key(report("loc:abc123", "Other wording", "https://github.com/acme/app"))).toBe("loc:abc123");
+  });
+  it("keeps the older text-based key for any other fingerprint", () => {
+    const text = key(report("text-hash", "One wording", "repo"));
+    expect(text).toContain("text-hash");
+    expect(text).toContain("One wording");
+  });
+});

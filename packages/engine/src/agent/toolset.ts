@@ -14,7 +14,7 @@ export type Toolset = "core" | "full";
 
 /**
  * The model-visible default: a shell, file read and edit, findings, a way to ask the
- * operator, skills, web search and visual cards. `memory` is added per session.
+ * operator, skills, web search and visual cards.
  */
 export const CORE_TOOL_NAMES: readonly string[] = [
   "bash",
@@ -86,15 +86,9 @@ export function resolveToolset(options: { explicit?: string; surfaceDefault: Too
 }
 
 /** Split an already-authorized tool list into what stays advertised and what only packs can add. */
-/**
- * Offered on top of the core list only when the session has Memory on (the host adds the definition
- * only then). The shell cannot stand in for it: notes live outside the workspace, and a sandboxed thread has no access to the notes directory.
- */
-export const SESSION_TOOL_NAMES: readonly string[] = ["memory"];
-
 export function partitionForToolset(defs: readonly ToolDefinition[], toolset: Toolset): { advertised: ToolDefinition[]; packOnly: ToolDefinition[] } {
   if (toolset === "full") return { advertised: [...defs], packOnly: [] };
-  const core = new Set([...CORE_TOOL_NAMES, ...SESSION_TOOL_NAMES]);
+  const core = new Set(CORE_TOOL_NAMES);
   const packed = packToolNames();
   const advertised: ToolDefinition[] = [];
   const packOnly: ToolDefinition[] = [];

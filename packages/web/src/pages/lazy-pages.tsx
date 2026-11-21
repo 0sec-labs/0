@@ -9,7 +9,6 @@ const loaders = {
   console: () => import("@/pages/console-page"),
   palette: () => import("@/components/command-palette"),
   saved: () => import("@/pages/saved-conversation-page"),
-  memory: () => import("@/pages/memory-page"),
   apiAccess: () => import("@/pages/findings-api-access-page"),
   team: () => import("@/pages/team-settings-page"),
   skills: () => import("@/pages/skills-page"),
@@ -41,7 +40,6 @@ export const FindingsPage = lazyRoute(() => loaders.findings().then((m) => m.Fin
 export const ConsolePage = lazyRoute(() => loaders.console().then((m) => m.ConsolePage));
 export const CommandPalette = lazyRoute(() => loaders.palette().then((m) => m.CommandPalette));
 export const SavedConversationPage = lazyRoute(() => loaders.saved().then((m) => m.SavedConversationPage));
-export const MemoryPage = lazyRoute(() => loaders.memory().then((m) => m.MemoryPage));
 export const FindingsApiAccessPage = lazyRoute(() => loaders.apiAccess().then((m) => m.FindingsApiAccessPage));
 export const TeamSettingsPage = lazyRoute(() => loaders.team().then((m) => m.TeamSettingsPage));
 export const SkillsPage = lazyRoute(() => loaders.skills().then((m) => m.SkillsPage));
@@ -69,7 +67,6 @@ export function routeForPath(pathname: string): RouteName | undefined {
     case "api-access": return "apiAccess";
     case "team": return "team";
     case "skills": return "skills";
-    case "memory": return "memory";
     case "extensions": return "extensions";
     case "findings": return "findings";
     case "computers": return "workers";
@@ -78,7 +75,7 @@ export function routeForPath(pathname: string): RouteName | undefined {
 }
 
 /** Chunks that carry dockview/markdown: fetched on navigation or hover only, never by idle warming. */
-const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "memory", "skills", "sentinels"]);
+const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "skills", "sentinels"]);
 
 /**
  * Warm the other routes once the browser is idle, then on intent: a link or finding row held under the pointer

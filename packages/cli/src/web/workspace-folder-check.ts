@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { opendir } from "node:fs/promises";
 import { basename } from "node:path";
-import { classifyFolderError, hasDesktopSession, permissionMessageFor, privacySubject, protectedFolderName, testHooksEnabled, PRIVACY_MESSAGE_PREFIX, type PrivacySubject } from "./workspace-access.js";
+import { closeQuietly, classifyFolderError, hasDesktopSession, permissionMessageFor, privacySubject, protectedFolderName, testHooksEnabled, PRIVACY_MESSAGE_PREFIX, type PrivacySubject } from "./workspace-access.js";
 
 /**
  * Non-blocking "can this server read that folder" check.
@@ -69,7 +69,7 @@ export const childProcessProbe: ProbeWorker = (directory) => {
   const done = new Promise<ProbeResult>((resolve) => {
     const inProcess = () => {
       void (async () => {
-        try { const handle = await opendir(directory); try { await handle.read(); } finally { await handle.close().catch(() => undefined); } resolve({ ok: true }); }
+        try { const handle = await opendir(directory); try { await handle.read(); } finally { await closeQuietly(handle); } resolve({ ok: true }); }
         catch (error) { resolve({ ok: false, code: (error as NodeJS.ErrnoException).code ?? "EIO" }); }
       })();
     };
@@ -80,7 +80,14 @@ export const childProcessProbe: ProbeWorker = (directory) => {
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => { output += chunk; });
     child.once("error", () => { if (!killed) inProcess(); });
-    child.once("close", () => { if (!killed && child?.exitCode !== null) resolve(output ? resultFromOutput(output) : { ok: false, code: "EIO" }); });
+    child.once("close", () => {
+      if (killed || child?.exitCode === null) return;
+      // No output means the child never ran the probe. A compiled `0` is its own program and has no `-e`
+      // (it prints "unknown option '-e'" and exits), and a failed exec looks the same. That says nothing
+      // about the folder, so look at it from this process rather than call it unreadable.
+      if (!output) { inProcess(); return; }
+      resolve(resultFromOutput(output));
+    });
   });
   return { done, kill: () => { killed = true; try { child?.kill("SIGKILL"); } catch { /* already gone */ } } };
 };

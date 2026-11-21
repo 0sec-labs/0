@@ -30,7 +30,6 @@ describe("resolveCrumbs", () => {
     ["/skills/catalog/o~r~x", "", "Semgrep Scan", [{ label: "Skills", to: "/skills" }, { label: "Browse", to: "/skills?tab=browse" }, { label: "Semgrep Scan" }]],
     ["/extensions", "", undefined, [{ label: "Extensions" }]],
     ["/computers", "", undefined, [{ label: "Computers" }]],
-    ["/memory", "", undefined, [{ label: "Memory" }]],
     ["/settings", "", undefined, [{ label: "Settings", to: "/settings" }, { label: "General" }]],
     ["/settings", "?section=appearance", undefined, [{ label: "Settings", to: "/settings" }, { label: "Appearance" }]],
     ["/settings", "?section=transcript", undefined, [{ label: "Settings", to: "/settings" }, { label: "Threads" }]],

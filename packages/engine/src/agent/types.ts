@@ -378,7 +378,7 @@ export type DelegatedFindingUpdateResult =
  * variables does it get? `null` means the command is not an extension's. Implemented by the extension runtime.
  */
 export interface ExtensionRunPort {
-  prepare(command: string): { ok: true; env: Record<string, string>; secrets: readonly string[] } | { ok: false; error: string } | null;
+  prepare(command: string, options?: { cwd?: string }): { ok: true; env: Record<string, string>; secrets: readonly string[] } | { ok: false; error: string } | null;
 }
 
 export interface ToolContext {
@@ -418,8 +418,6 @@ export interface ToolContext {
   scopePath?: string;
   /** Immutable parent-observed Git identity for delegated source reviews. */
   workspaceIdentity?: WorkspaceIdentity;
-  /** Host-bound Memory tool (remember, update or forget one note); absent during verification or when Memory is off. */
-  memory?: (args: { action: "remember" | "update" | "forget"; note?: string; kind?: string; scope?: "folder" | "global"; id?: string }) => { id?: string; removed?: boolean; saved?: boolean; status?: "live" | "proposed"; message: string };
   /**
    * True only for the interactive console executor. This explicit marker keeps
    * console-only source-acquisition identity checks out of native scan callers,
@@ -459,6 +457,12 @@ export interface ToolContext {
    */
   agentMessaging?: unknown;
   persistFindings?: boolean;
+  /**
+   * Which stored findings count as duplicates of a new one. Unset: every finding in the database
+   * (one run per database, the original design). `"scan"`: only this scan's own, for threads, which
+   * share one database, so another scan's finding must never swallow this scan's.
+   */
+  dedupeScope?: "scan";
   authConfig?: AuthConfig;
   /** Built-in web search only; does not restrict other network tools. */
   webSearchEnabled?: boolean;

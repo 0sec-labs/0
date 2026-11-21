@@ -57,10 +57,11 @@ import { LIST_TOOLS_NAME, LOAD_TOOL_NAME, formatToolCatalog, formatLoadResult } 
 import { resolveFolderPath } from "./tools/folder-path.js";
 import { TOOL_DEFINITIONS } from "./tools/index.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
-import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
+import { nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { resolveBashWallclockCeilingMs, runBashWithWallclock, buildStrReplaceMeta } from "./tools/exec-helpers.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 import { citedSourceHasKnownMarker } from "./tools/probe-helpers.js";
+import { normalizeAttackCategory } from "../shared/finding-schemas.js";
 import { mcpHostOf, deferredToolsOf, packToolsOf } from "./tools/context-hosts.js";
 
 // ── Tool registry (0#611) ──
@@ -382,14 +383,6 @@ export class ToolExecutor {
     }
   }
 
-  private memoryTool(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.memory) return { success: false, output: null, error: "Memory is unavailable in this session" };
-    const parsed = memoryArgsSchema.safeParse(args);
-    if (!parsed.success) return { success: false, output: null, error: parsed.error.issues[0]?.message ?? "Invalid memory request" };
-    try { return { success: true, output: this.ctx.memory(parsed.data) }; }
-    catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
-  }
-
   /**
    * Resolve the two deferred-tool control calls (`list_tools` / `load_tool`)
    * against the session's {@link DeferredToolRegistry}. Returns null when this
@@ -473,7 +466,8 @@ export class ToolExecutor {
 
     // A script of an enabled, approved extension gets its declared and approved variables (a connector's stored token
     // included) and nothing else; the value never comes back (see runBashWithWallclock `redact`).
-    const extensionRun = this.ctx.extensionRuns?.prepare(command);
+    const cwd = this.ctx.scopePath ?? this.ctx.workspaceRoot;
+    const extensionRun = this.ctx.extensionRuns?.prepare(command, { cwd });
     if (extensionRun && !extensionRun.ok) return { success: false, output: null, error: `bash refused: ${extensionRun.error}` };
     const env = { ...sanitizedEnv(), TARGET: this.ctx.target, ...this.buildAuthEnvVars(), ...(extensionRun?.env ?? {}) };
 
@@ -482,7 +476,7 @@ export class ToolExecutor {
     const displayCommand = (args.command as string).trim();
     const startedAt = Date.now();
     const outcome = await runBashWithWallclock(command, {
-      timeoutMs, ceilingMs, env, cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot, signal: this._executionContext.getStore()?.signal,
+      timeoutMs, ceilingMs, env, cwd, signal: this._executionContext.getStore()?.signal,
       ...(extensionRun?.secrets.length ? { redact: extensionRun.secrets } : {}),
     });
     const durationMs = Date.now() - startedAt;
@@ -652,13 +646,15 @@ export class ToolExecutor {
 
     const evidenceAnalysis = typeof args.evidence_analysis === "string" ? args.evidence_analysis : undefined;
 
+    const { category, unknownLabel } = normalizeAttackCategory(args.category);
+    const description = (args.description as string) ?? "";
     const finding: Finding = {
       id: randomUUID(),
       templateId: (args.template_id as string) ?? "manual",
       title: (args.title as string) ?? "Untitled finding",
-      description: (args.description as string) ?? "",
+      description: unknownLabel ? `${description}${description ? "\n\n" : ""}Category as given: ${unknownLabel}.` : description,
       severity: (args.severity as Finding["severity"]) ?? "medium",
-      category: (args.category as Finding["category"]) ?? "prompt-injection",
+      category,
       status: "discovered",
       evidence: {
         request: (args.evidence_request as string) ?? "",
@@ -911,7 +907,8 @@ export class ToolExecutor {
     // evidence/severity/confidence on a merge. The first record stays
     // authoritative. Re-running with stronger evidence requires
     // `finding` (an explicit, separate code path).
-    const existing = findMatchingFindingCandidate(this.ctx.findings, finding);
+    const byLocation = this.ctx.dedupeScope === "scan";
+    const existing = findMatchingFindingCandidate(this.ctx.findings, finding, { byLocation });
     // Cross-session dedupe (operator directive): sibling lane agents save into
     // their own scanIds, so the in-memory check above cannot see their
     // findings. Before persisting, fuzzy-match against what the engagement's
@@ -922,16 +919,21 @@ export class ToolExecutor {
     // in the same category via idx_findings_category to bound Levenshtein computation time.
     if (!existing && this.db && this.ctx.persistFindings !== false) {
       try {
-        const persisted = this.db.listFindings({
+        // Threads share one database. A finding of another scan, for this or another target, is not
+        // a duplicate of this one and must not swallow it, or this scan's report loses the finding.
+        const scanOnly = this.ctx.dedupeScope === "scan";
+        const persisted = (this.db.listFindings({
           category: finding.category,
           limit: 500,
         }) as Array<{
           id: string;
+          scanId?: string;
           title: string;
           category: string;
           evidenceRequest: string;
-        }>;
-        const dbDupe = findMatchingFindingCandidate(persisted, finding);
+          reviewAnnotation?: unknown;
+        }>).filter(row => !scanOnly || row.scanId === this.ctx.scanId);
+        const dbDupe = findMatchingFindingCandidate(persisted, finding, { byLocation });
         if (dbDupe) {
           return {
             success: true,
@@ -1871,7 +1873,8 @@ export class ToolExecutor {
       }
 
       // Check in-memory similarity match
-      const memDupe = findMatchingFindingCandidate(this.ctx.findings, finding);
+      const byLocation = this.ctx.dedupeScope === "scan";
+      const memDupe = findMatchingFindingCandidate(this.ctx.findings, finding, { byLocation });
       if (memDupe) {
         return { status: "duplicate", findingId: memDupe.id };
       }
@@ -1883,16 +1886,19 @@ export class ToolExecutor {
       // 500 records per category is an intentional architectural ceiling to bound event-loop
       // latency during fuzzy title Levenshtein distance calculations.
       try {
-        const persisted = db.listFindings({
+        // Threads share one database: another scan's finding is not a duplicate of this scan's.
+        const persisted = (db.listFindings({
           category: finding.category,
           limit: 500,
         }) as Array<{
           id: string;
+          scanId?: string;
           title: string;
           category: string;
           evidenceRequest: string;
-        }>;
-        const dbDupe = findMatchingFindingCandidate(persisted, finding);
+          reviewAnnotation?: unknown;
+        }>).filter(row => !byLocation || row.scanId === this.ctx.scanId);
+        const dbDupe = findMatchingFindingCandidate(persisted, finding, { byLocation });
         if (dbDupe) {
           return { status: "duplicate", findingId: dbDupe.id };
         }
@@ -1967,7 +1973,7 @@ export class ToolExecutor {
   private mergeSubagentFindings(findings: readonly Finding[], sink = this.ctx.findings): void {
     for (const finding of findings) {
       if (sink.some(existing => existing.id === finding.id)) continue;
-      if (findMatchingFindingCandidate(sink, finding)) continue;
+      if (findMatchingFindingCandidate(sink, finding, { byLocation: this.ctx.dedupeScope === "scan" })) continue;
       sink.push(finding);
     }
   }
@@ -2101,7 +2107,6 @@ export class ToolExecutor {
           consoleSession: this.ctx.consoleSession,
           workerPolicy,
           webSearchEnabled: this.ctx.webSearchEnabled,
-          codebaseLearning: false,
           workspaceRoot: this.ctx.workspaceRoot,
           skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
           skillAuthoring: this.ctx.skillAuthoring,
@@ -2265,7 +2270,6 @@ export class ToolExecutor {
         consoleSession: this.ctx.consoleSession,
         workerPolicy,
         webSearchEnabled: this.ctx.webSearchEnabled,
-        codebaseLearning: false,
         workspaceRoot: this.ctx.workspaceRoot,
         skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
         skillAuthoring: this.ctx.skillAuthoring,
@@ -3024,10 +3028,10 @@ export class ToolExecutor {
 
 // ── Helper: get tools for a specific agent role ──
 
-/** The one tool list every thread, child run and sentinel turn gets: all registered tools except `memory`, which the session adds when Memory is on. */
+/** The one tool list every thread, child run and sentinel turn gets: all registered tools. */
 export function getToolsForRole(opts?: { webSearchEnabled?: boolean }): ToolDefinition[] {
   const webSearch = opts?.webSearchEnabled ?? featureFlags.webSearch;
   return filterWorkflowAgentTools(Object.keys(TOOL_DEFINITIONS)
-    .filter((name) => name !== "memory" && (webSearch || name !== "web_search"))
+    .filter((name) => webSearch || name !== "web_search")
     .map((name) => TOOL_DEFINITIONS[name]));
 }

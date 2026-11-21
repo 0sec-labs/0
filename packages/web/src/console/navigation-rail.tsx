@@ -21,7 +21,6 @@ import {
 } from "@/ui/components/sidebar";
 import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
-import type { MemoryResponse } from "@/memory-model";
 import { SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS, canonicalWorkspacePath, isSidebarDestinationActive } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
@@ -89,7 +88,7 @@ export function ConsoleNavigationRail({
   onHistorySlot?: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
 }) {
-  const { getDashboard, client, webFetchJson } = useBackendApi();
+  const { getDashboard, client } = useBackendApi();
   const location = useLocation();
   const route = backendRoute(location.pathname);
   const currentPath = canonicalWorkspacePath(location.pathname.slice(route.basename.length) || "/");
@@ -101,11 +100,8 @@ export function ConsoleNavigationRail({
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
-  // Notes 0 proposed and nobody has reviewed yet (the same query the Memory page uses, so one request serves both).
-  const memory = useQuery({ queryKey: queryKeys.consoleMemory(client.backendId), queryFn: ({ signal }) => webFetchJson<MemoryResponse>("/api/console/memory", { signal }), staleTime: 30_000, refetchOnWindowFocus: true });
-  const proposedCount = memory.data?.proposed?.length ?? 0;
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review")).length ?? 0; // findings waiting on a person
-  // Seven items, no overflow menu: New thread, Findings, Skills, Memory, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
+  // Six items, no overflow menu: New thread, Findings, Skills, Computers, Extensions. A "run" is just a mission, so there is no Runs destination.
   const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const active = (to: string) => isSidebarDestinationActive(to, currentPath);
   const list = useSidebarListMode();
@@ -165,9 +161,6 @@ export function ConsoleNavigationRail({
           <NavLink key={to} to={to} data-active={active(to) || undefined} className={sidebarItemClasses}>
             <Icon aria-hidden="true" />
             <SidebarLabel>{label}</SidebarLabel>
-            {label === "Memory" && proposedCount > 0 && (
-              <span role="img" aria-label={`${proposedCount} proposed note${proposedCount === 1 ? "" : "s"} to review`} className="ml-auto size-2 shrink-0 rounded-full bg-primary" />
-            )}
             {label === "Findings" && findingCount > 0 && (
               <span
                 aria-label={`${findingCount} to review`}

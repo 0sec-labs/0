@@ -3,9 +3,9 @@ export const RECENT_GROUP = v("Recent {missions}");
 /** Locally remembered missions and pages the operator opened from search. */
 export const LOCAL_RECENT_GROUP = "Recent";
 export type SearchGroup = string;
-export const SEARCH_GROUPS: SearchGroup[] = [LOCAL_RECENT_GROUP, RECENT_GROUP, "Actions", "Pages", "Findings", "Sentinels", "Skills", "Memory", "Computers", "Settings"];
+export const SEARCH_GROUPS: SearchGroup[] = [LOCAL_RECENT_GROUP, RECENT_GROUP, "Actions", "Pages", "Findings", "Sentinels", "Skills", "Computers", "Settings"];
 
-export type SearchTab = "all" | "chats" | "pages" | "findings" | "skills" | "memory" | "computers" | "settings" | "sentinels";
+export type SearchTab = "all" | "chats" | "pages" | "findings" | "skills" | "computers" | "settings" | "sentinels";
 /** `groups: null` means every group. Each tab's sources are queried only while it (or a typed term on All) is active. */
 export const SEARCH_TABS: ReadonlyArray<{ id: SearchTab; label: string; groups: readonly SearchGroup[] | null }> = [
   { id: "all", label: "All", groups: null },
@@ -13,7 +13,6 @@ export const SEARCH_TABS: ReadonlyArray<{ id: SearchTab; label: string; groups: 
   { id: "pages", label: "Pages", groups: ["Pages", "Actions"] },
   { id: "findings", label: "Findings", groups: ["Findings"] },
   { id: "skills", label: "Skills", groups: ["Skills"] },
-  { id: "memory", label: "Memory", groups: ["Memory"] },
   { id: "computers", label: "Computers", groups: ["Computers"] },
   { id: "settings", label: "Settings", groups: ["Settings"] },
   { id: "sentinels", label: v("{Sentinels}"), groups: ["Sentinels"] },

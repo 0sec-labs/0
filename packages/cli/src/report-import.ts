@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { osecDB } from "@0/engine/storage";
-import type { Finding, ScanReport } from "@0/engine/shared";
+import { parseSarif, type Finding, type ScanReport } from "@0/engine/shared";
 
 const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const MAX_METADATA_BYTES = 64 * 1024;
@@ -127,5 +127,53 @@ export function importCiReport(options: { reportJson: string; metadataJson?: str
   const input = prepareCiReportImport(options.reportJson, options.metadataJson);
   const db = new osecDB(options.dbPath);
   try { return { ...db.importCiReport(input), dbPath: db.databasePath }; }
+  finally { db.close(); }
+}
+
+/**
+ * Findings from another scanner's SARIF log. The log is parsed as text and never executed; the scan
+ * it creates is marked as an unverified import, and the same file always lands on the same scan id.
+ */
+export function prepareSarifImport(sarifJson: string, options: { tool?: string; roots?: string[]; now?: Date } = {}): Parameters<osecDB["importCiReport"]>[0] {
+  if (Buffer.byteLength(sarifJson, "utf8") > MAX_REPORT_BYTES) throw new Error("The SARIF file exceeds the size limit.");
+  const parsed = parseSarif(sarifJson, { ...(options.tool ? { tool: options.tool } : {}), ...(options.roots ? { roots: options.roots } : {}) });
+  const digest = hash(canonical(JSON.parse(sarifJson)) + `\n${options.tool ?? ""}`);
+  const scanId = `sarif-${digest}`;
+  const now = options.now ?? new Date();
+  const importedAt = now.toISOString();
+  const target = parsed.repository ?? `sarif:${parsed.tools.join("+") || "unknown"}`;
+  const seen = new Set<string>();
+  const findings: Finding[] = parsed.findings.map((item, index) => {
+    // The same rule at the same place twice in one log is one finding.
+    let key = item.fingerprint;
+    if (seen.has(key)) key = `${key}-${index}`;
+    seen.add(key);
+    const where = item.path ? `${item.path}${item.startLine ? `:${item.startLine}` : ""}` : "no location";
+    return {
+      id: `${scanId}-${key.replace(/^sarif:/, "")}`, fingerprint: `${scanId}:${key}`,
+      templateId: `${item.tool}/${item.ruleId}`, title: item.title, description: item.description,
+      category: item.category, severity: item.severity, tool: item.tool,
+      evidence: {
+        request: where, response: item.snippet ?? "",
+        analysis: `Imported from ${item.tool}${item.toolVersion ? ` ${item.toolVersion}` : ""} (SARIF). Not verified by this engine.${item.cwe.length ? ` ${item.cwe.join(", ")}.` : ""}`,
+      },
+      ...(item.path && item.startLine ? { reviewAnnotation: { path: item.path, startLine: item.startLine, ...(item.endLine && item.endLine >= item.startLine ? { endLine: item.endLine } : {}) } } : {}),
+      timestamp: now.getTime(), status: "discovered", triageStatus: "new", workflowStatus: "backlog",
+    } as Finding;
+  });
+  const startedAt = importedAt;
+  const report = { target, scanDepth: "default", startedAt, completedAt: startedAt, durationMs: 0, findings: [], warnings: [] } as unknown as ScanReport;
+  const provenance = { schemaVersion: 1, source: "sarif", trust: "unverified", sourceExecutionStatus: "unknown", digest, tools: parsed.tools, importedAt, metadata: null };
+  return {
+    scanId, report, findings, status: "completed", provenance,
+    summary: { totalAttacks: 0, totalFindings: findings.length, ...Object.fromEntries(severities.map(severity => [severity, findings.filter(f => f.severity === severity).length])), executionSuccessful: true, exitReason: "completed" },
+  };
+}
+
+export function importSarif(options: { sarifJson: string; dbPath: string; tool?: string; roots?: string[] }): { scanId: string; findings: number; alreadyImported: boolean; dbPath: string } {
+  if (typeof options.dbPath !== "string" || !options.dbPath.trim()) throw new Error("An explicit destination database path is required.");
+  const input = prepareSarifImport(options.sarifJson, { ...(options.tool ? { tool: options.tool } : {}), ...(options.roots ? { roots: options.roots } : {}) });
+  const db = new osecDB(options.dbPath);
+  try { return { ...db.importCiReport(input), findings: input.findings.length, dbPath: db.databasePath }; }
   finally { db.close(); }
 }

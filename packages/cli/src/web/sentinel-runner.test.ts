@@ -545,6 +545,45 @@ describe("GitHub pull request polling", () => {
     const edit = calls.find(args => args[0] === "api" && args[1] === "--method")!;
     expect(edit).toEqual(expect.arrayContaining(["PATCH", "repos/o/r/issues/comments/777"]));
   });
+  it("with comments on, posts a suggestion on a changed line, once, and takes it down when the finding is gone", async () => {
+    const calls: string[][] = [];
+    let listing = [pr(1, "aaa")];
+    let suggestions: unknown[] = [{ id: "f1", title: "SQL injection", severity: "high", path: "src/db.ts", startLine: 11, suggestion: "db.query(sql, [id]);" }];
+    let posted = "";
+    const patch = "@@ -1,2 +10,3 @@\n ctx\n+changed\n+more";
+    const github = gh(() => listing, calls, args => {
+      if (args[0] === "api" && args[1] === "--paginate" && args[2]!.endsWith("/files")) return JSON.stringify({ filename: "src/db.ts", patch });
+      if (args[0] === "api" && args[1] === "--paginate" && args[2]!.endsWith("/pulls/1/comments")) return posted;
+      if (args[0] === "api" && args[1] === "--paginate") return "";
+      if (args[0] === "api" && args[1] === "--method" && args[2] === "POST") { const body = args[args.indexOf("-f") + 1]!.slice(5); posted = JSON.stringify({ id: 55, body }); return ""; }
+      if (args[0] === "api") return "";
+      if (args[0] === "pr" && args[1] === "comment") return "";
+      return undefined;
+    });
+    const { f, id } = await armedPr(github, { commentOnPr: true });
+    (f.missions as unknown as { findings: unknown }).findings = vi.fn(() => []);
+    (f.missions as unknown as { suggestions: unknown }).suggestions = vi.fn(() => suggestions);
+    await poll(f, 0);
+    listing = [pr(1, "aab")];
+    await poll(f, 2);
+    const first = (await f.activations(id))[0]!;
+    f.emit(first.missionId!, { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    const post = calls.find(args => args[0] === "api" && args[1] === "--method" && args[2] === "POST")!;
+    expect(post[3]).toBe("repos/o/r/pulls/1/comments");
+    expect(post).toEqual(expect.arrayContaining(["path=src/db.ts", "commit_id=aab", "side=RIGHT"]));
+    expect(post.join(" ")).toContain("```suggestion\ndb.query(sql, [id]);\n```");
+    // The next push finds the same finding already commented, so nothing is posted again; when it is gone the comment is removed.
+    suggestions = [];
+    listing = [pr(1, "aac")];
+    await poll(f, 4);
+    const second = (await f.activations(id)).find(activation => activation.id !== first.id)!;
+    f.emit(second.missionId!, { type: "turn-complete", stopReason: "end_turn" });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls.filter(args => args[0] === "api" && args[1] === "--method" && args[2] === "POST")).toHaveLength(1);
+    expect(calls.some(args => args[0] === "api" && args[2] === "DELETE" && args[3] === "repos/o/r/pulls/comments/55")).toBe(true);
+  });
+
   it("persistent thread: the pull request comment lists only the findings this turn added to the shared thread", async () => {
     const calls: string[][] = [];
     let listing = [pr(1, "aaa")];

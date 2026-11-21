@@ -20,7 +20,6 @@ export type SlashGroup =
   | "Computers"
   | "Models"
   | "Skills"
-  | "Memory"
   | "Extensions"
   | "Settings"
   | "Chat";
@@ -85,6 +84,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     aliases: ["finds"],
     legacy: ["findings"],
   }),
+  cmd("scan", "Findings", "Scan a folder in this thread", {
+    cli: "scan",
+    usage: "/scan <folder>",
+  }),
   cmd("findings export", "Findings", "Export findings and reports", {
     cli: "findings list --format",
     destination: "/findings",
@@ -133,16 +136,11 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     legacy: ["cost", "tokens"],
   }),
 
-  // Skills, memory, extensions
+  // Skills, extensions
   cmd("skills list", "Skills", "Browse your skills", {
     cli: "skills list",
     destination: "/skills",
     legacy: ["skills"],
-  }),
-  cmd("memory list", "Memory", "What 0 remembers", {
-    cli: "memory list",
-    destination: "/memory",
-    legacy: ["memory"],
   }),
   cmd("extensions list", "Extensions", "Browse and turn on extensions", {
     cli: "skills list --mcp",

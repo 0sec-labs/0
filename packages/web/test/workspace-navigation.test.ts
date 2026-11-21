@@ -3,7 +3,7 @@ import { LEGACY_REDIRECTS, canonicalWorkspacePath, isSidebarDestinationActive, S
 
 test("desktop and touch destinations share canonical work pages", () => {
   expect(WORKSPACE_DESTINATIONS.map(item => item.to)).toEqual([
-    "/chats", "/findings", "/sentinels", "/skills", "/memory", "/computers", "/extensions", "/settings",
+    "/chats", "/findings", "/sentinels", "/skills", "/computers", "/extensions", "/settings",
   ]);
   expect(new Set(WORKSPACE_DESTINATIONS.map(item => item.to)).size).toBe(WORKSPACE_DESTINATIONS.length);
   for (const item of WORKSPACE_DESTINATIONS) expect(canonicalWorkspacePath(item.to)).toBe(item.to);
@@ -22,9 +22,9 @@ test("compatibility paths preserve resource identities and only replace whole ro
 });
 
 test("the sidebar lists five destinations after New thread, in order, with no overflow menu", () => {
-  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/skills", "/memory", "/computers", "/extensions"]);
+  expect(SIDEBAR_DESTINATIONS).toEqual(["/findings", "/skills", "/computers", "/extensions"]);
   const labels = SIDEBAR_DESTINATIONS.map(to => WORKSPACE_DESTINATIONS.find(item => item.to === to)?.label);
-  expect(labels).toEqual(["Findings", "Skills", "Memory", "Computers", "Extensions"]);
+  expect(labels).toEqual(["Findings", "Skills", "Computers", "Extensions"]);
 });
 
 test("sidebar active state: Skills owns /skills*, Extensions owns /extensions", () => {
@@ -33,7 +33,6 @@ test("sidebar active state: Skills owns /skills*, Extensions owns /extensions", 
   expect(activeFor("/skills/catalog/o~r~x")).toEqual(["/skills"]);
   expect(activeFor("/sentinels/abc")).toEqual([]);
   expect(activeFor("/extensions")).toEqual(["/extensions"]);
-  expect(activeFor("/memory")).toEqual(["/memory"]);
   expect(activeFor("/computers")).toEqual(["/computers"]);
   expect(activeFor("/findings/abc")).toEqual(["/findings"]);
   expect(activeFor("/settings")).toEqual([]);

@@ -48,13 +48,12 @@ Set a secret of 32 to 4096 non-whitespace characters in an environment variable 
 ```bash
 0 --host 127.0.0.1 --port 48123 --no-open \
   --engine-token-env ZERO_REMOTE_ENGINE_TOKEN \
-  --engine-workspace /srv/repos/app --engine-target /srv/repos/app
+  --engine-workspace /srv/repos/app
 ```
 
 | Server option | Meaning |
 | --- | --- |
 | `--engine-workspace <path>` | Authorize a source workspace on the computer. |
-| `--engine-target <target>` | Restrict automation requests to this target. |
 | `--engine-allow-apply` | Admit requests to apply an exact, approved fix candidate. |
 | `--engine-time-cap <ms>` | Limit per automation run. Default `600000`. |
 | `--engine-cost-cap <usd>` | Limit per automation run. Default `5`. |

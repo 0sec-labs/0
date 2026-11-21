@@ -8,6 +8,40 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.41.0",
+    date: "2026-11-19",
+    title: "Scan in CI, and scan more than once",
+    summary: "0 scan can run several passes and merge them, its SARIF now works in GitHub code scanning, and two new skills hunt variants of a fixed bug and broken assumptions.",
+    highlights: [
+      { icon: "ShieldCheck", title: "Several passes", text: "0 scan --passes 3 scans the same code three times and merges the findings, because one run misses issues another finds. The budget is split between the passes, and each finding says how many found it." },
+      { icon: "Gauge", title: "Works in CI", text: "The SARIF has paths relative to the repository, the category as the rule, and a key that stays the same from run to run, so GitHub code scanning shows findings on the right lines. A job needs only an API key; the docs have a workflow." },
+      { icon: "Puzzle", title: "Two new skills", text: "variant-hunting takes a fix and finds the same bug at the other places. assumption-mining lists what each function silently relies on and looks for a caller that breaks it." },
+      { icon: "Bug", title: "Steadier scans", text: "A scan keeps going when a busy console misses a status request, leaves out node_modules and build folders, and never sends a git URL's password to the model." },
+    ],
+  },
+  {
+    version: "0.40.1",
+    date: "2026-11-19",
+    title: "Folders work in the standalone binary",
+    summary: "A fix for the standalone 0, where every folder looked unreadable. If 0 scan, threads --folder or the folder picker said it couldn't read a folder, update.",
+    highlights: [
+      { icon: "Bug", title: "Folders can be read again", text: "In the downloaded binary, choosing a folder, threads start --folder and 0 scan failed with \"couldn't read that folder\". The folder check mishandled how the compiled program closes a directory. It works now." },
+      { icon: "ShieldCheck", title: "0 scan from the binary", text: "0 scan starts its own console and scans a folder from the downloaded binary, the same as from a source checkout." },
+      { icon: "Wrench", title: "A release check for it", text: "The release build now starts a console from the compiled binary and starts a thread in a folder, so a build that cannot read folders no longer ships." },
+    ],
+  },
+  {
+    version: "0.40.0",
+    date: "2026-11-19",
+    title: "Scan a code base, as a thread",
+    summary: "0 scan is back: it scans a folder or git repository in a thread and prints the findings as a report. Findings, Extensions and Computers get a cleaner layout.",
+    highlights: [
+      { icon: "ShieldCheck", title: "0 scan", text: "Run 0 scan on a folder or a git URL. It lists every entry point, checks each one and records findings with file and line. Pick json, md, sarif, html or pdf, set a budget, and use --fail-on in CI. In chat, /scan does the same in the current thread." },
+      { icon: "ListChecks", title: "One flaw, one finding", text: "Findings of a scan that point at the same lines are merged, and a scan no longer loses a finding to another scan's. A finding with an unknown category is kept as other." },
+      { icon: "Palette", title: "Cleaner pages", text: "Findings is a full-width list with a page for each finding. Extensions and Computers are plain rows like Skills." },
+    ],
+  },
+  {
     version: "0.39.0",
     date: "2026-11-18",
     title: "Sentinels and a smaller 0",

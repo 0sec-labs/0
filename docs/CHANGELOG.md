@@ -12,8 +12,78 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- `0 findings import <file|->` brings another scanner's SARIF 2.1.0 results in as findings (FoxGuard, CodeQL, Semgrep and others). Each finding keeps the scanner's name, rule, severity, CWE and file and line, shows the scanner as a chip in the Findings list, and is marked as imported and unverified. Importing the same file again changes nothing. Absolute paths become repo-relative under `--root` (default: the current directory); paths outside it are dropped.
+
+- `0 findings fix <finding>` fixes one finding in an isolated git work tree: a thread that follows the new `fix-finding` skill makes the smallest change, the command runs your `--test` checks, commits on a `0/fix-<id>` branch and opens a pull request (a draft when a check fails). Running it again updates the same pull request. It never pushes to the base branch and never merges. `--no-pr` stops after the commit.
+- Scans and fixes started with `--db-path` now start their console on that database when none is running.
+
+- With `--comment` on, a Sentinel's pull request review also posts inline suggestion blocks on changed lines that a finding has a replacement for (at most 10 per run, none on forks); a comment is removed when a later push no longer has its finding.
+
+- Sentinels can be defined as YAML files in a git repository: `0 sentinels sync <folder>` shows what would change and `--apply` writes it (new Sentinels paused, new triggers disabled, a changed model or skill list sent back to review, nothing deleted; `--check` for CI), and `0 sentinels export <id>` writes an existing Sentinel as a file.
+- The pull request poll reads up to 1,000 open pull requests instead of 50.
+
+- `0 scan` runs a fast pattern scanner first when FoxGuard is installed (`--prepass auto`, the default; `--prepass off` skips it) and hands its hits to the scan thread as leads to check. The thread records only the leads that are real, says which it rejected, and still reviews the entry points itself, so bugs a pattern scanner cannot see are not lost.
+
+- `0 scan --diff <ref>` reviews only the files that differ from a git ref (for example `origin/main`) and the code they connect to, and only the pattern-scanner leads inside those files. For a pull request check this costs a fraction of a full scan. When nothing differs it starts no thread and writes a valid empty report, so a pipeline that reads the file keeps working.
+
+- `0 findings upload <sarif>` uploads a SARIF file (for example from `0 scan --format sarif -o scan.sarif`) to GitHub code scanning, so findings appear in the repository's Security tab and as pull request annotations. It takes the repository, commit and ref from the clone (or `GITHUB_SHA` and `GITHUB_REF` in Actions), compresses the file, waits for GitHub to process it and reports why it refused it. Uploading again for a later commit updates the alerts. Needs `gh` signed in with permission to write security events.
+
+### Changed
+
+- Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.
+
+### Removed
+
+- Memory: the model-written notes shared across threads, with its `memory` tool, the Memory page, `0 memory`, the `/memory` routes and the hidden `0 findings triage` commands that wrote to it. Operator instructions (`~/.0/AGENTS.md` and the per-workspace file) are the one place you write context for every thread, a Sentinel keeps its own `NOTES.md`, and why a finding is a false positive stays with the finding (`0 findings update --status false-positive --note ...`). Notes already in `~/.0/memory` are left on disk and no longer read.
+- About 27,000 lines of engine code that nothing used: ten unfinished engines (mobile, recon, attack, emit, h1, cve, protocol, specdrift, adgraph, xnu-fuzz), old scanners and helpers, the old runners, the attack-template loader, the red-team harness and its `0-llm` bin, the core/full build edition, and the matching package exports (`./identity`, `./adgraph`, `./xnu-fuzz`, `./kernel`, `./templates`, `./redteam`).
+- `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.
+
 ### Fixed
 
+- The repository of a Sentinel pull request trigger can no longer be a path such as `../x`; it must be `owner/name`.
+
+- The console that `0 scan` starts for itself takes a free port, so another console on the default port can no longer stop the scan from finding its own.
+- The scan skill tells the model not to use the memory tool.
+
+## [0.41.0] - 2026-11-19
+
+This release makes `0 scan` usable in CI and fuller: several passes merged into one report, a SARIF that works in GitHub code scanning, and two more skills.
+
+### Added
+
+- `0 scan --passes <n>` (up to 5) scans the same code several times, three at a time, and merges the findings by place, so the report is the union of what the runs found. `--budget` is the total and is split evenly. Each merged finding carries `foundInPasses` in the JSON and a "Found in k of n scan passes" line in every format, and the JSON has `passes` and every pass's `threadIds`. On NodeGoat three single scans found 8, 11 and 14 issues (18 distinct in all); three passes together reported 16, 8 of them found by every pass, for $0.25.
+- Two built-in skills that work from the shell and the `finding` tool alone. `variant-hunting` takes a fix (a commit or diff), names the bug class and the unsafe pattern, searches the whole tree for the same shape and checks every hit. `assumption-mining` lists what each function silently relies on and looks for a caller that does not establish it. On planted examples they found all 3 unfixed variants and both broken assumptions, with no false positive on a guarded decoy.
+
+### Fixed
+
+- A scan's SARIF works in GitHub code scanning. Paths are relative to the repository root instead of `file:///` URLs with the runner's checkout path, the rule is the finding's category instead of `manual`, and the finding key comes from its file and first line instead of the title and the checkout path, which changed on every run. In the JSON report `target` is the folder's name or the git URL, never an absolute path, and `location.path` is relative to the scanned folder.
+- A scan of a git URL no longer sends a user name and password in the URL to the thread, the model or the report.
+- The scan skill leaves out `node_modules`, `vendor`, build output and generated files.
+- `0 scan` keeps going when a few status requests to a busy console fail, as happens with several scans at once or a slow model provider. It gives up after about a minute of failures and names the thread, whose findings are kept (`0 findings export --scan <thread id>`).
+
+## [0.40.1] - 2026-11-19
+
+This patch release fixes the standalone `0` binary, in which every folder looked unreadable.
+
+### Fixed
+
+- In the standalone `0` binary (every release since 0.36.0), a folder could not be read: `threads start --folder`, choosing a folder in the app and `0 scan` failed with "Zero couldn't read that folder". The release smoke test now starts a console from the compiled binary and starts a thread in a folder, so this cannot ship again.
+
+## [0.40.0] - 2026-11-19
+
+This release brings `0 scan` back as a thread: a scan is a thread that follows the `scan` skill, so it shows up in `0 threads` and in the app, and its findings are exported as json, md, sarif, html or pdf. It also cleans up the CLI and the Findings, Extensions and Computers pages.
+
+### Added
+
+- `0 scan <folder or git URL>` scans a code base for security bugs and prints the findings as a report. A scan is a thread that follows the built-in `scan` skill, so it shows up in `0 threads` and in the app. `--budget` (default $5) stops it and keeps the partial findings, `--format` is `json`, `md`, `sarif`, `html` or `pdf`, `-o` writes a file, `--fail-on <severity>` sets the exit code for CI, `--timeout` cancels it and still prints what was found, and `--model` picks the model (default `gpt-6-luna`). With no console running it starts one for the scan; it also works with `--engine-url` and `--computer`. The JSON report is versioned (`schemaVersion: 1`). Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or time limit. Package and image targets are not supported. In chat, `/scan <folder>` runs the same scan in the current thread. If the scan changes a file in a git target, it is reported as failed and names the files.
+
+### Fixed
+
+- In a scan, one flaw is one finding: findings of one scan that cite the same lines of a file are merged, and a scan's findings are no longer merged into another scan's, so a repeat scan or a scan of another project can no longer lose a finding from its own report.
+- A finding with a category outside the known list is stored as `other` (the model's label is kept in the description) instead of making the whole report unreadable, and a report skips a stored finding it cannot read and says so.
+- The Markdown report no longer prints a Depth row or an Attacks line of 0.
 - Sub-agents, Sentinel runs and every thread now get the same tools with a shell; one bad skill file no longer breaks `load_skill`; helpers can work in one folder together; a Sentinel run now tells its thread the charter.
 
 ### Changed

@@ -641,6 +641,8 @@ export interface Finding {
    * Empty until the triage stage runs. See {@link LayerVerdict} for details.
    */
   layerVerdicts?: LayerVerdict[];
+  /** Scanner that produced this finding when it was imported from another tool's report; absent for findings 0 found. */
+  tool?: string;
   workflowStatus?: FindingWorkflowStatus;
   workflowAssignee?: string | null;
   /**

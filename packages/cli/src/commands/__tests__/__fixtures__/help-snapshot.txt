@@ -4,22 +4,23 @@ Usage: 0 [options] [command]
 Security sentinels for your repositories. Run 0 to open the console.
 
 Options:
-  -h, --help            display help for command
-  -p, --print <prompt>  Run one prompt headless: only the answer goes to stdout
-  -c, --continue        With -p: continue the most recent thread
-  -r, --resume <id>     With -p: continue a saved thread
+  -h, --help               display help for command
+  -p, --print <prompt>     Run one prompt headless: only the answer goes to stdout
+  -c, --continue           With -p: continue the most recent thread
+  -r, --resume <id>        With -p: continue a saved thread
 
 Work:
-  findings [options]    Browse findings and change their status
-  threads               Start, follow and stop threads
-  sentinels             Create, run and change Sentinels
+  scan [options] <target>  Scan a folder or git repository for security bugs; prints the findings as
+                           a report
+  findings [options]       Browse findings and change their status
+  threads                  Start, follow and stop threads
+  sentinels                Create, run and change Sentinels
 
 Setup:
-  skills                Skills and extensions: list, add
-  memory                What 0 remembers across threads
-  models                Models and provider connections
-  computers             Remote computers that run 0
-  config                Settings, API keys, team and setup checks (config doctor)
+  skills                   Skills and extensions: list, add
+  models                   Models and provider connections
+  computers                Remote computers that run 0
+  config                   Settings, API keys, team and setup checks (config doctor)
 
 Run `0 <command>` to list its subcommands; `0 <command> <subcommand> --help` for flags.
 
@@ -591,22 +592,26 @@ Usage: 0 findings [options] [command]
 Browse findings and change their status
 
 Options:
-  --db-path <path>       Path to SQLite database
-  --scan <scanId>        Filter by scan ID
-  --severity <severity>  Filter by severity: critical, high, medium, low, info
-  --category <category>  Filter by attack category
-  --status <status>      Filter by status: discovered, verified, confirmed, scored, reported, fixed,
-                         false-positive
-  --triage <triage>      Filter by triage: new, accepted, suppressed
-  --limit <n>            Max findings/groups to show (default: "50")
-  --all                  Show raw finding rows instead of grouped fingerprints (default: false)
-  -h, --help             display help for command
+  --db-path <path>         Path to SQLite database
+  --scan <scanId>          Filter by scan ID
+  --severity <severity>    Filter by severity: critical, high, medium, low, info
+  --category <category>    Filter by attack category
+  --status <status>        Filter by status: discovered, verified, confirmed, scored, reported,
+                           fixed, false-positive
+  --triage <triage>        Filter by triage: new, accepted, suppressed
+  --limit <n>              Max findings/groups to show (default: "50")
+  --all                    Show raw finding rows instead of grouped fingerprints (default: false)
+  -h, --help               display help for command
 
 Commands:
-  list [options]         List findings from the database
-  show [options] <id>    Show detailed information about a finding
-  update [options] <id>  Change a finding's status
-  help [command]         display help for command
+  list [options]           List findings from the database
+  show [options] <id>      Show detailed information about a finding
+  update [options] <id>    Change a finding's status
+  import [options] <file>  Import findings from another scanner's SARIF 2.1.0 file (use - for
+                           stdin). Nothing in the file is executed.
+  fix [options] <finding>  Fix one finding in an isolated git work tree and open a pull request for
+                           review
+  help [command]           display help for command
 
 ### 0 findings accept (hidden)
 Usage: 0 findings accept [options] <id>
@@ -636,6 +641,44 @@ Options:
   --db-path <path>       Path to SQLite database
   --json                 Print the result of writing a file as JSON
   -h, --help             display help for command
+
+### 0 findings fix
+Usage: 0 findings fix [options] <finding>
+
+Fix one finding in an isolated git work tree and open a pull request for review
+
+Options:
+  --repo <dir>               Git repository the finding is in (default: the current directory)
+  --base <branch>            Branch to start from and open the pull request against (default: the
+                             remote's default branch)
+  --test <command>           Check to run after the change; repeat for several. A failing check
+                             makes the pull request a draft
+  --no-pr                    Commit on the fix branch but do not push or open a pull request
+  --budget <usd>             Stop when the estimated spend reaches this many USD (default: "3")
+  --model <model>            Model for the fix thread (default: gpt-6-luna)
+  --timeout <seconds>        Maximum seconds to wait for the fix (default: "1800")
+  --engine-url <url>         Attach directly to a running trusted engine
+  --engine-token-env <name>  Environment variable holding the attached engine token
+  --computer <id>            Use a registered remote computer
+  --computers-config <path>  Operator computer connection registry JSON file
+  --db-path <path>           Control database of the local engine to attach to
+  -h, --help                 display help for command
+
+### 0 findings import
+Usage: 0 findings import [options] <file>
+
+Import findings from another scanner's SARIF 2.1.0 file (use - for stdin). Nothing in the file is
+executed.
+
+Arguments:
+  file              SARIF file, or - to read standard input
+
+Options:
+  --tool <name>     Label for the scanner, overriding the name in the file
+  --root <dir>      Folder that was scanned; absolute paths under it become repo-relative (default:
+                    the current directory)
+  --db-path <path>  Destination database; stop its running console before importing
+  -h, --help        display help for command
 
 ### 0 findings keys (hidden)
 Usage: 0 findings keys [options] [command]
@@ -771,77 +814,6 @@ Options:
   --note <text>     Suppression reason
   -h, --help        display help for command
 
-### 0 findings triage (hidden)
-Usage: 0 findings triage [options] [command]
-
-Triage findings and manage false-positive memories
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 findings triage mark-fp (hidden)
-Usage: 0 findings triage mark-fp [options] <finding-id>
-
-Mark a finding as false positive and remember why
-
-Arguments:
-  finding-id             Finding ID (full or prefix)
-
-Options:
-  --reason <text>        Why this finding is a false positive
-  --scope <scope>        Memory scope: global | target | package (default: "target")
-  --scope-value <value>  Scope identifier (target URL or package name)
-  --db-path <path>       Path to SQLite database
-  -h, --help             display help for command
-
-### 0 findings triage memory (hidden)
-Usage: 0 findings triage memory [options] [command]
-
-Moved: false-positive reasons are notes in `0 memory`
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 findings triage memory add (hidden)
-Usage: 0 findings triage memory add [options]
-
-Create a memory from an existing finding
-
-Options:
-  --finding <id>         Finding ID (full or prefix) to derive the memory from
-  --reason <text>        Why this finding is a false positive
-  --scope <scope>        Memory scope: global | target | package (default: "target")
-  --scope-value <value>  Scope identifier (target URL or package name)
-  --db-path <path>       Path to SQLite database
-  -h, --help             display help for command
-
-### 0 findings triage memory list (hidden)
-Usage: 0 findings triage memory list [options]
-
-List false-positive notes
-
-Options:
-  --db-path <path>  Path to SQLite database
-  -h, --help        display help for command
-
-### 0 findings triage memory remove (hidden)
-Usage: 0 findings triage memory remove [options] <id>
-
-Forget a note by id
-
-Arguments:
-  id                Note ID
-
-Options:
-  --db-path <path>  Path to SQLite database
-  -h, --help        display help for command
-
 ### 0 findings update
 Usage: 0 findings update [options] <id>
 
@@ -854,155 +826,25 @@ Options:
   --db-path <path>   Path to SQLite database
   -h, --help         display help for command
 
-### 0 memory
-Usage: 0 memory [options] [command]
+### 0 findings upload (hidden)
+Usage: 0 findings upload [options] <file>
 
-What 0 remembers across threads
+Upload a SARIF file to GitHub code scanning, so findings show in the Security tab and on pull
+requests
 
-Options:
-  -h, --help             display help for command
-
-Commands:
-  list [options]         List notes, and say which ones do not fit what the model is shown
-  add [options] <text>   Remember a note
-  remove [options] <id>  Forget a note
-  help [command]         display help for command
-
-### 0 memory add
-Usage: 0 memory add [options] <text>
-
-Remember a note
+Arguments:
+  file                 SARIF 2.1.0 file, for example from `0 scan --format sarif -o scan.sarif`
 
 Options:
-  --folder <path>    Folder the note is about (default: this folder)
-  --global           Remember it everywhere
-  --kind <kind>      One of fix-decision, convention, command, avoid
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory clear (hidden)
-Usage: 0 memory clear [options]
-
-Forget every note, or every note for one folder
-
-Options:
-  --folder <path>    Only this folder
-  --yes              Confirm
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory disable (hidden)
-Usage: 0 memory disable [options]
-
-Stop using notes in new threads (they stay on disk)
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory enable (hidden)
-Usage: 0 memory enable [options]
-
-Use notes in new threads again
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory export (hidden)
-Usage: 0 memory export [options]
-
-Write notes to a file: JSON for 0 (default), or with --to a reviewable AGENTS.md section
-
-Options:
-  --folder <path>      Only this folder (default for --to: this folder)
-  -o, --output <file>  Write the JSON export to a file instead of stdout
-  --to <file>          Add accepted notes to this markdown file (for example AGENTS.md) as a section
-                       you review and commit
-  --markdown           Print the markdown section instead of JSON
-  --db-path <path>     Engine database to import older memories from
-  --format <format>    Output: text or json (choices: "text", "json")
+  --repo <owner/name>  Repository (default: the current clone's)
+  --commit <sha>       Commit the results are for (default: HEAD, or GITHUB_SHA in Actions)
+  --ref <ref>          refs/heads/<branch> or refs/pull/<n>/merge (default: the current branch, or
+                       GITHUB_REF in Actions)
+  --tool <name>        Name the tool shown in GitHub
+  --no-wait            Return when GitHub has accepted the upload instead of waiting for it to be
+                       processed
+  --format <format>    Output: text or json (default: "text")
   -h, --help           display help for command
-
-### 0 memory import (hidden)
-Usage: 0 memory import [options] <file>
-
-Add the notes from an export file
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory list
-Usage: 0 memory list [options]
-
-List notes, and say which ones do not fit what the model is shown
-
-Options:
-  --folder <path>    Only notes for this folder
-  --global           Only global notes
-  --search <text>    Only notes containing this text
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory proposed (hidden)
-Usage: 0 memory proposed [options] [command]
-
-Review notes 0 proposed after reading web pages, files or tool output (they are not used until
-accepted)
-
-Options:
-  -h, --help      display help for command
-
-Commands:
-  help [command]  display help for command
-
-### 0 memory proposed accept (hidden)
-Usage: 0 memory proposed accept [options] <id>
-
-Accept a proposed note so it is used in new threads
-
-Options:
-  --text <text>      Correct the wording while accepting
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory proposed list (hidden)
-Usage: 0 memory proposed list [options]
-
-List proposed notes
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory proposed reject (hidden)
-Usage: 0 memory proposed reject [options] <id>
-
-Discard a proposed note
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
-
-### 0 memory remove
-Usage: 0 memory remove [options] <id>
-
-Forget a note
-
-Options:
-  --db-path <path>   Engine database to import older memories from
-  --format <format>  Output: text or json (choices: "text", "json")
-  -h, --help         display help for command
 
 ### 0 models
 Usage: 0 models [options] [command]
@@ -1133,6 +975,37 @@ Options:
   --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
 
+### 0 scan
+Usage: 0 scan [options] <target>
+
+Scan a folder or git repository for security bugs; prints the findings as a report
+
+Options:
+  --budget <usd>             Stop when the estimated spend reaches this many USD; partial findings
+                             are kept (default: "5")
+  --format <format>          Report format: json, md, sarif, html, pdf (default: "md")
+  -o, --output <file>        Write the report to a file instead of stdout
+  --fail-on <severity>       Exit 1 when a finding is at or above this severity (critical, high,
+                             medium, low, info)
+  --passes <n>               Scan this many times and merge the findings (a scan misses some issues
+                             that another run finds); the budget is split between them, up to 5
+                             (default: "1")
+  --diff <ref>               Review only the files that differ from this git ref (for example
+                             origin/main), and what they connect to; an empty diff scans nothing
+  --prepass <mode>           auto runs the pattern scanners first when they are installed and gives
+                             their hits to the scan as leads; off skips them (default: "auto")
+  --scanner <id>             Pattern scanner for the pre-pass (foxguard, semgrep, opengrep); repeat
+                             to use several (default: foxguard)
+  --skill <id>               Skill that holds the scan method (default: "scan")
+  --model <model>            Model for the scan thread (default: gpt-6-luna)
+  --timeout <seconds>        Maximum seconds to wait for the scan (default: "3600")
+  --engine-url <url>         Attach directly to a running trusted engine
+  --engine-token-env <name>  Environment variable holding the attached engine token
+  --computer <id>            Use a registered remote computer
+  --computers-config <path>  Operator computer connection registry JSON file
+  --db-path <path>           Control database of the local engine to attach to
+  -h, --help                 display help for command
+
 ### 0 sentinels
 Usage: 0 sentinels [options] [command]
 
@@ -1202,6 +1075,19 @@ Options:
   --db-path <path>   Control database (default: the user database)
   --format <format>  Output: text or json (choices: "text", "json")
   -h, --help         display help for command
+
+### 0 sentinels export (hidden)
+Usage: 0 sentinels export [options] <id>
+
+Write a Sentinel as a YAML definition file, so a team can start from what it already has
+
+Arguments:
+  id                Sentinel ID (full or prefix) or exact name
+
+Options:
+  --out <folder>    Write <name>.yaml into this folder instead of standard output
+  --db-path <path>  Database to read; stop its running console first
+  -h, --help        display help for command
 
 ### 0 sentinels files (hidden)
 Usage: 0 sentinels files [options] [command]
@@ -1334,6 +1220,24 @@ Show a Sentinel (full or prefix ID)
 Options:
   --db-path <path>   Control database (default: the user database)
   --format <format>  Output: text or json (choices: "text", "json")
+  -h, --help         display help for command
+
+### 0 sentinels sync (hidden)
+Usage: 0 sentinels sync [options] <folder>
+
+Make Sentinels match the YAML files in a folder. Shows what would change; --apply writes it.
+
+Arguments:
+  folder             Folder of Sentinel definitions (*.yaml), for example .0/sentinels
+
+Options:
+  --apply            Write the changes (without it, only the plan is shown)
+  --check            Exit 1 when the database differs from the files
+  --commit <sha>     Commit the files came from; recorded on each Sentinel
+  --enable           Enable the triggers this sync creates (only for a change that was already
+                     reviewed)
+  --db-path <path>   Database to change; stop its running console first
+  --format <format>  Output: text or json (default: "text")
   -h, --help         display help for command
 
 ### 0 sentinels triggers (hidden)

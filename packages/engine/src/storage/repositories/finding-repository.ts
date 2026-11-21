@@ -115,6 +115,7 @@ export class FindingRepository extends Repository {
         verificationResult: verificationResultJson,
         reviewAnnotation: reviewAnnotationJson,
         sourceVerification: sourceVerificationJson,
+        tool: finding.tool ?? null,
         timestamp: finding.timestamp,
       })
       .onConflictDoUpdate({
@@ -148,6 +149,7 @@ export class FindingRepository extends Repository {
           verificationResult: verificationResultJson,
           reviewAnnotation: reviewAnnotationJson,
           sourceVerification: sourceVerificationJson,
+          tool: finding.tool ?? null,
           timestamp: finding.timestamp,
         },
       })

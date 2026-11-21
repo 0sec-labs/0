@@ -23,7 +23,6 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, readdir
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eventBus, type SubagentMessagePayload } from "../events/bus.js";
-import { createFileNoteStore } from "../notes/index.js";
 import { buildSubagentMessage, getToolsForRole, ToolExecutor } from "./tools.js";
 
 const scopedTransport = vi.hoisted(() => vi.fn<typeof import("../http.js").fetchScoped>());
@@ -32,14 +31,10 @@ vi.mock("../http.js", async (importOriginal) => ({
   fetchScoped: scopedTransport,
 }));
 
-// Memory is opt-in per run; keep the suite from reading or writing the real ~/.0 store.
-// The dedicated Memory describe below re-enables it and injects a throwaway store. This file-level hook runs outer-most, before any
-// describe-scoped beforeEach, so a nested `delete` of the same var wins.
 beforeEach(() => {
   scopedTransport.mockReset();
   scopedTransport.mockRejectedValue(new Error("Unexpected scoped HTTP fixture request"));
   process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
-  process.env["ZERO_DISABLE_MEMORY"] = "1";
 });
 afterEach(() => {
   delete process.env["ZERO_DISABLE_HUNT_MEMORY"];
@@ -1824,57 +1819,6 @@ describe("runNativeAgentLoop — action-level tool_calls log", () => {
   });
 });
 
-// ── Hunt memory integration (default ON, opt out via ZERO_DISABLE_HUNT_MEMORY) ──
-
-describe("runNativeAgentLoop — Memory", () => {
-  let home: string;
-  beforeEach(() => {
-    delete process.env["ZERO_DISABLE_HUNT_MEMORY"]; delete process.env["ZERO_DISABLE_MEMORY"];
-    home = mkdtempSync(join(tmpdir(), "0-memory-"));
-    vi.stubEnv("HOME", home);
-  });
-  afterEach(() => { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }); });
-  const cfg = (extra: Partial<NativeAgentConfig> = {}): NativeAgentConfig => ({ role: "review", codebaseLearning: true, scopePath: home, target: home, scanId: "memory", systemPrompt: "Review", tools: [], maxTurns: 2, ...extra });
-
-  it("shows folder notes at loop start and lets the model remember one", async () => {
-    const store = createFileNoteStore({ home });
-    store.add({ text: "Routes live in module.ts", folder: home });
-    let first = true; const seen: string[] = []; let tools: string[] = [];
-    const runtime: NativeRuntime = {
-      type: "api", isAvailable: async () => true,
-      executeNative: async (_system, messages, offered) => {
-        seen.push(JSON.stringify(messages)); tools = offered.map((tool) => tool.name);
-        if (!first) return { content: [{ type: "text", text: "done" }], stopReason: "end_turn", durationMs: 1 };
-        first = false;
-        return { content: [{ type: "tool_use", id: "m", name: "memory", input: { action: "remember", note: "Tests run with pnpm test", kind: "command" } }], stopReason: "tool_use", durationMs: 1 };
-      },
-    };
-    await runNativeAgentLoop({ config: cfg(), runtime, db: null, memoryStore: store });
-    expect(seen[0]).toContain("Routes live in module.ts"); expect(seen[0]).toContain("untrusted");
-    expect(tools).toContain("memory");
-    // A scan loop reads repository content all the time, so its notes wait for review.
-    expect(store.list({ folder: home }).map((note) => note.text)).not.toContain("Tests run with pnpm test");
-    expect(store.list({ folder: home, status: "proposed" }).map((note) => note.text)).toEqual(["Tests run with pnpm test"]);
-  });
-
-  it("stays cold for verify, when the run opts out, and when the environment vetoes it", async () => {
-    const store = createFileNoteStore({ home });
-    store.add({ text: "Private routing context", folder: home });
-    const run = async (config: NativeAgentConfig, extra: { memoryStore?: typeof store } = { memoryStore: store }) => {
-      const seen: string[] = []; const names: string[] = [];
-      const runtime: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async (_s, messages, tools) => { seen.push(JSON.stringify(messages)); names.push(...tools.map((tool) => tool.name)); return { content: [{ type: "text", text: "done" }], stopReason: "end_turn", durationMs: 1 }; } };
-      await runNativeAgentLoop({ config, runtime, db: null, ...extra });
-      return { text: seen.join(""), names };
-    };
-    for (const result of [await run(cfg({ role: "verify" })), await run(cfg({ codebaseLearning: false, role: "review" }))]) {
-      expect(result.text).not.toContain("Private routing context"); expect(result.names).not.toContain("memory");
-    }
-    process.env["ZERO_DISABLE_MEMORY"] = "1";
-    const vetoed = await run(cfg());
-    expect(vetoed.text).not.toContain("Private routing context"); expect(vetoed.names).not.toContain("memory");
-  });
-});
-
 describe("runNativeAgentLoop — coordinator rails enforcement", () => {
   beforeEach(() => {
     // Rails are default OFF (opt-in) so they never surface as transcript noise
@@ -2146,7 +2090,6 @@ describe("recursive subagents", () => {
           scopePath: home, workspaceRoot: home, scanId: "recursive-root", maxTurns: 2,
           tools: getToolsForRole().filter(tool => tool.name !== "query_findings"),
           costLedger: ledger,
-          codebaseLearning: false,
         },
         runtime: runtimeAt(0), db: null,
       });

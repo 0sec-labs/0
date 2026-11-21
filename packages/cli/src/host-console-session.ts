@@ -250,7 +250,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
         finally { clearTimeout(timer); }
       }
       const result = await forceStop();
-      if (result.quarantined) throw new Error("Host session resource teardown could not be confirmed");
+      if (result.quarantined) throw new Error(`Host session resource teardown could not be confirmed${result.error ? `: ${result.error}` : ""}`);
     })(); },
   };
 }

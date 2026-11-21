@@ -1,6 +1,6 @@
 {
   "name": "@0/cli",
-  "version": "0.39.0",
+  "version": "0.41.0",
   "description": "0security CLI: build and deploy security agents that find, prove and fix security risks.",
   "license": "MIT OR Apache-2.0",
   "private": true,
@@ -24,7 +24,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "simple-icons": "^16.37.0",
+    "simple-icons": "^16.38.0",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
     "vitest": "^5.1.0",

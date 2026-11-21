@@ -11,7 +11,6 @@ import { findLiveLocalEngine } from "./local-engine.js";
 import { SkillsStore, SkillsError } from "./web/skills.js";
 import { SkillsCatalogService, handleSkillsCatalogRequest } from "./web/skills-catalog.js";
 import { WebOperatorServices } from "./web/operator-services.js";
-import { handleMemoryRequest } from "./web/memory-api.js";
 
 export interface ConsoleReply { status: number; data: unknown }
 export interface ConsoleClient {
@@ -81,7 +80,6 @@ function embedded(options: ConsoleOptions): ConsoleClient {
           const result = await handleSkillsCatalogRequest(catalog, pathname.slice("/api/console/".length), method, body);
           if (result) return result;
         }
-        const memory = handleMemoryRequest(pathname, method, body, url.searchParams); if (memory) return memory;
         operator ??= new WebOperatorServices({});
         const result = await operator.handle(pathname, method, body, url.searchParams); if (result) return result;
         return { status: 404, data: { error: "Route not found." } };

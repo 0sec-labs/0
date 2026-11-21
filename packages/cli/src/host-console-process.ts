@@ -1,4 +1,4 @@
-import { spawn, execFile, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, execFile, execFileSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Writable, type Readable } from "node:stream";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, type HostConsoleFrame, type HostConsoleStopResult } from "./host-console-protocol.js";
@@ -6,14 +6,22 @@ import { encodeHostConsoleFrames, HostConsoleFrameReader, type HostConsoleFrame,
 interface ProcessIdentity { pid: number; parent: number; group: number; started: string; zombie: boolean }
 interface Resource { identity: ProcessIdentity; group: boolean }
 
+/** `ps` can time out on a loaded machine; that is not a statement about the process, so ask again before giving up. */
+const PS_ATTEMPTS = 4;
+const PS_TIMEOUT_MS = 3000;
+const pause = (ms: number): void => { try { spawnSync("sleep", [String(ms / 1000)], { timeout: 1000 }); } catch { /* a missing sleep only shortens the wait */ } };
+
 function identity(pid: number): ProcessIdentity | undefined {
-  try {
-    const value = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,pgid=,stat=,lstart="], { encoding: "utf8", timeout: 1000 }).trim();
-    const match = /^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/.exec(value);
-    return match ? { pid, parent: Number(match[1]), group: Number(match[2]), started: match[4]!.trim().replace(/\s+/g, " "), zombie: match[3]!.startsWith("Z") } : undefined;
-  } catch (error) {
-    if ((error as { status?: number }).status === 1) return undefined;
-    throw new Error("Cannot inspect owned process identity");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const value = execFileSync("ps", ["-p", String(pid), "-o", "ppid=,pgid=,stat=,lstart="], { encoding: "utf8", timeout: PS_TIMEOUT_MS }).trim();
+      const match = /^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/.exec(value);
+      return match ? { pid, parent: Number(match[1]), group: Number(match[2]), started: match[4]!.trim().replace(/\s+/g, " "), zombie: match[3]!.startsWith("Z") } : undefined;
+    } catch (error) {
+      if ((error as { status?: number }).status === 1) return undefined; // ps ran and found no such process
+      if (attempt >= PS_ATTEMPTS) throw new Error("Cannot inspect owned process identity");
+      pause(25 * attempt);
+    }
   }
 }
 
@@ -22,7 +30,7 @@ function live(resource: Resource): boolean {
     try {
       const leader = identity(resource.identity.pid);
       if (leader && leader.group === leader.pid && leader.started !== resource.identity.started) return false;
-      const table = execFileSync("ps", ["-axo", "pgid=,stat="], { encoding: "utf8", timeout: 1000 });
+      const table = execFileSync("ps", ["-axo", "pgid=,stat="], { encoding: "utf8", timeout: PS_TIMEOUT_MS });
       return table.split("\n").some(line => { const [group, state] = line.trim().split(/\s+/); return Number(group) === resource.identity.pid && !state?.startsWith("Z"); });
     } catch { return true; } // Failure to inspect is not proof of termination.
   }
@@ -34,7 +42,12 @@ function live(resource: Resource): boolean {
 
 /** One async OS snapshot per drain poll, never one blocking ps per resource. */
 async function processTable(): Promise<Map<number, ProcessIdentity>> {
-  const raw = await new Promise<string>((resolve, reject) => execFile("ps", ["-axo", "pid=,ppid=,pgid=,stat=,lstart="], { encoding: "utf8", timeout: 1000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+  const read = () => new Promise<string>((resolve, reject) => execFile("ps", ["-axo", "pid=,ppid=,pgid=,stat=,lstart="], { encoding: "utf8", timeout: PS_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+  let raw: string | undefined;
+  for (let attempt = 1; raw === undefined; attempt++) {
+    try { raw = await read(); }
+    catch (error) { if (attempt >= PS_ATTEMPTS) throw error; await new Promise(resolve => setTimeout(resolve, 25 * attempt)); }
+  }
   const table = new Map<number, ProcessIdentity>();
   for (const line of raw.split("\n")) {
     const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/.exec(line);
@@ -73,6 +86,7 @@ export class HostConsoleProcess {
   #creating = new Set<string>();
   #exited = false;
   #closed = false;
+  #exitedAt = 0;
   #revoked = false;
   #stop?: Promise<HostConsoleStopResult>;
   #invalidResource = false;
@@ -103,6 +117,7 @@ export class HostConsoleProcess {
     this.#child.once("error", () => this.#fail(new Error("Host session process could not start")));
     this.#child.once("exit", () => {
       this.#exited = true;
+      this.#exitedAt = Date.now();
       // Pending turns settle only after owned resources are confirmed too.
       // An unexpected worker exit also drains registered detached children.
       if (!this.#stop) void this.forceStop();
@@ -113,6 +128,16 @@ export class HostConsoleProcess {
       if (main && main.group === this.pid) this.#resources.push({ identity: main, group: true });
       else { this.#invalidResource = true; void this.forceStop(); }
     } catch { this.#invalidResource = true; void this.forceStop(); }
+  }
+
+  /**
+   * The worker has exited, but some runtimes (Bun 1.3 on Linux) never report "close" for a child with extra pipes. Once it has been gone
+   * for a moment, nothing can still be written by it, so our ends of its pipes are closed here and the session counts as closed.
+   */
+  #reapPipes(): void {
+    if (!this.#exited || this.#closed || Date.now() - this.#exitedAt < 300) return;
+    for (const stream of this.#child.stdio) { try { stream?.destroy(); } catch { /* already closed */ } }
+    this.#closed = true;
   }
 
   #fail(error: Error): void {
@@ -225,7 +250,9 @@ export class HostConsoleProcess {
     let table: Map<number, ProcessIdentity> | undefined;
     const inspect = async () => {
       try { table = await processTable(); }
-      catch { this.#invalidResource = true; table = undefined; }
+      // A slow or failed `ps` is retried on the next pass. Stopping is only confirmed from a process table read at the end,
+      // so a single failure under load cannot make a stopped execution look healthy, and it no longer makes it permanently invalid.
+      catch { table = undefined; }
     };
     const signalAll = (signal: NodeJS.Signals) => {
       for (const resource of this.#resources) {
@@ -242,6 +269,7 @@ export class HostConsoleProcess {
         await inspect();
         if (hard) signalAll("SIGKILL"); // Includes resources registered during revocation.
         const resourcesLive = !table || this.#resources.some(resource => liveInTable(resource, table!));
+        this.#reapPipes();
         if (this.#closed && this.#hostCallbacks.size === 0 && !resourcesLive) return;
         if (Date.now() >= deadline) return;
         await new Promise(resolve => setTimeout(resolve, 20));
@@ -251,12 +279,16 @@ export class HostConsoleProcess {
     signalAll("SIGTERM");
     await wait(this.options.graceMs ?? 250);
     signalAll("SIGKILL");
-    await wait(this.options.confirmationMs ?? 2000, true);
+    // Returns as soon as everything is confirmed stopped; the limit only matters for a process that cannot be killed, and a loaded machine needs more than two seconds to reap a killed tree.
+    await wait(this.options.confirmationMs ?? 10_000, true);
     const resourcesStopped = !!table && this.#closed && this.#creating.size === 0 && this.#hostCallbacks.size === 0 && !this.#invalidResource && !this.#resources.some(resource => liveInTable(resource, table!));
     const quarantined = !this.#exited || !resourcesStopped;
     this.#fail(new Error(quarantined ? "Host session stop could not be confirmed; execution quarantined" : "Host session execution stopped"));
     this.#input.destroy();
     return { processExited: this.#exited, resourcesStopped, quarantined,
-      ...(quarantined ? { error: "Unconfirmed owned resources; do not reuse this execution" } : {}) };
+      ...(quarantined ? { error: `Unconfirmed owned resources; do not reuse this execution (${[
+        !this.#exited && "worker still running", !table && "process table unreadable", !this.#closed && "worker pipes open", this.#creating.size > 0 && "resource registration unfinished",
+        this.#hostCallbacks.size > 0 && "host callbacks pending", this.#invalidResource && "a resource could not be verified", table && this.#resources.some(resource => liveInTable(resource, table!)) && "a resource is still alive",
+      ].filter(Boolean).join(", ") || "unknown"})` } : {}) };
   }
 }

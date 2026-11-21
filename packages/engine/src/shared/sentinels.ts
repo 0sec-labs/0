@@ -17,7 +17,7 @@ export type SentinelStatus = (typeof SENTINEL_STATUSES)[number];
  * dropped on read, and input that still names them (or `access` / `accessLevel`) is accepted and ignored.
  * `budget` and `pauseReason` belong to the removed daily caps, and `scope` to the removed scope; they are dropped the same way.
  */
-const IGNORED_ACCESS_KEYS = ["autonomy", "toolAccess", "access", "accessLevel", "budget", "pauseReason", "scope"] as const;
+const IGNORED_ACCESS_KEYS = ["autonomy", "toolAccess", "access", "accessLevel", "budget", "pauseReason", "scope", "memory"] as const;
 /** Removes the retired access fields from stored or submitted data; never throws. */
 export function dropAccessFields<T extends Record<string, unknown>>(value: T): Omit<T, (typeof IGNORED_ACCESS_KEYS)[number]> {
   const copy: Record<string, unknown> = { ...value };
@@ -64,11 +64,6 @@ const notificationsSchema = z.object({
   on: z.array(z.enum(SENTINEL_NOTIFY_EVENTS)).max(4).default(["finding-high", "needs-you", "run-failed"]),
   quiet: z.boolean().default(false),
 }).strict();
-/** `autoLearn` was a setting nothing read; stored and submitted values are dropped. */
-const memorySchema = z.preprocess(value => value && typeof value === "object" && !Array.isArray(value) ? (({ autoLearn: _dropped, ...rest }) => rest)(value as Record<string, unknown>) : value, z.object({
-  enabled: z.boolean().default(true),
-}).strict());
-
 const base = {
   name: z.string().trim().min(1).max(80),
   mission: z.string().trim().max(160).default(""),
@@ -80,9 +75,8 @@ const base = {
   hostId: z.string().trim().min(1).max(256).nullable().default(null),
   model: modelSchema.nullable().default(null),
   notifications: notificationsSchema.prefault({}),
-  memory: memorySchema.prefault({}),
   status: z.enum(SENTINEL_STATUSES).default("paused"),
-  /** Automations (workflow definition ids) this Sentinel owns; they share its memory. */
+  /** Automations (workflow definition ids) this Sentinel owns; they share its notes files. */
   automationIds: z.array(identifier).max(50).refine(values => new Set(values).size === values.length).default([]),
 };
 /** Full editable body. Strict: unknown keys are rejected rather than silently dropped. */

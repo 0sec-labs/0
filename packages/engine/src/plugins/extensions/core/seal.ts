@@ -17,7 +17,10 @@ const canonical = (value: unknown): string => {
 };
 
 export const sealOf = (key: Buffer, subject: string, value: unknown): string => createHmac("sha256", key).update(`${subject}\0${canonical(value)}`).digest("hex");
-const same = (a: string | undefined, b: string): boolean => a !== undefined && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const same = (a: string | undefined, b: string): boolean =>
+  a !== undefined &&
+  Buffer.byteLength(a, "utf8") === Buffer.byteLength(b, "utf8") &&
+  timingSafeEqual(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 
 /** Fresh seals for every record in `state`. */
 export function sealAll(state: ExtensionState, key: Buffer): Record<string, string> {

@@ -50,7 +50,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : <ProjectControl />;
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
-  const subtitle = mode === "settings" && category === "shortcuts" ? "Keyboard shortcuts available in this app" : mode === "settings" ? undefined : page.description || undefined;
+  const subtitle = mode === "settings" && category === "shortcuts" ? undefined : mode === "settings" ? undefined : page.description || undefined;
   return <div className="flex min-w-0 flex-col gap-10">
     <PageHeader ref={headingRef} tabIndex={-1} className="outline-none" title={title} summary={subtitle} />
     <section className="flex min-w-0 flex-col gap-10" aria-label={mode === "settings" ? `${title} settings` : page.label}>{content}</section>

@@ -13,7 +13,6 @@ import { HELP_GROUPS, NEW_HOME, adoptCommands, applyNewSurface, configureGrouped
 export { HELP_GROUPS, NEW_HOME, configureGroupedHelp };
 
 import { registerFindingsCommand } from "./findings.js";
-import { registerTriageCommand } from "./triage.js";
 import { registerDoctorCommand } from "./doctor.js";
 import { registerDashboardCommand } from "./dashboard.js";
 import { registerTeamCommand } from "./team.js";
@@ -28,21 +27,25 @@ import { registerWorkbenchCommand } from "./workbench.js";
 import { registerMissionsCommand } from "./missions.js";
 import { registerFindingsExportCommand } from "./findings-export.js";
 import { registerFindingsKeysCommand } from "./findings-keys.js";
+import { registerFindingsImportCommand } from "./findings-import.js";
+import { registerFixCommand } from "./fix.js";
+import { registerFindingsUploadCommand } from "./findings-upload.js";
 import { registerSentinelsCommand } from "./sentinels.js";
 import { registerAutomationManageCommands } from "./automation-manage.js";
 import { registerSkillsCommand } from "./skills.js";
-import { registerMemoryCommand } from "./memory.js";
 import { registerConnectionsCommand } from "./connections.js";
 import { registerModelsCommand } from "./models.js";
 import { registerGithubCommand } from "./github.js";
 import { registerUsageCommand } from "./usage.js";
 import { registerAuditLogCommand } from "./audit-log.js";
+import { registerScanCommand } from "./scan.js";
 
 export function registerCommandTree(program: Command): void {
+  registerScanCommand(program);
   // Evidence.
   registerReportsCommand(program);
   registerFindingsCommand(program);
-  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand]);
+  nest(program, "findings", [registerFindingsExportCommand, registerFindingsKeysCommand, registerFindingsImportCommand, (parent) => registerFixCommand(parent), (parent) => registerFindingsUploadCommand(parent)]);
   registerWorkflowCommand(program); // also registers `chats` and `automation`
   registerMissionsCommand(program);
   nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
@@ -64,9 +67,8 @@ export function registerCommandTree(program: Command): void {
   registerAuditLogCommand(program);
   registerWorkbenchCommand(program);
 
-  // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
+  // Skills are a first-class page in the web UI, so they are a first-class group here.
   registerSkillsCommand(program);
-  registerMemoryCommand(program);
 
   adoptCommands(program);
   for (const command of program.commands) applyNewSurface(command);

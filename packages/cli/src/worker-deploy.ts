@@ -216,7 +216,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   const bundleRoot = existsSync(join(repoRoot, "dist/0.js")) ? repoRoot : staging;
   if (bundleRoot === staging) {
     mkdirSync(join(staging, "dist"));
-    for (const asset of ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "worker-assets"]) {
+    for (const asset of ["0.js", "cli-path-traversal-fixture.js", "chunks", "dashboard", "worker-assets"]) {
       if (existsSync(join(repoRoot, asset))) cpSync(join(repoRoot, asset), join(staging, "dist", asset), { recursive: true });
     }
   }

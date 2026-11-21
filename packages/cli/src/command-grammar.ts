@@ -28,7 +28,7 @@ function pull(args: Args, name: string, withValue: boolean): { found: boolean; v
 const isWord = (value: string | undefined): value is string => value !== undefined && !value.startsWith("-");
 
 const STATUS_TO_COMMAND: Readonly<Record<string, readonly string[]>> = {
-  accepted: ["findings", "accept"], suppressed: ["findings", "suppress"], open: ["findings", "reopen"], "false-positive": ["findings", "triage", "mark-fp"],
+  accepted: ["findings", "accept"], suppressed: ["findings", "suppress"], open: ["findings", "reopen"], "false-positive": ["findings", "suppress"],
 };
 const SENTINEL_STATE: Readonly<Record<string, string>> = { active: "resume", paused: "pause", acknowledged: "acknowledge", archived: "archive", deleted: "delete" };
 const THREAD_FLAGS = ["events", "export", "archive", "close", "delete", "clear", "set"] as const;
@@ -39,7 +39,15 @@ function findings(a: Args): string[] | undefined {
   if (a[1] === "update" && isWord(a[2])) {
     const status = pull(rest.slice(1), "--status", true);
     const target = status.value ? STATUS_TO_COMMAND[status.value] : undefined;
-    return target ? [...target, a[2], ...status.rest] : undefined;
+    if (!target) return undefined;
+    // A false positive is a suppression whose reason is the note kept with the finding.
+    if (status.value === "false-positive") {
+      const reason = pull(status.rest, "--reason", true);
+      if (!reason.value) return undefined;
+      const note = pull(reason.rest, "--note", true);
+      return [...target, a[2], ...note.rest, "--note", reason.value];
+    }
+    return [...target, a[2], ...status.rest];
   }
   if (a[1] === "list") {
     const imported = pull(rest, "--import", true);

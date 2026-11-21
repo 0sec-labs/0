@@ -31,7 +31,6 @@ import {
 import type { DashboardResponse } from "@/types";
 import type { SecurityWorkflow } from "@0/engine/shared";
 import { searchSettings, settingsHref, settingsPages } from "./console-control/settings-index";
-import type { MemoryResponse } from "@/memory-model";
 import { useTeamAccess } from "./team-access";
 import { useSentinels } from "@/sentinels/api";
 import { sentinelHref } from "@/sentinels/model";
@@ -93,7 +92,6 @@ export function CommandPalette({
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: queryKeys.appSearch(...scope, name), queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "sentinels"));
   const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
-  const memoryQuery = useQuery({ ...lazyList<MemoryResponse>("memory", "/api/console/memory", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
   const inventoryEnabled = open && (tab !== "all" || Boolean(searchQuery));
   const navigate = useNavigate();
@@ -301,11 +299,6 @@ export function CommandPalette({
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
       run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
     });
-    for (const note of memoryQuery.data?.notes ?? []) base.push({
-      id: `memory-${note.id}`, group: "Memory", label: note.text, meta: note.scope === "global" ? "Everywhere" : "Folder", icon: CapyDatabaseIcon,
-      keywords: searchKeywords(note.text, note.kind, note.folder),
-      run: () => navigate("/memory"),
-    });
     for (const backend of connection?.backends ?? []) base.push({
       id: `computer-${backend.id}`, group: "Computers", label: backend.id === "local" ? "This computer" : backend.name, meta: backend.status, icon: CapyDevicesIcon,
       keywords: searchKeywords(backend.id, backend.transport, "worker computer engine"),
@@ -336,7 +329,7 @@ export function CommandPalette({
     return [...remembered, ...chats, ...base];
   }, [
     chatsQuery.data, searchQuery, query, tab, recents, settingRows, resumeConsoleSession,
-    dashboard?.groups, dashboard?.workers, connection?.backends, workflowsQuery.data, sentinelsQuery.supported, sentinelsQuery.data, skillsQuery.data, memoryQuery.data, sentinelsQuery.sentinels,
+    dashboard?.groups, dashboard?.workers, connection?.backends, workflowsQuery.data, sentinelsQuery.supported, sentinelsQuery.data, skillsQuery.data, sentinelsQuery.sentinels,
     navigate,
     queryClient,
     selectedFingerprint,
@@ -347,9 +340,9 @@ export function CommandPalette({
   ]);
 
   const filteredItems = useMemo(() => filterAppSearch(items, deferredQuery, tab), [deferredQuery, items, tab]);
-  const inventories = [workflowsQuery, skillsQuery, memoryQuery];
+  const inventories = [workflowsQuery, skillsQuery];
   const inventoryLoading = inventories.some(result => result.isFetching && !result.data) || (sentinelsQuery.isFetching && !sentinelsQuery.data);
-  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "sentinels", skillsQuery.error && "skills", memoryQuery.error && "Memory"].filter(Boolean) : [];
+  const unavailableSections = inventoryEnabled ? [workflowsQuery.error && "sentinels", skillsQuery.error && "skills"].filter(Boolean) : [];
 
   const orderedItems = useMemo(() => GROUPS.flatMap(group => filteredItems.filter(item => item.group === group)), [filteredItems]);
   const firstResult = orderedItems[0]?.id ?? "";
@@ -463,7 +456,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>{v("Search {missions}, pages and settings")}</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, sentinels, skills, Memory, computers and settings. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, sentinels, skills, computers and settings. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

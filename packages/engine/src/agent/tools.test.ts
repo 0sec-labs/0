@@ -56,7 +56,7 @@ beforeEach(() => {
 describe("TOOL_DEFINITIONS", () => {
   it("registers exactly the minimal toolset", () => {
     expect(Object.keys(TOOL_DEFINITIONS).sort()).toEqual([
-      "ask_operator", "bash", "finding", "load_skill", "memory", "spawn_agent", "str_replace", "web_search",
+      "ask_operator", "bash", "finding", "load_skill", "spawn_agent", "str_replace", "web_search",
     ]);
   });
 });

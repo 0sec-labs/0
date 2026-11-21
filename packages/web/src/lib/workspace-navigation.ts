@@ -8,7 +8,6 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
   { to: "/sentinels", label: "Sentinels", icon: CapyAgentIcon },
   { to: "/skills", label: "Skills", icon: CapySparkleFourIcon },
-  { to: "/memory", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
   { to: "/extensions", label: "Extensions", icon: CapyPuzzleIcon },
   { to: "/settings", label: "Settings", icon: CapySettingsIcon },
@@ -19,7 +18,7 @@ export const WORKSPACE_DESTINATIONS = [
  * Sentinels are their own sidebar section below these (header, "+" and one row per Sentinel); automations live inside a Sentinel.
  * Skills is active on /skills* (installed, browse, catalog detail); Extensions on /extensions.
  */
-export const SIDEBAR_DESTINATIONS = ["/findings", "/skills", "/memory", "/computers", "/extensions"] as const;
+export const SIDEBAR_DESTINATIONS = ["/findings", "/skills", "/computers", "/extensions"] as const;
 
 /** Whether a sidebar destination is highlighted for the (canonical, basename-free) current path. */
 export function isSidebarDestinationActive(to: string, currentPath: string): boolean {
@@ -40,7 +39,7 @@ export function isSidebarDestinationActive(to: string, currentPath: string): boo
 export interface LegacyRedirect { readonly from: string; readonly routes: readonly string[]; readonly to: string; readonly keep: "path" | "query" | "none" }
 export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/onboarding", routes: ["/onboarding", "/setup", "/console/setup", "/console/onboarding"], to: "/chats", keep: "none" },
-  { from: "/learning", routes: ["/learning", "/lessons"], to: "/memory", keep: "query" },
+  { from: "/learning", routes: ["/learning", "/lessons", "/memory"], to: "/findings", keep: "none" },
   { from: "/runs", routes: ["/runs", "/runs/:scanId", "/dashboard", "/live", "/operations", "/scans", "/scans/:scanId", "/scope", "/engagements", "/engagements/*"], to: "/findings", keep: "none" },
   { from: "/agents", routes: ["/agents", "/agents/:sentinelId"], to: "/sentinels", keep: "path" },
   { from: "/threads", routes: ["/threads", "/threads/:fingerprint"], to: "/findings", keep: "path" },

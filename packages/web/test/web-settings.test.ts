@@ -32,7 +32,7 @@ describe("browser settings capability boundary", () => {
     expect(categoryFor({ key: "executionProfile" })).toBe("agents");
     expect(categoryFor({ key: "analyticsLevel" })).toBe("privacy");
     expect(settingLabel({ key: "allowSubagentPeerMessaging", label: "CLI label" })).toBe("Helpers share findings");
-    expect(webSettingDetails("allowSubagentPeerMessaging")?.description).toBe("Helpers can share findings with one another.");
+    expect(webSettingDetails("allowSubagentPeerMessaging")?.description).toBe("");
     expect(webSettingDetails("unknown")).toBeUndefined();
     expect(settingChoiceLabel("executionProfile", "smolvm")).toBe("Isolated environment");
     expect(settingChoiceLabel("busyInputMode", "steer")).toBe("Interrupt");

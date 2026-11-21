@@ -99,6 +99,29 @@ export interface FindingSimilarityCandidate {
   title?: string | null;
   evidenceRequest?: string | null;
   evidence?: { request?: string | null } | null;
+  /** The cited source location: an object in memory, a JSON string in a stored row. */
+  reviewAnnotation?: unknown;
+}
+
+/** Cited lines that overlap, or lie within this many lines of each other, are one root cause. */
+export const SAME_LOCATION_LINE_GAP = 2;
+
+/** The file and line range a finding cites, from an in-memory finding or a stored row. */
+export function sourceLocationOf(candidate: FindingSimilarityCandidate): { path: string; start: number; end: number } | undefined {
+  let value = candidate.reviewAnnotation;
+  if (typeof value === "string") { try { value = JSON.parse(value); } catch { return undefined; } }
+  if (!value || typeof value !== "object") return undefined;
+  const { path, startLine, endLine } = value as { path?: unknown; startLine?: unknown; endLine?: unknown };
+  if (typeof path !== "string" || !path || typeof startLine !== "number") return undefined;
+  return { path, start: startLine, end: typeof endLine === "number" && endLine >= startLine ? endLine : startLine };
+}
+
+/** Same file and the cited lines come within `gap` lines of each other (0: they overlap). */
+function sameLocation(a: FindingSimilarityCandidate, b: FindingSimilarityCandidate, gap: number): boolean {
+  const left = sourceLocationOf(a);
+  const right = sourceLocationOf(b);
+  if (!left || !right || left.path !== right.path) return false;
+  return left.start <= right.end + gap && right.start <= left.end + gap;
 }
 
 /**
@@ -121,6 +144,12 @@ export const getFindingCandidateEvidenceRequest = getCandidateEvidenceRequest;
 export function findMatchingFindingCandidate<T extends FindingSimilarityCandidate>(
   candidates: readonly T[],
   incoming: FindingSimilarityCandidate,
+  /**
+   * `byLocation`: also treat findings at the same cited place as one, whatever the title says.
+   * Overlapping lines count whatever the category (a model files one flaw under two labels);
+   * lines a couple apart count only in the same category.
+   */
+  options: { byLocation?: boolean } = {},
 ): T | undefined {
   const incomingCategory = incoming.category;
   if (!incomingCategory) return undefined;
@@ -129,6 +158,7 @@ export function findMatchingFindingCandidate<T extends FindingSimilarityCandidat
   const incomingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(incoming));
 
   return candidates.find((existing) => {
+    if (options.byLocation && sameLocation(existing, incoming, existing.category === incomingCategory ? SAME_LOCATION_LINE_GAP : 0)) return true;
     if (!existing.category || existing.category !== incomingCategory) return false;
     const existingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(existing));
     if (existingPrefix !== incomingPrefix) return false;

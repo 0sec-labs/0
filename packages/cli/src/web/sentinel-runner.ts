@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { SentinelStore, type SecurityWorkflowStore } from "@0/engine/storage";
 import { audit } from "./audit.js";
+import { diffRightLines, inlineMarker, planInlineSuggestions, type SuggestionFinding } from "./pr-review.js";
 import {
   nextSentinelFire, sentinelNeedsReview, sentinelReviewFingerprint,
   type ShareSafeReport, type Sentinel, type SentinelActivation, type SentinelTrigger, type SecurityWorkflow,
@@ -18,6 +19,8 @@ const MAX_PR_DIFF_CHARS = 14_000;
 const prCommentMinGapMs = () => { const value = Number(process.env.ZERO_PR_COMMENT_MIN_GAP_MS); return Number.isFinite(value) && value >= 0 ? value : 60_000; };
 const PR_COMMENT_MAX_PER_HOUR = 30;
 const PR_COMMENT_MAX_FINDINGS = 10;
+/** `gh pr list` pages through the API itself; this is the most open pull requests one poll reads. */
+const MAX_POLLED_PULL_REQUESTS = 1000;
 const prCommentMarker = (sentinelId: string) => `<!-- 0-agent-pr-review:${sentinelId} -->`;
 const execute = promisify(execFile);
 /** The local folder (the engine's working directory) whose origin remote is this repository, if any. Never clones or fetches. */
@@ -49,6 +52,8 @@ export interface SentinelMissionRuntime {
   reopen?(id: string): Promise<{ id: string }>;
   /** Findings the mission saved, as share-safe fields only. Used for the optional pull request comment. */
   findings?(id: string): ShareSafeReport["findings"];
+  /** Findings the mission saved that carry a replacement for the lines they cite. Used for inline suggestions on a pull request. */
+  suggestions?(id: string): SuggestionFinding[];
   /** The thread's current status and the last thing the Sentinel said in it. Used for the sidebar row; absent when the thread is not live. */
   thread?(id: string): { status: string; updatedAt: string; lastAssistantText?: string } | undefined;
   /** Takes one queued message off the thread's queue (a newer pull request commit supersedes it). */
@@ -291,7 +296,7 @@ export class SentinelRunner {
     const isEnabled = () => this.#store.getTrigger(trigger.id)?.enabled === true;
     let prs: Array<{ number: number; headRefOid: string; title: string; url: string; baseRefName: string; headRefName: string; isCrossRepository: boolean; isDraft?: boolean; state?: string }>;
     try {
-      const { stdout } = await this.#gh.run(["pr", "list", "--repo", github.repo, "--state", "open", "--limit", "50", "--json", "number,headRefOid,title,url,baseRefName,headRefName,isCrossRepository,isDraft,state", ...(github.baseBranch ? ["--base", github.baseBranch] : [])]);
+      const { stdout } = await this.#gh.run(["pr", "list", "--repo", github.repo, "--state", "open", "--limit", String(MAX_POLLED_PULL_REQUESTS), "--json", "number,headRefOid,title,url,baseRefName,headRefName,isCrossRepository,isDraft,state", ...(github.baseBranch ? ["--base", github.baseBranch] : [])]);
       const parsed: unknown = JSON.parse(stdout);
       if (!Array.isArray(parsed)) throw new Error("Unexpected gh output.");
       prs = parsed.filter((pr): pr is (typeof prs)[number] => !!pr && typeof pr.number === "number" && typeof pr.headRefOid === "string")
@@ -397,10 +402,45 @@ export class SentinelRunner {
       if (existing) { try { await this.#gh.run(["api", "--method", "PATCH", `repos/${comment.repo}/issues/comments/${existing}`, "-f", `body=${body}`]); edited = true; } catch { /* Not ours to edit: post a new one. */ } }
       if (!edited) await this.#gh.run(["pr", "comment", String(comment.pr), "--repo", comment.repo, "--body", body]);
       audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.comment", subject, detail: { sentinelId: sentinel.id, mode: edited ? "edited" : "created" } });
+      await this.#postInline(sentinel, comment, missionId, exclude);
     } catch (error) {
       audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.comment", subject, outcome: "denied", detail: { sentinelId: sentinel.id, reason: message(error).slice(0, 200) } });
       const failure = `The pull request comment could not be posted: ${message(error)}`.slice(0, 500);
       try { if (isTurn) this.#store.updateTurn(recordId, { note: failure }); else this.#store.updateActivation(recordId, { error: failure }); } catch { /* deleted */ }
+    }
+  }
+
+  /**
+   * Suggestions the author can apply with one click: a review comment on each changed line a finding has a replacement for.
+   * Comments from an earlier push whose finding is gone are removed. A failure here never undoes the summary.
+   */
+  async #postInline(sentinel: Sentinel, comment: NonNullable<LaunchOptions["comment"]>, missionId: string, exclude?: ReadonlySet<string>): Promise<void> {
+    if (comment.fork || !this.#missions.suggestions) return;
+    const subject = `${comment.repo}#${comment.pr}`;
+    try {
+      const found = this.#missions.suggestions(missionId).filter(finding => !exclude || !exclude.has(finding.id));
+      const changed = new Map<string, Set<number>>();
+      const files = (await this.#gh.run(["api", "--paginate", `repos/${comment.repo}/pulls/${comment.pr}/files`, "--jq", ".[] | {filename, patch} | tojson"])).stdout;
+      for (const line of files.split("\n")) {
+        if (!line.trim()) continue;
+        try { const file = JSON.parse(line) as { filename?: unknown; patch?: unknown }; if (typeof file.filename === "string") changed.set(file.filename, diffRightLines(typeof file.patch === "string" ? file.patch : undefined)); } catch { /* skip a malformed row */ }
+      }
+      const marker = inlineMarker(sentinel.id);
+      const listed = (await this.#gh.run(["api", "--paginate", `repos/${comment.repo}/pulls/${comment.pr}/comments`, "--jq", `.[] | select(.body | contains("${marker}")) | {id, body} | tojson`])).stdout;
+      const existing = new Map<string, string>();
+      for (const line of listed.split("\n")) {
+        if (!line.trim()) continue;
+        try { const row = JSON.parse(line) as { id?: unknown; body?: unknown }; const key = /0-inline:[^:\s]+:([0-9a-f]{12}) -->/.exec(String(row.body ?? ""))?.[1]; if (key && /^\d+$/.test(String(row.id))) existing.set(key, String(row.id)); } catch { /* skip */ }
+      }
+      const plan = planInlineSuggestions({ sentinelId: sentinel.id, findings: found, changed, existing });
+      for (const id of plan.remove) await this.#gh.run(["api", "--method", "DELETE", `repos/${comment.repo}/pulls/comments/${id}`]).catch(() => undefined);
+      for (const item of plan.post) {
+        await this.#gh.run(["api", "--method", "POST", `repos/${comment.repo}/pulls/${comment.pr}/comments`, "-f", `body=${item.body}`, "-f", `commit_id=${comment.headSha}`, "-f", `path=${item.path}`, "-F", `line=${item.line}`, "-f", "side=RIGHT",
+          ...(item.startLine ? ["-F", `start_line=${item.startLine}`, "-f", "start_side=RIGHT"] : [])]);
+      }
+      if (plan.post.length || plan.remove.length) audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.suggestions", subject, detail: { sentinelId: sentinel.id, posted: plan.post.length, removed: plan.remove.length, skipped: plan.skipped } });
+    } catch (error) {
+      audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pr.suggestions", subject, outcome: "denied", detail: { sentinelId: sentinel.id, reason: message(error).slice(0, 200) } });
     }
   }
 
@@ -501,7 +541,7 @@ export class SentinelRunner {
 
   #seed(sentinel: Sentinel, options: LaunchOptions): string {
     const charter = this.#store.getFile(sentinel.id, "AGENTS.md")?.content ?? "";
-    const notes = sentinel.memory.enabled ? this.#store.getFile(sentinel.id, "NOTES.md")?.content : undefined;
+    const notes = this.#store.getFile(sentinel.id, "NOTES.md")?.content;
     const automation = options.automation;
     const steps = automation?.nodes.filter(node => node.enabled && node.type !== "trigger").map(node => `- ${node.label} (${node.type})${node.execution?.instructions ? `: ${node.execution.instructions.slice(0, 600)}` : ""}`).join("\n");
     const event = options.trigger.event ? JSON.stringify(options.trigger.event) : undefined;

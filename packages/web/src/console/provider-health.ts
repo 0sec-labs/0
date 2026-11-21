@@ -74,7 +74,7 @@ export function healthHint(provider: HealthProvider): string | null {
 export function credentialOrigin(provider: HealthProvider, hasSavedAccount: boolean): string | null {
   if (provider.source !== "environment") return null;
   return hasSavedAccount
-    ? `From environment (${provider.environmentVariable ?? "variable"}), which wins over the saved key`
+    ? `From ${provider.environmentVariable ?? "environment"}, which wins over the saved key`
     : "From environment";
 }
 

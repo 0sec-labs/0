@@ -185,6 +185,8 @@ export const findings = sqliteTable(
      * keep working when it is absent.
      */
     reviewAnnotation: text("reviewAnnotation"),
+    /** Scanner that produced the finding when it was imported (for example `CodeQL`); NULL for findings 0 found itself. */
+    tool: text("tool"),
     timestamp: integer("timestamp").notNull(),
   },
   (table) => [

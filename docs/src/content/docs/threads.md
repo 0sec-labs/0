@@ -29,7 +29,7 @@ Run `0 --help` for the full list.
 4. Describe the job, for example "Review this repo for auth bypasses and verify anything you find".
 5. Watch tool activity in the transcript. Findings land in **Findings**.
 
-The sidebar holds **New thread** and your history, **Findings**, **Skills**, **Memory**, **Computers**, **Extensions** and your **Sentinels**. Press `?` outside a text field for the keyboard shortcuts.
+The sidebar holds **New thread** and your history, **Findings**, **Skills**, **Computers**, **Extensions** and your **Sentinels**. Press `?` outside a text field for the keyboard shortcuts.
 
 The composer can attach images or text files, set a thinking effort for models that support it, and takes slash commands. A message sent while the agent works is queued and goes out when the response ends; **Send now** interrupts instead, and **Stop response** stops. If a model connection drops, the thread reconnects and continues from its last completed tool result.
 
@@ -41,8 +41,9 @@ Type `/` for a menu. Each entry mirrors a CLI command, and anything that changes
 | --- | --- |
 | `/threads start`, `/threads list`, `/threads export` | `0 threads send new`, `0 threads list`, `0 threads list <id> --export` |
 | `/findings list`, `/fix [finding-id]` | `0 findings list`, `0 threads send new` |
+| `/scan <folder>` | `0 scan <folder>`; in chat it scans in this thread instead of a new one |
 | `/sentinels list`, `/sentinels create` | `0 sentinels list`, `0 sentinels set --create` |
-| `/computers list`, `/models list`, `/skills list`, `/memory list` | the same words after `0` |
+| `/computers list`, `/models list`, `/skills list` | the same words after `0` |
 | `/config get`, `/doctor` | `0 config get`, `0 config doctor` |
 
 Chat-only commands are `/help`, `/status`, `/tools`, `/explain [topic]`, `/feedback <message>`, `/shortcuts` and `/usage`.
@@ -57,18 +58,6 @@ The agent also has a `web_search` tool (Parallel's anonymous hosted search, with
 ### Saved threads
 
 A saved thread opens at `/chats/saved/<id>` read-only, with its transcript and panels, and resumes when you send a message. Search with ⌘K; it matches message text and titles and skips tool payloads and private reasoning. **Settings → Threads** sets title instructions, idle archiving (off, 7, 14, 30 or 90 days) and the helper limits: concurrent helpers (1-128, default 32), nesting depth (1-16, default 8) and helpers per call (1-4096, default 1024).
-
-## Memory
-
-**Memory** is what 0 remembers across threads: short plain notes such as an accepted or rejected fix, a convention, how to run the tests, or something to avoid. Open **Memory** to list, search, add, edit and forget notes, or turn Memory off for new threads.
-
-At the start of each turn the model reads the notes, newest first, up to about 2,000 tokens. The notes are labelled as untrusted context: they never override system rules or your request. The model has one `memory` tool with three actions: `remember`, `update` and `forget`. A repository cannot supply notes.
-
-- **You** commit immediately: "remember that ...", `0 memory add` and the Add button save at once.
-- **0** commits a note it chose to keep, unless the thread has read untrusted content (web pages, repository files, shell output, extension results). Then the note goes to the **Proposed** inbox on the Memory page until you accept it.
-- **Secrets**: a note that looks like a key, token or password is refused.
-
-Notes are plain Markdown in `~/.0/memory/MEMORY.md`. Nothing is written into your repository. `ZERO_DISABLE_MEMORY=1` turns Memory off. From the terminal: `0 memory list`, `0 memory add "<note>"`, `0 memory remove <id>`.
 
 ## From the terminal
 
@@ -110,7 +99,7 @@ On a server or in CI, start the app with `0 --headless --ready-json`. It opens n
 
 ## Commands and skills
 
-- **The eight CLI commands** (`findings`, `threads`, `sentinels`, `skills`, `memory`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
+- **The CLI commands** (`findings`, `threads`, `sentinels`, `skills`, `models`, `computers`, `config`) are fixed entry points built into 0. They are not skills. In a thread, the `/` commands are a shorter list that mirrors the CLI (`/threads list` is `0 threads list`); a few exist only in chat.
 - **Skills** are know-how a thread loads when a task needs it: `SKILL.md` folders, which extensions can also supply. See [Skills](/skills/).
 - **Sentinels** are standing threads that wake on a schedule or a pull request. See [Sentinels](/sentinels/).
 - **Verifier gate:** a skill can declare a check that the engine runs itself, so a thread cannot claim Verified without it. See [Findings](/findings/#verified-and-not-verified).

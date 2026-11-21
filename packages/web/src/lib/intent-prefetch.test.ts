@@ -20,7 +20,7 @@ describe("createIntentPrefetcher", () => {
   it("does not fetch rows a pointer sweeps across", () => {
     const run = vi.fn();
     const intent = createIntentPrefetcher(run);
-    for (const p of ["/skills", "/memory", "/computers"]) { intent.enter(path(p)); vi.advanceTimersByTime(20); }
+    for (const p of ["/skills", "/computers"]) { intent.enter(path(p)); vi.advanceTimersByTime(20); }
     intent.enter(undefined);
     vi.advanceTimersByTime(200);
     expect(run).not.toHaveBeenCalled();

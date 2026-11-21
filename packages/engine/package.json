@@ -6,9 +6,6 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "0-llm": "dist/redteam/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -30,40 +27,15 @@
       "types": "./dist/storage/index.d.ts",
       "import": "./dist/storage/index.js"
     },
-    "./templates": {
-      "types": "./dist/templates/index.d.ts",
-      "import": "./dist/templates/index.js"
-    },
-    "./redteam": {
-      "types": "./dist/redteam/index.d.ts",
-      "import": "./dist/redteam/index.js"
-    },
-    "./identity": {
-      "types": "./dist/identity/index.d.ts",
-      "import": "./dist/identity/index.js"
-    },
-    "./adgraph": {
-      "types": "./dist/adgraph/index.d.ts",
-      "import": "./dist/adgraph/index.js"
-    },
-    "./xnu-fuzz": {
-      "types": "./dist/xnu-fuzz/index.d.ts",
-      "import": "./dist/xnu-fuzz/index.js"
-    },
-    "./kernel": {
-      "types": "./dist/kernel/index.d.ts",
-      "import": "./dist/kernel/index.js"
-    },
     "./dist/*": "./dist/*"
   },
   "scripts": {
     "generate-skills": "node scripts/generate-skills-manifest.mjs",
-    "build": "node scripts/generate-skills-manifest.mjs && node scripts/generate-embedded.mjs && tsc && node scripts/copy-build-assets.mjs",
+    "build": "node scripts/generate-skills-manifest.mjs && tsc && node scripts/copy-build-assets.mjs",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
-    "generate-templates": "node scripts/generate-embedded.mjs",
     "sync-pricing": "tsx scripts/sync-pricing.ts"
   },
   "dependencies": {

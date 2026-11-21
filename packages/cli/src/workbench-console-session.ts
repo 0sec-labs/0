@@ -193,8 +193,8 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   if (config.workflowLifecycle) callbacks.push("workflowInvoke");
   if (config.skillAuthoring) callbacks.push("skillRead", "skillCreate", "skillSave", "skillCopy");
   if (config.skillEditor) callbacks.push("skillEditorRead");
-  const sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
-  if (sourceLearningEnabled && options.readSourceLessons) callbacks.push("sourceLessons");
+  // Memory is gone, so the isolated workbench exports no source lessons; the paths below stay inert until they are removed.
+  const sourceLearningEnabled = false as boolean;
   const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, workflowEditorId: config.workflowAuthoring?.editor?.id }, false);
   let messages = structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []);
   let checkpoint = config.initialCheckpoint;

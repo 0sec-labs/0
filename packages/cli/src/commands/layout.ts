@@ -39,8 +39,8 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["findings", "threads", "sentinels"]],
-  ["Setup", ["skills", "memory", "models", "computers", "config"]],
+  ["Work", ["scan", "findings", "threads", "sentinels"]],
+  ["Setup", ["skills", "models", "computers", "config"]],
 ];
 
 /** Root `--help`: the visible commands grouped by purpose instead of one flat list. */
@@ -84,6 +84,7 @@ const examplesBlock = (lines: readonly string[]): string => `Examples:\n${lines.
 
 /** Short, real examples for the visible commands, keyed by command path. */
 const EXAMPLES: Readonly<Record<string, readonly string[]>> = {
+  scan: ["0 scan ~/code/app", "0 scan ~/code/app --format sarif -o scan.sarif --fail-on high", "0 scan https://github.com/acme/app --budget 2 --format json"],
   findings: ["0 findings list --severity high", "0 findings show 3f2a", '0 findings update 3f2a --status accepted --note "known"'],
   "findings list": ["0 findings list --severity high --status verified", "0 findings list --format json", "0 findings list --format sarif -o findings.sarif"],
   "findings show": ["0 findings show 3f2a"],
@@ -101,10 +102,6 @@ const EXAMPLES: Readonly<Record<string, readonly string[]>> = {
   skills: ["0 skills list", "0 skills list pr-diff-review", "0 skills add owner/repo@<full-sha>", "0 skills add ./my-skills"],
   "skills list": ["0 skills list", "0 skills list pr-diff-review", "0 skills list --catalog"],
   "skills add": ["0 skills add ./my-skills", "0 skills add owner/repo@<full-sha> --yes"],
-  memory: ['0 memory add "Use pnpm, not npm"', "0 memory list --search pnpm", "0 memory remove <id>"],
-  "memory list": ["0 memory list", "0 memory list --folder ~/code/app --format json"],
-  "memory add": ['0 memory add "Use pnpm, not npm"', '0 memory add "Staging is read-only" --global'],
-  "memory remove": ["0 memory remove <id>"],
   models: ["0 models connect", "0 models connect anthropic --key-env ANTHROPIC_API_KEY", "0 models list", "0 models set claude-sonnet-4-6 --provider anthropic"],
   "models list": ["0 models list", "0 models list --provider anthropic --format json"],
   "models set": ["0 models set", "0 models set claude-sonnet-4-6 --provider anthropic"],
@@ -199,6 +196,8 @@ export function applyNewSurface(top: Command): void {
   const description = GROUP_DESCRIPTIONS[top.name()];
   if (!visible || !description) {
     if (TOP_LEVEL_COMMANDS.some((entry) => entry.name === top.name() && entry.hidden)) setHidden(top, true);
+    // A visible command with no subcommands (`scan`) still prints its examples.
+    else if (EXAMPLES[top.name()]) top.addHelpText("after", `\n${examplesBlock(EXAMPLES[top.name()]!)}`);
     return;
   }
   top.description(description);
