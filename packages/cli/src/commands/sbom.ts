@@ -29,19 +29,20 @@ const defaults: SbomDeps = {
   },
 };
 
-export function runGenerate(folder: string, options: { output?: string; name?: string }, deps: SbomDeps): void {
+export function runGenerate(folder: string, options: { output?: string; name?: string; ai?: boolean }, deps: SbomDeps): void {
   const target = resolve(folder);
   let isFolder = false;
   try { isFolder = statSync(target).isDirectory(); } catch { /* reported below */ }
   if (!isFolder) throw new UsageError(`'${folder}' is not a folder.`);
-  const result = generateSbom(target, { toolVersion: VERSION, ...(options.name ? { name: options.name } : {}) });
-  if (!result.lockfiles.length || !result.bom.components.length) {
+  const result = generateSbom(target, { toolVersion: VERSION, ...(options.name ? { name: options.name } : {}), ...(options.ai ? { ai: true } : {}) });
+  if (!result.bom.components.length) {
     const supported = [...new Set(LOCKFILES.map(lock => lock.file))].join(", ");
-    throw new UsageError(`No supported lockfile with packages in ${folder}. Supported: ${supported}. For Maven, Gradle, NuGet or container images, generate the SBOM with syft or cdxgen.`);
+    throw new UsageError(`No supported lockfile with packages${options.ai ? " and no AI components" : ""} in ${folder}. Supported: ${supported}. For Maven, Gradle, NuGet or container images, generate the SBOM with syft or cdxgen.`);
   }
   const text = `${JSON.stringify(result.bom, null, 2)}\n`;
   if (options.output) { deps.write(resolve(options.output), text); deps.err(`Wrote ${options.output}`); } else deps.out(text);
-  deps.err(`${result.bom.components.length} components from ${result.lockfiles.length} lockfile${result.lockfiles.length === 1 ? "" : "s"}: ${result.lockfiles.map(lock => `${lock.path} (${lock.label}, ${lock.components})`).join(", ")}`);
+  const aiCount = result.bom.components.filter(component => component.type !== "library").length;
+  deps.err(`${result.bom.components.length - aiCount} components from ${result.lockfiles.length} lockfile${result.lockfiles.length === 1 ? "" : "s"}${result.lockfiles.length ? `: ${result.lockfiles.map(lock => `${lock.path} (${lock.label}, ${lock.components})`).join(", ")}` : ""}${options.ai ? `; ${aiCount} AI components (models, datasets, hosted model ids, MCP servers)` : ""}`);
 }
 
 export async function runCheck(file: string, options: { format?: string }, deps: SbomDeps): Promise<number> {
@@ -71,8 +72,9 @@ export function registerSbomCommand(program: Command, deps: SbomDeps = defaults)
     .argument("[folder]", "Folder to read lockfiles from", ".")
     .option("-o, --output <file>", "Write the SBOM to a file instead of stdout")
     .option("--name <name>", "Name of the application the SBOM describes (default: the folder's name)")
+    .option("--ai", "Also list the AI in the folder: models, datasets, hosted model ids and MCP servers, found by reading files as text")
     .addHelpText("after", "\nNothing is installed or run; lockfiles are read as text. Exit 2 when the folder has no supported lockfile.")
-    .action((folder: string, options: { output?: string; name?: string }) => {
+    .action((folder: string, options: { output?: string; name?: string; ai?: boolean }) => {
       try { runGenerate(folder, options, deps); } catch (error) { finishWithError(error, { err: deps.err }, false); }
     });
   sbom.command("check")

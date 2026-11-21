@@ -836,7 +836,7 @@ Write a CycloneDX 1.5 SBOM from the lockfiles in a folder (npm, pnpm, yarn, Carg
 0 sbom generate [options] [folder]
 ```
 
-Reads `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`, `go.mod`, `poetry.lock`, `Pipfile.lock` and pinned `requirements.txt` anywhere under the folder (skipping `node_modules`, build output and hidden folders). Nothing is installed or run; lockfiles are read as text. Components are identified by package URL, sorted and de-duplicated, so the same lockfiles give the same SBOM. A component is marked `excluded` only when every lockfile that lists it says it is development-only. A folder with no supported lockfile is an error (exit 2); for Maven, Gradle, NuGet or container images, generate the SBOM with syft or cdxgen instead.
+Reads `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`, `go.mod`, `poetry.lock`, `Pipfile.lock` and pinned `requirements.txt` anywhere under the folder (skipping `node_modules`, build output and hidden folders). Nothing is installed or run; lockfiles are read as text. Components are identified by package URL, sorted and de-duplicated, so the same lockfiles give the same SBOM. A component is marked `excluded` only when every lockfile that lists it says it is development-only. `--ai` also lists the AI in the folder as CycloneDX components: model files (`.gguf`, `.safetensors`, `.onnx`, `.pt`, `.pth`, `.ckpt`, `.pkl` and others, with pickle-based formats flagged), hub references in code (`from_pretrained`, `pipeline(..., model=)`, `hf_hub_download`, `load_dataset`), hosted model ids passed to provider SDKs (with the provider), and MCP servers from `.mcp.json` and similar files (an unpinned launcher such as `npx -y` is flagged). It reads files as text and downloads nothing; a reference the patterns do not recognise is missed, so treat the list as what was seen, not a complete inventory. A folder with no supported lockfile is an error (exit 2); for Maven, Gradle, NuGet or container images, generate the SBOM with syft or cdxgen instead.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -846,6 +846,7 @@ Reads `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`,
 | --- | --- | --- |
 | `-o, --output <file>` | — | Write the SBOM to a file instead of stdout |
 | `--name <name>` | — | Name of the application the SBOM describes (default: the folder's name) |
+| `--ai` | — | Also list the AI in the folder: models, datasets, hosted model ids and MCP servers, found by reading files as text |
 
 #### sbom check
 

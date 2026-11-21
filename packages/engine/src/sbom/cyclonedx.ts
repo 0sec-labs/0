@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { detectAi, type AiComponent } from "./ai.js";
 import { LOCKFILES, type Component } from "./parsers.js";
 
 const MAX_LOCKFILE_BYTES = 64 * 1024 * 1024;
@@ -13,7 +14,7 @@ export interface Bom {
   serialNumber: string;
   version: 1;
   metadata: { timestamp: string; tools: { components: Array<{ type: "application"; author: string; name: string; version: string }> }; component: { type: "application"; name: string } };
-  components: Array<{ type: "library"; "bom-ref": string; name: string; version: string; purl: string; scope?: "excluded" }>;
+  components: Array<{ type: "library"; "bom-ref": string; name: string; version: string; purl: string; scope?: "excluded" } | AiComponent>;
 }
 export interface SbomResult { bom: Bom; lockfiles: Array<{ path: string; label: string; components: number }>; truncated: boolean }
 
@@ -50,7 +51,7 @@ function findLockfiles(folder: string): Array<{ path: string; label: string; par
 }
 
 /** Build a CycloneDX 1.5 SBOM from the lockfiles under a folder. Sorted and de-duplicated, so the same lockfiles give the same SBOM. */
-export function generateSbom(folder: string, options: { name?: string; toolVersion: string; now?: Date }): SbomResult {
+export function generateSbom(folder: string, options: { name?: string; toolVersion: string; now?: Date; ai?: boolean }): SbomResult {
   const locks = findLockfiles(folder);
   // A pinned requirements.txt next to a lock that already covers the same ecosystem adds noise, not facts.
   const byPurl = new Map<string, { component: Component; purl: string }>();
@@ -68,8 +69,9 @@ export function generateSbom(folder: string, options: { name?: string; toolVersi
       else if (existing.component.dev && !component.dev) delete existing.component.dev;
     }
   }
+  const ai = options.ai ? detectAi(folder) : [];
   const sorted = [...byPurl.values()].sort((a, b) => (a.purl < b.purl ? -1 : a.purl > b.purl ? 1 : 0));
-  const digest = createHash("sha256").update(sorted.map(item => item.purl).join("\n")).digest("hex");
+  const digest = createHash("sha256").update([...sorted.map(item => item.purl), ...ai.map(item => item["bom-ref"])].join("\n")).digest("hex");
   const serial = `urn:uuid:${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
   const bom: Bom = {
     bomFormat: "CycloneDX", specVersion: "1.5", serialNumber: serial, version: 1,
@@ -78,7 +80,7 @@ export function generateSbom(folder: string, options: { name?: string; toolVersi
       tools: { components: [{ type: "application", author: "0sec-labs", name: "0", version: options.toolVersion }] },
       component: { type: "application", name: options.name ?? (folder.split(/[\\/]/).filter(Boolean).pop() ?? "application") },
     },
-    components: sorted.map(({ component, purl }) => ({ type: "library" as const, "bom-ref": purl, name: component.name, version: component.version, purl, ...(component.dev ? { scope: "excluded" as const } : {}) })),
+    components: [...sorted.map(({ component, purl }) => ({ type: "library" as const, "bom-ref": purl, name: component.name, version: component.version, purl, ...(component.dev ? { scope: "excluded" as const } : {}) })), ...ai],
   };
   return { bom, lockfiles: summary.sort((a, b) => (a.path < b.path ? -1 : 1)), truncated: false };
 }

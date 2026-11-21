@@ -1014,6 +1014,8 @@ Arguments:
 Options:
   -o, --output <file>  Write the SBOM to a file instead of stdout
   --name <name>        Name of the application the SBOM describes (default: the folder's name)
+  --ai                 Also list the AI in the folder: models, datasets, hosted model ids and MCP
+                       servers, found by reading files as text
   -h, --help           display help for command
 
 ### 0 scan

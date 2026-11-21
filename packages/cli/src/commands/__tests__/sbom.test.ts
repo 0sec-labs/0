@@ -24,6 +24,18 @@ describe("0 sbom generate", () => {
   });
 });
 
+describe("0 sbom generate --ai", () => {
+  it("adds the AI in the folder, and is not an error when there is no lockfile but there is AI", () => {
+    const dir = project({ "app.py": 'm = AutoModel.from_pretrained("org/model")\n', ".mcp.json": JSON.stringify({ mcpServers: { files: { command: "npx", args: ["-y", "srv"] } } }) });
+    const io = deps();
+    runGenerate(dir, { ai: true }, io.deps);
+    const bom = JSON.parse(io.out.join(""));
+    expect(bom.components.map((component: { type: string }) => component.type).sort()).toEqual(["machine-learning-model", "service"]);
+    expect(io.err.join("\n")).toContain("2 AI components");
+    expect(() => runGenerate(dir, {}, deps().deps)).toThrow("No supported lockfile");
+  });
+});
+
 describe("0 sbom check", () => {
   const bom = JSON.stringify({ components: [{ purl: "pkg:npm/lodash@4.17.20" }] });
   const osv = (vulns: unknown[]) => (async (url: string | URL | Request) => String(url).endsWith("querybatch") ? new Response(JSON.stringify({ results: [{ vulns }] })) : new Response(JSON.stringify({ id: "GHSA-1", aliases: ["CVE-1"], summary: "Bad", database_specific: { severity: "HIGH" }, affected: [{ ranges: [{ events: [{ fixed: "4.17.21" }] }] }] }))) as typeof fetch;

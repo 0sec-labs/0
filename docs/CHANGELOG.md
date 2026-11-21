@@ -37,6 +37,9 @@ on the GitHub Release tag.
 
 - `0 sbom generate [folder]` writes a CycloneDX 1.5 SBOM from the lockfiles in a folder (npm, pnpm, yarn, Cargo, Go, Poetry, Pipenv and pinned requirements), reading them as text and never installing anything; `0 sbom check <file>` looks every component up in the public OSV database and lists the advisories (exit 1 when there are any). On this repository it listed 1,106 components from four lockfiles in a moment and the check found two real advisories in Rust crates. Maven, Gradle, NuGet and container images are not covered by the built-in generator.
 
+- Two skills for AI applications, `llm-app-review` and `mcp-server-review` (`0 scan --skill llm-app-review`): they map an app's trust boundaries (what reaches the model, what it can do, what happens to its output) and check them against the OWASP LLM risks, or check MCP configuration and tool handlers for poisoning, over-broad access, unpinned launchers and injection.
+- `0 sbom generate --ai` also lists the AI in a folder (models, datasets, hosted model ids, MCP servers) as CycloneDX components, found by reading files as text.
+
 ### Changed
 
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.
