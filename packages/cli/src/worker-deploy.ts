@@ -57,7 +57,7 @@ const REMOTE_DEPS = {
 /** Commands stream over stdin (`bash -s`) so no quoting layer ever sees them. */
 const SSH_HOST_PATTERN = /^[A-Za-z0-9._@-]+$/;
 const LIMA_NAME_PATTERN = /^[\w.-]+$/;
-const TARGET_GIT_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s'"]+$/;
+const TARGET_GIT_PATTERN = /^https:\/\/[^\s'"]+$/;
 const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const hasWorkerAssets = (directory: string) =>
@@ -116,7 +116,15 @@ export function validateWorkerOptions(options: WorkerDeployOptions): void {
     throw new Error("--ssh must be an OpenSSH host name or user@host (no options or shell characters)");
   }
   if (options.lima && !LIMA_NAME_PATTERN.test(options.lima)) throw new Error("--lima must be an instance name (letters, digits, ., _, -)");
-  if (options.targetGit && !TARGET_GIT_PATTERN.test(options.targetGit)) throw new Error("--target-git must be a URL without whitespace or quotes");
+  if (options.targetGit) {
+    if (!TARGET_GIT_PATTERN.test(options.targetGit)) throw new Error("--target-git must be an https:// URL without whitespace or quotes");
+    try {
+      const url = new URL(options.targetGit);
+      if (url.protocol !== "https:" || !url.hostname) throw new Error();
+    } catch {
+      throw new Error("--target-git must be an https:// URL without whitespace or quotes");
+    }
+  }
 }
 
 /** `ssh` and `scp` must be on PATH; the container image ships them, a minimal host may not. */
@@ -243,7 +251,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   shell(`cd ${REMOTE_DIR} && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund > install.log 2>&1 || { tail -20 install.log; exit 1; }`, 900_000);
   let targetPath: string;
   if (options.targetGit) {
-    shell(`rm -rf ${REMOTE_DIR}/work && mkdir -p ${REMOTE_DIR}/work && git clone --depth 1 ${sq(options.targetGit!)} ${REMOTE_DIR}/work/target`, 900_000);
+    shell(`rm -rf ${REMOTE_DIR}/work && mkdir -p ${REMOTE_DIR}/work && GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c protocol.allow=never -c protocol.https.allow=always -c core.hooksPath=/dev/null -c init.templateDir= clone --depth 1 -- ${sq(options.targetGit!)} ${REMOTE_DIR}/work/target`, 900_000);
     targetPath = `${REMOTE_DIR}/work/target`;
   } else {
     shell(`rm -rf ${REMOTE_DIR}/work && mkdir -p ${REMOTE_DIR}/work && cp -R ${REMOTE_DIR}/demo-target ${REMOTE_DIR}/work/demo-target`);
