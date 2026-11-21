@@ -1,0 +1,104 @@
+name: 0 security scan
+description: Scan a pull request with 0 and upload the findings to GitHub code scanning.
+author: 0sec-labs
+branding:
+  icon: shield
+  color: red
+inputs:
+  version:
+    description: "Release of 0 to install, for example 0.41.0. Pin it: the binary is checked against that release's checksums."
+    required: true
+  target:
+    description: Folder to scan, relative to the workspace.
+    default: "."
+  diff-base:
+    description: "Git ref to compare against. On a pull request it defaults to the base branch, so only the change is reviewed. Empty elsewhere scans the whole folder."
+    default: ""
+  model:
+    description: Model for the scan thread. Empty uses the default.
+    default: ""
+  budget:
+    description: Stop when the estimated spend reaches this many USD. Findings so far are kept.
+    default: "5"
+  passes:
+    description: Scan this many times and merge the findings (the budget is split between them).
+    default: "1"
+  fail-on:
+    description: Fail the job when a finding is at or above this severity (critical, high, medium, low, info). Empty never fails on findings.
+    default: ""
+  upload:
+    description: "Upload the findings to GitHub code scanning. Needs the `security-events: write` permission."
+    default: "true"
+  github-token:
+    description: Token used to upload to code scanning.
+    default: ${{ github.token }}
+outputs:
+  sarif:
+    description: Path of the SARIF file the scan wrote.
+    value: ${{ steps.scan.outputs.sarif }}
+  exit-code:
+    description: "Exit code of the scan: 0 done, 1 findings at or above fail-on or the scan failed, 2 usage error, 3 stopped at the budget (partial)."
+    value: ${{ steps.scan.outputs.code }}
+runs:
+  using: composite
+  steps:
+    - name: Install 0
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        case "$VERSION" in ""|*[!0-9.]*) echo "::error::version must look like 0.41.0"; exit 1 ;; esac
+        export INSTALL_DIR="$RUNNER_TEMP/0/bin"
+        # The installer from this same ref downloads that release and refuses it unless its checksum matches.
+        RELEASE_BASE_URL="https://github.com/0sec-labs/0security/releases/download/v${VERSION}" sh "$GITHUB_ACTION_PATH/install.sh"
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        DIFF_BASE: ${{ inputs.diff-base }}
+        MODEL: ${{ inputs.model }}
+        BUDGET: ${{ inputs.budget }}
+        PASSES: ${{ inputs.passes }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -uo pipefail
+        sarif="$RUNNER_TEMP/0.sarif"
+        args=(scan "$TARGET" --format sarif -o "$sarif" --budget "$BUDGET" --passes "$PASSES")
+        base="$DIFF_BASE"
+        if [ -z "$base" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+          git fetch --no-tags --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+          base="origin/${GITHUB_BASE_REF}"
+        fi
+        if [ -n "$base" ]; then args+=(--diff "$base"); fi
+        if [ -n "$MODEL" ]; then args+=(--model "$MODEL"); fi
+        if [ -n "$FAIL_ON" ]; then args+=(--fail-on "$FAIL_ON"); fi
+        0 "${args[@]}"
+        code=$?
+        echo "sarif=$sarif" >> "$GITHUB_OUTPUT"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        # Upload first, then let the last step decide whether the job fails.
+        exit 0
+
+    - name: Upload to code scanning
+      if: ${{ inputs.upload == 'true' && steps.scan.outputs.code != '2' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SARIF: ${{ steps.scan.outputs.sarif }}
+      run: 0 findings upload "$SARIF" --tool "0"
+
+    - name: Result
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.code }}
+      run: |
+        case "$CODE" in
+          0) ;;
+          3) echo "::warning::The scan stopped at its budget; the findings are partial." ;;
+          1) echo "::error::The scan found a finding at or above fail-on, or it failed. See the log above."; exit 1 ;;
+          *) echo "::error::The scan exited with code $CODE."; exit 1 ;;
+        esac

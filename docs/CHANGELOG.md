@@ -30,6 +30,8 @@ on the GitHub Release tag.
 
 - `0 findings upload <sarif>` uploads a SARIF file (for example from `0 scan --format sarif -o scan.sarif`) to GitHub code scanning, so findings appear in the repository's Security tab and as pull request annotations. It takes the repository, commit and ref from the clone (or `GITHUB_SHA` and `GITHUB_REF` in Actions), compresses the file, waits for GitHub to process it and reports why it refused it. Uploading again for a later commit updates the alerts. Needs `gh` signed in with permission to write security events.
 
+- A GitHub Action (`uses: 0sec-labs/0security@v<version>`) that scans a pull request and uploads the findings to GitHub code scanning: it installs the release you pin (checksum-verified), runs `0 scan --diff` against the base branch, uploads the SARIF with `0 findings upload`, and fails the job at `fail-on`. See [Pull request checks](https://docs.0.security/ci/). It needs a release that contains `action.yml`, so it works from the next tag.
+
 ### Changed
 
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.

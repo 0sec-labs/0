@@ -207,6 +207,7 @@ export default defineConfig({
             { label: "Skills", slug: "skills" },
             { label: "Extensions", slug: "extensions" },
             { label: "Findings", slug: "findings" },
+            { label: "Pull request checks", slug: "ci" },
           ],
         },
         {
