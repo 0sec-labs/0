@@ -167,7 +167,8 @@ export function validateFileRef(
     return { valid: false, reason: `fabricated path: ${path}` };
   }
   const abs = resolve(scopeAbs, path);
-  if (abs !== scopeAbs && !abs.startsWith(scopeAbs + "/")) {
+  const scopePrefix = scopeAbs.endsWith(sep) ? scopeAbs : scopeAbs + sep;
+  if (abs !== scopeAbs && !abs.startsWith(scopePrefix)) {
     return { valid: false, reason: `fabricated path: ${path}` };
   }
   const probe = probeFileRefTarget(abs, scopeAbs);
