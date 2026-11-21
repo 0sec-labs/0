@@ -6,6 +6,8 @@ import { homeStateDir } from "@0/engine/shared";
 import { z } from "zod";
 import { TeamAuth, TeamAuthError, hashTeamPassword, parseTeamConfig, type TeamConfig } from "./team-auth.js";
 
+const HAS_POSIX_PERMISSIONS = process.platform !== "win32";
+
 const setupSchema = z.object({
   workspaceName: z.string().trim().min(1).max(160), displayName: z.string().trim().min(1).max(160),
   userId: z.string().trim().min(1).max(160), password: z.string().min(1).max(1024),
@@ -15,7 +17,7 @@ function readPrivateConfig(path: string): TeamConfig {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const info = fstatSync(fd);
-    if (!info.isFile() || (info.mode & 0o077) !== 0 || info.size > 1024 * 1024) throw new TeamAuthError("Team configuration must be a private regular file", 409);
+    if (!info.isFile() || (HAS_POSIX_PERMISSIONS && (info.mode & 0o077) !== 0) || info.size > 1024 * 1024) throw new TeamAuthError("Team configuration must be a private regular file", 409);
     return parseTeamConfig(JSON.parse(readFileSync(fd, "utf8")));
   } finally { closeSync(fd); }
 }
