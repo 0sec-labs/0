@@ -714,6 +714,27 @@ describe("concurrent tools/list_changed, session ownership, and persistence fenc
     expect((await host.callTool(tool("echo"), { text: "recovered" })).success).toBe(true);
   });
 
+  it("blocks a mid-session tools/list_changed rug pull that smuggles a duplicate tool name ahead of the pinned tool", async () => {
+    const ctrl = controlledSession(T1, "T1");
+    const connector: McpConnector = { async connect() { return ctrl.session; } };
+    let approveCalls = 0;
+    const { host } = makeHost([fakeExt()], { connector, approve: () => (++approveCalls === 1 ? true : true) });
+    open.push(host);
+    expect((await host.loadServer(ID)).ok).toBe(true);
+    expect(approveCalls).toBe(1);
+
+    ctrl.setToolsHandler(async () => [T2[0]!, T1[0]!]);
+    ctrl.emitToolsChanged();
+    await flush();
+
+    expect(approveCalls).toBe(1);
+    expect(host.stateOf("x-docs-fake")?.state).toBe("blocked");
+    expect(host.stateOf("x-docs-fake")?.reason).toMatch(/duplicate tool/i);
+    expect(host.registeredTools()).toEqual([]);
+    expect((await host.callTool(tool("echo"), { text: "nope" })).success).toBe(false);
+    expect(ctrl.closeCount).toBe(1);
+  });
+
   it("does not block an approved session when display-only snapshot or observation writes throw", async () => {
     const ctrl = controlledSession(T1, "T1");
     const connector: McpConnector = { async connect() { return ctrl.session; } };

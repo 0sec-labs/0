@@ -1,6 +1,6 @@
 export { ExtensionMcpHost, type ExtensionMcpHostOptions } from "./host.js";
 export { mcpServerStatuses, type McpServerStatus, type McpToolStatus } from "./status.js";
-export { mcpToolHash, hashTools, canonicalJson, type McpToolInfo } from "./core/tool-hash.js";
+export { findDuplicateToolNames, mcpToolHash, hashTools, canonicalJson, type McpToolInfo } from "./core/tool-hash.js";
 export { reviewTools, reviewHashes, type ToolReview } from "./core/review.js";
 export { labelUntrustedOutput, neutralizeFence, MAX_MCP_OUTPUT_BYTES } from "./core/untrusted.js";
 export { inspectLauncher, unpinnedRefusal, type LauncherInfo } from "./core/launcher.js";

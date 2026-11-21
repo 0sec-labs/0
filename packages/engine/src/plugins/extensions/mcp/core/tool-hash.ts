@@ -27,3 +27,14 @@ export function mcpToolHash(tool: McpToolInfo): string {
 }
 
 export const hashTools = (tools: readonly McpToolInfo[]): Record<string, string> => Object.fromEntries(tools.map(t => [t.name, mcpToolHash(t)]));
+
+/** Sorted unique tool names that appear more than once in `tools`. Duplicate names make hash pinning ambiguous. */
+export function findDuplicateToolNames(tools: readonly McpToolInfo[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const tool of tools) {
+    if (seen.has(tool.name)) duplicates.add(tool.name);
+    else seen.add(tool.name);
+  }
+  return [...duplicates].sort();
+}

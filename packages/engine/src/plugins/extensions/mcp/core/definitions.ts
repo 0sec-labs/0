@@ -1,7 +1,7 @@
 /** Pure: what the model sees. One index line per server; full tool schemas only after the server is loaded. */
 import type { ToolDefinition } from "../../../../agent/types.js";
 import { mcpToolName } from "../../../../agent/mcp-adapt.js";
-import type { McpToolInfo } from "./tool-hash.js";
+import { findDuplicateToolNames, type McpToolInfo } from "./tool-hash.js";
 import { isToolName, safeText } from "./sanitize.js";
 import { sanitizeProperties } from "./schema.js";
 
@@ -43,8 +43,10 @@ export interface BuiltTools { readonly definitions: ToolDefinition[]; readonly s
  */
 export function buildDefinitions(id: string, tools: readonly McpToolInfo[], allowed: ReadonlySet<string>): BuiltTools {
   const definitions: ToolDefinition[] = []; const skipped: BuiltTools["skipped"] = [];
+  const duplicates = new Set(findDuplicateToolNames(tools));
   for (const tool of [...tools].sort((a, b) => (a.name < b.name ? -1 : 1))) {
     if (!allowed.has(tool.name)) continue;
+    if (duplicates.has(tool.name)) { skipped.push({ name: tool.name, why: "duplicate tool name" }); continue; }
     if (definitions.length >= MAX_TOOLS_PER_SERVER) { skipped.push({ name: tool.name, why: "too many tools" }); continue; }
     const name = mcpToolName(id, tool.name);
     if (name.length > MAX_TOOL_NAME || !isToolName(tool.name)) { skipped.push({ name: tool.name, why: "name not usable" }); continue; }

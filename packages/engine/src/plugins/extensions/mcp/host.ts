@@ -19,7 +19,7 @@ import { parseMcpToolName } from "../../../agent/mcp-adapt.js";
 import type { LoadedExtension } from "../runtime.js";
 import { buildDefinitions, indexDefinition, indexEntry, indexName, serverId } from "./core/definitions.js";
 import { launchFor, launchHookInput } from "./core/launch.js";
-import { mcpToolHash, hashTools, type McpToolInfo } from "./core/tool-hash.js";
+import { findDuplicateToolNames, mcpToolHash, hashTools, type McpToolInfo } from "./core/tool-hash.js";
 import { labelUntrustedOutput } from "./core/untrusted.js";
 import type { McpConnector, McpGate, McpObservationLog, McpPinStore, McpSession, McpSnapshotStore } from "./ports.js";
 import { reviewServer } from "./review-flow.js";
@@ -202,9 +202,9 @@ export class ExtensionMcpHost implements McpToolHost {
     if (server.sessionToken !== token) return { status: "stale" };
     if (outcome.kind === "aborted") return { status: "superseded" };
     const { review } = outcome;
-    if (review.needsApproval) {
-      try { this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review, blocked: review.reason }); } catch { /* informational */ }
-      return { status: "rejected", reason: review.reason };
+    if (review.needsApproval || findDuplicateToolNames(tools).length > 0) {
+      try { this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review, blocked: review.reason || "duplicate tool names; refused" }); } catch { /* informational */ }
+      return { status: "rejected", reason: review.reason || "duplicate tool names; refused" };
     }
     if (server.toolsVersion !== version) return { status: "superseded" };
     try { this.#o.observed.record(ext.name, ext.revision, decl.name, { at: (this.#o.now?.() ?? new Date()).toISOString(), tools: hashTools(tools), review: null, blocked: null }); } catch { /* informational */ }
@@ -275,7 +275,9 @@ export class ExtensionMcpHost implements McpToolHost {
     if (server.state !== "ready" || !server.session || !server.allowed.has(tool)) return fail(`MCP tool ${name} is blocked${server.reason ? `: ${redactWith(server, server.reason)}` : ": load its server first"}`);
     if (server.stale || server.revalidating) return fail(`MCP tool ${name} is blocked: the server reported changed tools and they are being reviewed`);
     // Cheap re-check from cached state: the definition this call was built from must still be the one the operator pinned.
-    const cached = server.tools.get(tool); const pinned = this.#o.pins.pins(ext.name, ext.revision)[decl.name]?.tools[tool];
+    const cached = server.tools.get(tool);
+    const pinnedTools = this.#o.pins.pins(ext.name, ext.revision)[decl.name]?.tools;
+    const pinned = pinnedTools && Object.hasOwn(pinnedTools, tool) ? pinnedTools[tool] : undefined;
     if (!cached || pinned === undefined || mcpToolHash(cached) !== pinned) return fail(`MCP tool ${name} is blocked: it no longer matches what you approved`);
     try {
       const res = await server.session.call(tool, args);

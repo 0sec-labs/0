@@ -1,7 +1,8 @@
 /** Pure: compare the tools a server shows now with the hashes the operator approved. Fail closed. */
 import type { McpToolInfo } from "./tool-hash.js";
-import { hashTools } from "./tool-hash.js";
+import { findDuplicateToolNames, hashTools } from "./tool-hash.js";
 import { reviewReason } from "./approval-text.js";
+import { displayName } from "./sanitize.js";
 
 export interface ToolReview {
   /** Tools whose hash matches the approval: the only ones that may be advertised or called. */
@@ -31,4 +32,19 @@ export function reviewHashes(pinned: Readonly<Record<string, string>> | undefine
   return { allowed: needsApproval ? [] : names, changed, added, removed, needsApproval, reason };
 }
 
-export const reviewTools = (pinned: Readonly<Record<string, string>> | undefined, current: readonly McpToolInfo[]): ToolReview => reviewHashes(pinned, hashTools(current));
+export function reviewTools(pinned: Readonly<Record<string, string>> | undefined, current: readonly McpToolInfo[]): ToolReview {
+  const duplicates = findDuplicateToolNames(current);
+  if (duplicates.length > 0) {
+    const shown = duplicates.slice(0, 5).map(displayName).join(", ");
+    const suffix = duplicates.length > 5 ? ` and ${duplicates.length - 5} more` : "";
+    return {
+      allowed: [],
+      changed: duplicates,
+      added: [],
+      removed: [],
+      needsApproval: true,
+      reason: `duplicate tool names (${shown}${suffix}); refused`,
+    };
+  }
+  return reviewHashes(pinned, hashTools(current));
+}

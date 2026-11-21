@@ -19,11 +19,16 @@ export function snapshotOf(tools: readonly McpToolInfo[]): ToolSnapshots {
     if (!isToolName(t.name)) continue;
     const schema = t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema as { properties?: unknown; required?: unknown } : {};
     const props = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties) ? Object.entries(schema.properties as Record<string, unknown>).filter(([k]) => isToolName(k)).slice(0, 40) : [];
-    out[t.name] = {
-      description: safeText(t.description, 300),
-      params: Object.fromEntries(props.map(([k, v]) => [k, typeOf(v)])),
-      required: (Array.isArray(schema.required) ? schema.required.filter((r): r is string => isToolName(r)) : []).slice(0, 40).sort(),
-    };
+    Object.defineProperty(out, t.name, {
+      value: {
+        description: safeText(t.description, 300),
+        params: Object.fromEntries(props.map(([k, v]) => [k, typeOf(v)])),
+        required: (Array.isArray(schema.required) ? schema.required.filter((r): r is string => isToolName(r)) : []).slice(0, 40).sort(),
+      },
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
   return out;
 }
@@ -48,14 +53,15 @@ export function changeLines(previous: ToolSnapshots | undefined, current: ToolSn
   const shown = (list: readonly string[]) => list.filter(isToolName);
   const lines: string[] = [];
   for (const name of shown(review.changed).slice(0, 8)) {
-    const was = previous?.[name]; const now = current[name];
+    const was = previous && Object.hasOwn(previous, name) ? previous[name] : undefined;
+    const now = Object.hasOwn(current, name) ? current[name] : undefined;
     if (!now) { lines.push(`changed ${name}: its new definition has details that cannot be shown safely`); continue; }
     if (!was) { lines.push(`changed ${name}: no earlier text is on record. Now: "${clamp(now.description, 160)}"`); continue; }
     const schema = schemaChange(was, now);
     const text = was.description === now.description ? "description unchanged" : `description was "${clamp(was.description, 160)}" and now reads "${clamp(now.description, 160)}"`;
     lines.push(`changed ${name}: ${text}${schema ? `; schema ${schema}` : was.description === now.description ? "; only annotations or schema details changed" : ""}`);
   }
-  for (const name of shown(review.added).slice(0, 8)) { const now = current[name]; lines.push(`new ${name}: "${clamp(now?.description ?? "", 160)}"${now && Object.keys(now.params).length ? ` (takes ${names(Object.entries(now.params).map(([k, v]) => `${k}:${v}`))})` : ""}`); }
+  for (const name of shown(review.added).slice(0, 8)) { const now = Object.hasOwn(current, name) ? current[name] : undefined; lines.push(`new ${name}: "${clamp(now?.description ?? "", 160)}"${now && Object.keys(now.params).length ? ` (takes ${names(Object.entries(now.params).map(([k, v]) => `${k}:${v}`))})` : ""}`); }
   if (review.removed.length) lines.push(`removed: ${names(shown(review.removed))}`);
   const hidden = review.changed.length + review.added.length - shown(review.changed).length - shown(review.added).length;
   if (hidden > 0) lines.push(`${hidden} tool(s) have names that are not valid tool names and are not shown`);
