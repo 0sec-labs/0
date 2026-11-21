@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startWorkbenchBroker, WORKBENCH_BROKER_WORKSPACE } from "./smolvm-broker.js";
+import { resolveHttpBrokerCommand, startWorkbenchBroker, WORKBENCH_BROKER_WORKSPACE } from "./smolvm-broker.js";
 import type { WorkbenchBrokerController } from "./smolvm-broker.js";
 import { runSmolvmDarwinProgram } from "./smolvm-darwin.js";
 import type { SmolvmExecutionResult } from "./smolvm.js";
@@ -114,6 +114,98 @@ async function transportReceipt(broker: WorkbenchBrokerController, command: stri
 }
 
 const qualifiedHost = process.platform === "darwin" && process.arch === "arm64" && process.getuid?.() !== 0;
+
+function declarativeHttpRequest(target: string, extraHeaders: string[] = []) {
+  return {
+    interactive: false,
+    httpTarget: target,
+    timeoutMs: 5000,
+    command: [
+      "curl", "--disable", "--globoff", "--silent", "--show-error",
+      "--request", "GET",
+      "--max-time", "5",
+      "--proto", "=http,https",
+      "--proto-redir", "=http,https",
+      "--max-redirs", "0",
+      "--noproxy", "*",
+      "--output", "-",
+      "--write-out", "%{stderr}\n__ZERO_HTTP_STATUS__:%{http_code}\n",
+      ...extraHeaders.flatMap(header => ["--header", header]),
+      "--", target,
+    ],
+  };
+}
+
+describe("HTTP sibling broker URL canonicalization and SSRF boundary", () => {
+  const publicDns = async () => [{ address: "93.184.216.34", family: 4 }];
+
+  it.each([
+    "http://1.1.1.1\\@127.0.0.1:48123/secret",
+    "http://1.1.1.1\\@[::1]:48123/secret",
+    "http://1.1.1.1\\@169.254.169.254/latest/meta-data/",
+    "http://1.1.1.1:80\\@127.0.0.1:48123/secret",
+    "https://public.example\\@127.0.0.1/secret",
+    "http://1.1.1.1\\path",
+    " http://1.1.1.1/leading-space",
+    "http://1.1.1.1\t/tab",
+    "http://1.1.1.1\r\n/crlf",
+    "http:1.1.1.1/no-slashes",
+    "http://1.1.1.1:0/port-zero",
+    "http://localhost./dot-localhost",
+    "http://sub.localhost./dot-sub-localhost",
+    "http://example.com%2e/pct-host",
+  ])("refuses parser-differential or non-canonical URL %j", async target => {
+    const abort = new AbortController();
+    await expect(
+      resolveHttpBrokerCommand(declarativeHttpRequest(target, ["Authorization:"]), abort.signal, publicDns),
+    ).rejects.toThrow(/HTTP broker/);
+  });
+
+  it("canonicalizes public IP and domain URLs so curl and --resolve agree on target identity", async () => {
+    const abort = new AbortController();
+
+    const decimalIp = await resolveHttpBrokerCommand(
+      declarativeHttpRequest("http://16843009/health"),
+      abort.signal,
+      publicDns,
+    );
+    expect(decimalIp.slice(-2)).toEqual(["--", "http://1.1.1.1/health"]);
+
+    const domain = await resolveHttpBrokerCommand(
+      declarativeHttpRequest("https://API.EXAMPLE.COM:443/v1?a=1"),
+      abort.signal,
+      publicDns,
+    );
+    expect(domain.slice(-4)).toEqual(["--resolve", "api.example.com:443:93.184.216.34", "--", "https://api.example.com/v1?a=1"]);
+
+    const idn = await resolveHttpBrokerCommand(
+      declarativeHttpRequest("https://b\u00fccher.example/path"),
+      abort.signal,
+      publicDns,
+    );
+    expect(idn.slice(-4)).toEqual(["--resolve", "xn--bcher-kva.example:443:93.184.216.34", "--", "https://xn--bcher-kva.example/path"]);
+
+    const ipv6 = await resolveHttpBrokerCommand(
+      declarativeHttpRequest("https://[2606:2800:0220:0001:0248:1893:25c8:1946]/"),
+      abort.signal,
+      publicDns,
+    );
+    expect(ipv6.slice(-2)).toEqual(["--", "https://[2606:2800:220:1:248:1893:25c8:1946]/"]);
+  });
+
+  it("refuses private, loopback, and mixed DNS answers", async () => {
+    const abort = new AbortController();
+    await expect(
+      resolveHttpBrokerCommand(declarativeHttpRequest("https://rebind.example/"), abort.signal, async () => [
+        { address: "93.184.216.34", family: 4 },
+        { address: "127.0.0.1", family: 4 },
+      ]),
+    ).rejects.toThrow(/private, loopback, reserved or mixed/);
+    await expect(
+      resolveHttpBrokerCommand(declarativeHttpRequest("http://2130706433/"), abort.signal, publicDns),
+    ).rejects.toThrow(/private, loopback, reserved or mixed/);
+  });
+});
 
 describe.skipIf(!qualifiedHost)("host sibling broker authority boundary", () => {
   it("refuses setup archives above the same eight-GiB ceiling as broker admission", async () => {
