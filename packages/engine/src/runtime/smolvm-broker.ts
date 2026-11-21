@@ -251,11 +251,34 @@ function checkedProgram(raw: unknown, grant: WorkbenchBrokerAdmission, expectedI
   request.files = validateFiles(request.files, grant.limits);
   return request;
 }
-async function httpCommand(request: BrokerRequest, signal: AbortSignal): Promise<string[]> {
-  if (request.interactive || typeof request.httpTarget !== "string" || Buffer.byteLength(request.httpTarget) > 8192) throw new Error("HTTP broker requires a bounded declarative request, not an interactive program");
-  const url = new URL(request.httpTarget);
+export type BrokerHostLookup = (hostname: string) => Promise<Array<{ address: string; family: number }>>;
+export type BrokerHttpRequest = Pick<BrokerRequest, "interactive" | "httpTarget" | "command" | "timeoutMs">;
+
+export async function resolveHttpBrokerCommand(
+  request: BrokerHttpRequest,
+  signal: AbortSignal,
+  resolveHost: BrokerHostLookup = hostname => lookup(hostname, { all: true }),
+): Promise<string[]> {
+  const rawTarget = request.httpTarget;
+  if (request.interactive || typeof rawTarget !== "string" || Buffer.byteLength(rawTarget) > 8192) throw new Error("HTTP broker requires a bounded declarative request, not an interactive program");
+  // Reject WHATWG-vs-libcurl parser differentials before parsing: backslashes in authority are
+  // treated as `/` by WHATWG URL but as userinfo by libcurl (RFC 3986), and ASCII controls or
+  // whitespace are silently stripped by WHATWG.
+  if (/[\x00-\x20\x7f\\]/.test(rawTarget) || !/^https?:\/\//i.test(rawTarget)) throw new Error("HTTP broker requires a canonical public HTTP(S) URL without userinfo or backslashes");
+  const rawAuthority = rawTarget.slice(rawTarget.indexOf("://") + 3).split(/[/?#]/, 1)[0] ?? "";
+  if (!rawAuthority || rawAuthority.includes("@") || rawAuthority.includes("%")) throw new Error("HTTP broker requires a public HTTP(S) URL without userinfo");
+  const url = new URL(rawTarget);
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || !host || /^(?:localhost|.*\.localhost)$/i.test(host)) throw new Error("HTTP broker requires a public HTTP(S) URL without userinfo");
+  const normalizedHost = host.replace(/\.+$/, "");
+  if (
+    !["http:", "https:"].includes(url.protocol)
+    || url.username
+    || url.password
+    || url.port === "0"
+    || !normalizedHost
+    || /^(?:localhost|.*\.localhost)$/i.test(normalizedHost)
+    || (isIP(host) === 0 && !/^[a-z0-9.-]+$/i.test(host))
+  ) throw new Error("HTTP broker requires a public HTTP(S) URL without userinfo");
   const argv = request.command;
   const prefix = ["curl", "--disable", "--globoff", "--silent", "--show-error", "--request"];
   if (!prefix.every((arg, index) => argv[index] === arg) || !/^[A-Za-z]{1,32}$/.test(argv[6] ?? "")) throw new Error("HTTP broker permits only declarative curl requests");
@@ -270,7 +293,7 @@ async function httpCommand(request: BrokerRequest, signal: AbortSignal): Promise
     index += 2;
   }
   if (argv[index] === "--data-binary" && argv[index + 1] === "@-") index += 2;
-  if (argv[index] !== "--" || argv[index + 1] !== request.httpTarget || argv.length !== index + 2) throw new Error("HTTP broker rejects additional curl flags, files, redirects or destinations");
+  if (argv[index] !== "--" || argv[index + 1] !== rawTarget || argv.length !== index + 2) throw new Error("HTTP broker rejects additional curl flags, files, redirects or destinations");
   const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
     let settled = false;
     const finish = (error?: unknown, result?: Array<{ address: string; family: number }>) => {
@@ -282,14 +305,16 @@ async function httpCommand(request: BrokerRequest, signal: AbortSignal): Promise
     const abort = () => finish(new Error("HTTP broker DNS resolution cancelled"));
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
-    else void lookup(host, { all: true }).then(result => finish(undefined, result), error => finish(error));
+    else void resolveHost(host).then(result => finish(undefined, result), error => finish(error));
   });
   if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) throw new Error("HTTP broker refuses private, loopback, reserved or mixed DNS destinations");
-  if (isIP(host)) return [...argv];
+  // Always forward the WHATWG-canonical URL so curl and --resolve agree on scheme, host, port, and IP literal.
+  const canonicalTarget = url.href;
+  if (isIP(host)) return [...argv.slice(0, index), "--", canonicalTarget];
   const address = addresses[0]!;
   const port = url.port || (url.protocol === "https:" ? "443" : "80");
   const pinned = address.family === 6 ? `[${address.address}]` : address.address;
-  return [...argv.slice(0, index), "--resolve", `${host}:${port}:${pinned}`, ...argv.slice(index)];
+  return [...argv.slice(0, index), "--resolve", `${host}:${port}:${pinned}`, "--", canonicalTarget];
 }
 
 // This transport program executes ONLY in the fresh sibling VM. Its output is
@@ -405,7 +430,7 @@ export async function startWorkbenchBroker(options: WorkbenchBrokerOptions): Pro
         if (cancelled || abort.signal.aborted) throw new Error("Workbench sandbox cancelled before VM admission");
         const image = images.get(request.imageReference ?? options.imageDigest);
         if (!image) throw new Error(`Sandbox image is not explicitly approved: ${request.imageReference}`);
-        const command = request.profile === "http" ? await httpCommand(request, abort.signal) : [...request.command];
+        const command = request.profile === "http" ? await resolveHttpBrokerCommand(request, abort.signal) : [...request.command];
         workspace = await mkdtemp(join(privateRoot, "job-"));
         const source = join(workspace, "source"), control = join(workspace, "control");
         await mkdir(source, { mode: 0o700 }); await mkdir(control, { mode: 0o700 });
