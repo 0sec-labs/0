@@ -52,9 +52,8 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import { homedir } from "node:os";
 import { loadCloudCredentials } from "@0/engine";
-import { VERSION } from "@0/engine/shared";
+import { VERSION, homeStateDir } from "@0/engine/shared";
 import { getReleaseChannel } from "./runtime.js";
 import { getBuiltInSentryDsn } from "./built-in-diagnostics.js";
 
@@ -77,7 +76,7 @@ export interface FeedbackResult {
 }
 
 export function feedbackFilePath(homeDir?: string): string {
-  return join(homeDir ?? homedir(), ".0", "feedback.md");
+  return join(homeStateDir(homeDir), "feedback.md");
 }
 
 /** Render one entry as a Markdown block. Pure, so it is unit-testable. */

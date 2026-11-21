@@ -7,13 +7,13 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
-import { parseSarif, parseScannerList, scanPrompt, scannerArguments, scannerById, SCANNERS, type PrePassLeads, type ScanReport } from "@0/engine/shared";
+import { homeStateDir, parseSarif, parseScannerList, scanPrompt, scannerArguments, scannerById, SCANNERS, type PrePassLeads, type ScanReport } from "@0/engine/shared";
 import { mergePasses, scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, lastAssistantText, usageLine, type FinishedThread, type Json } from "./thread-output.js";
@@ -89,7 +89,7 @@ export const defaultScanDeps: ScanDeps = {
     const lists = await Promise.all(scanners.map(async id => {
       const spec = scannerById(id);
       if (!spec) return undefined;
-      const binary = [spec.pathEnv ? process.env[spec.pathEnv] : undefined, join(homedir(), ".0", "bin", spec.command), spec.command].filter((value): value is string => !!value).find(candidate => candidate === spec.command || existsSync(candidate));
+      const binary = [spec.pathEnv ? process.env[spec.pathEnv] : undefined, join(homeStateDir(), "bin", spec.command), spec.command].filter((value): value is string => !!value).find(candidate => candidate === spec.command || existsSync(candidate));
       if (!binary) return undefined;
       try {
         let stdout: string;
