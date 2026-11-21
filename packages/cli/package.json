@@ -26,7 +26,7 @@
   "devDependencies": {
     "simple-icons": "^16.38.0",
     "tsx": "^4.23.15",
-    "typescript": "^5.7.2",
+    "typescript": "^7.0.2",
     "vitest": "^5.1.0",
     "yaml": "^2.9.1"
   }
