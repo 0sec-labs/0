@@ -86,6 +86,7 @@ export class HostConsoleProcess {
   #creating = new Set<string>();
   #exited = false;
   #closed = false;
+  #exitedAt = 0;
   #revoked = false;
   #stop?: Promise<HostConsoleStopResult>;
   #invalidResource = false;
@@ -116,6 +117,7 @@ export class HostConsoleProcess {
     this.#child.once("error", () => this.#fail(new Error("Host session process could not start")));
     this.#child.once("exit", () => {
       this.#exited = true;
+      this.#exitedAt = Date.now();
       // Pending turns settle only after owned resources are confirmed too.
       // An unexpected worker exit also drains registered detached children.
       if (!this.#stop) void this.forceStop();
@@ -126,6 +128,16 @@ export class HostConsoleProcess {
       if (main && main.group === this.pid) this.#resources.push({ identity: main, group: true });
       else { this.#invalidResource = true; void this.forceStop(); }
     } catch { this.#invalidResource = true; void this.forceStop(); }
+  }
+
+  /**
+   * The worker has exited, but some runtimes (Bun 1.3 on Linux) never report "close" for a child with extra pipes. Once it has been gone
+   * for a moment, nothing can still be written by it, so our ends of its pipes are closed here and the session counts as closed.
+   */
+  #reapPipes(): void {
+    if (!this.#exited || this.#closed || Date.now() - this.#exitedAt < 300) return;
+    for (const stream of this.#child.stdio) { try { stream?.destroy(); } catch { /* already closed */ } }
+    this.#closed = true;
   }
 
   #fail(error: Error): void {
@@ -257,6 +269,7 @@ export class HostConsoleProcess {
         await inspect();
         if (hard) signalAll("SIGKILL"); // Includes resources registered during revocation.
         const resourcesLive = !table || this.#resources.some(resource => liveInTable(resource, table!));
+        this.#reapPipes();
         if (this.#closed && this.#hostCallbacks.size === 0 && !resourcesLive) return;
         if (Date.now() >= deadline) return;
         await new Promise(resolve => setTimeout(resolve, 20));
