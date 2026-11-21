@@ -37,7 +37,7 @@ else{
  const{ConsoleGateway}=await import(${JSON.stringify(resolve(repository, "packages/cli/src/web/console-gateway.ts"))});const{osecDB}=await import('@0/engine/storage');
  const g=new ConsoleGateway({homeDir:root,projectPath:root,dbPath:root+'/selected.db'});
  process.once('SIGTERM',()=>{void g.closeAll().finally(()=>process.exit(1))});
- const wait=async(check)=>{const end=Date.now()+15000;while(!check()){if(Date.now()>end)throw Error('qualification timed out: '+JSON.stringify(g.list()));await Bun.sleep(20)}};
+ const wait=async(check)=>{const end=Date.now()+15000;while(!check()){if(Date.now()>end)throw Error('qualification timed out: '+JSON.stringify(g.list())+' failures: '+JSON.stringify(g.list().filter(x=>x.status==='failed'||x.lastTurnFailed).map(x=>{try{const v=g.get(x.id);return{id:x.id,outcome:v.lastOutcome,error:v.session.error}}catch(e){return{id:x.id,read:String(e)}}})));await Bun.sleep(20)}};
  const runtime={providerId:'openai',model:'gpt-fixture',singleModel:true,cyberAccessProgram:'daybreak_blue'};
  const chat=g.create({title:'Retain chat',autonomyMode:'yolo',runtime}),other=g.create({title:'Other chat',runtime});
  try{await g.send(chat.id,'OWNED-HANG');await wait(()=>existsSync(sentinel));

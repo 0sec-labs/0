@@ -63,9 +63,9 @@ export async function runUpload(file: string, options: UploadOptions, deps: Uplo
 
   const repo = options.repo ?? (await deps.gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).catch(() => "")).trim();
   if (!REPO.test(repo)) throw new UsageError("Name the repository with --repo owner/name (or run this inside its clone).");
-  const commit = (options.commit ?? process.env.GITHUB_SHA ?? (await deps.git(["rev-parse", "HEAD"]).catch(() => ""))).trim();
+  const commit = (options.commit || process.env.GITHUB_SHA || (await deps.git(["rev-parse", "HEAD"]).catch(() => ""))).trim();
   if (!SHA.test(commit)) throw new UsageError("Name the commit with --commit <40-character sha> (or run this inside the clone).");
-  let ref = options.ref ?? process.env.GITHUB_REF;
+  let ref = options.ref || process.env.GITHUB_REF || undefined;
   if (!ref) { const branch = (await deps.git(["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "")).trim(); ref = branch && branch !== "HEAD" ? `refs/heads/${branch}` : undefined; }
   if (!ref || !REF.test(ref)) throw new UsageError("Name the ref with --ref refs/heads/<branch> (or refs/pull/<n>/merge).");
 
