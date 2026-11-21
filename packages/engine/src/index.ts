@@ -304,7 +304,6 @@ export type {
 
 // Transport-independent workflow execution and owned lifecycle.
 export * from "./engine-service.js";
-export * from "./notes/index.js";
 
 export * from "./report-export.js";
 

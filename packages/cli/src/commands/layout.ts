@@ -40,7 +40,7 @@ export function adoptCommands(program: Command, only?: string): void {
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
   ["Work", ["scan", "findings", "threads", "sentinels"]],
-  ["Setup", ["skills", "memory", "models", "computers", "config"]],
+  ["Setup", ["skills", "models", "computers", "config"]],
 ];
 
 /** Root `--help`: the visible commands grouped by purpose instead of one flat list. */
@@ -102,10 +102,6 @@ const EXAMPLES: Readonly<Record<string, readonly string[]>> = {
   skills: ["0 skills list", "0 skills list pr-diff-review", "0 skills add owner/repo@<full-sha>", "0 skills add ./my-skills"],
   "skills list": ["0 skills list", "0 skills list pr-diff-review", "0 skills list --catalog"],
   "skills add": ["0 skills add ./my-skills", "0 skills add owner/repo@<full-sha> --yes"],
-  memory: ['0 memory add "Use pnpm, not npm"', "0 memory list --search pnpm", "0 memory remove <id>"],
-  "memory list": ["0 memory list", "0 memory list --folder ~/code/app --format json"],
-  "memory add": ['0 memory add "Use pnpm, not npm"', '0 memory add "Staging is read-only" --global'],
-  "memory remove": ["0 memory remove <id>"],
   models: ["0 models connect", "0 models connect anthropic --key-env ANTHROPIC_API_KEY", "0 models list", "0 models set claude-sonnet-4-6 --provider anthropic"],
   "models list": ["0 models list", "0 models list --provider anthropic --format json"],
   "models set": ["0 models set", "0 models set claude-sonnet-4-6 --provider anthropic"],

@@ -130,7 +130,7 @@ type ManagedSession = {
   forceStopOperation?: Promise<DesktopConsoleSession>;
   initialMessages: NativeMessage[]; savedId?: string; workers: Map<string, ConsoleWorker>; ownedIds: Set<string>;
   userAttributions: ConsoleUserAttribution[];
-  busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; automatedQueued?: Set<string>; tainted?: boolean; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
+  busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; automatedQueued?: Set<string>; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
   pendingConfiguration?: ConsoleSessionConfiguration; configuration: Promise<void> | null;
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   costCeilingUsd?: number; costCeilingExceeded?: boolean;
@@ -912,7 +912,7 @@ export class ConsoleGateway {
     };
     const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}), ...((configuration?.workerPolicy !== undefined || requestedPolicy !== undefined) ? { workerPolicy: intersectWorkerPolicy(configuration?.workerPolicy, requestedPolicy) } : {}) }); const managed = this.#require(created.id);
     if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
-    if (configuration?.tainted === true) managed.tainted = true;
+    
     if (Number.isFinite(stored.savedAt) && stored.savedAt > 0) { managed.activityAt = stored.savedAt; }
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     // Older records carry no source: their title is the operator's unless blank.
@@ -1100,13 +1100,13 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...(managed.tainted ? { initialTainted: true } : {}), codebaseLearning: true, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy),
-            initialMessages: managed.initialMessages, ...(managed.tainted ? { initialTainted: true } : {}), skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
+            initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             ...callbacks,
           }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: managed.workspacePath ?? this.#projectPath,
@@ -1119,7 +1119,7 @@ export class ConsoleGateway {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             scanId: managed.id, refineObjective: false, role: managed.role, autonomyMode: managed.autonomyMode, approvals: settings.approvals, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy),
-            initialMessages: managed.initialMessages, ...(managed.tainted ? { initialTainted: true } : {}), codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
+            initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
             workspaceRoot: managed.workspacePath ?? this.#projectPath,
             operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
@@ -1251,7 +1251,6 @@ export class ConsoleGateway {
   }
 
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"], options?: { untrusted?: boolean }): Promise<void> {
-    if (options?.untrusted) managed.tainted = true;
     const startingEpoch = ++managed.executionEpoch;
     this.#clearCancellation(managed);
     managed.status = "working"; this.#emitSession(managed);
@@ -1843,7 +1842,6 @@ export class ConsoleGateway {
         ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
         role: managed.role,
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
-        ...(managed.tainted ? { tainted: true } : {}),
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
         ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}),

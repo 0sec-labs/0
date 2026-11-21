@@ -32,11 +32,11 @@ on the GitHub Release tag.
 
 ### Changed
 
-- Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.
 
 ### Removed
 
+- Memory: the model-written notes shared across threads, with its `memory` tool, the Memory page, `0 memory`, the `/memory` routes and the hidden `0 findings triage` commands that wrote to it. Operator instructions (`~/.0/AGENTS.md` and the per-workspace file) are the one place you write context for every thread, a Sentinel keeps its own `NOTES.md`, and why a finding is a false positive stays with the finding (`0 findings update --status false-positive --note ...`). Notes already in `~/.0/memory` are left on disk and no longer read.
 - About 27,000 lines of engine code that nothing used: ten unfinished engines (mobile, recon, attack, emit, h1, cve, protocol, specdrift, adgraph, xnu-fuzz), old scanners and helpers, the old runners, the attack-template loader, the red-team harness and its `0-llm` bin, the core/full build edition, and the matching package exports (`./identity`, `./adgraph`, `./xnu-fuzz`, `./kernel`, `./templates`, `./redteam`).
 - `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.
 

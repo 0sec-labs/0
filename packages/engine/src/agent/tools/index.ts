@@ -38,7 +38,6 @@ const TOOL_REGISTRY_ORDER = [
   "web_search",
   "load_skill",
   "ask_operator",
-  "memory",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(

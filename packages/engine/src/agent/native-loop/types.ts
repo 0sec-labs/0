@@ -7,7 +7,6 @@ import type { ToolHealthSummary } from "../tool-health.js";
 import { type TrustGraphConfig } from "../trust-graph-runtime.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
 import type { ScanCostLedger } from "../cost-ledger.js";
-import type { NoteStore } from "../../notes/index.js";
 import type { osecDB } from "../../storage/index.js";
 import type { Finding, AttackResult, TargetInfo } from "../../shared/index.js";
 
@@ -106,15 +105,6 @@ export interface NativeAgentConfig {
    * `trust-graph-runtime.ts` for the full contract.
    */
   trustGraph?: TrustGraphConfig;
-  /**
-   * Enable codebase learning: recall prior source-grounded notes into context
-   * at loop start and expose the `memory` tool. For scoped source
-   * reviews (agent-runner.ts, purpose === "research") this is set to true by
-   * the caller. For attack/discovery roles with a scopePath it defaults to
-   * true when not explicitly set. purpose === "verify" or any non-scoped run
-   * must either omit this or set it to false so tools/context stay cold.
-   */
-  codebaseLearning?: boolean;
   /** Captured canonical workspace root for trust/enablement decisions. */
   workspaceRoot?: string;
   skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
@@ -143,11 +133,6 @@ export interface NativeAgentLoopOptions {
   onEvent?: (eventType: string, payload: Record<string, unknown>) => void;
   /** Poll for user-injected messages at turn boundaries. */
   getPendingUserMessages?: () => string[];
-  /**
-   * Optional Memory override; supplying one opts into Memory for this run. Otherwise Memory is used only
-   * when codebaseLearning is true. ZERO_DISABLE_MEMORY=1/true vetoes either opt-in.
-   */
-  memoryStore?: NoteStore;
 }
 
 export interface NativeAgentState {

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { SECURITY_WORKFLOW_TEMPLATES, getSecurityWorkflowTemplate, parseSecurityWorkflowInput, type SecurityWorkflowExecution } from "@0/engine/shared";
 import { SecurityWorkflowStore } from "@0/engine/storage";
-import { handleMemoryRequest } from "./memory-api.js";
 
 const PREFIX = "/api/console/";
 const idSchema = z.string().trim().min(1).max(160);
@@ -17,8 +16,8 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
 function errorMessage(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 16_000); }
 
 /**
- * The records behind Sentinels' automations (saved definitions, their versions and retained runs) plus the
- * memory routes. It does not execute anything: a Sentinel fires an automation by prompt (sentinel-runner),
+ * The records behind Sentinels' automations (saved definitions, their versions and retained runs) .
+ * It does not execute anything: a Sentinel fires an automation by prompt (sentinel-runner),
  * and the scan pipelines and workflow graph runner are gone.
  */
 export class WebWorkflowService {
@@ -53,8 +52,6 @@ export class WebWorkflowService {
   }
 
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
-    const memory = handleMemoryRequest(pathname, method, input, query);
-    if (memory) return memory;
     if (!pathname.startsWith(PREFIX + "workflow-definitions") && !pathname.startsWith(PREFIX + "workflow-executions")) return null;
     try {
       return await this.#definitionRequest(pathname, method, input, query);

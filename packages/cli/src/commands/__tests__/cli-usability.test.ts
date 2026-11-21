@@ -31,7 +31,7 @@ describe("CLI usability", () => {
 
   it("--json is accepted next to --format wherever either exists, and --format json sets it", async () => {
     const program = await tree();
-    const memoryList = find(program, "memory", "list");
+    const memoryList = find(program, "models", "list");
     expect(memoryList.options.find((o) => o.long === "--json")?.hidden).toBe(true);
     expect(memoryList.options.find((o) => o.long === "--format")?.argChoices).toEqual(["text", "json"]);
     const threadsList = find(program, "threads", "list");

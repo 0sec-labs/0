@@ -127,18 +127,15 @@ Formats are `json`, `md` and `sarif`. Without `-o` the report goes to stdout. Th
 
 Accepting a finding does not verify it, and suppressing it does not make it false. Whether a finding is verified is decided by the verifier gate (see [Verified and Not verified](#verified-and-not-verified)).
 
-## Teach 0 your false positives
+## Mark a false positive
 
-Record why a finding is a false alarm. It becomes a note in [Memory](/threads/#memory) tagged `avoid`, and later threads can read the `avoid` notes as untrusted context.
+Record why a finding is a false alarm. The finding is suppressed with your reason, and it stays suppressed across scans of the same code.
 
 ```bash
-0 findings update 3f2a --status false-positive --reason "Echo endpoint only exists in test fixtures" \
-  --db-path ./engagement.db
-0 memory add "The public API allows CORS on purpose" --kind avoid --global
-0 memory list
+0 findings update 3f2a --status false-positive --reason "Echo endpoint only exists in test fixtures"
 ```
 
-`findings update --status false-positive` suppresses the finding and remembers why. `0 memory add` remembers a note without touching any finding. Notes are untrusted hints: the agents still check the current code and deployment.
+`findings update --status false-positive` suppresses the finding and keeps the reason with it. To give every thread standing context, such as "the public API allows CORS on purpose", write it in your operator instructions (`~/.0/AGENTS.md`, or the per-workspace file).
 
 ## Verified and Not verified
 

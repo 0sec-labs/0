@@ -1,5 +1,4 @@
 import { createContext, type ReactNode } from "react";
-import { SourceContext } from "../../source-context";
 import { ToolCatalog } from "../../tool-catalog";
 import type { PanelViewComponent } from "../types";
 
@@ -23,7 +22,6 @@ export const ToolsView: PanelViewComponent = ({ snapshot }) => {
     );
   return (
     <div className="min-w-0 space-y-3 p-3 text-sm">
-      <SourceContext context={snapshot.sourceContext} />
       <ToolCatalog tools={snapshot.tools} />
     </div>
   );

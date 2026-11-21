@@ -220,7 +220,7 @@ export class AgentTurnDelivery {
     const { sentinel, automation, event } = request;
     const store = this.#ctx.store;
     const charterFile = store.getFile(sentinel.id, "AGENTS.md");
-    const notesFile = sentinel.memory.enabled ? store.getFile(sentinel.id, "NOTES.md") : null;
+    const notesFile = store.getFile(sentinel.id, "NOTES.md");
     const fingerprint = sentinelReviewFingerprint(sentinel);
     const seen = this.#seen.get(sentinel.id);
     const notices = [...input.notices];

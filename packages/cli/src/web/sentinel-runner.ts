@@ -541,7 +541,7 @@ export class SentinelRunner {
 
   #seed(sentinel: Sentinel, options: LaunchOptions): string {
     const charter = this.#store.getFile(sentinel.id, "AGENTS.md")?.content ?? "";
-    const notes = sentinel.memory.enabled ? this.#store.getFile(sentinel.id, "NOTES.md")?.content : undefined;
+    const notes = this.#store.getFile(sentinel.id, "NOTES.md")?.content;
     const automation = options.automation;
     const steps = automation?.nodes.filter(node => node.enabled && node.type !== "trigger").map(node => `- ${node.label} (${node.type})${node.execution?.instructions ? `: ${node.execution.instructions.slice(0, 600)}` : ""}`).join("\n");
     const event = options.trigger.event ? JSON.stringify(options.trigger.event) : undefined;

@@ -75,7 +75,7 @@ async function runGuest(cli: boolean): Promise<number> {
       approvals: session.approvals, webSearchEnabled: session.webSearchEnabled, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
     await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
-    // Memory provenance is live UI state, never part of persisted session artifacts.
+    // Source context is live UI state, never part of persisted session artifacts.
     emit({ type: "state", snapshot: { ...snapshot, ...(checkpoint?.harnessRoot ? { checkpoint: undefined } : {}), sourceContext: session.sourceContext } });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
@@ -122,7 +122,6 @@ async function runGuest(cli: boolean): Promise<number> {
             return;
           }
           const config = frame.config as Record<string, unknown>;
-          config.codebaseLearning = false; // Memory lives on the host; the isolated guest neither reads nor writes notes.
           const callbacks: Record<string, unknown> = {};
           for (const name of CALLBACKS) if ((frame.callbacks as string[]).includes(name)) callbacks[name] = async (...args: unknown[]) => {
             const value = await callback(name, args);

@@ -5,14 +5,6 @@ import { ImpactAssessmentSchema } from "../../shared/index.js";
 import type { OperatorQuestion, OperatorQuestionOption, OperatorQuestionRequest } from "../types.js";
 import { z } from "zod";
 
-export const memoryArgsSchema = z.object({
-  action: z.enum(["remember", "update", "forget"]),
-  note: z.string().trim().max(2000).optional(),
-  kind: z.string().max(40).optional(),
-  scope: z.enum(["folder", "global"]).optional(),
-  id: z.string().max(64).optional(),
-}).strip();
-
 // ── Operator question tool (`ask_operator`) ─────────────────────────────────
 //
 // Schema bounds for `ask_operator`. Deliberately small: a mid-turn operator

@@ -34,7 +34,7 @@ export const DELEGATING_TOOLS: ReadonlySet<string> = new Set(["spawn_agent"]);
 /** No process, file or network effect of their own. Adding a tool here is a reviewed decision. */
 export const INERT_TOOLS: ReadonlySet<string> = new Set([
   "finding", "load_skill",
-  "ask_operator", "memory",
+  "ask_operator",
 ]);
 
 export const classifyTool = (name: string): "executing" | "network" | "delegating" | "inert" | "unclassified" =>

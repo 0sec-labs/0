@@ -120,7 +120,7 @@ export function AgentConversation({ sentinel, readOnly }: { sentinel: Sentinel; 
   {!wide && <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
     <SheetContent side="right" className="w-[min(380px,100vw)] p-0 sm:max-w-[380px]">
       <SheetTitle className="sr-only">Details</SheetTitle>
-      <SheetDescription className="sr-only">Status, triggers, instructions and memory.</SheetDescription>
+      <SheetDescription className="sr-only">Status, triggers, instructions and notes.</SheetDescription>
       <div className="pt-8"><SentinelPane sentinel={sentinel} readOnly={readOnly} /></div>
     </SheetContent>
   </Sheet>}

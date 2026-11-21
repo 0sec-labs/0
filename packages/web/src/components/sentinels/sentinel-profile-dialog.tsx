@@ -4,7 +4,6 @@ import { errorText } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { toast } from "@/ui/components/toast";
 import { THIS_COMPUTER, type AgentAvatar, type AgentModelPick } from "@/lib/agent-create-model";
@@ -14,10 +13,10 @@ import { AvatarPicker } from "./avatar-picker";
 import { FolderPicker } from "./folder-row";
 import { ComputerRow, ModelRow, Row } from "./profile-rows";
 
-interface Form { name: string; mission: string; avatar: AgentAvatar; folder: string; computerId: string; model: AgentModelPick | null; memory: boolean }
+interface Form { name: string; mission: string; avatar: AgentAvatar; folder: string; computerId: string; model: AgentModelPick | null }
 const formOf = (sentinel: Sentinel): Form => ({
   name: sentinel.name, mission: sentinel.mission, avatar: { color: sentinel.avatar.color, icon: sentinel.avatar.icon ?? "agent" }, folder: sentinel.folder ?? "", computerId: sentinel.hostId ?? THIS_COMPUTER,
-  model: sentinel.model ? { providerId: sentinel.model.providerId, model: sentinel.model.model } : null, memory: sentinel.memory.enabled,
+  model: sentinel.model ? { providerId: sentinel.model.providerId, model: sentinel.model.model } : null,
 });
 
 /** The small Profile dialog (448px like New sentinel): who it is and where it runs. Delete, Archive and Save sit in the footer. */
@@ -39,7 +38,7 @@ export function SentinelProfileDialog({ sentinel, readOnly, open, onOpenChange }
     try {
       await update.mutateAsync({ id: sentinel.id, version: sentinel.version, fields: {
         name, mission: form.mission.trim(), avatar: { color: form.avatar.color, icon: form.avatar.icon }, folder: form.folder || null,
-        hostId: form.computerId === THIS_COMPUTER ? null : form.computerId, model: form.model, memory: { enabled: form.memory },
+        hostId: form.computerId === THIS_COMPUTER ? null : form.computerId, model: form.model,
       } });
       onOpenChange(false);
     } catch (cause) { setError(errorText(cause, "Unable to save.")); }
@@ -69,7 +68,6 @@ export function SentinelProfileDialog({ sentinel, readOnly, open, onOpenChange }
             <Row label="Folder"><FolderPicker value={form.folder} onChange={folder => set({ folder })} /></Row>
             <ComputerRow value={form.computerId} onChange={computerId => set({ computerId })} disabled={locked} />
             <ModelRow enabled={open} value={form.model} onChange={model => set({ model })} disabled={locked} />
-            <Row label="Memory"><Switch aria-label="Use memory" checked={form.memory} disabled={locked} onCheckedChange={memory => set({ memory })} /></Row>
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
@@ -84,7 +82,7 @@ export function SentinelProfileDialog({ sentinel, readOnly, open, onOpenChange }
     </Dialog>
     <ConfirmDialog open={confirmArchive} onOpenChange={setConfirmArchive} pending={update.isPending} title={`Archive ${sentinel.name}?`} description="It stops waking, leaves the list and cannot be turned back on."
       confirmLabel="Archive" onConfirm={() => void archive()} />
-    <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} pending={remove.isPending} destructive title={`Delete ${sentinel.name}?`} description="Its instructions, memory and history are removed. Threads it started stay."
+    <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} pending={remove.isPending} destructive title={`Delete ${sentinel.name}?`} description="Its instructions, notes and history are removed. Threads it started stay."
       confirmLabel="Delete" onConfirm={() => void destroy()} />
   </>;
 }

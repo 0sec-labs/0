@@ -85,7 +85,7 @@ Project settings live in `<project>/.0/tui-settings.json`.
 
 Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. Moving one path does not move the others.
 
-A running console is tied to one folder and owns its database. Commands such as `0 skills list`, `0 memory list` and `0 threads list` run from another folder stop with `This console is for <folder>. Run the command there, or add --db-path <path>.`
+A running console is tied to one folder and owns its database. Commands such as `0 skills list` and `0 threads list` run from another folder stop with `This console is for <folder>. Run the command there, or add --db-path <path>.`
 
 Thread transcripts hold target hostnames, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
 

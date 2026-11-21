@@ -89,8 +89,8 @@ describe("guest source references", () => {
     writeFileSync(join(scope, "code.ts"), "changed");
     expect(() => validateWorkbenchSourceLesson(lesson, root, scope)).toThrow("digest mismatch");
   });
-  it("serializes only the learning opt-in flag, never host stores or callbacks", () => {
-    const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", codebaseLearning: true, memoryStore: {} as never } , "/operator/repo");
-    expect(serial).toEqual({ workspaceRoot: "/workspace", codebaseLearning: true });
+  it("serializes no host stores or callbacks", () => {
+    const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", onFindingSaved: () => {} } as never, "/operator/repo");
+    expect(serial).toEqual({ workspaceRoot: "/workspace" });
   });
  });

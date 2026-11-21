@@ -6,7 +6,7 @@ import {
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "PR Security Reviewer", mission: "m", avatar: { color: "#3b82f6", emoji: "T" }, role: "pr-security-reviewer", skills: [], notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "PR Security Reviewer", mission: "m", avatar: { color: "#3b82f6", emoji: "T" }, role: "pr-security-reviewer", skills: [], notifications: { channels: ["in-app"], on: [], quiet: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
 const preset = { id: "pr-security-reviewer", name: "PR Security Reviewer", avatar: { color: "#3b82f6", icon: "shield" }, description: "Run tests.", job: "Run tests.", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 

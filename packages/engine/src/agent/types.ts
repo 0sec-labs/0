@@ -418,8 +418,6 @@ export interface ToolContext {
   scopePath?: string;
   /** Immutable parent-observed Git identity for delegated source reviews. */
   workspaceIdentity?: WorkspaceIdentity;
-  /** Host-bound Memory tool (remember, update or forget one note); absent during verification or when Memory is off. */
-  memory?: (args: { action: "remember" | "update" | "forget"; note?: string; kind?: string; scope?: "folder" | "global"; id?: string }) => { id?: string; removed?: boolean; saved?: boolean; status?: "live" | "proposed"; message: string };
   /**
    * True only for the interactive console executor. This explicit marker keeps
    * console-only source-acquisition identity checks out of native scan callers,

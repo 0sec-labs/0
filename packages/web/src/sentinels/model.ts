@@ -30,7 +30,6 @@ export interface Sentinel {
   hostId?: string | null;
   model?: SentinelModelChoice | null;
   notifications: SentinelNotifications;
-  memory: { enabled: boolean };
   status: SentinelStatus;
   automationIds: string[];
   homeMissionId: string | null;

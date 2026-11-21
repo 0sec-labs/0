@@ -30,7 +30,6 @@ New to 0? Read the [Quickstart](/) first. Settings and environment variables are
 | `0 threads` | Start, follow and stop threads. | `list`, `send`, `start`, `stop` |
 | `0 sentinels` | Sentinels and, with `--automation`, saved automations. | `list`, `run`, `set` |
 | `0 skills` | Skills, extensions, MCP servers and connectors. | `list`, `add`, `run` |
-| `0 memory` | What 0 remembers across threads. | `list`, `add`, `remove` |
 | `0 models` | Models and provider connections. | `list`, `set`, `connect` |
 | `0 computers` | Remote computers that run 0. | `list`, `add`, `stop` |
 | `0 config` | Settings, API keys, team setup and `config doctor`. | `get`, `set`, `doctor` |
@@ -829,7 +828,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [upload](#findings-upload) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [export](#findings-export) · [keys](#findings-keys) · [upload](#findings-upload) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1110,93 +1109,6 @@ Revoke a key. Requires `--yes`.
 | `--db-path <path>` | — | Path to SQLite database |
 | `--json` | — | Print JSON |
 | `--format <format>` | — | Output: text or json Choices: text, json. |
-
-### findings triage
-
-Triage findings and manage learned FP memories
-
-```text
-0 findings triage
-```
-
-Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
-
-#### findings triage memory
-
-Manage Semgrep-style triage memories
-
-```text
-0 findings triage memory
-```
-
-Subcommands: [add](#findings-triage-memory-add) · [list](#findings-triage-memory-list) · [remove](#findings-triage-memory-remove).
-
-#### findings triage memory add
-
-Create a memory from an existing finding
-
-```text
-0 findings triage memory add [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--finding <id>` **required** | — | Finding ID (full or prefix) to derive the memory from |
-| `--reason <text>` **required** | — | Why this finding is a false positive |
-| `--scope <scope>` | `target` | Memory scope: global \| target \| package |
-| `--scope-value <value>` | — | Scope identifier (target URL or package name) |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage memory list
-
-List all triage memories
-
-```text
-0 findings triage memory list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage memory remove
-
-Delete a memory by id
-
-```text
-0 findings triage memory remove [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes | Note ID |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### findings triage mark-fp
-
-Mark a finding as false positive and auto-create a memory
-
-```text
-0 findings triage mark-fp [options] <finding-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `finding-id` | Yes | Finding ID (full or prefix) |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--reason <text>` **required** | — | Why this finding is a false positive |
-| `--scope <scope>` | `target` | Memory scope: global \| target \| package |
-| `--scope-value <value>` | — | Scope identifier (target URL or package name) |
-| `--db-path <path>` | — | Path to SQLite database |
-
-#### Real kernel VM verification
-
-Imported crash logs record a prior run. For a new reproduction, follow Kernel VM Verification and its execution and evidence requirements.
 
 ### config db
 
@@ -1803,162 +1715,6 @@ Remove a skill that was added from GitHub or the catalog
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Use this engine database instead of the default |
 | `--format <format>` | — | Output: text or json Choices: text, json. |
-
-### memory
-
-List, add, remove, export and import what 0 remembers across threads
-
-```text
-0 memory
-```
-
-Memory is what 0 remembers across threads: short plain notes per folder or everywhere, kept as Markdown under `~/.0/memory/`. The commands work on those files and need no running engine. False-positive reasons are notes tagged `avoid`. A note is in Memory or it is not. Memory holds about 2,000 tokens and a note that would not fit is refused. A thread that read web pages, files or tool output cannot add one. Secrets are never saved.
-
-```bash
-0 memory list
-0 memory add "Run tests with pnpm test" --kind command
-0 memory export --to AGENTS.md
-```
-
-Subcommands: [list](#memory-list) · [add](#memory-add) · [remove](#memory-remove) · [clear](#memory-clear) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
-
-#### memory list
-
-List notes
-
-```text
-0 memory list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only notes for this folder |
-| `--global` | — | Only global notes |
-| `--search <text>` | — | Only notes containing this text |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory add
-
-Remember a note
-
-```text
-0 memory add [options] <text>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `text` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Folder the note is about (default: this folder) |
-| `--global` | — | Remember it everywhere |
-| `--kind <kind>` | — | One of fix-decision, convention, command, avoid |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory remove
-
-Forget a note
-
-```text
-0 memory remove [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory clear
-
-Forget every note, or every note for one folder
-
-```text
-0 memory clear [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only this folder |
-| `--yes` | — | Confirm |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory disable
-
-Stop using notes in new threads (they stay on disk)
-
-```text
-0 memory disable [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory enable
-
-Use notes in new threads again
-
-```text
-0 memory enable [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory export
-
-Write notes to a file: JSON for 0 by default, or with `--to` an AGENTS.md section for a person to review and commit. Only notes you wrote or accepted are exported. 0 never imports notes from a repository.
-
-```text
-0 memory export [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--folder <path>` | — | Only this folder (default for --to: this folder) |
-| `-o, --output <file>` | — | Write the JSON export to a file instead of stdout |
-| `--to <file>` | — | Add your notes to this markdown file (for example AGENTS.md) as a section you review and commit |
-| `--markdown` | — | Print the markdown section instead of JSON |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-#### memory import
-
-Add the notes from an export file
-
-```text
-0 memory import [options] <file>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `file` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Print machine-readable JSON |
-| `--db-path <path>` | — | Engine database to import older memories from |
-| `--format <format>` | — | Output: text or json Choices: text, json. |
-
-## Automations
 
 ### automation
 

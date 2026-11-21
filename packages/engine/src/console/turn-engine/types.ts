@@ -5,7 +5,6 @@ import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } f
 import type { McpToolHost } from "../../agent/mcp-host.js";
 import type { ExtensionRunPort } from "../../agent/types.js";
 import { type osecDB } from "../../storage/index.js";
-import type { NoteStore } from "../../notes/index.js";
 import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../../agent/types.js";
 import type { ConsoleSessionCheckpoint } from "../session-checkpoint.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
@@ -244,9 +243,7 @@ export interface ConsoleSendOptions {
   signal?: AbortSignal;
   /**
    * Marks a turn triggered by automated or external/peer input (Sentinel PRs,
-   * schedules, webhooks, worker completions). Untrusted turns immediately taint
-   * the thread's Memory guard so model writes become review proposals and
-   * never auto-commit `remember ...` shortcuts from prompt text.
+   * schedules, webhooks, worker completions).
    */
   untrusted?: boolean;
 }
@@ -273,8 +270,6 @@ export interface ConsoleSessionConfig {
    * the session starts with empty history (unchanged behaviour).
    */
   initialMessages?: NativeMessage[];
-  /** Restore tainted Memory guard state even when prior untrusted turns ran no tools. */
-  initialTainted?: boolean;
   /**
    * Role whose tool set the console exposes. Defaults to `"audit"`, which maps
    * to the full "everything" registry (web search, source, patch, shell,
@@ -291,10 +286,6 @@ export interface ConsoleSessionConfig {
    * console keeps its historical in-memory-only behavior.
    */
   db?: osecDB | null;
-  /** Use Memory (read notes each turn, offer the memory tool). No extra model calls. */
-  codebaseLearning?: boolean;
-  /** Host-owned Memory, optionally injected for a tenant or test. */
-  memoryStore?: NoteStore;
   /**
    * Optional cap on tool-call rounds within a single operator turn.
    * Unlimited by default: long reviews continue until the model finishes or the

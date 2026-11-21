@@ -10,13 +10,13 @@ A Sentinel is a named standing job with files and a schedule, configured once. I
 1. Run `0` and click **+** next to **Sentinels** in the sidebar. The Sentinels page, the command palette and the **Create a sentinel** chip on the home screen open the same dialog.
 2. Optionally pick a **Start from** preset. It fills the name, avatar and instructions; **Blank** is the default. Click the avatar to change its glyph or colour.
 3. Type a name, then check the **Folder** it works on, the **Computer** it runs on and its **Model** (the current default unless you pick one).
-4. Click **Create sentinel**. The sentinel is **active** and you land in its own thread: tell it what to do in the composer. The pane on the right holds its status, triggers, instructions and memory.
+4. Click **Create sentinel**. The sentinel is **active** and you land in its own thread: tell it what to do in the composer. The pane on the right holds its status, triggers, instructions and notes.
 
 Creating a sentinel never turns a schedule on. No trigger exists until you add one under **Triggers** in the pane, and a trigger starts only after you review and turn it on.
 
 Sentinels run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Sentinel has a model, skills, instructions (`AGENTS.md`) and its own memory (`NOTES.md`), plus `handoffs/` and `reports/` folders.
+Each Sentinel has a model, skills, instructions (`AGENTS.md`) and its own notes (`NOTES.md`), plus `handoffs/` and `reports/` folders.
 
 ## One thread that never ends
 

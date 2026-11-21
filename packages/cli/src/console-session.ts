@@ -11,7 +11,6 @@ export function createLocalConsoleSession(
   dbPath?: string,
   options: ConsoleExecutionOptions = {},
 ): ConsoleSession {
-  config = { ...config, codebaseLearning: config.codebaseLearning ?? true };
   const isolated = createIsolatedConsoleSession(config, { ...options, dbPath });
   if (isolated) return isolated;
   return createHostLocalConsoleSession(config, dbPath, options);
@@ -39,7 +38,6 @@ export function createHostLocalConsoleSession(
     }
     const engineConfig: ConsoleSessionConfig = {
       ...config,
-      codebaseLearning: config.codebaseLearning ?? true,
       scanId,
       db,
       conversationHistory: config.conversationHistory ?? createConversationHistory(),

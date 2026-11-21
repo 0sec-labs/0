@@ -57,7 +57,7 @@ import { LIST_TOOLS_NAME, LOAD_TOOL_NAME, formatToolCatalog, formatLoadResult } 
 import { resolveFolderPath } from "./tools/folder-path.js";
 import { TOOL_DEFINITIONS } from "./tools/index.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
-import { memoryArgsSchema, nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
+import { nonEmptyString, buildOperatorQuestionRequest, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { resolveBashWallclockCeilingMs, runBashWithWallclock, buildStrReplaceMeta } from "./tools/exec-helpers.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult } from "./tools/verification.js";
 import { citedSourceHasKnownMarker } from "./tools/probe-helpers.js";
@@ -381,14 +381,6 @@ export class ToolExecutor {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
     }
-  }
-
-  private memoryTool(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.memory) return { success: false, output: null, error: "Memory is unavailable in this session" };
-    const parsed = memoryArgsSchema.safeParse(args);
-    if (!parsed.success) return { success: false, output: null, error: parsed.error.issues[0]?.message ?? "Invalid memory request" };
-    try { return { success: true, output: this.ctx.memory(parsed.data) }; }
-    catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
   }
 
   /**
@@ -2115,7 +2107,6 @@ export class ToolExecutor {
           consoleSession: this.ctx.consoleSession,
           workerPolicy,
           webSearchEnabled: this.ctx.webSearchEnabled,
-          codebaseLearning: false,
           workspaceRoot: this.ctx.workspaceRoot,
           skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
           skillAuthoring: this.ctx.skillAuthoring,
@@ -2279,7 +2270,6 @@ export class ToolExecutor {
         consoleSession: this.ctx.consoleSession,
         workerPolicy,
         webSearchEnabled: this.ctx.webSearchEnabled,
-        codebaseLearning: false,
         workspaceRoot: this.ctx.workspaceRoot,
         skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
         skillAuthoring: this.ctx.skillAuthoring,
@@ -3038,10 +3028,10 @@ export class ToolExecutor {
 
 // ── Helper: get tools for a specific agent role ──
 
-/** The one tool list every thread, child run and sentinel turn gets: all registered tools except `memory`, which the session adds when Memory is on. */
+/** The one tool list every thread, child run and sentinel turn gets: all registered tools. */
 export function getToolsForRole(opts?: { webSearchEnabled?: boolean }): ToolDefinition[] {
   const webSearch = opts?.webSearchEnabled ?? featureFlags.webSearch;
   return filterWorkflowAgentTools(Object.keys(TOOL_DEFINITIONS)
-    .filter((name) => name !== "memory" && (webSearch || name !== "web_search"))
+    .filter((name) => webSearch || name !== "web_search")
     .map((name) => TOOL_DEFINITIONS[name]));
 }
