@@ -818,6 +818,53 @@ Fetch and install the latest release binary for 0 (re-runs install.sh).
 
 ## Findings & evidence
 
+### sbom
+
+Generate an SBOM from lockfiles, and check one against known advisories
+
+```text
+0 sbom
+```
+
+Subcommands: [generate](#sbom-generate) · [check](#sbom-check).
+
+#### sbom generate
+
+Write a CycloneDX 1.5 SBOM from the lockfiles in a folder (npm, pnpm, yarn, Cargo, Go, Python)
+
+```text
+0 sbom generate [options] [folder]
+```
+
+Reads `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `Cargo.lock`, `go.mod`, `poetry.lock`, `Pipfile.lock` and pinned `requirements.txt` anywhere under the folder (skipping `node_modules`, build output and hidden folders). Nothing is installed or run; lockfiles are read as text. Components are identified by package URL, sorted and de-duplicated, so the same lockfiles give the same SBOM. A component is marked `excluded` only when every lockfile that lists it says it is development-only. A folder with no supported lockfile is an error (exit 2); for Maven, Gradle, NuGet or container images, generate the SBOM with syft or cdxgen instead.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `folder` | No | Folder to read lockfiles from |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `-o, --output <file>` | — | Write the SBOM to a file instead of stdout |
+| `--name <name>` | — | Name of the application the SBOM describes (default: the folder's name) |
+
+#### sbom check
+
+Look every component of an SBOM up in the public OSV database and list the advisories
+
+```text
+0 sbom check [options] <file>
+```
+
+Lists each advisory with its aliases, severity, the versions that fix it and a one-line summary, grouped by component. The only network use is the lookup at `https://api.osv.dev`: package URLs go out and nothing else does. Exit 0 when there are no advisories and 1 when there are, so a scheduled job can fail or open an issue.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | CycloneDX SBOM (JSON), for example from `0 sbom generate` |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--format <format>` | `text` | Output: text or json |
+
 ### findings
 
 Browse and manage persisted findings

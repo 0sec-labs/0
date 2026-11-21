@@ -57,3 +57,33 @@ Outputs: `sarif` (path of the file) and `exit-code` (0 done, 1 a finding at or a
 - **Use the default checkout.** On a pull request it checks out the merge commit, so comparing with the base branch gives exactly the change.
 - **Code scanning needs a supported plan.** On private repositories it is part of GitHub Code Security.
 - **Not a verdict.** Findings are what a model found and checked in the code; the report says what it covered. Treat a clean run as "nothing found", not "safe".
+
+## Keep an SBOM and watch it for new advisories
+
+An SBOM and a regular advisory check are what the EU Cyber Resilience Act expects a manufacturer to keep. A scheduled job can regenerate the SBOM from your lockfiles and fail when a component has a known advisory; the lookup uses the public OSV database.
+
+```yaml
+name: dependency advisories
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install 0
+        run: |
+          VERSION=0.41.0 # Pin the CLI
+          RELEASE_BASE_URL="https://github.com/0sec-labs/0security/releases/download/v${VERSION}" INSTALL_DIR="$RUNNER_TEMP/0" sh <(curl -fsSL "https://raw.githubusercontent.com/0sec-labs/0security/v${VERSION}/install.sh")
+          echo "$RUNNER_TEMP/0" >> "$GITHUB_PATH"
+      - run: 0 sbom generate . -o sbom.cdx.json
+      - run: 0 sbom check sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: sbom, path: sbom.cdx.json }
+```
+
+`0 sbom check` exits 1 when it finds an advisory, so the job fails and you are told. This produces evidence for your own records; it does not by itself make a product compliant.

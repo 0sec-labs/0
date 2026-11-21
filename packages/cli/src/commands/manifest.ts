@@ -21,6 +21,7 @@ export interface TopLevelCommand {
 /** Descriptions of the visible commands: the one copy the real groups and the root help share. */
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   scan: "Scan a folder or git repository for security bugs; prints the findings as a report",
+  sbom: "Generate an SBOM from lockfiles, and check one against known advisories",
   findings: "Browse findings and change their status",
   threads: "Start, follow and stop threads",
   sentinels: "Create, run and change Sentinels",
@@ -32,6 +33,7 @@ export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
 
 /** The only subcommands `--help` shows for each visible command. Everything else stays registered but hidden (see command-grammar.ts). */
 export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
+  sbom: ["generate", "check"],
   findings: ["list", "show", "update", "import", "fix"],
   threads: ["list", "show", "send", "start", "stop"],
   sentinels: ["list", "run", "set"],
@@ -43,6 +45,7 @@ export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = 
 
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: "scan", aliases: [], description: GROUP_DESCRIPTIONS["scan"]!, options: true, arguments: "<target>" },
+  { name: "sbom", aliases: [], description: GROUP_DESCRIPTIONS["sbom"]! },
   { name: "findings", aliases: [], description: GROUP_DESCRIPTIONS["findings"]!, options: true },
   { name: "threads", aliases: [], description: GROUP_DESCRIPTIONS["threads"]! },
   { name: "sentinels", aliases: [], description: GROUP_DESCRIPTIONS["sentinels"]! },

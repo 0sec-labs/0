@@ -12,6 +12,7 @@ Options:
 Work:
   scan [options] <target>  Scan a folder or git repository for security bugs; prints the findings as
                            a report
+  sbom                     Generate an SBOM from lockfiles, and check one against known advisories
   findings [options]       Browse findings and change their status
   threads                  Start, follow and stop threads
   sentinels                Create, run and change Sentinels
@@ -973,6 +974,46 @@ Show spend and tokens of the open threads, by model or by thread
 Options:
   --by <model|thread>  Group by model (default) or list each thread
   --format <format>    Output: text or json (choices: "text", "json")
+  -h, --help           display help for command
+
+### 0 sbom
+Usage: 0 sbom [options] [command]
+
+Generate an SBOM from lockfiles, and check one against known advisories
+
+Options:
+  -h, --help                   display help for command
+
+Commands:
+  generate [options] [folder]  Write a CycloneDX 1.5 SBOM from the lockfiles in a folder (npm, pnpm,
+                               yarn, Cargo, Go, Python)
+  check [options] <file>       Look every component of an SBOM up in the public OSV database and
+                               list the advisories
+  help [command]               display help for command
+
+### 0 sbom check
+Usage: 0 sbom check [options] <file>
+
+Look every component of an SBOM up in the public OSV database and list the advisories
+
+Arguments:
+  file               CycloneDX SBOM (JSON), for example from `0 sbom generate`
+
+Options:
+  --format <format>  Output: text or json (default: "text")
+  -h, --help         display help for command
+
+### 0 sbom generate
+Usage: 0 sbom generate [options] [folder]
+
+Write a CycloneDX 1.5 SBOM from the lockfiles in a folder (npm, pnpm, yarn, Cargo, Go, Python)
+
+Arguments:
+  folder               Folder to read lockfiles from (default: ".")
+
+Options:
+  -o, --output <file>  Write the SBOM to a file instead of stdout
+  --name <name>        Name of the application the SBOM describes (default: the folder's name)
   -h, --help           display help for command
 
 ### 0 scan

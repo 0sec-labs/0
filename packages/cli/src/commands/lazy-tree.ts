@@ -21,6 +21,10 @@ const SECTIONS: Readonly<Record<string, Build>> = {
     (await import("./scan.js")).registerScanCommand(root);
   },
 
+  async sbom(root) {
+    (await import("./sbom.js")).registerSbomCommand(root);
+  },
+
   async findings(root) {
     const [reports, findings, exportCommand, keys, importCommand, fix, upload] = await Promise.all([
       import("./reports.js"), import("./findings.js"), import("./findings-export.js"), import("./findings-keys.js"), import("./findings-import.js"), import("./fix.js"), import("./findings-upload.js"),

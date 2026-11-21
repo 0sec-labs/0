@@ -24,5 +24,6 @@ export { registerFindingsExportCommand } from "./findings-export.js";
 export { registerFindingsKeysCommand } from "./findings-keys.js";
 export { registerFindingsImportCommand } from "./findings-import.js";
 export { registerFixCommand } from "./fix.js";
+export { registerSbomCommand } from "./sbom.js";
 export { registerFindingsUploadCommand } from "./findings-upload.js";
 export { registerSkillsCommand } from "./skills.js";
