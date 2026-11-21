@@ -65,7 +65,8 @@
     "test:public-source-export": "node --test scripts/create-public-source-export.test.mjs",
     "export:public-source": "node scripts/create-public-source-export.mjs",
     "clean": "pnpm -r clean",
-    "dev:packages": "pnpm -r --parallel dev"
+    "dev:packages": "pnpm -r --parallel dev",
+    "verify": "node scripts/verify-local.mjs"
   },
   "keywords": [
     "security",
