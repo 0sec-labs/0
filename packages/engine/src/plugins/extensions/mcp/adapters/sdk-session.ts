@@ -28,10 +28,14 @@ export async function connectSdk(transport: Transport, options: SessionOptions =
   const close = () => client.close().catch(() => undefined);
   return {
     async tools(): Promise<McpToolInfo[]> {
-      const out: McpToolInfo[] = []; let cursor: string | undefined;
+      const out: McpToolInfo[] = []; const seen = new Set<string>(); let cursor: string | undefined;
       for (let page = 0; page < 10; page++) {
         const listed = await client.listTools(cursor ? { cursor } : undefined, { timeout: connectTimeout });
-        for (const t of listed.tools ?? []) out.push({ name: t.name, description: t.description ?? "", inputSchema: t.inputSchema, ...(t.annotations ? { annotations: t.annotations } : {}) });
+        for (const t of listed.tools ?? []) {
+          if (seen.has(t.name)) throw new Error("server advertised duplicate tool names");
+          seen.add(t.name);
+          out.push({ name: t.name, description: t.description ?? "", inputSchema: t.inputSchema, ...(t.annotations ? { annotations: t.annotations } : {}) });
+        }
         cursor = listed.nextCursor; if (!cursor) break;
       }
       return out;

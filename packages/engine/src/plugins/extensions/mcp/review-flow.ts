@@ -3,7 +3,7 @@ import type { McpOperatorChannel } from "../../../agent/mcp-host.js";
 import { approvalSummary, reviewReason } from "./core/approval-text.js";
 import { reviewTools, type ToolReview } from "./core/review.js";
 import { snapshotOf } from "./core/snapshot.js";
-import { hashTools, type McpToolInfo } from "./core/tool-hash.js";
+import { findDuplicateToolNames, hashTools, type McpToolInfo } from "./core/tool-hash.js";
 import type { McpPinStore, McpSnapshotStore } from "./ports.js";
 import type { Server } from "./server-state.js";
 
@@ -23,6 +23,8 @@ export async function reviewServer(deps: ReviewDeps, server: Server, tools: McpT
   const { ext, decl } = server;
   const approved = deps.pins.pins(ext.name, ext.revision)[decl.name]?.tools;
   const review = reviewTools(approved, tools);
+  // Duplicate tool names cannot be uniquely pinned or approved; fail closed without prompting.
+  if (findDuplicateToolNames(tools).length > 0) return { kind: "reviewed", review };
   if (!review.needsApproval || !deps.operator?.approve) return { kind: "reviewed", review };
   const current = snapshotOf(tools);
   const summary = approvalSummary({ extension: ext.name, server: decl.name, review, previous: deps.snapshots?.read(ext.name, ext.revision, decl.name), current, toolCount: tools.length });

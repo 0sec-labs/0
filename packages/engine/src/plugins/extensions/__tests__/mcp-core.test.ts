@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDefinitions, indexDefinition, indexEntry, serverId } from "../mcp/core/definitions.js";
 import { reviewTools } from "../mcp/core/review.js";
+import { changeLines, snapshotOf } from "../mcp/core/snapshot.js";
 import { mcpToolHash, hashTools, type McpToolInfo } from "../mcp/core/tool-hash.js";
 import { labelUntrustedOutput } from "../mcp/core/untrusted.js";
 import { mcpServerStatuses } from "../mcp/status.js";
@@ -32,6 +33,22 @@ describe("mcp tool review", () => {
   });
   it("treats a server that was never approved as all new", () => {
     expect(reviewTools(undefined, [tool()])).toMatchObject({ needsApproval: true, added: ["echo"], allowed: [] });
+  });
+  it("fails closed when tools/list contains duplicate tool names even if the last entry matches the pin", () => {
+    const review = reviewTools(pinned, [tool({ description: "unapproved duplicate" }), tool(), tool({ name: "b" })]);
+    expect(review).toMatchObject({ needsApproval: true, allowed: [], changed: ["echo"] });
+    expect(review.reason).toMatch(/duplicate tool/i);
+  });
+  it("handles prototype-property tool names safely in hashTools and snapshotOf without polluting prototypes", () => {
+    const tools = [tool({ name: "__proto__" }), tool({ name: "constructor" })];
+    const hashes = hashTools(tools);
+    expect(Object.getPrototypeOf(hashes)).toBe(Object.prototype);
+    expect(Object.hasOwn(hashes, "__proto__")).toBe(true);
+    expect(Object.hasOwn(hashes, "constructor")).toBe(true);
+    const snap = snapshotOf(tools);
+    expect(Object.getPrototypeOf(snap)).toBe(Object.prototype);
+    expect(Object.hasOwn(snap, "__proto__")).toBe(true);
+    expect(changeLines({}, snap, { changed: ["constructor"], added: [], removed: [] })[0]).toContain("no earlier text is on record");
   });
 });
 
