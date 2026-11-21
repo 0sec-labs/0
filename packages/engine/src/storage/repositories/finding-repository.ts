@@ -4,7 +4,7 @@ import { eq, desc, and, or } from "drizzle-orm";
 import type { Finding, FindingTriageStatus } from "../../shared/index.js";
 import * as schema from "../schema.js";
 import { findingStatuses, type FindingStatusDB } from "../schema.js";
-import { iterateLatestFindingMetadata, getFindingFamilyMetadata, selectFindingFamiliesByBusinessPriority, selectFindingsByBusinessPriority, type BusinessPriorityFindingOptions } from "../finding-priority.js";
+import { iterateLatestFindingMetadata, getFindingFamilyMetadata, selectFindingFamiliesBySeverity, selectFindingsBySeverity, type RankedFindingOptions } from "../finding-priority.js";
 import { buildFindingFingerprint, type PersistedFindingReviewFields, serializeFindingSourceVerification, serializeFindingVerificationResult, serializeFindingReviewAnnotation, restoreFindingReviewFields, deriveEvidenceFromPocSteps, normalizeWorkflowStatus, type WorkflowStatus } from "../finding-helpers.js";
 import { Repository } from "./base.js";
 
@@ -245,19 +245,19 @@ export class FindingRepository extends Repository {
 
 
   /** Globally rank current family assessments before the body/row limit. Historical review counts remain intact. */
-  listFindingFamiliesByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return selectFindingFamiliesByBusinessPriority(this.sqlite, opts);
+  listFindingFamiliesBySeverity(opts?: RankedFindingOptions) {
+    return selectFindingFamiliesBySeverity(this.sqlite, opts);
   }
 
 
   /** Bounded row-level native --all list; historical rows are independently ranked. */
-  listFindingsByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return selectFindingsByBusinessPriority(this.sqlite, opts);
+  listFindingsBySeverity(opts?: RankedFindingOptions) {
+    return selectFindingsBySeverity(this.sqlite, opts);
   }
 
 
   /** Uncapped paged metadata for exact cross-database latest-family merging; no evidence bodies. */
-  iterateLatestFindingMetadata(opts?: Omit<BusinessPriorityFindingOptions, "limit">) {
+  iterateLatestFindingMetadata(opts?: Omit<RankedFindingOptions, "limit">) {
     return iterateLatestFindingMetadata(this.sqlite, opts);
   }
 

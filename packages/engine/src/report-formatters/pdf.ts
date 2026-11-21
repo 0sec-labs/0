@@ -2,7 +2,7 @@
 import { createRequire } from "node:module";
 import { createWriteStream } from "node:fs";
 import type { ScanReport } from "../shared/index.js";
-import { compareFindingsByBusinessPriority } from "../shared/index.js";
+import { compareFindingsBySeverity } from "../shared/index.js";
 import type PDFDocumentType from "pdfkit";
 import { findingPresentation, targetLabel, reportDate } from "./presentation.js";
 
@@ -18,7 +18,7 @@ export async function generatePdfReport(report: ScanReport, outputPath: string):
   const stream = createWriteStream(outputPath);
   const done = new Promise<void>((resolve, reject) => { stream.on("finish", resolve); stream.on("error", reject); doc.on("error", reject); });
   doc.pipe(stream);
-  const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
+  const sorted = [...report.findings].sort(compareFindingsBySeverity);
   function text(value: string, size = 11, color = "#4d4d57", bold = false): void {
     doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).fillColor(color).text(plain(value), M, doc.y, { width: W, lineGap: 3 });
   }

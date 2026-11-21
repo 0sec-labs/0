@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/engine/shared";
+import { describeAttackerImpact, compareFindingsBySeverity } from "@0/engine/shared";
 import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/engine/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 import {
@@ -164,12 +164,12 @@ function priorityFinding(row: PriorityRow) {
   return { severity: row.severity, cvssScore: row.cvssScore, impactAssessment };
 }
 function compareRows(a: PriorityRow, b: PriorityRow): number {
-  return compareFindingsByBusinessPriority(priorityFinding(a), priorityFinding(b)) || b.timestamp - a.timestamp || b.id.localeCompare(a.id);
+  return compareFindingsBySeverity(priorityFinding(a), priorityFinding(b)) || b.timestamp - a.timestamp || b.id.localeCompare(a.id);
 }
 function renderPriority(row: FindingRow): void {
-  const priority = getFindingPriority(priorityFinding(row));
-  console.log(`  ${chalk.white.bold(`Business priority: ${priority.label}`)} ${chalk.white(row.title)}`);
-  console.log(`  ${chalk.gray("Business impact rationale:")} ${priority.rationale}`);
+  console.log(`  ${chalk.white.bold(row.title)}`);
+  const attacker = describeAttackerImpact(priorityFinding(row));
+  if (attacker) console.log(`  ${chalk.gray("What an attacker can do:")} ${attacker.can}`);
   console.log(`  ${chalk.gray("Technical severity:")} ${severityColor(row.severity)(row.severity)}${row.cvssScore != null ? `  CVSS: ${row.cvssScore}` : ""}${row.cvssVector ? `  CVSS vector: ${row.cvssVector}` : ""}  ${statusColor(row.status)(row.status)}  ${triageColor(row.triageStatus)(String(row.triageStatus ?? "new"))}`);
 }
 
@@ -203,8 +203,8 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
     for (const dbPath of dbPaths) {
       const db = new osecDB(dbPath);
       try {
-        if (opts.all) rows.push(...db.listFindingsByBusinessPriority({ ...filters, limit }) as FindingRow[]);
-        else for (const family of db.listFindingFamiliesByBusinessPriority({ ...filters, limit })) groups.push({ fingerprint: family.key, latest: family.latest as FindingRow, count: family.count, scans: family.scanCount });
+        if (opts.all) rows.push(...db.listFindingsBySeverity({ ...filters, limit }) as FindingRow[]);
+        else for (const family of db.listFindingFamiliesBySeverity({ ...filters, limit })) groups.push({ fingerprint: family.key, latest: family.latest as FindingRow, count: family.count, scans: family.scanCount });
       } finally { db.close(); }
     }
   }

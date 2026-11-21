@@ -1,4 +1,4 @@
-import { ImpactAssessmentSchema, compareFindingsByBusinessPriority, getFindingPriority, type Finding, type ImpactAssessment } from "@0/engine/shared";
+import { ImpactAssessmentSchema, compareFindingsBySeverity, type Finding, type ImpactAssessment } from "@0/engine/shared";
 import type { NativeRuntime } from "@0/engine";
 import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
@@ -142,15 +142,11 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
         scans: new Set(sorted.map((item) => item.scanId)).size,
       };
     })
-    .sort((a, b) => compareFindingRowsByBusinessPriority(a.latest, b.latest));
+    .sort((a, b) => compareFindingRowsBySeverity(a.latest, b.latest));
 }
 
-export function findingRowPriority(row: FindingsRow) {
-  return getFindingPriority({ severity: row.severity, impactAssessment: parseJsonColumn(row.impactAssessment) });
-}
-
-export function compareFindingRowsByBusinessPriority(a: FindingsRow, b: FindingsRow): number {
-  return compareFindingsByBusinessPriority(
+export function compareFindingRowsBySeverity(a: FindingsRow, b: FindingsRow): number {
+  return compareFindingsBySeverity(
     { severity: a.severity, cvssScore: a.cvssScore ?? undefined, impactAssessment: parseJsonColumn(a.impactAssessment) },
     { severity: b.severity, cvssScore: b.cvssScore ?? undefined, impactAssessment: parseJsonColumn(b.impactAssessment) },
   ) || b.timestamp - a.timestamp;

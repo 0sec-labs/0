@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { getFindingPriority } from "@0/engine/shared/finding-priority";
+import { attackerImpactSentence } from "@0/engine/shared/attacker-impact";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import type { DashboardResponse, FindingGroup } from "@/types";
@@ -11,7 +11,7 @@ import {
 /** What the list remembers while a finding's own page is open, so Back lands on the same search, scroll position and row. */
 export const listMemory: { search: string; scrollTop: number; lastOpened: string | null } = { search: "", scrollTop: 0, lastOpened: null };
 
-const searchExtra = (group: FindingGroup) => { const priority = getFindingPriority(group.latest); return `${priority.label} ${priority.rationale}`; };
+const searchExtra = (group: FindingGroup) => attackerImpactSentence(group.latest) ?? "";
 
 /** The persisted view (tabs, filters, grouping) and the findings it shows, in display order. Shared by the list and by a finding's page (previous/next). */
 export function useFindingsView(dashboard: DashboardResponse, search: string) {

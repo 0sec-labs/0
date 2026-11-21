@@ -41,6 +41,7 @@ on the GitHub Release tag.
 
 ### Removed
 
+- Business priority: every finding read "Not assessed" because a scan cannot know a business, so the label, its sort order, the rationale line, the SARIF `businessPriority*` properties and the "Edit business impact" form are gone. Findings are ordered by technical severity, then CVSS, and show what an attacker can do instead.
 - Memory: the model-written notes shared across threads, with its `memory` tool, the Memory page, `0 memory`, the `/memory` routes and the hidden `0 findings triage` commands that wrote to it. Operator instructions (`~/.0/AGENTS.md` and the per-workspace file) are the one place you write context for every thread, a Sentinel keeps its own `NOTES.md`, and why a finding is a false positive stays with the finding (`0 findings update --status false-positive --note ...`). Notes already in `~/.0/memory` are left on disk and no longer read.
 - About 27,000 lines of engine code that nothing used: ten unfinished engines (mobile, recon, attack, emit, h1, cve, protocol, specdrift, adgraph, xnu-fuzz), old scanners and helpers, the old runners, the attack-template loader, the red-team harness and its `0-llm` bin, the core/full build edition, and the matching package exports (`./identity`, `./adgraph`, `./xnu-fuzz`, `./kernel`, `./templates`, `./redteam`).
 - `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.

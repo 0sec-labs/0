@@ -1,5 +1,5 @@
 // Pure merge of per-database family snapshots into one Findings view. No I/O, no database handles.
-import { compareFindingsByBusinessPriority, getFindingPriority } from "../../shared/index.js";
+import { compareFindingsBySeverity } from "../../shared/index.js";
 import type { FindingFamilyPrioritySummary } from "../finding-priority.js";
 import type { FamilyOwner, FindingProvenance, FindingRow, MergedFamily, ScanRow, SourceRef, SourceSnapshot } from "./types.js";
 
@@ -9,12 +9,11 @@ function assessment(row: FindingRow): unknown {
   try { return row.impactAssessment ? JSON.parse(row.impactAssessment) : undefined; } catch { return undefined; }
 }
 
-/** Same order as a single database ranks its families: business priority, then recency. */
+/** Same order as a single database ranks its families: severity, then recency. */
 export function compareFamilies(a: FindingFamilyPrioritySummary, b: FindingFamilyPrioritySummary): number {
-  const rank = (row: FindingRow) => getFindingPriority({ impactAssessment: assessment(row) as never }).rank;
   const left = { severity: a.latest.severity, cvssScore: a.latest.cvssScore, impactAssessment: assessment(a.latest) as never };
   const right = { severity: b.latest.severity, cvssScore: b.latest.cvssScore, impactAssessment: assessment(b.latest) as never };
-  return rank(b.latest) - rank(a.latest) || compareFindingsByBusinessPriority(left, right)
+  return compareFindingsBySeverity(left, right)
     || b.latest.timestamp - a.latest.timestamp || b.latest.id.localeCompare(a.latest.id);
 }
 

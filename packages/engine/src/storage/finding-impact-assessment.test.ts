@@ -9,15 +9,13 @@ function fixture() {
   return db;
 }
 describe("finding impact metadata persistence", () => {
-  it("changes the business-priority queue after an operator assessment and clear", () => {
+  it("does not let an assessment change the order of the queue", () => {
     const db = fixture();
     try {
-      db.saveFinding("scan", { id: "technical-critical", templateId: "critical-test", title: "Critical technical issue", description: "Different evidence", severity: "critical", category: "other", status: "discovered", evidence: { request: "GET /development HTTP/1.1", response: "Crash" }, timestamp: Date.now() } as Finding);
-      expect(db.listFindingsByBusinessPriority({ limit: 1 })[0]?.id).toBe("technical-critical");
+      db.saveFinding("scan", { id: "technical-critical", templateId: "critical-test", title: "Critical technical issue", description: "Different evidence", severity: "critical", category: "other", status: "verified", evidence: { request: "r", response: "r" }, timestamp: 2 } as Finding);
+      expect(db.listFindingsBySeverity({ limit: 1 })[0]?.id).toBe("technical-critical");
       db.updateFindingImpactAssessment("finding", assessment);
-      expect(db.listFindingsByBusinessPriority({ limit: 1 })[0]?.id).toBe("finding");
-      db.updateFindingImpactAssessment("finding", null);
-      expect(db.listFindingsByBusinessPriority({ limit: 1 })[0]?.id).toBe("technical-critical");
+      expect(db.listFindingsBySeverity({ limit: 1 })[0]?.id).toBe("technical-critical");
     } finally { db.close(); }
   });
   it("updates and clears only impact assessment, preserving technical evidence and gates", () => {

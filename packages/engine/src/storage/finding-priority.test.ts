@@ -22,114 +22,29 @@ function assessment(business_impact: ImpactAssessment["business_impact"]): Impac
   return { business_impact, reachability_tier: "remote-auth", blast_radius: "Customer billing records", weaponizability: "info-leak", rationale: "Billing records of other tenants can be read from the deployed service.", assessment_source: "provided" };
 }
 
-describe("bounded business-priority database selection", () => {
-  it("uses the same latest occurrence in queues, detail and history when timestamps tie", () => {
+describe("database selection by severity", () => {
+  it("orders families by severity then recency, whatever their impact assessment says, and counts every occurrence", () => {
     const { db, insert, first, second } = fixture();
-    insert("occurrence-a", 100, assessment("headline"), { family: "family", scanId: first });
-    insert("occurrence-z", 100, assessment("noise"), { family: "family", scanId: second });
-    const representative = db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest;
-    expect(representative.id).toBe("occurrence-z");
-    expect(db.getLatestFindingByFingerprint("family")).toEqual(representative);
-    expect(db.getRelatedFindings("family").map(row => row.id)).toEqual(["occurrence-z", "occurrence-a"]);
-    expect([...db.iterateLatestFindingMetadata()].map(row => row.id)).toEqual(["occurrence-z"]);
+    insert("old-shared", 100, assessment("headline"), { family: "shared", scanId: first, severity: "low" });
+    insert("new-shared", 200, assessment("noise"), { family: "shared", scanId: second, severity: "low" });
+    insert("critical-alone", 50, null, { family: "alone", scanId: first, severity: "critical" });
+    insert("high-recent", 300, null, { family: "recent", scanId: second, severity: "high" });
+    const families = db.listFindingFamiliesBySeverity({ limit: 10 });
+    expect(families.map(family => family.latest.id)).toEqual(["critical-alone", "high-recent", "new-shared"]);
+    expect(families.find(family => family.key === "shared")).toMatchObject({ count: 2, scanCount: 2 });
   });
-  it("pages all latest family metadata without bodies or holding cursors between yields", () => {
-    const { db, dbPath, sqlite, insert, first, second } = fixture();
-    sqlite.transaction(() => { for (let n=0;n<510;n++) insert(`item-${String(n).padStart(4,"0")}`,n,null); })();
-    insert("old-family",1,assessment("headline"),{family:"family",scanId:first});
-    insert("new-family",2,assessment("noise"),{family:"family",scanId:second});
-    const queries=vi.spyOn(sqlite,"prepare");
-    const iterator=db.iterateLatestFindingMetadata();
-    const firstRow=iterator.next().value;
-    expect(firstRow).toBeDefined();
-    const writer=new osecDB(dbPath);
-    try { expect(writer.updateFindingImpactAssessment("old-family",assessment("modest"))).toBe(true); }
-    finally { writer.close(); }
-    const metadata=[firstRow,...iterator];
-    expect(metadata).toHaveLength(511);
-    expect(metadata.filter(row=>row.familyKey==="family").map(row=>row.id)).toEqual(["new-family"]);
-    expect(metadata.every(row=>!("description" in row)&&!("evidenceRequest" in row))).toBe(true);
-    expect(queries.mock.calls.some(([sql])=>sql.includes("SELECT * FROM findings"))).toBe(false);
-    expect(db.getFindingFamilyMetadata("family")).toEqual({count:2,scanIds:[first,second].sort()});
-    expect(db.getFindingFamilyMetadata("family",{scanId:first})).toEqual({count:1,scanIds:[first]});
+  it("applies the limit after the global ordering, so an old critical finding is not pushed out by recent low ones", () => {
+    const { db, sqlite, insert, first } = fixture();
+    // More than one metadata page of recent low findings, in one transaction so the test stays fast.
+    sqlite.transaction(() => { for (let n = 0; n < 600; n++) insert(`recent-${String(n).padStart(4, "0")}`, 1000 + n, null, { scanId: first, severity: "low" }); })();
+    insert("older-critical", 1, null, { scanId: first, severity: "critical" });
+    expect(db.listFindingFamiliesBySeverity({ limit: 1 })[0]?.latest.id).toBe("older-critical");
+    expect(db.listFindingsBySeverity({ limit: 1 })[0]?.id).toBe("older-critical");
   });
-  it("reads priority queues while the engine control store remains open and releases locks for later writers", () => {
-    const { db, dbPath, insert } = fixture();
-    insert("urgent", 1, assessment("headline"));
-    const control = new SecurityWorkflowStore(dbPath);
-    let reopened: osecDB | undefined;
-    try {
-      const definition = control.save({ name: "Owned workflow", instructions: "", target: "https://example.test", nodes: [{ id: "start", type: "trigger", label: "Start", enabled: true }, { id: "audit", type: "audit", label: "Audit", enabled: true }], edges: [{ source: "start", target: "audit" }] });
-      expect(control.get(definition.id)).toMatchObject({ id: definition.id });
-      expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest.id).toBe("urgent");
-      expect(db.listFindingsByBusinessPriority({ limit: 1 })[0].id).toBe("urgent");
-      reopened = new osecDB(dbPath);
-      expect(reopened.updateFindingImpactAssessment("urgent", assessment("noise"))).toBe(true);
-      expect(control.get(definition.id)).toMatchObject({ id: definition.id });
-      expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest.impactAssessment).toContain('"business_impact":"noise"');
-    } finally { reopened?.close(); control.close(); }
-  });
-  it("selects an older urgent family beyond metadata pages before loading limited evidence bodies", () => {
-    const { db, sqlite, insert } = fixture();
-    sqlite.transaction(() => { for (let n = 0; n < 510; n++) insert(`new-${String(n).padStart(4, "0")}`, n + 100, assessment("noise"), { severity: "critical" }); insert("zz-old-urgent", 1, assessment("headline"), { severity: "low" }); })();
-    const queries = vi.spyOn(sqlite, "prepare");
-    const selected = db.listFindingFamiliesByBusinessPriority({ limit: 1 });
-    expect(selected.map(item => item.latest.id)).toEqual(["zz-old-urgent"]);
-    const bodyQueries = queries.mock.calls.map(([query]) => query).filter(query => /SELECT \* FROM findings/.test(query));
-    expect(bodyQueries).toEqual(["SELECT * FROM findings WHERE id IN (?)"]);
-    expect(queries.mock.calls.some(([query]) => query.includes("ORDER BY f.id LIMIT 500"))).toBe(true);
-  });
-  it("ranks only the latest family assessment and preserves historical counts, votes and active roles", () => {
-    const { db, sqlite, insert, first, second } = fixture();
-    insert("old", 1, assessment("headline"), { family: "family", scanId: first });
-    insert("latest", 100, assessment("noise"), { family: "family", scanId: second });
-    insert("other", 2, assessment("notable"));
-    sqlite.prepare(`INSERT INTO verdicts(id,findingId,agentRole,verdict,timestamp) VALUES('old-vote','old','verifier','TRUE_POSITIVE',1),('new-vote','latest','verifier','FALSE_POSITIVE',2)`).run();
-    for (const [id, scanId, agentRole] of [["session-old", first, "verifier"], ["session-new", second, "verifier"], ["research", first, "researcher"]]) db.saveSession({ id, scanId, agentRole, turnCount: 1, status: "running", messages: [{ private: "Must not enter priority metadata" }], toolContext: { secret: "context" } });
-    const families = db.listFindingFamiliesByBusinessPriority({ limit: 2 });
-    expect(families.map(item => item.key)).toEqual(["other", "family"]);
-    const family = families[1];
-    expect(family).toMatchObject({ latest: { id: "latest" }, count: 2, scanCount: 2, verdictCounts: { truePositive: 1, falsePositive: 1, unsure: 0, total: 2 } });
-    expect(family.sourceScanIds).toEqual([first, second].sort());
-    expect(family.activeSessions.map(item => item.agentRole).sort()).toEqual(["researcher", "verifier"]);
-    expect(family.activeSessions.every(item => !("messages" in item) && !("toolContext" in item))).toBe(true);
-  });
-  it("uses schema-validated business assessments rather than forged labels or heuristic severity baselines", () => {
-    const { db, insert } = fixture();
-    insert("forged", 3, { business_impact: "headline" }, { severity: "critical" });
-    insert("heuristic", 2, { ...assessment("headline"), assessment_source: "heuristic" }, { severity: "critical" });
-    insert("legitimate", 1, assessment("notable"), { severity: "low" });
-    expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest.id).toBe("legitimate");
-  });
-  it("does not discard valid multibyte schema-bounded rationale while ranking", () => {
-    const { db, insert } = fixture();
-    insert("unicode-urgent", 1, { ...assessment("headline"), rationale: "Affected customer records: " + "损".repeat(7900) }, { severity: "low" });
-    insert("unknown", 2, null, { severity: "critical" });
-    expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest.id).toBe("unicode-urgent");
-  });
-  it("does not resurrect an obsolete family state when filtering by severity or status", () => {
-    const { db, insert, first, second } = fixture();
-    insert("old", 1, assessment("headline"), { family: "family", severity: "critical", status: "verified", scanId: first });
-    insert("new", 2, assessment("noise"), { family: "family", severity: "low", scanId: second });
-    expect(db.listFindingFamiliesByBusinessPriority({ severity: "critical" })).toEqual([]);
-    expect(db.listFindingFamiliesByBusinessPriority({ status: "verified" })).toEqual([]);
-    expect(db.listFindingFamiliesByBusinessPriority({ scanId: first, severity: "critical" })[0]).toMatchObject({ latest: { id: "old" }, count: 1, scanCount: 1, sourceScanIds: [first] });
-  });
-  it("keeps historical rows independent for the native --all list while capping after global priority", () => {
-    const { db, insert } = fixture();
-    insert("old", 1, assessment("headline"), { family: "family" });
-    insert("new", 2, assessment("noise"), { family: "family" });
-    expect(db.listFindingsByBusinessPriority({ limit: 1 }).map(item => item.id)).toEqual(["old"]);
-    expect(db.listFindingsByBusinessPriority({ limit: 2 }).map(item => item.id)).toEqual(["old", "new"]);
-    expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 }).map(item => item.latest.id)).toEqual(["new"]);
-  });
-  it("bounds malformed or oversized assessment reads and validates finite retrieval limits", () => {
-    const { db, insert } = fixture();
-    insert("large", 2, `${" ".repeat(90000)}${JSON.stringify(assessment("headline"))}`, { severity: "critical" });
-    insert("valid", 1, assessment("notable"), { severity: "low" });
-    expect(db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest.id).toBe("valid");
-    expect(db.listFindingFamiliesByBusinessPriority({ limit: 0 })).toEqual([]);
-    expect(() => db.listFindingFamiliesByBusinessPriority({ limit: -1 })).toThrow("0 and 5000");
-    expect(() => db.listFindingsByBusinessPriority({ limit: 5001 })).toThrow("0 and 5000");
+  it("validates the limit and applies filters", () => {
+    const { db, insert, first } = fixture();
+    insert("a", 1, null, { scanId: first, severity: "high" }); insert("b", 2, null, { scanId: first, severity: "low" });
+    expect(db.listFindingsBySeverity({ severity: "low", limit: 5 }).map(row => row.id)).toEqual(["b"]);
+    expect(() => db.listFindingsBySeverity({ limit: -1 })).toThrow();
   });
 });

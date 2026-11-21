@@ -26,7 +26,7 @@ export class SqliteFindingsSource implements FindingsSource {
   async read(): Promise<SourceSnapshot> {
     try {
       return await this.withDatabase("read", db => ({
-        families: db.listFindingFamiliesByBusinessPriority({ limit: this.options.familyLimit ?? 1000 }),
+        families: db.listFindingFamiliesBySeverity({ limit: this.options.familyLimit ?? 1000 }),
         scans: db.listScans(100),
       }));
     } catch {

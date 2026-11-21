@@ -22,7 +22,7 @@ import type {
 } from "../shared/index.js";
 import { randomUUID } from "node:crypto";
 import type { FindingStatusDB } from "./schema.js";
-import type { BusinessPriorityFindingOptions } from "./finding-priority.js";
+import type { RankedFindingOptions } from "./finding-priority.js";
 import {
   resolveOsecDbPath,
   resetOsecDatabase,
@@ -244,17 +244,17 @@ export class osecDB {
   }
 
   /** Globally rank current family assessments before the body/row limit. Historical review counts remain intact. */
-  listFindingFamiliesByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return this.repos.findings.listFindingFamiliesByBusinessPriority(opts);
+  listFindingFamiliesBySeverity(opts?: RankedFindingOptions) {
+    return this.repos.findings.listFindingFamiliesBySeverity(opts);
   }
 
   /** Bounded row-level native --all list; historical rows are independently ranked. */
-  listFindingsByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return this.repos.findings.listFindingsByBusinessPriority(opts);
+  listFindingsBySeverity(opts?: RankedFindingOptions) {
+    return this.repos.findings.listFindingsBySeverity(opts);
   }
 
   /** Uncapped paged metadata for exact cross-database latest-family merging; no evidence bodies. */
-  iterateLatestFindingMetadata(opts?: Omit<BusinessPriorityFindingOptions, "limit">) {
+  iterateLatestFindingMetadata(opts?: Omit<RankedFindingOptions, "limit">) {
     return this.repos.findings.iterateLatestFindingMetadata(opts);
   }
 

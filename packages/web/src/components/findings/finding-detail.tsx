@@ -2,11 +2,10 @@ import { queryKeys } from "@/queries";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getFindingPriority } from "@0/engine/shared/finding-priority";
+import { describeAttackerImpact } from "@0/engine/shared/attacker-impact";
 import { ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
 import { CapyChevronDownIcon as ChevronDown, CapyCopyIcon as Copy, CapyChatIcon as MessageSquare, CapyUserIcon as User } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
-import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { ErrorState } from "@/components/state-panel";
 import { NotFound } from "@/ui/components/not-found";
 import { Button } from "@/components/ui/button";
@@ -88,7 +87,6 @@ export function FindingDetail(props: FindingDetailProps) {
           <section aria-label="Review" className="flex max-w-4xl flex-col gap-3">
             <SectionLabel>Review</SectionLabel>
             <ReviewControls key={fingerprint} fingerprint={fingerprint} initialNote={latest.triageNote ?? ""} triageStatus={latest.triageStatus} saving={saving} mutations={mutations} />
-            <FindingImpactEditor key={latest.id} finding={latest} />
             {mutationError ? <ErrorState error={mutationError} /> : null}
           </section>
 
@@ -139,7 +137,7 @@ function Properties({ group, family, latest, workflow, status, fingerprint, miss
   status: FindingStatus;
 }) {
   const severity = normalizeSeverity(latest.severity);
-  const priority = getFindingPriority(latest);
+  const attacker = describeAttackerImpact(latest);
   const firstSeen = family?.rows.length ? Math.min(...family.rows.map(row => row.timestamp)) : null;
   const confidence = typeof latest.confidence === "number" && Number.isFinite(latest.confidence) ? Math.round(latest.confidence <= 1 ? latest.confidence * 100 : latest.confidence) : null;
   const count = group?.count ?? family?.rows.length ?? 1;
@@ -175,7 +173,9 @@ function Properties({ group, family, latest, workflow, status, fingerprint, miss
           </span>
         </Tooltip>
       </Prop>
-      <Prop label="Business impact"><span className="px-2">{priority.label}</span></Prop>
+      {attacker ? <Prop label="What an attacker can do"><span className="px-2">{attacker.can}</span></Prop> : null}
+      {attacker ? <Prop label="Who can do it"><span className="px-2">{attacker.who}</span></Prop> : null}
+      {attacker ? <Prop label="What they get"><span className="px-2">{attacker.gets}</span></Prop> : null}
       <Prop label="Category"><span className="min-w-0 truncate px-2">{latest.category || "Uncategorized"}</span></Prop>
       {confidence !== null ? <Prop label="Confidence"><span className="px-2 tabular-nums">{confidence}%</span></Prop> : null}
       {sourceLabel ? <Prop label="Source"><span className="min-w-0 truncate px-2">{sourceLabel}</span></Prop> : null}

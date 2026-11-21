@@ -1,4 +1,4 @@
-import { describeAttackerImpact, getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
+import { describeAttackerImpact, compareFindingsBySeverity } from "../shared/index.js";
 import type { ScanReport, Finding, FindingRemediation, PocStep } from "../shared/index.js";
 
 /**
@@ -39,10 +39,6 @@ export function formatMarkdown(report: ScanReport): string {
   lines.push("");
   if (report.summary.totalAttacks > 0) lines.push(`- **Attacks:** ${report.summary.totalAttacks}`);
   lines.push(`- **Findings:** ${report.summary.totalFindings}`);
-  for (const label of ["Urgent", "High", "Moderate", "Low", "Not assessed"]) {
-    const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length;
-    if (count) lines.push(`- **Business priority — ${label}:** ${count}`);
-  }
   lines.push("", "### Technical severity", "");
   if (report.summary.critical > 0)
     lines.push(`- **Critical:** ${report.summary.critical}`);
@@ -76,7 +72,7 @@ export function formatMarkdown(report: ScanReport): string {
   if (report.findings.length > 0) {
     lines.push("## Findings");
     lines.push("");
-    for (const finding of [...report.findings].sort(compareFindingsByBusinessPriority)) {
+    for (const finding of [...report.findings].sort(compareFindingsBySeverity)) {
       lines.push(formatFinding(finding));
     }
   } else {
@@ -198,12 +194,9 @@ function reproductionSection(steps: PocStep[]): string[] {
 
 function formatFinding(finding: Finding): string {
   const lines: string[] = [];
-  const priority = getFindingPriority(finding);
 
-  lines.push(`### [${priority.label}] ${finding.title}`);
+  lines.push(`### ${finding.title}`);
   lines.push("");
-  lines.push(`- **Business priority:** ${priority.label}`);
-  lines.push(`- **Business impact rationale:** ${priority.rationale}`);
   const attacker = describeAttackerImpact(finding);
   if (attacker) {
     lines.push(`- **What an attacker can do:** ${attacker.can}`);

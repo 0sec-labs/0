@@ -1,5 +1,5 @@
 import type { ScanReport, Finding, Severity } from "../shared/index.js";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
+import { describeAttackerImpact, compareFindingsBySeverity } from "../shared/index.js";
 import { findingPresentation, targetLabel, reportDate } from "./presentation.js";
 import { renderOverview, type ReportWithOverview } from "./overview.js";
 
@@ -9,7 +9,7 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function renderFinding(f: Finding, i: number, deploymentNote?: string): string {
-  const e = escapeHtml, copy = findingPresentation(f), priority = getFindingPriority(f);
+  const e = escapeHtml, copy = findingPresentation(f), attacker = describeAttackerImpact(f);
   const structured = (label: string, value: unknown): string => value != null ? `<section class="content-section"><details class="source-title"><summary>${label}</summary><pre>${e(JSON.stringify(value, null, 2))}</pre></details></section>` : "";
   const block = (label: string, value: string | undefined, code = false): string => value ? `<section class="content-section"><h3>${label}</h3>${code ? `<pre><code>${e(value)}</code></pre>` : `<div class="prose">${e(value)}</div>`}</section>` : "";
   return `<article class="finding" id="finding-${i + 1}" data-index="${i}">
@@ -26,8 +26,8 @@ function renderFinding(f: Finding, i: number, deploymentNote?: string): string {
       ${!f.description && !f.evidence.analysis ? '<p class="empty-note">No additional narrative was recorded. See the evidence for source references.</p>' : ""}
     </div>
     <div class="tab-panel" data-panel="evidence">${block("Request / reproduction", f.evidence.request, true)}${block("Response / source evidence", f.evidence.response, true)}${structured("Reproduction steps",f.pocSteps)}${structured("Verification contract",f.verificationSpec)}${structured("Source verification",f.sourceVerification)}${structured("Reproduction result",f.pocExecution)}${structured("Replay verification",f.verification_result)}${structured("Source annotation",f.reviewAnnotation)}${structured("Remediation details",f.remediation)}${!f.evidence.request && !f.evidence.response ? '<p class="empty-note">No request or response evidence was recorded.</p>' : ""}</div>
-    <div class="tab-panel" data-panel="assessment"><section class="content-section"><h3>Assessment</h3><dl class="facts"><div><dt>Technical severity</dt><dd>${f.severity}</dd></div><div><dt>Status</dt><dd>${e(f.status)}</dd></div><div><dt>Business priority</dt><dd>${e(priority.label)}</dd></div>${f.confidence != null ? `<div><dt>Confidence</dt><dd>${Math.round(f.confidence * 100)}%</dd></div>` : ""}${f.cvssScore != null ? `<div><dt>CVSS</dt><dd>${f.cvssScore.toFixed(1)}</dd></div>` : ""}</dl></section>
-      ${block("Business impact rationale", priority.rationale)}
+    <div class="tab-panel" data-panel="assessment"><section class="content-section"><h3>Assessment</h3><dl class="facts"><div><dt>Technical severity</dt><dd>${f.severity}</dd></div><div><dt>Status</dt><dd>${e(f.status)}</dd></div>${f.confidence != null ? `<div><dt>Confidence</dt><dd>${Math.round(f.confidence * 100)}%</dd></div>` : ""}${f.cvssScore != null ? `<div><dt>CVSS</dt><dd>${f.cvssScore.toFixed(1)}</dd></div>` : ""}</dl></section>
+      ${attacker ? `<section class="content-section"><h3>What an attacker can do</h3><div class="narrative"><p>${e(attacker.can)}</p></div><dl class="facts"><div><dt>Who can do it</dt><dd>${e(attacker.who)}</dd></div><div><dt>What they get</dt><dd>${e(attacker.gets)}</dd></div></dl></section>` : ""}
       ${f.impactAssessment ? `<section class="content-section"><h3>Impact assessment</h3><dl class="impact">${Object.entries(f.impactAssessment).map(([key,value])=>`<div><dt>${e(key.replace(/_/g," "))}</dt><dd>${e(String(value))}</dd></div>`).join("")}</dl></section>` : ""}
       ${f.cvssVector ? block("CVSS vector",f.cvssVector,true) : ""}
       <section class="content-section"><h3>Finding reference</h3><code class="reference">${e(f.id)}</code></section>
@@ -35,7 +35,7 @@ function renderFinding(f: Finding, i: number, deploymentNote?: string): string {
   </article>`;
 }
 export function formatHtml(report: ReportWithOverview): string {
-  const e = escapeHtml, sorted = [...report.findings].sort(compareFindingsByBusinessPriority), target = targetLabel(report.target);
+  const e = escapeHtml, sorted = [...report.findings].sort(compareFindingsBySeverity), target = targetLabel(report.target);
   // Keep human-provided target text available without exposing local checkout paths.
   const targetReference = report.target.startsWith("/") || report.target.startsWith("\\") || /^(?:[a-z]:|https?:\/\/)/i.test(report.target) ? target : report.target;
   // Escape '<' so source evidence cannot terminate the inert JSON script element.

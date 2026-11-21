@@ -145,10 +145,10 @@ vi.mock("@0/engine/storage", () => {
       if (opts?.triageStatus) out = out.filter((r) => r.triageStatus === opts.triageStatus);
       return out;
     }
-    listFindingsByBusinessPriority(opts?: Parameters<FakeOsecDB["listFindings"]>[0]): FakeFindingRow[] {
+    listFindingsBySeverity(opts?: Parameters<FakeOsecDB["listFindings"]>[0]): FakeFindingRow[] {
       return this.listFindings(opts).slice(0, opts?.limit ?? 100);
     }
-    listFindingFamiliesByBusinessPriority(opts?: Parameters<FakeOsecDB["listFindings"]>[0]) {
+    listFindingFamiliesBySeverity(opts?: Parameters<FakeOsecDB["listFindings"]>[0]) {
       const groups = new Map<string, FakeFindingRow[]>();
       for (const row of this.listFindings(opts)) { const key = row.fingerprint ?? row.id; groups.set(key, [...groups.get(key) ?? [], row]); }
       return [...groups.entries()].map(([key, rows]) => ({ key, latest: [...rows].sort((a, b) => b.timestamp - a.timestamp)[0]!, count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size })).slice(0, opts?.limit ?? 100);

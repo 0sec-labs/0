@@ -1,5 +1,5 @@
 import { posix, win32 } from "node:path";
-import { attackerImpactSentence, getFindingPriority, compareFindingsByBusinessPriority } from "../shared/index.js";
+import { attackerImpactSentence, compareFindingsBySeverity } from "../shared/index.js";
 import type { PocStep, ScanReport, Finding, Severity } from "../shared/index.js";
 import { VERSION } from "../shared/index.js";
 
@@ -163,12 +163,7 @@ function findingToResult(finding: Finding, target: string): SarifResult {
   const codeFlows = pocStepsToCodeFlows(finding.pocSteps, target);
   if (codeFlows) result.codeFlows = codeFlows;
 
-  const priority = getFindingPriority(finding);
   result.properties = {
-    businessPriority: priority.label,
-    businessPriorityRank: priority.rank,
-    businessPriorityAssessed: priority.assessed,
-    businessPriorityRationale: priority.rationale,
     findingId: finding.id,
     category: finding.category,
     severity: finding.severity,
@@ -237,7 +232,7 @@ export function formatSarif(report: ScanReport): string {
           },
         },
         results: [
-          ...[...report.findings].sort(compareFindingsByBusinessPriority).map((f) => findingToResult(f, report.target)),
+          ...[...report.findings].sort(compareFindingsBySeverity).map((f) => findingToResult(f, report.target)),
           ...(report.reviewChecks ?? []).map(check => ({
             ruleId: `review-check/${check.id}`,
             kind: check.status === "pass" ? "pass" : check.status === "issue" ? "fail" : "open",

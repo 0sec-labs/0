@@ -118,7 +118,7 @@ Export findings without opening the browser:
 
 Formats are `json`, `md` and `sarif`. Without `-o` the report goes to stdout. The browser app also exports HTML and PDF.
 
-`0 findings show` prints the business priority and its rationale, technical severity, CVSS when present, status, triage state, the evidence and related occurrences.
+`0 findings show` prints the title, what an attacker can do (when the scan assessed it), technical severity, CVSS when present, status, triage state, the evidence and related occurrences.
 
 ## Status and triage are different
 

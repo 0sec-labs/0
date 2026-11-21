@@ -85,8 +85,8 @@ a captured hash — then turn that access into a higher-severity finding. The be
 from combining footholds, not from single isolated probes.`;
 
 // (0#1103) Impact-assessment guidance. Appended to any prompt that describes
-// finding fields — asks the model to supply evidence-grounded business
-// impact only when the evidence supports it, avoiding hallucinated defaults.
+// finding fields — asks the model to say what the attacker can do, only when
+// the evidence supports it, avoiding hallucinated defaults.
 const IMPACT_ASSESSMENT_INSTRUCTION = `
 
 ## Impact assessment (OPTIONAL)
@@ -97,23 +97,17 @@ supply an \`impact_assessment\` JSON object with your \`finding\` call:
 - \`reachability_tier\`: How the attacker reaches the sink —
   \`remote-unauth\` (worst) | \`remote-auth\` | \`proximity-rf\` |
   \`local-unpriv\` | \`local-priv\` | \`needs-hardware\` | \`needs-host-migration\` (weakest)
-- \`blast_radius\`: Brief sentence naming who/what is affected
+- \`blast_radius\`: One or two plain sentences on what an attacker can do and what they end up with ("An unauthenticated caller can read any user's orders"); this is what a reader sees
 - \`weaponizability\`: What the attacker gains — \`rce\` > \`lpe-to-root\` >
   \`integrity-tampering\` > \`info-leak\` > \`dos-crash\`
-- \`business_impact\`: The business-priority tier — \`headline\` | \`notable\` |
-  \`modest\` | \`noise\` | \`unassessed\`. Assess consequences for the actual
-  affected business: customer or tenant data exposure, fraud or unauthorized
-  transactions, revenue-critical services, service disruption, and safety where
-  supported. Reachability, affected users/assets, and existing controls qualify
-  that consequence. CVSS and technical severity are separate context, not a
-  substitute for business priority.
+- \`business_impact\`: Always \`unassessed\`. It is required by the format and is not shown or used for ranking.
 - \`rationale\`: 1-2 sentence justification
 
 Only supply this when the evidence genuinely supports it. When you lack
 concrete reachability, blast-radius, or weaponizability facts, leave
 \`impact_assessment\` unset — downstream consumers (CVSS generators, advisory
 templates) handle an absent assessment independently. Do NOT fabricate or
-default values. Missing business context is \`unassessed\`; use \`unknown\` for
+default values. Use \`unknown\` for
 reachability or weaponizability you cannot establish. Explain the missing facts
 and next question in the rationale. Do not invent revenue, financial loss,
 affected customer counts, regulatory obligations, or successful exploitation.

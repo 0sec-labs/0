@@ -1,8 +1,8 @@
-import { compareFindingsByBusinessPriority, getFindingPriority } from "../shared/index.js";
+import { compareFindingsBySeverity } from "../shared/index.js";
 import type { ShimmedDatabase } from "./wasm-shim.js";
 import type * as schema from "./schema.js";
 
-export interface BusinessPriorityFindingOptions {
+export interface RankedFindingOptions {
   scanId?: string; severity?: string; category?: string; status?: string; triageStatus?: string;
   /** Maximum latest family representatives. Historical evidence bodies are never loaded to rank them. */
   limit?: number;
@@ -28,7 +28,7 @@ export interface LatestFindingMetadata extends Metadata {
 /** Pages contain bounded assessment JSON only; evidence and descriptions are excluded.
  * No read transaction or native cursor is held while the caller processes a yielded row.
  */
-export function* iterateLatestFindingMetadata(sqlite: ShimmedDatabase, opts: Omit<BusinessPriorityFindingOptions, "limit"> = {}): Generator<LatestFindingMetadata> {
+export function* iterateLatestFindingMetadata(sqlite: ShimmedDatabase, opts: Omit<RankedFindingOptions, "limit"> = {}): Generator<LatestFindingMetadata> {
   let afterId: string | null = null;
   while (true) {
     const page = sqlite.prepare(`SELECT f.id,COALESCE(f.fingerprint,f.id) AS familyKey,f.timestamp,f.severity,f.category,f.status,f.triageStatus,f.cvssScore,
@@ -50,9 +50,9 @@ export function getFindingFamilyMetadata(sqlite: ShimmedDatabase, key: string, o
     AND (@scanId IS NULL OR scanId=@scanId) GROUP BY scanId ORDER BY scanId`).all({key,scanId:opts.scanId ?? null}) as Array<{scanId:string;count:number}>;
   return {count: rows.reduce((sum,row)=>sum+row.count,0),scanIds: rows.map(row=>row.scanId)};
 }
-interface Candidate extends Omit<Metadata, "impactAssessment"> { businessPriorityRank: number }
+type Candidate = Omit<Metadata, "impactAssessment">;
 function compare(a: Candidate, b: Candidate): number {
-  return b.businessPriorityRank - a.businessPriorityRank || compareFindingsByBusinessPriority(a, b) || b.timestamp - a.timestamp || b.id.localeCompare(a.id);
+  return compareFindingsBySeverity(a, b) || b.timestamp - a.timestamp || b.id.localeCompare(a.id);
 }
 /** Worst retained item at the root: memory is bounded by the requested limit. */
 function retain(heap: Candidate[], item: Candidate, limit: number): void {
@@ -76,7 +76,7 @@ const PAGE_SIZE = 500;
 // Covers every schema-bounded field even when JSON escapes each UTF-16 code unit.
 const MAX_ASSESSMENT_BYTES = 80 * 1024;
 /** Latest family state is selected before filtering and global business ranking, in one read snapshot. */
-function rankedFindingRows(sqlite: ShimmedDatabase, opts: BusinessPriorityFindingOptions, latestOnly: boolean): Array<typeof schema.findings.$inferSelect> {
+function rankedFindingRows(sqlite: ShimmedDatabase, opts: RankedFindingOptions, latestOnly: boolean): Array<typeof schema.findings.$inferSelect> {
   const limit = opts.limit ?? 100;
   if (!Number.isSafeInteger(limit) || limit < 0 || limit > 5000) throw new Error("Business-priority finding limit must be an integer between 0 and 5000.");
   if (limit === 0) return [];
@@ -100,10 +100,8 @@ function rankedFindingRows(sqlite: ShimmedDatabase, opts: BusinessPriorityFindin
     while (true) {
       const page = statement.all({ latestOnly: latestOnly ? 1 : 0, afterId, scanId: opts.scanId ?? null, severity: opts.severity ?? null, category: opts.category ?? null, status: opts.status ?? null, triageStatus: opts.triageStatus ?? null }) as unknown as Metadata[];
       for (const row of page) {
-        let impactAssessment: unknown;
-        try { impactAssessment = row.impactAssessment ? JSON.parse(row.impactAssessment) : undefined; } catch { /* Malformed assessments remain unassessed. */ }
         const { impactAssessment: _serialized, ...metadata } = row;
-        retain(heap, { ...metadata, businessPriorityRank: getFindingPriority({ impactAssessment }).rank }, limit);
+        retain(heap, metadata, limit);
       }
       if (page.length < PAGE_SIZE) break;
       afterId = page[page.length - 1]!.id;
@@ -118,12 +116,12 @@ function rankedFindingRows(sqlite: ShimmedDatabase, opts: BusinessPriorityFindin
 }
 
 /** Historical rows remain individually visible for native --all views. */
-export function selectFindingsByBusinessPriority(sqlite: ShimmedDatabase, opts: BusinessPriorityFindingOptions = {}): Array<typeof schema.findings.$inferSelect> {
+export function selectFindingsBySeverity(sqlite: ShimmedDatabase, opts: RankedFindingOptions = {}): Array<typeof schema.findings.$inferSelect> {
   return sqlite.transaction(() => rankedFindingRows(sqlite, opts, false))();
 }
 
 /** Latest family assessments determine ranking; history contributes counts and review state only. */
-export function selectFindingFamiliesByBusinessPriority(sqlite: ShimmedDatabase, opts: BusinessPriorityFindingOptions = {}): FindingFamilyPrioritySummary[] {
+export function selectFindingFamiliesBySeverity(sqlite: ShimmedDatabase, opts: RankedFindingOptions = {}): FindingFamilyPrioritySummary[] {
   return sqlite.transaction(() => {
     return rankedFindingRows(sqlite, opts, true).map(item => {
       const params = { key: item.fingerprint ?? item.id, scanId: opts.scanId ?? null };
