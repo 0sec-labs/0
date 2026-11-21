@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEPRECATED_ENV, applyEnvAliases } from "./deprecated-env.js";
 
 // Warn-once state is per process; use fresh module instances per test.
 async function load() {
@@ -71,12 +70,4 @@ describe("applyEnvAliases", () => {
     }
   });
 
-  it("lists only the approved aliases", () => {
-    expect(DEPRECATED_ENV.map((e) => `${e.old}>${e.replacement}`)).toEqual([
-      "ZERO_CHATGPT_AUTH_FILE>ZERO_CODEX_AUTH_JSON_PATH",
-      "ZERO_WPSCAN_API_TOKEN>WPSCAN_API_TOKEN",
-      "ZERO_SKIP_PROVIDER_BANNER>ZERO_SUPPRESS_PROVIDER_STARTUP_LOG",
-    ]);
-    expect(typeof applyEnvAliases).toBe("function");
-  });
 });

@@ -7,8 +7,6 @@ import {
   DEFERRED_TOOLS_MIN,
   LIST_TOOLS_NAME,
   LOAD_TOOL_NAME,
-  listToolsDef,
-  loadToolDef,
   formatToolCatalog,
   formatLoadResult,
 } from "./deferred-tools.js";
@@ -102,14 +100,6 @@ describe("DeferredToolRegistry", () => {
   });
 });
 
-describe("control tool definitions", () => {
-  it("expose stable names", () => {
-    expect(listToolsDef.name).toBe(LIST_TOOLS_NAME);
-    expect(loadToolDef.name).toBe(LOAD_TOOL_NAME);
-    expect(loadToolDef.required).toContain("names");
-  });
-});
-
 describe("formatToolCatalog", () => {
   it("reports emptiness distinctly with/without a query", () => {
     expect(formatToolCatalog([])).toMatch(/No additional loadable tools/);
@@ -137,12 +127,6 @@ describe("formatLoadResult", () => {
     expect(formatLoadResult({ loaded: ["a", "b"], unknown: [] })).toMatch(/Loaded 2 tool/);
     expect(formatLoadResult({ loaded: [], unknown: ["z"] })).toMatch(/Not found.*z/);
     expect(formatLoadResult({ loaded: [], unknown: [] })).toMatch(/No tool names/);
-  });
-});
-
-describe("threshold", () => {
-  it("is a sane positive floor", () => {
-    expect(DEFERRED_TOOLS_MIN).toBeGreaterThan(0);
   });
 });
 

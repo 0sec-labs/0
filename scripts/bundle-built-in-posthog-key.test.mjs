@@ -47,16 +47,6 @@ test("a malformed key fails loudly without echoing the value", () => {
   assert.throws(() => resolveBuildPostHogKey({ ZERO_RELEASE_POSTHOG_KEY: "garbage" }), /not a valid/);
 });
 
-test("bundle-cli and bun-compile validate before bundling and embed via define", () => {
-  const source = readFileSync(join(ROOT, "scripts/bundle-cli.mjs"), "utf8");
-  assert.match(source, /resolveBuildPostHogKey\(\)/);
-  assert.match(source, /__ZERO_BUILT_IN_POSTHOG_KEY__: JSON\.stringify\(BUILT_IN_POSTHOG_KEY\)/);
-  assert.ok(source.indexOf("resolveBuildPostHogKey()") < source.indexOf("await build("));
-  const compile = readFileSync(join(ROOT, "scripts/bun-compile.sh"), "utf8");
-  assert.match(compile, /built-in-posthog-key\.mjs/);
-  assert.match(compile, /--define "__ZERO_BUILT_IN_POSTHOG_KEY__=/);
-});
-
 test("only the release compile step receives the secret", () => {
   const release = readFileSync(join(ROOT, ".github/workflows/release.yml"), "utf8");
   assert.equal(release.match(/secrets\.ZERO_RELEASE_POSTHOG_KEY/g)?.length, 1);

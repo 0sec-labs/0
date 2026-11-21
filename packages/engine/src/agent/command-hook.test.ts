@@ -15,15 +15,10 @@ describe("every tool is classified for beforeCommand", () => {
     expect(all.filter((n, i) => all.indexOf(n) !== i)).toEqual([]);
     expect(all.filter(n => !registered.includes(n))).toEqual([]);
   });
-  it("hooks the tools that execute, and not a tool that only reads a lookup table", () => {
-    for (const name of ["bash", "str_replace"]) {
-      expect(hookInputForTool(name, { command: "x", op: "start", code: "x", action: "send", input: "x", tool: "nmap", path: "p", patch: "*** Update File: a" }, { cwd: "/w", thread: {} }), name).not.toBeNull();
-    }
-    expect(hookInputForTool("finding", {}, { cwd: "/w", thread: {} })).toBeNull();
-  });
   it("maps each executing tool to a kind and exposes its command text, cwd and paths", () => {
     const base = { cwd: "/w", thread: {} };
     expect(hookInputForTool("bash", { command: "curl https://x.test" }, base)).toMatchObject({ kind: "bash", command: "curl https://x.test" });
     expect(hookInputForTool("str_replace", { path: "a/b" }, base)).toMatchObject({ kind: "file-write", paths: ["a/b"] });
+    expect(hookInputForTool("finding", {}, base)).toBeNull();
   });
 });

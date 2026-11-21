@@ -8,7 +8,7 @@ One layout primitive, `PageShell` (`packages/web/src/components/page-shell.tsx`)
 | `form` | 672px, same gutters and offset | Settings sections |
 | `full` | edge to edge, header keeps the gutter and offset | Findings (list and board), finding page, thread view |
 
-The widths are the CSS variables `--page-width-list` and `--page-width-form` (styles.css), mirrored by `PAGE_WIDTHS`; `test/page-shell.test.ts` asserts they match, and `test/design-guards.test.ts` fails when a file under `pages/` sets `max-w-*`/`mx-auto` or when a route is outside the shell or the route table.
+The widths are the CSS variables `--page-width-list` and `--page-width-form` (styles.css), mirrored by `PAGE_WIDTHS`; `test/page-shell.test.ts` asserts they match.
 
 ## Why these numbers
 

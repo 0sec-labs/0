@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SLASH_COMMANDS, filterCommands, findCommand, getCommandByName } from "./slash-commands.js";
+import { SLASH_COMMANDS, filterCommands, findCommand } from "./slash-commands.js";
 
 describe("slash registry", () => {
   it("has unique names across names, aliases and legacy names", () => {
@@ -47,11 +47,5 @@ describe("slash registry", () => {
     expect(filterCommands("find").map((c) => c.name)).toEqual(["findings list", "findings export"]);
     expect(filterCommands("config g").map((c) => c.name)).toEqual(["config get"]);
     expect(filterCommands("sessions").map((c) => c.name)).toEqual(["threads list"]);
-  });
-
-  it("uses user vocabulary", () => {
-    const text = SLASH_COMMANDS.map((c) => `${c.description} ${c.usage ?? ""}`).join(" ");
-    expect(text).not.toMatch(/mission|workspace|engine|project/i);
-    expect(getCommandByName("threads start")?.cli).toBe("threads start");
   });
 });

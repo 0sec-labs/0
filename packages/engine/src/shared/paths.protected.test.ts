@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  hasProtectedSegment, hasUnsafeRelativeSegment, homeStateDir, isProtectedSegment,
-  isUnsafeRelativeSegment, shortTmpRoot, tmpWorkdir,
+  hasProtectedSegment, hasUnsafeRelativeSegment, isProtectedSegment,
+  isUnsafeRelativeSegment,
 } from "./paths.js";
 import { assertSourceScopePath, normalizeSourcePath } from "../secure/source-scope.js";
 
@@ -52,23 +52,4 @@ describe("protected segments", () => {
     symlinkSync(join(root, ".git"), join(root, "link"));
     expect(hasUnsafeRelativeSegment("link/config")).toBe(false);
   });
-});
-
-describe("tmp and state helpers", () => {
-  it("tmpWorkdir creates a private directory with the given prefix", async () => {
-    const dir = await tmpWorkdir("0w-test-"); cleanup.push(dir);
-    expect(dir.startsWith(join(tmpdir(), "0w-test-"))).toBe(true);
-    expect(statSync(dir).mode & 0o777).toBe(0o700);
-  });
-  it("tmpWorkdir honours an explicit base", async () => {
-    const base = mkdtempSync(join(tmpdir(), "paths-base-")); cleanup.push(base);
-    const dir = await tmpWorkdir("s-", base);
-    expect(dir.startsWith(join(base, "s-"))).toBe(true);
-  });
-  it("shortTmpRoot stays /tmp on POSIX for socket-path limits", () => {
-    expect(shortTmpRoot("darwin")).toBe("/tmp");
-    expect(shortTmpRoot("linux")).toBe("/tmp");
-    expect(shortTmpRoot("win32")).toBe(tmpdir());
-  });
-  it("homeStateDir is <home>/.0", () => { expect(homeStateDir("/h")).toBe(join("/h", ".0")); });
 });

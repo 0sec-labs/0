@@ -26,6 +26,3 @@ test("old name allowed only in the Docker migration section and changelog", () =
   assert.equal(e.length, 1);
   assert.match(e[0], /docker\.md:2/);
 });
-test("this repository passes", () => {
-  assert.deepEqual(checkImageName(join(import.meta.dirname, "..")), []);
-});

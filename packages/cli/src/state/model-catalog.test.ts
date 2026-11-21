@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MODEL_PRICING, modelProvider } from "@0/engine/shared";
 
-import { buildModelCatalog, formatModelPrice, modelSelectorItems } from "./model-catalog.js";
+import { buildModelCatalog, formatModelPrice } from "./model-catalog.js";
 
 const SOME_MODEL = "gpt-5.5";
 
@@ -88,38 +88,5 @@ describe("buildModelCatalog", () => {
       warn.mockRestore();
       log.mockRestore();
     }
-  });
-});
-
-describe("modelSelectorItems", () => {
-  it("maps each model to a selector row", () => {
-    const items = modelSelectorItems(SOME_MODEL);
-    expect(items.length).toBe(buildModelCatalog().length);
-    for (const item of items) {
-      expect(item.id.length).toBeGreaterThan(0);
-      expect(item.label).toBe(item.id);
-      expect(item.meta).toBeDefined();
-      expect(item.meta!.length).toBeGreaterThan(0);
-      expect(item.meta).toContain(" · ");
-      expect(item.disabled).toBeUndefined();
-    }
-  });
-
-  it("flags exactly the current model", () => {
-    const items = modelSelectorItems(SOME_MODEL);
-    const flagged = items.filter((item) => item.current);
-    expect(flagged).toHaveLength(1);
-    expect(flagged[0].id).toBe(SOME_MODEL);
-    expect(items[0].id).toBe(SOME_MODEL);
-  });
-
-  it("flags nothing when there is no current model", () => {
-    expect(modelSelectorItems().some((item) => item.current)).toBe(false);
-  });
-
-  it("carries the provider and price into the meta line", () => {
-    const catalog = buildModelCatalog(SOME_MODEL);
-    const items = modelSelectorItems(SOME_MODEL);
-    expect(items[0].meta).toBe(`${catalog[0].provider} · ${catalog[0].price}`);
   });
 });

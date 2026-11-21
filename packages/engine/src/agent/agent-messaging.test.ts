@@ -114,11 +114,6 @@ const SETTING_COMBOS: readonly Pick<
 // ---------------------------------------------------------------------------
 
 describe("decideAddressing (pure policy)", () => {
-  it("allows parent → child", () => {
-    const d = decideAddressing(parentRuntime(), CHILD_ID);
-    expect(d).toEqual({ allowed: true, kind: "child" });
-  });
-
   it("allows a parent to broadcast", () => {
     expect(decideAddressing(parentRuntime(), BROADCAST_ID)).toEqual({ allowed: true, kind: "child" });
   });
@@ -187,15 +182,6 @@ describe("decideAddressing (pure policy)", () => {
     for (const bad of ["../../etc/passwd", "a b", "", 42, null, undefined, {}]) {
       expect(decideAddressing(operatorRuntime(), bad).allowed).toBe(false);
     }
-  });
-
-  it("operator steering does not mutate the runtime (no authority side-effect)", () => {
-    const rt = operatorRuntime();
-    const snapshot = JSON.parse(JSON.stringify(rt));
-    for (const to of [CHILD_ID, SIBLING_ID, STRANGER_ID, OPERATOR_ID, BROADCAST_ID]) {
-      decideAddressing(rt, to);
-    }
-    expect(rt).toEqual(snapshot);
   });
 
   it("adding the operator role changes no parent/child verdict", () => {
@@ -377,10 +363,10 @@ describe("decideAddressing (pure policy)", () => {
     );
   });
 
-  it("does not mutate the runtime it is given (no authority side-effect)", () => {
-    const rt = childRuntime();
+  it.each([["child", childRuntime], ["operator", operatorRuntime]] as const)("does not mutate the %s runtime it is given (no authority side-effect)", (_role, make) => {
+    const rt = make();
     const snapshot = JSON.parse(JSON.stringify(rt));
-    for (const to of [PARENT_ID, SIBLING_ID, OPERATOR_ID, STRANGER_ID, BROADCAST_ID]) {
+    for (const to of [PARENT_ID, CHILD_ID, SIBLING_ID, OPERATOR_ID, STRANGER_ID, BROADCAST_ID]) {
       decideAddressing(rt, to);
     }
     expect(rt).toEqual(snapshot);

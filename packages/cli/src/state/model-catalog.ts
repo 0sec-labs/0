@@ -8,7 +8,6 @@
 
 import { MODEL_PRICING, getRates, modelProvider } from "@0/engine/shared";
 
-import type { SelectorItem } from "./selector.js";
 import { loadCatalogModels, METERED_CATALOG_PROVIDERS, type CatalogSyncOptions } from "./model-catalog-sync.js";
 
 export interface CatalogModel {
@@ -64,15 +63,6 @@ export function buildModelCatalog(currentModel?: string): CatalogModel[] {
     if (b.id === currentModel) return 1;
     return compareStrings(a.provider, b.provider) || compareStrings(a.id, b.id);
   });
-}
-
-export function modelSelectorItems(currentModel?: string): SelectorItem[] {
-  return buildModelCatalog(currentModel).map((model) => ({
-    id: model.id,
-    label: model.id,
-    meta: `${model.provider} · ${model.price}`,
-    current: model.id === currentModel,
-  }));
 }
 
 // ── Models.dev-synced superset ────────────────────────────────────────────────

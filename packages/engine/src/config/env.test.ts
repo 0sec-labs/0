@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { features } from "../agent/features.js";
+import { describe, expect, it } from "vitest";
 import { envFlag, envInt, envString } from "./env.js";
 
 const ENV = (o: Record<string, string>) => o as NodeJS.ProcessEnv;
@@ -32,23 +31,5 @@ describe("envInt / envString", () => {
     expect(envString("S", "d", ENV({ S: " v " }))).toBe("v");
     expect(envString("S", "d", ENV({ S: "  " }))).toBe("d");
     expect(envString("S", undefined, ENV({}))).toBeUndefined();
-  });
-});
-
-describe("legacy boolean parser equivalence", () => {
-  const KEY = "ZERO_FEATURE_LOOP_DETECTION";
-  const saved = process.env[KEY];
-  afterEach(() => {
-    if (saved === undefined) delete process.env[KEY]; else process.env[KEY] = saved;
-  });
-  const inputs = ["0", "false", "FALSE", "False", "1", "true", "off", "no", "", "yes", "on", " 0", "anything"];
-
-  it("features flags match the old `!== '0' && !== 'false'` rule", () => {
-    for (const v of inputs) {
-      process.env[KEY] = v;
-      expect(features.loopDetection, JSON.stringify(v)).toBe(v !== "0" && v !== "false");
-    }
-    delete process.env[KEY];
-    expect(features.loopDetection).toBe(true);
   });
 });

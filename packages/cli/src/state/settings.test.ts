@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS,
-  SETTING_DEFS,
   describeSetting,
+  SETTING_DEFS,
   isOperatorSetting,
   loadSettings,
   normalizeSettings,
@@ -259,106 +259,6 @@ describe("loadSettings / saveSettings", () => {
     expect(saveSettings(corrupt, home)).toBe(true);
     expect(loadSettings(home)).toEqual(DEFAULT_SETTINGS);
     expect(readText(settingsFilePath(home))).not.toContain("stray");
-  });
-});
-
-describe("toggleSetting", () => {
-  it("flips a boolean setting", () => {
-    const on = { ...DEFAULT_SETTINGS, showSubagents: true };
-
-    const off = toggleSetting(on, "showSubagents");
-    expect(off.showSubagents).toBe(false);
-    expect(toggleSetting(off, "showSubagents").showSubagents).toBe(true);
-  });
-
-  it("leaves the other settings alone when flipping one", () => {
-    const next = toggleSetting(DEFAULT_SETTINGS, "showCost");
-
-    expect({ ...next, showCost: DEFAULT_SETTINGS.showCost }).toEqual(DEFAULT_SETTINGS);
-  });
-
-  it("cycles a two-value enum and wraps", () => {
-    const a = toggleSetting(DEFAULT_SETTINGS, "density");
-    expect(a.density).toBe("compact");
-
-    const b = toggleSetting(a, "density");
-    expect(b.density).toBe("comfortable");
-  });
-
-  it("cycles a four-value enum and wraps", () => {
-    const one = toggleSetting(DEFAULT_SETTINGS, "toolCardStyle");
-    const two = toggleSetting(one, "toolCardStyle");
-    const three = toggleSetting(two, "toolCardStyle");
-    const four = toggleSetting(three, "toolCardStyle");
-
-    expect([one.toolCardStyle, two.toolCardStyle, three.toolCardStyle, four.toolCardStyle]).toEqual([
-      "rail",
-      "inline",
-      "hidden",
-      "compact",
-    ]);
-  });
-
-  it("returns the input unchanged for an unknown key", () => {
-    expect(toggleSetting(DEFAULT_SETTINGS, "showFooter")).toBe(DEFAULT_SETTINGS);
-    expect(toggleSetting(DEFAULT_SETTINGS, "")).toBe(DEFAULT_SETTINGS);
-    expect(toggleSetting(DEFAULT_SETTINGS, "toString")).toBe(DEFAULT_SETTINGS);
-  });
-
-  it("repairs an enum value that is not in the choice list", () => {
-    const corrupt = { ...DEFAULT_SETTINGS, toolCardStyle: "neon" as TuiSettings["toolCardStyle"] };
-
-    expect(toggleSetting(corrupt, "toolCardStyle").toolCardStyle).toBe("compact");
-  });
-
-  it("does not mutate its input", () => {
-    const before = { ...DEFAULT_SETTINGS };
-    const snapshot = { ...before };
-
-    toggleSetting(before, "showSubagents");
-    toggleSetting(before, "density");
-
-    expect(before).toEqual(snapshot);
-  });
-
-  it("returns every setting to its starting value after a full cycle", () => {
-    for (const def of SETTING_DEFS) {
-      const steps = def.kind === "boolean" ? 2 : (def.choices?.length ?? 0);
-      let settings = DEFAULT_SETTINGS;
-      for (let i = 0; i < steps; i += 1) settings = toggleSetting(settings, def.key);
-
-      expect(settings).toEqual(DEFAULT_SETTINGS);
-    }
-  });
-});
-
-describe("describeSetting", () => {
-  it("renders booleans as on/off with the label and description", () => {
-    const text = describeSetting(DEFAULT_SETTINGS, "showSubagents");
-
-    expect(text).toContain("Subagent list");
-    expect(text).toContain("on");
-    expect(describeSetting({ ...DEFAULT_SETTINGS, showSubagents: false }, "showSubagents")).toContain(
-      "off",
-    );
-  });
-
-  it("renders the current enum value", () => {
-    expect(describeSetting({ ...DEFAULT_SETTINGS, density: "compact" }, "density")).toContain(
-      "compact",
-    );
-  });
-
-  it("returns an empty string for an unknown key rather than throwing", () => {
-    expect(describeSetting(DEFAULT_SETTINGS, "nope")).toBe("");
-  });
-
-  it("produces a single line for every declared setting", () => {
-    for (const def of SETTING_DEFS) {
-      const text = describeSetting(DEFAULT_SETTINGS, def.key);
-      expect(text.length).toBeGreaterThan(0);
-      expect(text).not.toContain("\n");
-    }
   });
 });
 

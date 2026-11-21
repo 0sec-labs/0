@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VERSION } from "@0/engine/shared";
-import { canUseOpenTui, getReleaseChannel, getRuntimeMetadata } from "./runtime.js";
+import { getReleaseChannel, getRuntimeMetadata } from "./runtime.js";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -35,9 +35,4 @@ describe("artifact release identity", () => {
     expect(getRuntimeMetadata().engine).toBe("Bun");
     expect(getRuntimeMetadata().engineVersion).toBe(process.versions.bun ?? "unknown");
   });
-});
-
-it("keeps interactive terminal rendering retired under Bun", () => {
-  vi.stubGlobal("Bun", {});
-  expect(canUseOpenTui()).toBe(false);
 });
