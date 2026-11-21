@@ -1,9 +1,20 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BRANCH_PREFIX, fixBranchName, pullRequestBody, runFix, type FixDeps, type FixOptions, type FindingToFix } from "../fix.js";
+import {
+  BRANCH_PREFIX,
+  fixBranchName,
+  parseFixPolicy,
+  pullRequestBody,
+  runFix,
+  type FixDeps,
+  type FixOptions,
+  type FindingToFix,
+} from "../fix.js";
+import type { FixPolicy } from "@0/engine/shared";
 
 const finding: FindingToFix = { id: "f-1234567890ab", fingerprint: "sarif-x:abc", title: "SQL injection in search", severity: "high", category: "sql-injection", tool: "foxguard", description: "d", path: "src/db.ts", startLine: 10 };
 
-function harness(overrides: Partial<{ status: string; checks: Record<string, number>; pulls: string; remote: string }> = {}) {
+function harness(overrides: Partial<{ status: string; checks: Record<string, number>; pulls: string; remote: string; policy: FixPolicy }> = {}) {
   const calls: string[] = [];
   const requests: Array<[string, string, unknown]> = [];
   const bodies: string[] = [];
@@ -24,7 +35,9 @@ function harness(overrides: Partial<{ status: string; checks: Record<string, num
     },
     gh: async (_cwd, args) => { calls.push(`gh ${args.join(" ")}`); return args[1] === "list" ? overrides.pulls ?? "[]" : args[1] === "create" ? "https://github.com/o/r/pull/7\n" : ""; },
     check: async (_cwd, command) => ({ command, code: overrides.checks?.[command] ?? 0, output: "out" }),
-    loadFinding: () => finding, makeTemp: () => "/tmp/x", removeTemp: () => {}, writeFile: (_p, text) => { bodies.push(text); },
+    loadFinding: () => finding,
+    loadPolicy: () => overrides.policy,
+    makeTemp: () => "/tmp/x", removeTemp: () => {}, writeFile: (_p, text) => { bodies.push(text); },
   };
   return { deps, calls, requests, bodies };
 }
@@ -67,7 +80,7 @@ describe("0 findings fix", () => {
     const outcome = await runFix("f-1", options({ test: ["pnpm test"] }), h.deps);
     expect(outcome?.pullRequest).toMatchObject({ created: false, draft: false });
     expect(h.calls.some(call => call.startsWith("gh pr create"))).toBe(false);
-    expect(h.calls).toContain("gh pr edit 7 --body-file /tmp/x/body.md");
+    expect(h.calls).toContain(`gh pr edit 7 --body-file ${join("/tmp/x", "body.md")}`);
     expect(h.calls).toContain("gh pr ready 7");
   });
 
@@ -90,5 +103,66 @@ describe("0 findings fix", () => {
     const body = pullRequestBody({ ...finding, title: "ping @victim about #12" }, "see @team", [{ command: "a|b", code: 1, output: "```x```" }]);
     expect(body).not.toMatch(/@(?!​)/);
     expect(body).toContain("Opened as a draft");
+  });
+
+  it("injects fix policy into the thread prompt when policy is loaded", async () => {
+    const policy: FixPolicy = {
+      approvedLibraries: [
+        { name: "kysely", preferredVersion: "^0.27.0", purpose: "SQL query building" },
+        "dompurify",
+      ],
+      forbiddenPatterns: [
+        { pattern: "eval", reason: "Arbitrary code execution risk" },
+      ],
+      rules: ["Always use parameterized queries for database operations"],
+    };
+    const h = harness({ policy });
+    const outcome = await runFix("f-1", options({ policy: ".zero/fix-policy.json" }), h.deps);
+    expect(outcome).toMatchObject({ changed: true, committed: true });
+    const message = h.requests.find(([, path]) => path.endsWith("/messages"))![2] as { text: string };
+    expect(message.text).toContain("<fix-policy>");
+    expect(message.text).toContain("kysely (version: ^0.27.0, purpose: SQL query building)");
+    expect(message.text).toContain("dompurify");
+    expect(message.text).toContain("eval (reason: Arbitrary code execution risk)");
+    expect(message.text).toContain("Always use parameterized queries for database operations");
+  });
+});
+
+describe("parseFixPolicy", () => {
+  it("parses valid JSON fix policy", () => {
+    const json = JSON.stringify({
+      approvedLibraries: ["dompurify", { name: "kysely", preferredVersion: "0.27" }],
+      forbiddenPatterns: ["dangerouslySetInnerHTML"],
+      rules: ["Do not add new dependencies"],
+      notes: "Internal security policy v1",
+    });
+    const policy = parseFixPolicy(json, "test.json");
+    expect(policy.approvedLibraries).toHaveLength(2);
+    expect(policy.forbiddenPatterns).toEqual(["dangerouslySetInnerHTML"]);
+    expect(policy.rules).toEqual(["Do not add new dependencies"]);
+    expect(policy.notes).toBe("Internal security policy v1");
+  });
+
+  it("parses valid YAML fix policy", () => {
+    const yaml = `
+approvedLibraries:
+  - dompurify
+  - name: kysely
+    purpose: SQL builder
+rules:
+  - Use parameterized queries
+`;
+    const policy = parseFixPolicy(yaml, "test.yaml");
+    expect(policy.approvedLibraries).toHaveLength(2);
+    expect(policy.rules).toEqual(["Use parameterized queries"]);
+  });
+
+  it("throws UsageError on invalid syntax", () => {
+    expect(() => parseFixPolicy("not valid: [json or yaml", "bad.json")).toThrow("Failed to parse fix policy");
+  });
+
+  it("throws UsageError when policy is not an object", () => {
+    expect(() => parseFixPolicy("[\"invalid\"]", "arr.json")).toThrow("must be an object");
+    expect(() => parseFixPolicy("\"string\"", "str.json")).toThrow("must be an object");
   });
 });
