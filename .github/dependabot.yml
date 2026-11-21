@@ -26,7 +26,7 @@ updates:
       actions:
         patterns: ["*"]
   - package-ecosystem: docker
-    directory: /scripts/docker
+    directory: /deploy/docker
     schedule:
       interval: weekly
     open-pull-requests-limit: 3

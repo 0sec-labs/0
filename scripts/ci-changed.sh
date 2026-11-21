@@ -36,7 +36,7 @@ while IFS= read -r f; do
     docs/*|README.md|packages/cli/*|packages/engine/*|scripts/check-docs-site.mjs|scripts/sync-cli-docs.mjs|scripts/check-docs-commands*|package.json|pnpm-lock.yaml) docs=true ;;
   esac
   case "$f" in
-    scripts/docker/*|scripts/smoke-server-mode.mjs|deploy/compose/*|packages/cli/src/web/server-mode*|packages/cli/src/web/dashboard-http.ts|packages/cli/src/commands/dashboard.ts) docker=true ;;
+    deploy/docker/*|scripts/docker/*|scripts/smoke-server-mode.mjs|deploy/compose/*|packages/cli/src/web/server-mode*|packages/cli/src/web/dashboard-http.ts|packages/cli/src/commands/dashboard.ts) docker=true ;;
   esac
   case "$f" in
   esac
