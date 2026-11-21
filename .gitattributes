@@ -1,0 +1,5 @@
+# The embedded skill manifest inlines these YAML files byte-for-byte, and its
+# drift tests compare the two. Keep both LF on every checkout, including Windows
+# with core.autocrlf=true, so a Windows build does not rewrite the manifest.
+packages/engine/src/agent/skills/**/*.yaml text eol=lf
+packages/engine/src/agent/skills/skills.generated.ts text eol=lf
