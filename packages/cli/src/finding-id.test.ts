@@ -19,8 +19,8 @@ describe("finding ids", () => {
     expect(resolveFindingId(rows, "ef01234567")).toBe(rows[0]);
   });
   it("says so when the text is ambiguous, and returns nothing for no match", () => {
-    expect(() => resolveFindingId(rows, "0")).toThrow("matches 2 findings");
-    expect(() => resolveFindingId(rows, scan.slice(0, 20))).toThrow("matches 2 findings");
+    expect(() => resolveFindingId(rows, "0")).toThrow("is ambiguous");
+    expect(() => resolveFindingId(rows, scan.slice(0, 20))).toThrow("is ambiguous");
     expect(resolveFindingId(rows, "zzzz")).toBeUndefined();
     expect(resolveFindingId(rows, "  ")).toBeUndefined();
   });

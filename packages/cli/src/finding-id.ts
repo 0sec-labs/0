@@ -34,7 +34,7 @@ export function resolveFindingId<T extends { id: string }>(rows: readonly T[], i
   for (const matches of strategies) {
     const found = rows.filter(matches);
     if (found.length === 1) return found[0];
-    if (found.length > 1) throw new Error(`'${text}' matches ${found.length} findings; use more of the id (\`0 findings list\` shows the part that differs).`);
+    if (found.length > 1) throw new Error(`Finding '${text}' is ambiguous: it matches ${found.length} findings; use more of the id (the list shows the part that differs).`);
   }
   return undefined;
 }
