@@ -12,24 +12,24 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
-const dockerfile = read("scripts/docker/Dockerfile");
+const dockerfile = read("deploy/docker/Dockerfile");
 const publish = read(".github/workflows/docker-publish.yml");
 const IDS = ["zero_release_sentry_dsn", "zero_release_posthog_key"];
 const NAMES = ["ZERO_RELEASE_SENTRY_DSN", "ZERO_RELEASE_POSTHOG_KEY"];
 
 test("Dockerfile mounts both keys as optional secrets on the build step", () => {
-  const code = dockerfile.replace(/\\\n/g, " ");
+  const code = dockerfile.replace(/\\\r?\n/g, " ");
   for (const id of IDS) {
     assert.match(code, new RegExp(`--mount=type=secret,id=${id},required=false`));
   }
-  const run = code.split("\n").find((l) => l.startsWith("RUN --mount=type=secret"));
+  const run = code.split(/\r?\n/).find((l) => l.startsWith("RUN --mount=type=secret"));
   assert.ok(run, "secret-mounted RUN present");
   assert.match(run, /pnpm build\s*$/);
   assert.equal(code.match(/^RUN pnpm build\s*$/m), null, "no bare pnpm build");
 });
 
 test("Dockerfile never uses ARG or ENV for the release keys", () => {
-  for (const line of dockerfile.replace(/\\\n/g, " ").split("\n")) {
+  for (const line of dockerfile.replace(/\\\r?\n/g, " ").split(/\r?\n/)) {
     if (/^\s*(ARG|ENV)\b/.test(line)) {
       for (const name of [...NAMES, ...IDS]) {
         assert.ok(!line.toLowerCase().includes(name.toLowerCase()), line);

@@ -34,16 +34,16 @@ if (await exists(outputDir)) {
 }
 
 const publicRoots = [
-  "scripts/docker/Dockerfile.dockerignore",
-  "scripts/docker/Dockerfile.workbench.dockerignore",
+  "deploy/docker/Dockerfile.dockerignore",
+  "deploy/docker/Dockerfile.workbench.dockerignore",
   ".gitignore",
   "docs/CHANGELOG.md",
   ".github/CONTRIBUTING.md",
   "scripts/create-public-source-export.mjs",
   "scripts/create-public-source-export.test.mjs",
   "scripts/dashboard-browser-imports.test.mjs",
-  "scripts/docker/Dockerfile",
-  "scripts/docker/Dockerfile.workbench",
+  "deploy/docker/Dockerfile",
+  "deploy/docker/Dockerfile.workbench",
   "LICENSE-APACHE",
   "LICENSE-MIT",
   "NOTICE",

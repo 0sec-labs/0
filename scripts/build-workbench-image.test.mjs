@@ -10,7 +10,7 @@ const input = { sourceRevision: revision, archive: "/tmp/0-profile.tar", availab
 
 test("default profile plans current CLI on immutable ARM64 base without choosing Kali", () => {
   const plan = planWorkbenchBuild(input);
-  assert.equal(plan.commands[0].args[plan.commands[0].args.indexOf("--file") + 1], "scripts/docker/Dockerfile.workbench");
+  assert.equal(plan.commands[0].args[plan.commands[0].args.indexOf("--file") + 1], "deploy/docker/Dockerfile.workbench");
   assert.equal(plan.profile, "core-web"); assert.equal(plan.platform, "linux/arm64");
   assert.match(plan.baseImage, /@sha256:[a-f0-9]{64}$/);
   assert.equal(plan.qualification, "not-built");

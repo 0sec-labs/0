@@ -24,7 +24,7 @@ ghcr.io/0sec-labs/0security:0.41.0    # releases only
 ghcr.io/0sec-labs/0security:0.41      # releases only, follows the latest 0.37.x
 ```
 
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0security/blob/main/scripts/docker/Dockerfile),
+**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0security/blob/main/deploy/docker/Dockerfile),
 [`docker-publish.yml`](https://github.com/0sec-labs/0security/blob/main/.github/workflows/docker-publish.yml).
 Use a version tag, a digest or a short-SHA tag when you need repeatable runs. `latest` is the most recent release; use `edge` for the nightly main build.
 
@@ -60,6 +60,8 @@ at `/work` so the container can read source and write reports. State lives in `/
 ## Run the app on a server (experimental, single node)
 
 This is the one supported way to run the web console for more than one person on a server. It is **experimental**: one node, one container, one volume. There is no high availability. See [Teams and enterprise](#teams-and-enterprise).
+
+For infrastructure setup on AWS (EC2/ECS) or Azure (VM/Container Instances) with persistent disks, cloud secret stores, automated backups and TLS ingress, see [Self-hosting on Azure and AWS](/self-hosting/).
 
 ### Start it
 
@@ -186,8 +188,8 @@ The console can run security tools and use your model keys, so access to it is f
 ## Build your own
 
 ```bash
-docker build -f scripts/docker/Dockerfile -t 0:local .
-docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
+docker build -f deploy/docker/Dockerfile -t 0:local .
+docker build -f deploy/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
 
 The published image embeds the project's telemetry keys like the release binaries do. Building the Dockerfile yourself embeds nothing unless you pass the `zero_release_sentry_dsn` and `zero_release_posthog_key` BuildKit secrets.
