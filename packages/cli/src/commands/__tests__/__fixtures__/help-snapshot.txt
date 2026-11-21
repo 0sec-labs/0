@@ -653,6 +653,7 @@ Options:
                              remote's default branch)
   --test <command>           Check to run after the change; repeat for several. A failing check
                              makes the pull request a draft
+  --policy <path>            Policy file of approved libraries and fix rules (.json or .yaml)
   --no-pr                    Commit on the fix branch but do not push or open a pull request
   --budget <usd>             Stop when the estimated spend reaches this many USD (default: "3")
   --model <model>            Model for the fix thread (default: gpt-6-luna)
