@@ -90,12 +90,29 @@ async function fetchCatalog(impl: PricingDiscoveryFetch): Promise<Map<string, Mo
   return catalog;
 }
 
+/**
+ * Hard opt-out signals. Mirrors `analyticsOptedOut` in ../telemetry/analytics-level.ts
+ * (set and not explicitly falsy); re-declared here because importing it would
+ * add a shared -> telemetry edge to the engine directory cycle. Keep in sync.
+ */
+function networkOptedOut(env: NodeJS.ProcessEnv = process.env): boolean {
+  return ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"].some(name => {
+    const v = env[name]?.trim().toLowerCase();
+    return v !== undefined && v !== "" && v !== "0" && v !== "false" && v !== "no";
+  });
+}
+
 /** Look up `model` (raw or vendor-normalized) in the OpenRouter catalog and register
  * the rates under both spellings. No-op when pricing is already known, and never
  * throws — catalog unavailability just leaves the model costUnavailable. */
 export async function discoverAndRegisterPricing(model: string, fetchImpl?: PricingDiscoveryFetch): Promise<void> {
   try {
     if (!model || hasKnownPricing(model)) return;
+    // The public OpenRouter catalog is a third-party lookup. With an opt-out
+    // set (ZERO_OFFLINE, ZERO_NO_TELEMETRY, DO_NOT_TRACK) nothing may leave
+    // for it, so an enterprise gateway sees the only outbound model traffic.
+    // An injected fetch is a caller's own transport and is not gated.
+    if (!isFetch(fetchImpl) && !configuredFetch && networkOptedOut()) return;
     const impl = isFetch(fetchImpl) ? fetchImpl : configuredFetch ?? globalThis.fetch;
     const catalog = await loadCatalog(impl);
     let rates: ModelRates | undefined;

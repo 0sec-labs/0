@@ -83,6 +83,43 @@ export ZERO_SELECTED_PROVIDER="openai"
 
 For OpenCode Go, use its published base URL, such as `https://opencode.ai/inference/go/openai/v1`.
 
+### Enterprise gateway: Bedrock through LiteLLM
+
+Run models in your own AWS account by putting a [LiteLLM](https://docs.litellm.ai) proxy in front of Amazon Bedrock. 0 talks to the proxy as a custom OpenAI-compatible provider, so the proxy holds the AWS credentials and 0 never sees them.
+
+A LiteLLM configuration file that exposes one Bedrock model:
+
+```yaml
+model_list:
+  - model_name: claude-bedrock
+    litellm_params:
+      model: bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0
+      aws_region_name: eu-central-1
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+```
+
+Start it with `litellm --config config.yaml`, using the AWS credential chain of the host it runs on (an instance role, or `AWS_*` variables). Then point 0 at it:
+
+```bash
+export OPENAI_BASE_URL="https://litellm.internal.example/v1"
+export OPENAI_API_KEY="your-litellm-key"
+export ZERO_SELECTED_PROVIDER="openai"
+export ZERO_MODEL="claude-bedrock"
+export ZERO_NO_TELEMETRY=1
+0 -p "Review ./authorized-repo"
+```
+
+- `ZERO_MODEL` is the proxy's `model_name`, not the Bedrock ID.
+- 0 calls `<base>/chat/completions`. Any other OpenAI-compatible gateway (vLLM, an API management layer, a vendor proxy) uses the same variables.
+- The Bedrock model must support tool use. 0 sends tool definitions in the standard OpenAI `tools` format and reads `tool_calls` back, which LiteLLM translates to and from Bedrock's Converse API.
+- Leave `ZERO_LLM_FALLBACK` unset and do not export other provider keys, so no request can route elsewhere ([Keep model traffic in one region](#data-residency)).
+- Check the route without a scan: `ZERO_RUNTIME_TRACE=1 0 -p "reply with ok"` prints the chosen provider and model on stderr.
+
+#### What leaves the machine
+
+With `ZERO_NO_TELEMETRY=1` (or `DO_NOT_TRACK=1` or `ZERO_OFFLINE=1`) 0 sends no usage counts or crash reports and skips the public pricing and model-catalog lookups (OpenRouter and Models.dev). Model requests go only to `OPENAI_BASE_URL`. Prices for gateway models show as unknown. Still yours to control: the optional `web_search` tool is off unless `ZERO_FEATURE_WEB_SEARCH=1`, scan targets you point at are contacted by design, and GitHub is contacted only when you scan a GitHub repository.
+
 ### Ollama
 
 Ollama serves an OpenAI-compatible endpoint, so connect it as a custom provider:

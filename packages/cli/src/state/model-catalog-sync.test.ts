@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,7 +88,20 @@ describe("syncModelCatalog + cache", () => {
     cachePath = join(dir, "model-catalog.json");
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("makes no Models.dev request when an opt-out is set", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+      vi.stubEnv(name, "1");
+      expect(await syncModelCatalog({ cachePath })).toBeNull();
+      vi.stubEnv(name, undefined);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it("fetches, normalizes, and writes a 0600 cache", async () => {
