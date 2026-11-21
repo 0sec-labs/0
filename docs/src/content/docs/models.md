@@ -87,7 +87,7 @@ For OpenCode Go, use its published base URL, such as `https://opencode.ai/infere
 
 Run models in your own AWS account by putting a [LiteLLM](https://docs.litellm.ai) proxy in front of Amazon Bedrock. 0 talks to the proxy as a custom OpenAI-compatible provider, so the proxy holds the AWS credentials and 0 never sees them.
 
-A LiteLLM `config.yaml` that exposes one Bedrock model:
+A LiteLLM configuration file that exposes one Bedrock model:
 
 ```yaml
 model_list:
