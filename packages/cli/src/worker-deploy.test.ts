@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { explainSshFailure, loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
+import { deployWorker, explainSshFailure, loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
 
 describe("worker deployment assets", () => {
   it("resolves both source and split bundle modules to their package root", () => {
@@ -120,6 +120,105 @@ describe("worker deployment assets", () => {
 
   it("rejects invalid ports before invoking the worker", () => {
     for (const enginePort of [0, 65536, 1.5]) expect(() => validateWorkerOptions({ ssh: "worker", enginePort })).toThrow("enginePort");
+  });
+
+  it("accepts valid HTTPS repository URLs", () => {
+    const valid = [
+      "https://github.com/0sec-labs/0.git",
+      "https://gitlab.com/group/repo.git",
+      "https://example.com/repo",
+      "https://example.com:8443/repo.git",
+      "https://host.xz/path/to/repo.git",
+    ];
+    for (const targetGit of valid) {
+      expect(() => validateWorkerOptions({ ssh: "worker", targetGit })).not.toThrow();
+    }
+  });
+
+  it("rejects non-HTTPS protocols (http, file, git, ext, ssh)", () => {
+    const rejected = [
+      "http://github.com/0sec-labs/0.git",
+      "file:///tmp/zero-repo",
+      "git://github.com/0sec-labs/0.git",
+      "ext::sh -c evil",
+      "ext://evil",
+      "ssh://git@github.com/0sec-labs/0.git",
+      "ftp://example.com/repo.git",
+    ];
+    for (const targetGit of rejected) {
+      expect(() => validateWorkerOptions({ ssh: "worker", targetGit })).toThrow(/--target-git/);
+    }
+  });
+
+  it("rejects malformed URLs, URLs with whitespace, quotes, or missing host", () => {
+    const malformed = [
+      "not-a-url",
+      "https://",
+      "https:///",
+      "https://?query-only",
+      "https://#hash-only",
+      "https://example.com/repo with spaces.git",
+      "https://example.com/repo'quote.git",
+      'https://example.com/repo"quote.git',
+      "https://x.test/r.git'; rm -rf / #",
+    ];
+    for (const targetGit of malformed) {
+      expect(() => validateWorkerOptions({ ssh: "worker", targetGit })).toThrow(/--target-git/);
+    }
+  });
+
+  it("applies protocol, hook, and environment hardening in the clone command", async () => {
+    const root = mkdtempSync(join(tmpdir(), "worker-harden-test-"));
+    mkdirSync(join(root, "dist"), { recursive: true });
+    mkdirSync(join(root, "vendor"), { recursive: true });
+    mkdirSync(join(root, "dist/worker-assets/demo-target"), { recursive: true });
+    writeFileSync(join(root, "dist/0.js"), "");
+    writeFileSync(join(root, "vendor/tree-sitter-0.21.1-node24.tgz"), "");
+
+    const shell = vi.fn((cmd: string) => {
+      if (cmd.includes("uname")) return "Linux 6.1 x86_64";
+      if (cmd.includes("node --version")) return "v24.14.0";
+      if (cmd.includes("clang --version")) return "clang version 18.1.0";
+      if (cmd.includes("clone")) {
+        throw new Error(`INTERCEPTED_CLONE: ${cmd}`);
+      }
+      return "";
+    });
+
+    try {
+      await expect(deployWorker({
+        ssh: "test-host",
+        targetGit: "https://example.com/org/repo.git",
+        repoRoot: root,
+        quiet: true,
+      }, {
+        label: "test-host",
+        shell,
+        copy: () => {},
+        tunnel: () => 12345,
+      })).rejects.toThrow(/INTERCEPTED_CLONE/);
+
+      const cloneCall = shell.mock.calls.find(call => typeof call[0] === "string" && call[0].includes("clone"));
+      expect(cloneCall).toBeDefined();
+      const command = cloneCall![0] as string;
+
+      // Git environment hardening
+      expect(command).toContain("GIT_TERMINAL_PROMPT=0");
+      expect(command).toContain("GIT_ASKPASS=/bin/false");
+      expect(command).toContain("GIT_CONFIG_NOSYSTEM=1");
+      expect(command).toContain("GIT_CONFIG_GLOBAL=/dev/null");
+
+      // Protocol and hook isolation overrides
+      expect(command).toContain("-c protocol.allow=never");
+      expect(command).toContain("-c protocol.https.allow=always");
+      expect(command).toContain("-c core.hooksPath=/dev/null");
+      expect(command).toContain("-c init.templateDir=");
+
+      // Argument separation and escaping
+      expect(command).toMatch(/clone\s+--depth\s+1\s+--\s+'https:\/\/example\.com\/org\/repo\.git'\s+\/tmp\/zero-engine\/work\/target/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
