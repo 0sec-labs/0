@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, isAbsolute, resolve } from "node:path";
+import { join, isAbsolute, resolve, sep } from "node:path";
 import {
   parsePatch,
   applyPatchOps,
@@ -388,7 +388,7 @@ describe("applyPatchOps (filesystem)", () => {
     const candidate = isAbsolute(logical)
       ? resolve(logical)
       : resolve(root, logical);
-    if (candidate !== root && !candidate.startsWith(root + "/")) {
+    if (candidate !== root && !candidate.startsWith(root + sep)) {
       throw new Error(`Path escapes the allowed scope: ${logical}`);
     }
     return candidate;
