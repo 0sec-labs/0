@@ -11,33 +11,28 @@ One page on how the repo is layered and how to keep it that way.
            |            \                 |  built output only
            |             \                v
            |              +------ copied into cli as dashboard-assets.generated.ts
-           |  (bench command)
+           |
            v
-   packages/bench (@0/bench)    never shipped
-        |
-        v
    packages/engine (@0/engine)  <------- cli and web depend on this too
    agents, storage, shared types, templates
 ```
 
-Allowed edges: `cli -> engine`, `cli -> bench` (the `bench` command only),
-`web -> engine`, `bench -> engine`. Everything else is forbidden. The engine
-depends on none of the other packages.
+Allowed edges: `cli -> engine` and `web -> engine`. Everything else is
+forbidden. The engine depends on neither of the other packages.
 
 ## Layering rules
 
 Enforced by `pnpm check:architecture` (`scripts/check-architecture.mjs`, run in
 `test:public` and in `.github/workflows/main.yml`):
 
-1. `engine` imports nothing from `@0/cli`, `@0/web` or `@0/bench`.
-2. `web` imports only `@0/engine` (never `@0/cli` or `@0/bench`).
+1. `engine` imports nothing from `@0/cli` or `@0/web`.
+2. `web` imports only `@0/engine` (never `@0/cli`).
 3. `cli` never imports `@0/web` or anything in `packages/web/src`; it consumes
    only the built assets (`packages/cli/scripts/generate-dashboard-assets.mjs`).
-4. `bench` is imported only by `cli`, and by repo-level `scripts/`.
-5. Cross-package imports go through a package's `exports` map. The only deep
+4. Cross-package imports go through a package's `exports` map. The only deep
    entries are listed in `ALLOWED_DEEP` in the check script. Relative imports
    that reach into another package are rejected.
-6. Top-level directories inside `packages/engine/src` must not form new import
+5. Top-level directories inside `packages/engine/src` must not form new import
    cycles. Existing cycles are recorded in `scripts/architecture-baseline.json`
    (a warning count only); a new or grown cycle fails. Refresh the baseline
    with `node scripts/check-architecture.mjs --update-baseline` only when a
@@ -69,8 +64,6 @@ The model-visible tool list is eight tools; see
 - `packages/cli`: `src/**/*.test.{ts,tsx}`, `src/commands/__tests__/`, and the
   spawned-CLI end-to-end suite in `test/e2e/`.
 - `packages/web`: `test/` (vitest, `packages/web/vitest.config.ts`).
-- `packages/bench`: `src/**/*.test.ts`, root-level `*.test.ts` and `test/`
-  (`pnpm --filter @0/bench test:targets`).
 - Repo-level: `scripts/*.test.mjs` run with `node --test`; the browser and docs
   checks are the `test:*` scripts in the root `package.json`.
 
