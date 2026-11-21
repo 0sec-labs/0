@@ -7,13 +7,13 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
-import { scanPrompt, type ScanReport } from "@0/engine/shared";
+import { parseSarif, scanPrompt, type PrePassLeads, type ScanReport } from "@0/engine/shared";
 import { mergePasses, scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, lastAssistantText, usageLine, type FinishedThread, type Json } from "./thread-output.js";
@@ -54,6 +54,8 @@ export interface ScanDeps {
   startConsole(dbPath?: string): Promise<() => void>;
   /** What `git status` lists in the folder, or undefined when it is not a git work tree. A scan must leave it as it found it. */
   changedFiles(folder: string): Promise<Set<string> | undefined>;
+  /** Run a fast pattern scanner on the folder for leads, or undefined when none is installed or it fails. Never throws. */
+  prePass(folder: string): Promise<PrePassLeads | undefined>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
@@ -81,6 +83,18 @@ export const defaultScanDeps: ScanDeps = {
     child.on("error", () => {});
     return () => { child.kill("SIGTERM"); };
   },
+  async prePass(folder) {
+    const binary = [process.env.ZERO_FOXGUARD_PATH, join(homedir(), ".0", "bin", "foxguard"), "foxguard"].filter((value): value is string => !!value).find(candidate => candidate === "foxguard" || existsSync(candidate));
+    if (!binary) return undefined;
+    try {
+      let stdout: string;
+      try { stdout = (await exec(binary, ["--format", "sarif", folder], { timeout: 120_000, maxBuffer: 128 * 1024 * 1024 })).stdout; }
+      // A scanner that exits non-zero because it found something still wrote its report.
+      catch (error) { stdout = (error as { stdout?: string }).stdout ?? ""; if (!stdout.trim().startsWith("{")) return undefined; }
+      const parsed = parseSarif(stdout, { tool: "foxguard", roots: [folder] });
+      return { tool: "foxguard", leads: parsed.findings, total: parsed.findings.length };
+    } catch { return undefined; }
+  },
   async clone(url) {
     const dir = mkdtempSync(join(tmpdir(), "0-scan-"));
     // An untrusted repository: no hooks, no external transports, shallow, and `--` before the URL.
@@ -90,7 +104,7 @@ export const defaultScanDeps: ScanDeps = {
 };
 
 interface ScanOptions extends ConsoleTransportOptions {
-  budget: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
+  budget: string; prepass?: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
 }
 
 export interface ResolvedTarget {
@@ -139,6 +153,7 @@ function validate(target: string | undefined, options: ScanOptions): void {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(options.skill)) throw new UsageError("--skill must be a skill id such as scan.");
   if (!(FORMATS as readonly string[]).includes(options.format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
   if (options.format === "pdf" && !options.output) throw new UsageError("PDF is binary; supply -o <file>.");
+  if (options.prepass !== undefined && options.prepass !== "auto" && options.prepass !== "off") throw new UsageError("--prepass must be auto or off.");
   const budget = Number(options.budget);
   if (!Number.isFinite(budget) || budget <= 0 || budget > 1000) throw new UsageError("--budget must be a positive USD amount up to 1000.");
   const passes = Number(options.passes);
@@ -165,7 +180,7 @@ export async function connect(options: ConsoleTransportOptions, deps: Pick<ScanD
   throw new Error("Could not start a console within 30s. Start one with `0 --headless` and run the scan again.");
 }
 
-interface PassContext { client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
+interface PassContext { prePass?: PrePassLeads; client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
 interface PassResult { threadId: string; done: FinishedThread; stored: ScanReport; budgetExhausted: boolean; timedOut: boolean; costUsd?: number }
 
 /** Poll a thread until it finishes, the deadline passes (it is then cancelled) or the console is lost for too long. */
@@ -213,7 +228,7 @@ async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
   const path = `/api/console/sessions/${encodeURIComponent(id)}`;
   try {
     await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
-    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill) });
+    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill, ctx.prePass) });
   } catch (error) {
     // A thread that never started is no use to anyone; do not leave it in the list.
     const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
@@ -252,7 +267,9 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     const before = await deps.changedFiles(resolved.folder);
     ({ client, stop: stopConsole } = await connect(options, deps));
     // --budget is the total: each pass gets an equal share, so the cost stays predictable however many passes run.
-    const ctx: PassContext = { client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
+    const prePass = options.prepass === "off" ? undefined : await deps.prePass(resolved.folder);
+    if (prePass) deps.err(`${prePass.tool} pre-pass: ${prePass.total} lead${prePass.total === 1 ? "" : "s"} for the scan to check`);
+    const ctx: PassContext = { ...(prePass ? { prePass } : {}), client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
 
     const passErrors: string[] = [];
     const results = (await inPool(total, MAX_PARALLEL_PASSES, async (index): Promise<PassResult | undefined> => {
@@ -327,6 +344,7 @@ export function registerScanCommand(program: Command, deps: ScanDeps = defaultSc
     .option("-o, --output <file>", "Write the report to a file instead of stdout")
     .option("--fail-on <severity>", "Exit 1 when a finding is at or above this severity (critical, high, medium, low, info)")
     .option("--passes <n>", `Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to ${MAX_PASSES}`, "1")
+    .option("--prepass <mode>", "auto runs a pattern scanner (FoxGuard) first when it is installed and gives its hits to the scan as leads; off skips it", "auto")
     .option("--skill <id>", "Skill that holds the scan method", "scan")
     .option("--model <model>", `Model for the scan thread (default: ${DEFAULT_SCAN_MODEL})`)
     .option("--timeout <seconds>", "Maximum seconds to wait for the scan", String(DEFAULT_TIMEOUT_SECONDS)))

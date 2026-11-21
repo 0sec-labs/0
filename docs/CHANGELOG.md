@@ -24,6 +24,8 @@ on the GitHub Release tag.
 - Sentinels can be defined as YAML files in a git repository: `0 sentinels sync <folder>` shows what would change and `--apply` writes it (new Sentinels paused, new triggers disabled, a changed model or skill list sent back to review, nothing deleted; `--check` for CI), and `0 sentinels export <id>` writes an existing Sentinel as a file.
 - The pull request poll reads up to 1,000 open pull requests instead of 50.
 
+- `0 scan` runs a fast pattern scanner first when FoxGuard is installed (`--prepass auto`, the default; `--prepass off` skips it) and hands its hits to the scan thread as leads to check. The thread records only the leads that are real, says which it rejected, and still reviews the entry points itself, so bugs a pattern scanner cannot see are not lost.
+
 ### Changed
 
 - Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
