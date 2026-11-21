@@ -7,6 +7,8 @@ import { TeamAuth, hashTeamPassword } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation, authorizeTeamApi, handleTeamRequest } from "./team-web.js";
 import type { ConsoleGateway } from "./console-gateway.js";
+import { closeAuditLog, listAudit } from "@0/engine/storage";
+import { configureAudit } from "./audit.js";
 let hash: string, directory: string, auth: TeamAuth, collaboration: CollaborationService;
 let cookies: Record<string, string>, gateway: ConsoleGateway;
 const origin = "http://127.0.0.1:48123";
@@ -114,5 +116,35 @@ describe("shared room HTTP authorization", () => {
     expect(authorizeTeamApi(localAuth, request("POST"), "/api/console/sessions")).toBeNull();
     expect(() => assertTeamConsoleMutation(request("POST"), "chat-a", localAuth, undefined, gateway)).not.toThrow();
     await expect(handleTeamRequest(request(), new URL("/api/team/presence", origin), localAuth, undefined, gateway, async () => undefined)).rejects.toThrow("not configured");
+  });
+});
+
+describe("team sign-in and sign-out audit", () => {
+  let dbPath = "";
+  beforeEach(() => { dbPath = join(directory, "audit.db"); configureAudit(dbPath); });
+  afterEach(() => { configureAudit(null); closeAuditLog(); });
+  const events = () => listAudit({}, { dbPath }).events.reverse();
+  it("records password sign-in and sign-out under the named member, without credentials", async () => {
+    await route("auth/login", "POST", undefined, { userId: "editor", password: "test-only-password" });
+    await route("auth/logout", "POST", "editor");
+    const [login, logout] = events();
+    expect(login).toMatchObject({ actor: "operator Editor (browser)", action: "access.login", outcome: "ok", detail: { id: "editor", kind: "password", role: "editor" } });
+    expect(logout).toMatchObject({ actor: "operator Editor (browser)", action: "access.logout", detail: { id: "editor" } });
+    expect(JSON.stringify(events())).not.toContain("test-only-password");
+  });
+  it("does not record a sign-out for a request without a session", async () => {
+    await route("auth/logout", "POST");
+    expect(events()).toHaveLength(0);
+  });
+  it("records an SSO sign-in as the member and a rejected SSO callback as denied", async () => {
+    const user = auth.lookupUser("viewer")!;
+    const spy = vi.spyOn(auth, "callback").mockResolvedValueOnce({ user, redirect: "/", setCookies: [] } as never);
+    await route("auth/callback");
+    const { TeamAuthError } = await import("./team-auth.js");
+    spy.mockRejectedValueOnce(new TeamAuthError("This SSO account is not a workspace member", 403));
+    await expect(route("auth/callback")).rejects.toThrow("not a workspace member");
+    const [ok, denied] = events();
+    expect(ok).toMatchObject({ actor: "operator Viewer (browser)", action: "access.login", detail: { id: "viewer", kind: "sso" } });
+    expect(denied).toMatchObject({ actor: "anonymous", action: "access.login_failed", outcome: "denied", detail: { kind: "sso", reason: "not_a_member", status: 403 } });
   });
 });

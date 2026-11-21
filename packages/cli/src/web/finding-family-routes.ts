@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { osecDB } from "@0/engine/storage";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
-import { audit, auditActor } from "./audit.js";
+import { audit, auditActor, type AuditCaller } from "./audit.js";
 import { json, readJsonObject, requireControlToken } from "./dashboard-http.js";
 import { findingsServiceFor } from "./findings-service.js";
 import {
@@ -28,7 +28,7 @@ function collect(db: osecDB, fingerprint: string) {
 
 export async function handleFindingFamilyRequest(
   req: IncomingMessage, res: ServerResponse, fingerprint: string, action: "triage" | "workflow" | undefined,
-  dbPath: string | undefined, controlToken: string, engineBearer?: string,
+  dbPath: string | undefined, controlToken: string, engineBearer?: string, caller: AuditCaller = { engineRequest: false },
 ): Promise<void> {
   const findings = findingsServiceFor(dbPath);
   if (req.method === "POST" && action === "triage") {
@@ -37,7 +37,7 @@ export async function handleFindingFamilyRequest(
     const status = normalizeTriageStatus(body.triageStatus);
     // The decision applies to the whole family, in every database that holds one of its findings.
     await findings.writeFamily(fingerprint, db => db.updateFindingTriageByFingerprint(fingerprint, status, typeof body.triageNote === "string" ? body.triageNote : undefined));
-    audit({ actor: auditActor({ engineRequest: false }), action: "finding.triage", subject: fingerprint, detail: { fingerprint, decision: status } });
+    audit({ actor: auditActor(caller), action: "finding.triage", subject: fingerprint, detail: { fingerprint, decision: status, ...(caller.userId ? { id: caller.userId } : {}) } });
     json(res, 200, { ok: true });
     return;
   }

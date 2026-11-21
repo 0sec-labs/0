@@ -13,7 +13,7 @@ let auditDbPath: string | undefined;
 export function configureAudit(dbPath?: string | null): void { auditDbPath = dbPath === null ? undefined : resolveOsecDbPath(dbPath); }
 export function audit(event: AuditInput): void { if (auditDbPath) recordAudit(event, { dbPath: auditDbPath }); }
 
-export interface AuditCaller { engineRequest: boolean; teamEnabled?: boolean; displayName?: string }
+export interface AuditCaller { engineRequest: boolean; teamEnabled?: boolean; displayName?: string; userId?: string }
 export function auditActor(caller: AuditCaller): string {
   if (caller.engineRequest) return "engine";
   return caller.teamEnabled && caller.displayName ? `operator ${caller.displayName} (browser)` : "operator (browser)";

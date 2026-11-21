@@ -8,6 +8,8 @@ import type { Finding } from "@0/engine/shared";
 import { handleApiRequest } from "./dashboard-api.js";
 import { closeSharedDbs } from "./shared-db.js";
 import { invalidateReadCache } from "./read-cache.js";
+import { closeAuditLog, listAudit } from "@0/engine/storage";
+import { configureAudit } from "./audit.js";
 
 const TOKEN = "t".repeat(32);
 let home: string; let previousHome: string | undefined; let previousDb: string | undefined;
@@ -76,5 +78,20 @@ describe("findings API over scan run databases", () => {
     expect(detail.provenance).toMatchObject({ kind: "scan", scanId: "run-a" });
     const scan = await (await call("/api/scans/run-a/findings")).json() as { findings: Array<{ id: string }> };
     expect(scan.findings.map(f => f.id)).toEqual(["a1"]);
+  });
+
+  it("attributes a triage decision to the authenticated team member, not a shared identity", async () => {
+    seed(runDb("run-a"), "run-a", "https://a.example", [finding("a1", "high", { fingerprint: "fp-a" })]);
+    const auditPath = join(home, "audit.db"); configureAudit(auditPath);
+    try {
+      const member = createServer((req, res) => { void handleApiRequest(req, res, new URL(req.url ?? "/", "http://x").pathname, undefined, TOKEN, undefined, undefined, { engineRequest: false, teamEnabled: true, displayName: "Ada Reviewer", userId: "ada" }).then(() => undefined); });
+      await new Promise<void>(done => member.listen(0, "127.0.0.1", done));
+      const url = `http://127.0.0.1:${(member.address() as { port: number }).port}`;
+      const response = await fetch(`${url}/api/finding-family/fp-a/triage`, { method: "POST", headers: { "content-type": "application/json", "x-0-control-token": TOKEN }, body: JSON.stringify({ triageStatus: "suppressed" }) });
+      expect(response.status).toBe(200);
+      member.close();
+      const [event] = listAudit({}, { dbPath: auditPath }).events;
+      expect(event).toMatchObject({ actor: "operator Ada Reviewer (browser)", action: "finding.triage", subject: "fp-a", detail: { decision: "suppressed", id: "ada" } });
+    } finally { configureAudit(null); closeAuditLog(); }
   });
 });
