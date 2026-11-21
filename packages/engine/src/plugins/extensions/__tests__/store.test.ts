@@ -46,6 +46,63 @@ describe("sealed approvals (defence in depth)", () => {
     unwrap(svc.store.update(s => { s.extensions["demo"]!.enabled.global = false; return ok(undefined); }));
     expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("disabled");
   });
+  it("rejects multi-byte unicode seals and unpaired surrogates without throwing RangeError", async () => {
+    const { svc, state } = await installed();
+    const raw = JSON.parse(readFileSync(state, "utf8"));
+    const malformed = [
+      { desc: "accented character (é)", val: "a".repeat(63) + "é" },
+      { desc: "multi-byte currency (€)", val: "a".repeat(63) + "€" },
+      { desc: "emoji / astral character (🔐)", val: "a".repeat(62) + "🔐" },
+      { desc: "mixed ASCII and unicode", val: "a".repeat(30) + "é" + "€" + "🔐" + "b".repeat(30) },
+      { desc: "all multi-byte unicode", val: "é".repeat(64) },
+      { desc: "long unicode", val: "é".repeat(100) },
+      { desc: "unpaired high surrogate", val: "a".repeat(63) + "\uD800" },
+    ];
+
+    for (const { val } of malformed) {
+      raw.seals["ext:demo"] = val;
+      raw.seals["builtin:github"] = val;
+      raw.builtins = { github: { enabled: true, explicit: true } };
+      writeFileSync(state, JSON.stringify(raw));
+
+      // Neither read() nor builtinState() may throw RangeError
+      const s = svc.store.read();
+      expect(s.ok).toBe(true);
+      expect(svc.store.builtinState("github")).toEqual({ kind: "default" });
+
+      // Fail-closed behavior: demo loses approvals and shows needs-approval
+      expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("needs-approval");
+      expect(svc.loadable().extensions).toEqual([]);
+      expect(svc.loadable().refused[0]).toMatchObject({ name: "demo", code: "not_approved" });
+    }
+  });
+  it("an invalid 64-character ASCII seal fails closed normally", async () => {
+    const { svc, state } = await installed();
+    const raw = JSON.parse(readFileSync(state, "utf8"));
+    raw.seals["ext:demo"] = "0".repeat(64);
+    writeFileSync(state, JSON.stringify(raw));
+    expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("needs-approval");
+    expect(svc.loadable().extensions).toEqual([]);
+    expect(svc.loadable().refused[0]).toMatchObject({ name: "demo", code: "not_approved" });
+  });
+  it("permits standard recovery operations after encountering malformed multi-byte seals", async () => {
+    const { svc, state } = await installed();
+    const raw = JSON.parse(readFileSync(state, "utf8"));
+    raw.seals["ext:demo"] = "a".repeat(63) + "é";
+    writeFileSync(state, JSON.stringify(raw));
+
+    // Extension shows needs-approval due to broken seal
+    expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("needs-approval");
+
+    // Standard recovery: re-approving via enable({ approve: true }) updates state and writes fresh valid seal
+    const enabled = svc.installer.enable("demo", { approve: true });
+    expect(enabled.ok).toBe(true);
+    expect(svc.list().rows.find(r => r.name === "demo")?.status).toBe("enabled");
+
+    const updated = svc.store.read();
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.value.extensions["demo"]?.sealBroken).toBeUndefined();
+  });
 });
 
 describe("state.json key rename", () => {
