@@ -92,3 +92,16 @@ describe("0 findings fix", () => {
     expect(body).toContain("Opened as a draft");
   });
 });
+
+describe("the commit identity", () => {
+  it("uses a neutral one when git has none (a clean machine, an Actions runner), and the person's own when it has", async () => {
+    const none = harness();
+    await runFix("f-1", options({ pr: false }), none.deps);
+    expect(none.calls.find(call => call.includes(" commit "))).toContain("-c user.email=noreply@0.security");
+    const named = harness();
+    const git = named.deps.git;
+    named.deps.git = async (cwd, args) => (args[0] === "config" && args[1] === "user.email" ? "dev@example.com\n" : git(cwd, args));
+    await runFix("f-1", options({ pr: false }), named.deps);
+    expect(named.calls.find(call => call.includes(" commit "))).not.toContain("user.email");
+  });
+});

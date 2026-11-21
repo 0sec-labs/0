@@ -172,7 +172,10 @@ export async function runFix(id: string, options: FixOptions, deps: FixDeps): Pr
     const verified = checks.every(check => check.code === 0) && !thread.failed;
 
     await deps.git(tree, ["add", "-A"]);
-    await deps.git(tree, ["commit", "--quiet", "-m", `fix: ${finding.title.slice(0, 120)}\n\nFinding ${finding.id}`]);
+    // A clean machine or an Actions runner has no git identity; use a neutral one rather than fail the commit.
+    const configured = (await deps.git(tree, ["config", "user.email"]).catch(() => "")).trim();
+    const identity = configured ? [] : ["-c", "user.name=0", "-c", "user.email=noreply@0.security"];
+    await deps.git(tree, [...identity, "commit", "--quiet", "-m", `fix: ${finding.title.slice(0, 120)}\n\nFinding ${finding.id}`]);
     committedBranch = true;
     const outcome: FixOutcome = { ...common, changed: true, committed: true, checks, verified };
     if (!options.pr) { deps.err(`committed on ${branch}; not pushed (--no-pr).`); return outcome; }
