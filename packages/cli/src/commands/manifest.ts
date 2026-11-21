@@ -21,6 +21,7 @@ export interface TopLevelCommand {
 /** Descriptions of the visible commands: the one copy the real groups and the root help share. */
 export const GROUP_DESCRIPTIONS: Readonly<Record<string, string>> = {
   scan: "Scan a folder or git repository for security bugs; prints the findings as a report",
+  probe: "Send adversarial messages to a live model or agent endpoint and report the ones it obeys",
   sbom: "Generate an SBOM from lockfiles, and check one against known advisories",
   findings: "Browse findings and change their status",
   threads: "Start, follow and stop threads",
@@ -45,6 +46,7 @@ export const VISIBLE_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = 
 
 export const TOP_LEVEL_COMMANDS: readonly TopLevelCommand[] = [
   { name: "scan", aliases: [], description: GROUP_DESCRIPTIONS["scan"]!, options: true, arguments: "<target>" },
+  { name: "probe", aliases: [], description: GROUP_DESCRIPTIONS["probe"]!, options: true, arguments: "<url>" },
   { name: "sbom", aliases: [], description: GROUP_DESCRIPTIONS["sbom"]! },
   { name: "findings", aliases: [], description: GROUP_DESCRIPTIONS["findings"]!, options: true },
   { name: "threads", aliases: [], description: GROUP_DESCRIPTIONS["threads"]! },

@@ -11,6 +11,11 @@ describe("what an attacker can do", () => {
     });
     expect(attackerImpactSentence({ impactAssessment: assessed })).toContain("They can: run their own code.");
   });
+  it("leaves out who can do it when reachability was not established", () => {
+    const unknown = { ...assessed, reachability_tier: "unknown" };
+    expect(describeAttackerImpact({ impactAssessment: unknown })?.who).toBe("");
+    expect(attackerImpactSentence({ impactAssessment: unknown })).not.toContain("Who:");
+  });
   it("says nothing when there is no assessment, a malformed one, or only a heuristic guess", () => {
     expect(describeAttackerImpact({})).toBeUndefined();
     expect(describeAttackerImpact({ impactAssessment: { blast_radius: "" } })).toBeUndefined();

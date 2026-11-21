@@ -39,7 +39,7 @@ export function adoptCommands(program: Command, only?: string): void {
 }
 
 export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
-  ["Work", ["scan", "sbom", "findings", "threads", "sentinels"]],
+  ["Work", ["scan", "probe", "sbom", "findings", "threads", "sentinels"]],
   ["Setup", ["skills", "models", "computers", "config"]],
 ];
 
@@ -85,6 +85,7 @@ const examplesBlock = (lines: readonly string[]): string => `Examples:\n${lines.
 /** Short, real examples for the visible commands, keyed by command path. */
 const EXAMPLES: Readonly<Record<string, readonly string[]>> = {
   scan: ["0 scan ~/code/app", "0 scan ~/code/app --format sarif -o scan.sarif --fail-on high", "0 scan https://github.com/acme/app --budget 2 --format json"],
+  probe: ["0 probe https://api.example.com/v1/chat/completions -H \"Authorization: Bearer $OPENAI_API_KEY\" --model gpt-4o-mini", "0 probe https://app.example.com/api/chat --body '{\"message\":\"{{prompt}}\"}' --response-path reply", "0 probe https://app.example.com/api/chat --secret sk-live-1234 --format sarif -o probe.sarif --fail-on medium"],
   sbom: ["0 sbom generate . -o sbom.cdx.json", "0 sbom check sbom.cdx.json", "0 sbom check sbom.cdx.json --format json"],
   "sbom generate": ["0 sbom generate . -o sbom.cdx.json", "0 sbom generate ~/code/app --name app"],
   "sbom check": ["0 sbom check sbom.cdx.json", "0 sbom check sbom.cdx.json --format json"],

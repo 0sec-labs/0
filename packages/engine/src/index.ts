@@ -328,3 +328,4 @@ export { RECOMMENDED_MODEL_ROLES, recommendModels } from "./runtime/llm-api/reco
 export type { RecommendedPick, RecommendedRole, RecommendedRoleSpec } from "./runtime/llm-api/recommended-models.js";
 
 export * from "./sbom/index.js";
+export * from "./probe/index.js";

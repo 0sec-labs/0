@@ -40,6 +40,8 @@ on the GitHub Release tag.
 - Two skills for AI applications, `llm-app-review` and `mcp-server-review` (`0 scan --skill llm-app-review`): they map an app's trust boundaries (what reaches the model, what it can do, what happens to its output) and check them against the OWASP LLM risks, or check MCP configuration and tool handlers for poisoning, over-broad access, unpinned launchers and injection.
 - `0 sbom generate --ai` also lists the AI in a folder (models, datasets, hosted model ids, MCP servers) as CycloneDX components, found by reading files as text.
 
+- `0 probe <url>` sends ten adversarial messages (instruction override, fake system markup, hidden instructions in a document or base64, a role-play jailbreak, system prompt extraction, credential requests, command execution, markdown and HTML output) to a live model or agent endpoint and reports the ones whose reply shows they worked. Each carries a canary, so a hit is checked on the reply, not judged by another model. Reports in every format, `--save` into the findings store, `--fail-on` for CI. On a real model it got 3 of 10 through a deliberately weak prompt and 0 of 10 through a hardened one.
+
 ### Changed
 
 - Less text in the app: shorter Settings descriptions, no subtitle that repeats a page's name, a one-line Memory notice, and shorter dialogs on Computers.

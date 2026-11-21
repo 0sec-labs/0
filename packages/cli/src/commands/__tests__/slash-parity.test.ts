@@ -10,7 +10,7 @@ import { registerCommandTree } from "../tree.js";
 
 /** Nouns that make no sense in a chat composer. */
 // Reads lockfiles and calls an advisory database; there is no thread to talk to.
-const CLI_ONLY = new Set<string>(["sbom"]);
+const CLI_ONLY = new Set<string>(["sbom", "probe"]);
 
 const isHidden = (command: Command): boolean => (command as unknown as { _hidden?: boolean })._hidden === true;
 

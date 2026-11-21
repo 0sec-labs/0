@@ -818,6 +818,42 @@ Fetch and install the latest release binary for 0 (re-runs install.sh).
 
 ## Findings & evidence
 
+### probe
+
+Send adversarial messages to a live model or agent endpoint and report the ones it obeys
+
+```text
+0 probe [options] <url>
+```
+
+Sends ten attacks to the URL you name and reports the ones whose reply shows they worked: a user message that overrides the instructions, fake system markup, instructions hidden in a document or in base64, a role-play jailbreak, reading out the system prompt, asking for credentials, asking for a command to be run, markdown that leaks data when rendered, and raw HTML in the reply. Each attack carries a unique canary, so a hit is a check on the reply (the canary came back, a credential appeared, `uid=` came back from a command) and not another model's opinion. Models vary, so each probe is sent twice by default and one hit counts.
+
+The request is an OpenAI-style chat body unless you give `--body` with `{{prompt}}` where the message goes, and the reply is found automatically in common JSON shapes or at `--response-path`. Put a key in a header as an environment variable (`-H "Authorization: Bearer $OPENAI_API_KEY"`) so it is not typed on the command line. Give `--secret` a secret you know is in the endpoint's prompt and a reply that contains it is reported as a definite leak. Requests are 300 ms apart and capped at 100 by default. The findings go into the usual reports (`--format md|json|sarif|html|pdf`) and, with `--save`, into `0 findings list`.
+
+On a real model behind a deliberately weak prompt, three of the ten got through; behind a hardened prompt none did. A miss means the reply did not show the attack working in those attempts; it does not prove the endpoint is safe against attacks that are not in the list.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `url` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `-H, --header <header>` | — | Request header, `Name: value`; the value may be $ENV_VAR so a key is not typed on the command line (repeatable) |
+| `--body <json>` | — | Request body as JSON with {{prompt}} where the message goes (default: an OpenAI-style chat body) |
+| `--body-file <file>` | — | Read the request body from a file |
+| `--model <name>` | — | Add this model name to the default chat body |
+| `--response-path <path>` | — | Where the reply is in a JSON response, such as choices.0.message.content (default: tried automatically) |
+| `--probes <ids>` | — | Only these probes, comma separated (direct-override, delimiter-injection, indirect-document, encoded-instruction, persona-jailbreak, system-prompt-extraction, secret-request, tool-execution, markdown-exfiltration, raw-html-output) |
+| `--repeat <n>` | `2` | Times each probe is sent; models vary, and a hit in any attempt counts |
+| `--delay <ms>` | `300` | Pause between requests |
+| `--timeout <seconds>` | `30` | Seconds to wait for each reply |
+| `--max-requests <n>` | `100` | Send at most this many requests |
+| `--secret <text>` | — | A secret known to be in the endpoint's prompt; a reply that contains it is a definite leak |
+| `--format <format>` | `md` | Report format: json, md, sarif, html, pdf |
+| `-o, --output <file>` | — | Write the report to a file instead of stdout |
+| `--fail-on <severity>` | — | Exit 1 when a finding is at or above this severity |
+| `--save` | — | Also store the findings, so they show in `0 findings list` |
+
 ### sbom
 
 Generate an SBOM from lockfiles, and check one against known advisories

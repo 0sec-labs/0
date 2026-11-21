@@ -5,7 +5,7 @@ import type { ImpactAssessment } from "./types.js";
 export interface AttackerImpact {
   /** What an attacker can do, in the model's words (the blast radius). */
   can: string;
-  /** Who can do it: from the reachability tier. */
+  /** Who can do it: from the reachability tier. Empty when that was not established. */
   who: string;
   /** What they get: from how weaponizable the bug is. */
   gets: string;
@@ -19,7 +19,7 @@ const WHO: Record<ImpactAssessment["reachability_tier"], string> = {
   "local-priv": "a privileged local user",
   "needs-hardware": "someone with physical access",
   "needs-host-migration": "someone who first controls another part of the system",
-  unknown: "who can reach it is not established",
+  unknown: "",
 };
 const GETS: Record<ImpactAssessment["weaponizability"], string> = {
   rce: "run their own code",
@@ -44,5 +44,5 @@ export function describeAttackerImpact(finding: { impactAssessment?: unknown }):
 /** One line for a report or a code scanning alert. */
 export function attackerImpactSentence(finding: { impactAssessment?: unknown }): string | undefined {
   const impact = describeAttackerImpact(finding);
-  return impact ? `${impact.can} Who: ${impact.who}. They can: ${impact.gets}.` : undefined;
+  return impact ? `${impact.can}${impact.who ? ` Who: ${impact.who}.` : ""} They can: ${impact.gets}.` : undefined;
 }

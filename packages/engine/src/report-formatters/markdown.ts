@@ -200,7 +200,7 @@ function formatFinding(finding: Finding): string {
   const attacker = describeAttackerImpact(finding);
   if (attacker) {
     lines.push(`- **What an attacker can do:** ${attacker.can}`);
-    lines.push(`- **Who can do it:** ${attacker.who}`);
+    if (attacker.who) lines.push(`- **Who can do it:** ${attacker.who}`);
     lines.push(`- **What they get:** ${attacker.gets}`);
   }
   lines.push(`- **Technical severity:** ${finding.severity}`);

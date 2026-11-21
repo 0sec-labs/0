@@ -12,6 +12,8 @@ Options:
 Work:
   scan [options] <target>  Scan a folder or git repository for security bugs; prints the findings as
                            a report
+  probe [options] <url>    Send adversarial messages to a live model or agent endpoint and report
+                           the ones it obeys
   sbom                     Generate an SBOM from lockfiles, and check one against known advisories
   findings [options]       Browse findings and change their status
   threads                  Start, follow and stop threads
@@ -975,6 +977,37 @@ Options:
   --by <model|thread>  Group by model (default) or list each thread
   --format <format>    Output: text or json (choices: "text", "json")
   -h, --help           display help for command
+
+### 0 probe
+Usage: 0 probe [options] <url>
+
+Send adversarial messages to a live model or agent endpoint and report the ones it obeys
+
+Options:
+  -H, --header <header>   Request header, `Name: value`; the value may be $ENV_VAR so a key is not
+                          typed on the command line (repeatable)
+  --body <json>           Request body as JSON with {{prompt}} where the message goes (default: an
+                          OpenAI-style chat body)
+  --body-file <file>      Read the request body from a file
+  --model <name>          Add this model name to the default chat body
+  --response-path <path>  Where the reply is in a JSON response, such as choices.0.message.content
+                          (default: tried automatically)
+  --probes <ids>          Only these probes, comma separated (direct-override, delimiter-injection,
+                          indirect-document, encoded-instruction, persona-jailbreak,
+                          system-prompt-extraction, secret-request, tool-execution,
+                          markdown-exfiltration, raw-html-output)
+  --repeat <n>            Times each probe is sent; models vary, and a hit in any attempt counts
+                          (default: "2")
+  --delay <ms>            Pause between requests (default: "300")
+  --timeout <seconds>     Seconds to wait for each reply (default: "30")
+  --max-requests <n>      Send at most this many requests (default: "100")
+  --secret <text>         A secret known to be in the endpoint's prompt; a reply that contains it is
+                          a definite leak
+  --format <format>       Report format: json, md, sarif, html, pdf (default: "md")
+  -o, --output <file>     Write the report to a file instead of stdout
+  --fail-on <severity>    Exit 1 when a finding is at or above this severity
+  --save                  Also store the findings, so they show in `0 findings list`
+  -h, --help              display help for command
 
 ### 0 sbom
 Usage: 0 sbom [options] [command]

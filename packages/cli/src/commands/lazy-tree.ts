@@ -21,6 +21,10 @@ const SECTIONS: Readonly<Record<string, Build>> = {
     (await import("./scan.js")).registerScanCommand(root);
   },
 
+  async probe(root) {
+    (await import("./probe.js")).registerProbeCommand(root);
+  },
+
   async sbom(root) {
     (await import("./sbom.js")).registerSbomCommand(root);
   },

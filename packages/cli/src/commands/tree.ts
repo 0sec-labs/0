@@ -40,10 +40,12 @@ import { registerUsageCommand } from "./usage.js";
 import { registerAuditLogCommand } from "./audit-log.js";
 import { registerScanCommand } from "./scan.js";
 import { registerSbomCommand } from "./sbom.js";
+import { registerProbeCommand } from "./probe.js";
 
 export function registerCommandTree(program: Command): void {
   registerScanCommand(program);
   registerSbomCommand(program);
+  registerProbeCommand(program);
   // Evidence.
   registerReportsCommand(program);
   registerFindingsCommand(program);
