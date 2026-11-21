@@ -248,4 +248,56 @@ describe("the memory limit", () => {
     const result = runMemoryTool(store, undefined, { action: "remember", note: long("one more") }, { guard: createThreadGuard("t") });
     expect(result).toMatchObject({ saved: false }); expect(result.message).toContain("Memory is full");
   });
+  it("refuses a global note when an existing folder's notes leave no room for it, and accepts one when it fits", () => {
+    const folderA = join(home, "a");
+    const savedA = fill(text => store.add({ text, scope: "folder", folder: folderA }));
+    expect(savedA).toBeGreaterThan(5);
+
+    expect(() => store.add({ text: long("in global"), scope: "global" })).toThrow(/Memory is full/);
+
+    const context = memoryContext(store, folderA);
+    expect(context.omitted).toHaveLength(0);
+    expect(context.text).not.toMatch(/not shown/);
+
+    store.clear();
+    const folderNote = store.add({ text: "a short folder note", scope: "folder", folder: folderA });
+    const globalNote = store.add({ text: "a short global note", scope: "global" });
+    const ctx = memoryContext(store, folderA);
+    expect(ctx.omitted).toHaveLength(0);
+    expect(ctx.notes.map(n => n.id)).toContain(folderNote.id);
+    expect(ctx.notes.map(n => n.id)).toContain(globalNote.id);
+  });
+  it("does not let unrelated folders affect each other when checking global note budgets", () => {
+    const folderA = join(home, "a");
+    const folderB = join(home, "b");
+    const noteA = store.add({ text: long("in a"), scope: "folder", folder: folderA });
+    const noteB = store.add({ text: long("in b"), scope: "folder", folder: folderB });
+    const globalNote = store.add({ text: long("in global"), scope: "global" });
+    expect(globalNote.id).toBeDefined();
+
+    expect(memoryContext(store, folderA).omitted).toHaveLength(0);
+    expect(memoryContext(store, folderB).omitted).toHaveLength(0);
+    expect(memoryContext(store, folderA).notes.map(n => n.id)).toEqual([noteA.id, globalNote.id]);
+    expect(memoryContext(store, folderB).notes.map(n => n.id)).toEqual([noteB.id, globalNote.id]);
+  });
+  it("excludes the original note when replacing a global note during edit", () => {
+    const folderA = join(home, "a");
+    const globalNote = store.add({ text: "short", scope: "global" });
+    const savedA = fill(text => store.add({ text, scope: "folder", folder: folderA }));
+    expect(savedA).toBeGreaterThan(0);
+
+    expect(() => store.edit(globalNote.id, "still short")).not.toThrow();
+    expect(() => store.edit(globalNote.id, long("grown"))).toThrow(/Memory is full/);
+  });
+  it("does not persist rejected notes to disk", () => {
+    const folderA = join(home, "a");
+    fill(text => store.add({ text, scope: "folder", folder: folderA }));
+    const countBefore = store.list().length;
+
+    expect(() => store.add({ text: long("overflow global"), scope: "global" })).toThrow(/Memory is full/);
+    expect(store.list()).toHaveLength(countBefore);
+
+    const fresh = createFileNoteStore({ home });
+    expect(fresh.list()).toHaveLength(countBefore);
+  });
 });
