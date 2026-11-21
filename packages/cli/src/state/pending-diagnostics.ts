@@ -20,8 +20,8 @@
  */
 
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { homeStateDir } from "@0/engine/shared";
 import {
   buildDiagnosticFeedback, submissionBlockedReason, submitFeedback,
   type DiagnosticInfo, type DiagnosticMetadata, type FeedbackPayload,
@@ -54,7 +54,7 @@ export function isPendingReportId(value: unknown): value is string {
 }
 
 export function pendingDirectory(homeDir?: string): string {
-  return join(homeDir ?? homedir(), ".0", "diagnostics", "pending");
+  return join(homeStateDir(homeDir), "diagnostics", "pending");
 }
 
 function recordFor(payload: FeedbackPayload, createdAt: string): PendingRecord | null {
