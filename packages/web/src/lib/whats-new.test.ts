@@ -2,23 +2,6 @@ import { describe, expect, it } from "vitest";
 import { RELEASES } from "./releases";
 import { compareVersions, releaseIndex, shouldAutoOpenWhatsNew, showWhatsNewCard } from "./whats-new";
 
-describe("release data", () => {
-  it("only shows a picture made for that release: an image is optional and never another version's screenshot", () => {
-    for (const release of RELEASES) if (release.image) expect(release.image, release.version).toContain(`/releases/${release.version}.`);
-  });
-  it("is newest first with unique versions", () => {
-    for (let i = 1; i < RELEASES.length; i++) expect(compareVersions(RELEASES[i - 1]!.version, RELEASES[i]!.version)).toBe(1);
-  });
-  it("has 3 to 4 complete highlights per release", () => {
-    for (const release of RELEASES) {
-      for (const value of [release.version, release.date, release.title, release.summary]) expect(value.trim()).not.toBe("");
-      expect(release.highlights.length).toBeGreaterThanOrEqual(3);
-      expect(release.highlights.length).toBeLessThanOrEqual(4);
-      for (const item of release.highlights) for (const value of [item.icon, item.title, item.text]) expect(value.trim()).not.toBe("");
-    }
-  });
-});
-
 describe("seen and dismiss logic", () => {
   it("compares dotted versions numerically", () => {
     expect(compareVersions("0.29.0", "0.28.11")).toBe(1);

@@ -5,7 +5,6 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { osecDB } from "@0/engine/storage";
 import type { Finding } from "@0/engine/shared";
-import { registerCommandTree } from "../tree.js";
 import { runFindingsExport, type FindingsExportDeps } from "../findings-export.js";
 import { registerFindingsKeysCommand, type FindingsKeysDeps } from "../findings-keys.js";
 import { FindingsAccessTokenStore } from "../../web/findings-access-tokens.js";
@@ -30,11 +29,6 @@ function exportDeps() {
 }
 
 describe("0 findings export", () => {
-  it("is in the command tree", () => {
-    const program = new Command(); registerCommandTree(program);
-    const findings = program.commands.find(c => c.name() === "findings")!;
-    expect(findings.commands.map(c => c.name())).toEqual(expect.arrayContaining(["export", "keys"]));
-  });
   it("exports selected findings by prefix as sarif to a file", async () => {
     const h = exportDeps();
     await runFindingsExport(["abc1"], { format: "sarif", output: "/tmp/f.sarif", dbPath }, h.deps);

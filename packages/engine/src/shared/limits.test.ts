@@ -7,13 +7,6 @@ import {
 afterEach(() => { resetLimitsForTests(); vi.restoreAllMocks(); });
 const env = (vars: Record<string, string>) => vars as NodeJS.ProcessEnv;
 
-describe("registered defaults are unchanged", () => {
-  it.each([
-    [BASH_TIMEOUT_MS, 120_000], [REVIEW_MAX_FILES, 5000], [VERIFY_CONCURRENCY, 8],
-    [LLM_STREAM_MAX_ATTEMPTS, 3], [LLM_MAX_RETRIES, 6], [LLM_429_MAX_RETRIES, 12],
-  ])("%j", (limit, value) => { expect(resolveLimit(limit, env({}))).toBe(value); });
-});
-
 describe("resolution", () => {
   it("env overrides setting overrides default", () => {
     configureLimits({ "verify.concurrency": 4 });

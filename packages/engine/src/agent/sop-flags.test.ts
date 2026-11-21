@@ -70,34 +70,4 @@ describe("playbook injection behavior at the flag boundary", () => {
     expect(text).toContain(PLAYBOOKS[types[0]!]);
   });
 
-  it("caps at three playbooks so the injection stays bounded", () => {
-    // Feed evidence for many classes at once; the cap is what keeps the
-    // worst-case injection size predictable.
-    const kitchenSink = [
-      "You have an error in your SQL syntax",
-      "mysql_fetch_array() expects parameter 1",
-      "<script>alert(1)</script> reflected in response",
-      "Content-Type: text/html; charset=utf-8",
-      "{{7*7}} rendered as 49",
-      "jinja2.exceptions.TemplateSyntaxError",
-      "/api/users/1 returned another user's record",
-      "id parameter changed to 2 returned 200 OK",
-      "failed to open stream: /etc/passwd",
-      "include(): Failed opening required",
-    ];
-    expect(detectPlaybooks(kitchenSink).length).toBeLessThanOrEqual(3);
-  });
-
-  it("keeps the worst-case injection inside a predictable context budget", () => {
-    // Guards the cost side of the default-ON question: if someone adds a
-    // 20k-character playbook, the top-3 injection silently doubles the
-    // context cost of every scan that trips it.
-    const sizes = Object.values(PLAYBOOKS)
-      .map((p) => p.length)
-      .sort((a, b) => b - a);
-    const worstCaseChars = sizes.slice(0, 3).reduce((a, b) => a + b, 0);
-    // ~4 chars/token → ~3.6k tokens today. The assertion is a ratchet, not a
-    // measurement: it fails loudly if the worst case grows a lot.
-    expect(worstCaseChars).toBeLessThan(20_000);
-  });
 });

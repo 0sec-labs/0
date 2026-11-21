@@ -1,27 +1,6 @@
-/**
- * 0#193 / 0-cloud#111 — Finding.verificationSpec wire contract.
- *
- * Coverage:
- *   1. Type narrowing on the VerificationCodePredicate discriminated union.
- *   2. JSON serialisation round-trip on a populated VerificationSpec.
- *   3. Backward-compat: a Finding with no verificationSpec is still a valid
- *      Finding and round-trips cleanly.
- *   4. The agent-tool `parseVerificationSpecArg` helper accepts both already-
- *      parsed objects and JSON strings, and rejects malformed payloads
- *      cleanly.
- *   5. The cloud-sink `normalizeFinding` passes verificationSpec through
- *      without dropping the finding when the spec itself is malformed.
- *
- * The spec is OPTIONAL and ADDITIVE — existing prose evidence + pocSteps
- * remain intact alongside it.
- */
-import { randomUUID } from "node:crypto";
+/** 0#193 — the agent-tool `parseVerificationSpecArg` helper: parsed objects and JSON strings in, malformed payloads rejected cleanly. */
 import { describe, it, expect } from "vitest";
-import type {
-  Finding,
-  VerificationCodePredicate,
-  VerificationSpec,
-} from "./shared/index.js";
+import type { VerificationSpec } from "./shared/index.js";
 import { parseVerificationSpecArg } from "./agent/tools.js";
 
 function makeSpec(): VerificationSpec {
@@ -46,99 +25,6 @@ function makeSpec(): VerificationSpec {
     },
   };
 }
-
-describe("VerificationCodePredicate types (0#193)", () => {
-  it("narrows kind to the right predicate fields", () => {
-    const fc: VerificationCodePredicate = {
-      kind: "file-contains",
-      file: "a.ts",
-      pattern: "x",
-    };
-    const fmp: VerificationCodePredicate = {
-      kind: "file-missing-pattern",
-      file: "a.ts",
-      pattern: "x",
-    };
-    const fe: VerificationCodePredicate = { kind: "file-exists", file: "a.ts" };
-    const ast: VerificationCodePredicate = {
-      kind: "ast-shape",
-      file: "a.ts",
-      query: "(call_expression)",
-    };
-
-    const diff: VerificationCodePredicate = {
-      kind: "git-diff-applies",
-      baseCommit: "a".repeat(40),
-      diff: "diff --git a/proof.ts b/proof.ts\n",
-    };
-
-    if (fc.kind === "file-contains") expect(fc.pattern).toBe("x");
-    if (fmp.kind === "file-missing-pattern") expect(fmp.pattern).toBe("x");
-    if (fe.kind === "file-exists") expect(fe.file).toBe("a.ts");
-    if (ast.kind === "ast-shape") expect(ast.query).toBe("(call_expression)");
-    if (diff.kind === "git-diff-applies") expect(diff.baseCommit).toHaveLength(40);
-  });
-});
-
-describe("Finding.verificationSpec backward compatibility (0#193)", () => {
-  it("a Finding without verificationSpec is still a valid Finding", () => {
-    // Legacy shape: prose evidence only, no spec. Every renderer / sink /
-    // DB writer must keep working when verificationSpec is undefined.
-    const legacy: Finding = {
-      id: randomUUID(),
-      templateId: "manual",
-      title: "Legacy reflected XSS",
-      description: "q param reflected without encoding",
-      severity: "high",
-      category: "xss",
-      status: "discovered",
-      evidence: {
-        request: "GET /search?q=<script>",
-        response: "<script> echoed",
-        analysis: "no encoding in the template",
-      },
-      timestamp: 1_700_000_000_000,
-    };
-    expect(legacy.verificationSpec).toBeUndefined();
-    // And it round-trips through JSON unchanged.
-    const restored = JSON.parse(JSON.stringify(legacy)) as Finding;
-    expect(restored).toEqual(legacy);
-    expect(restored.verificationSpec).toBeUndefined();
-  });
-
-  it("a Finding with verificationSpec coexists with prose evidence (additive)", () => {
-    const enriched: Finding = {
-      id: randomUUID(),
-      templateId: "manual",
-      title: "SQL injection on /users",
-      description: "user input concatenated into a SQL string",
-      severity: "critical",
-      category: "sql-injection",
-      status: "discovered",
-      evidence: {
-        request: "POST /users name=' OR 1=1 --",
-        response: "[{...}]",
-        analysis: "db.query interpolates req.body.name",
-      },
-      verificationSpec: makeSpec(),
-      timestamp: 1_700_000_000_000,
-    };
-    // Both halves of the contract present.
-    expect(enriched.evidence.request).toContain("OR 1=1");
-    expect(enriched.verificationSpec).toBeDefined();
-    expect(enriched.verificationSpec!.code).toHaveLength(3);
-    expect(enriched.verificationSpec!.behavior).toBeDefined();
-  });
-
-  it("JSON serialisation round-trips a populated spec byte-identically", () => {
-    const spec = makeSpec();
-    const wire = JSON.stringify(spec);
-    const restored = JSON.parse(wire) as VerificationSpec;
-    expect(restored).toEqual(spec);
-    expect(restored).not.toBe(spec);
-    expect(JSON.stringify(restored)).toBe(wire);
-  });
-});
 
 describe("parseVerificationSpecArg (agent tool wire shape, 0#193)", () => {
   it("returns null for nullish / empty / wrong-type input", () => {

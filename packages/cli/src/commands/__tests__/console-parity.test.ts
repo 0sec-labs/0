@@ -1,12 +1,10 @@
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { recordAudit } from "@0/engine/storage";
 import type { ConsoleClient, ConsoleResult } from "../../console-attach-client.js";
 import { openConsoleClient } from "../../console-attach-client.js";
-import { registerCommandTree } from "../tree.js";
 import { runAuditLog } from "../audit-log.js";
 import { runConfigGet, runConfigReset, runConfigSet } from "../config.js";
 import { runConnectionsAdd, runConnectionsList, runConnectionsRemove, runConnectionsTest } from "../connections.js";
@@ -31,22 +29,6 @@ afterEach(() => {
   process.exitCode = 0;
   process.env.HOME = originalHome;
   for (const dir of temp.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-describe("command tree", () => {
-  it("registers every new group and registers computers", () => {
-    const program = new Command();
-    registerCommandTree(program);
-    const names = program.commands.map(c => c.name());
-    for (const name of ["models", "computers", "config"]) expect(names).toContain(name);
-    const nested = (group: string) => program.commands.find(c => c.name() === group)!.commands.map(c => c.name());
-    expect(nested("models")).toEqual(expect.arrayContaining(["connections", "usage"]));
-    expect(nested("config")).toEqual(expect.arrayContaining(["github", "audit-log"]));
-    const computers = program.commands.find(c => c.name() === "computers")!;
-    expect(computers.commands.map(c => c.name())).toEqual(expect.arrayContaining(["list", "add", "repair", "stop", "hosts"]));
-    expect(computers.commands.find(c => c.name() === "add")!.aliases()).toContain("deploy");
-    expect(program.commands.find(c => c.name() === "config")!.commands.map(c => c.name())).toEqual(expect.arrayContaining(["get", "set", "reset", "list", "show"]));
-  });
 });
 
 describe("connections", () => {

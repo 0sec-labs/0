@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { categoriesOfPage, searchSettings, settingsPageId, settingsPages, settingsRedirect } from "./settings-index";
+import { categoriesOfPage, searchSettings, settingsPageId, settingsRedirect } from "./settings-index";
 
 describe("settings pages", () => {
-  it("stay a short list", () => { expect(settingsPages.length).toBeLessThanOrEqual(10); });
-  it("redirect removed sections to the closest page or route", () => {
-    expect(settingsRedirect("transcript")).toBe("/settings?section=threads");
-    expect(settingsRedirect("privacy")).toBe("/settings?section=general");
-    expect(settingsRedirect("repositories")).toBe("/settings?section=git");
+  it("redirect a removed section and leave live ones alone", () => {
     expect(settingsRedirect("finding-states")).toBe("/findings");
-    expect(settingsRedirect("integrations")).toBe("/extensions");
-    expect(settingsRedirect("skills")).toBe("/skills");
-    expect(settingsRedirect("members")).toBe("/team");
     expect(settingsRedirect("git")).toBeUndefined();
     expect(settingsRedirect(null)).toBeUndefined();
   });

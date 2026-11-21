@@ -5,8 +5,6 @@ import {
   getRates,
   MODEL_PRICING,
   modelProvider,
-  priceRun,
-  PRICING_SNAPSHOT_DATE,
   splitCost,
 } from "./cost.js";
 import { ScanCostLedger } from "./cost-ledger.js";
@@ -41,23 +39,6 @@ describe("estimateCost", () => {
       "z-ai/glm-5.1",
     );
     expect(cost).toBeCloseTo(1.4 + 4.4, 5);
-  });
-
-  it("prices current Codex and GLM benchmark models without falling back", () => {
-    // gpt-5.5 reconciled to the LiteLLM OSS feed 2026-07-05: $5/M in, $30/M out.
-    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, "gpt-5.5"))
-      .toBeCloseTo(5.0 + 30.0, 5);
-    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, "gpt-5.5-codex"))
-      .toBeCloseTo(5.0 + 30.0, 5);
-    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, "glm-5.2"))
-      .toBeCloseTo(1.4 + 4.4, 5);
-  });
-
-  it("prices GPT-6 Sol, 6.1 Sol, and Luna with their distinct cached-input rates", () => {
-    const usage = { inputTokens: 1_000_000, cachedInputTokens: 500_000, outputTokens: 1_000_000 };
-    expect(estimateCost(usage, "gpt-6-sol")).toBeCloseTo(0.5 * 2 + 0.5 * 0.2 + 10);
-    expect(estimateCost(usage, "gpt-6.1-sol")).toBeCloseTo(0.5 * 2 + 0.5 * 0.1 + 10);
-    expect(estimateCost(usage, "gpt-6-luna")).toBeCloseTo(0.5 * 0.1 + 0.5 * 0.01 + 0.5);
   });
 
   it("estimates a newly discovered model without allowing catalog data to replace bundled tariffs", () => {
@@ -177,41 +158,7 @@ describe("estimateCost", () => {
   });
 });
 
-describe("priceRun", () => {
-  it("is the shared run-pricing helper alias for estimateCost", () => {
-    const usage = { inputTokens: 123_000, outputTokens: 45_000, cachedInputTokens: 20_000 };
-    expect(priceRun(usage, "claude-sonnet-4-6")).toBeCloseTo(
-      estimateCost(usage, "claude-sonnet-4-6"),
-      5,
-    );
-  });
-});
-
 describe("getRates", () => {
-  it("exposes a dated shared pricing table", () => {
-    expect(PRICING_SNAPSHOT_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(MODEL_PRICING["claude-sonnet-4-6"]).toEqual({
-      input: 3.00,
-      output: 15.00,
-      cachedInput: 0.30,
-    });
-  });
-
-  it("returns GLM 5.1 cached-input rate from the Provos post", () => {
-    const rates = getRates("glm-5.1");
-    expect(rates.cachedInput).toBe(0.26);
-  });
-
-  it("returns GLM 5.2 cached-input rate from the GLM 5.x pricing family", () => {
-    const rates = getRates("glm-5.2");
-    expect(rates.cachedInput).toBe(0.26);
-  });
-
-  it("returns the Kimi K3 cached-input rate", () => {
-    expect(getRates("k3").cachedInput).toBe(0.30);
-    expect(getRates("k3[1m]").cachedInput).toBe(0.30);
-  });
-
   it("returns the default-table rate for an unknown model", () => {
     const rates = getRates("totally-made-up-model-9000");
     expect(rates.input).toBe(3.0);

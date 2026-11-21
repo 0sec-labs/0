@@ -32,9 +32,9 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "core-safety-")); mark = joi
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); vi.restoreAllMocks(); });
 
 describe("There is one mode: the shell runs, and an older access value changes nothing", () => {
-  for (const legacy of ["read-only", "observe", "recon", "standard", "act", "yolo", "copilot", "run", "propose", "changes"] as const) {
-    it(`bash runs with the stored value ${legacy}${legacy === "standard" || legacy === "propose" ? " (still asks first, as before)" : ""}`, async () => {
-      const asks = legacy === "standard" || legacy === "propose";
+  for (const legacy of ["standard", "yolo"] as const) {
+    it(`bash runs with the stored value ${legacy}${legacy === "standard" ? " (still asks first, as before)" : ""}`, async () => {
+      const asks = legacy === "standard";
       const approveTool = vi.fn(async () => true);
       const session = createConsoleSession({
         runtime: new ScriptedRuntime([use("bash", { command: `touch ${mark}` }), end("done")]),

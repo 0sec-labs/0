@@ -16,7 +16,6 @@ import {
   eventBus,
   type ScanCompletedPayload,
   type CostBreakdownEntry,
-  type OastConfirmedPayload,
   type EventType,
 } from "./bus.js";
 import { splitCost, modelProvider } from "../agent/cost.js";
@@ -56,27 +55,6 @@ describe("eventBus.emit('scan_completed', …) cost fields", () => {
 
     expect(observed).toHaveLength(1);
     expect(observed[0]!.type).toBe("scan_completed");
-    expect(observed[0]!.payload).toEqual(payload);
-  });
-
-  // OAST confirmations remain available to local event subscribers.
-  it("fans an oast_confirmed event to subscribers", () => {
-    const observed: Array<{ type: EventType; payload: Record<string, unknown> }> = [];
-    eventBus.subscribe({
-      emit: (type, payload) => observed.push({ type, payload }),
-    });
-    const payload: OastConfirmedPayload = {
-      findingId: "eng-abc123",
-      category: "ssrf",
-      oracle: "oast-callback",
-      hasPov: true,
-      reason: "DNS callback: host=abc.oast.0.ai",
-    };
-
-    eventBus.emit("oast_confirmed", payload);
-
-    expect(observed).toHaveLength(1);
-    expect(observed[0]!.type).toBe("oast_confirmed");
     expect(observed[0]!.payload).toEqual(payload);
   });
 

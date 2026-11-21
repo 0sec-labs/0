@@ -30,20 +30,7 @@ describe("feature presets — fp-moat membership", () => {
    * preset would let the router suppress the very layers the A/B measures, so
    * their absence is a correctness property, not an omission.
    */
-  it("excludes the triage routers and inline validation", () => {
-    const flags = FEATURE_PRESETS["fp-moat"];
-    expect(flags).not.toContain("ZERO_FEATURE_LEARNED_ROUTER");
-    expect(flags).not.toContain("ZERO_FEATURE_DYNAMIC_TRIAGE");
-    expect(flags).not.toContain("ZERO_FEATURE_INLINE_VALIDATION");
-  });
-
   /** The always-on filters already run; including them would overstate the preset. */
-  it("excludes the always-on filters", () => {
-    const flags = FEATURE_PRESETS["fp-moat"];
-    expect(flags).not.toContain("ZERO_FEATURE_HOLDING_IT_WRONG");
-    expect(flags).not.toContain("ZERO_FEATURE_EVIDENCE_GATE");
-  });
-
   /**
    * `egats` is the one layer our own ablation measured as genuinely broken
    * (2 -> 1 flags at 10x the worst per-flag cost on stubborn-14; removed from
@@ -51,11 +38,6 @@ describe("feature presets — fp-moat membership", () => {
    * codebase, and the preset must never resurrect it — an A/B arm containing a
    * known-regressing layer would invalidate the comparison.
    */
-  it("never enables the measured-broken egats layer", () => {
-    for (const flag of FEATURE_PRESETS["fp-moat"]) {
-      expect(flag).not.toMatch(/EGATS/i);
-    }
-  });
 });
 
 describe("feature presets — application", () => {

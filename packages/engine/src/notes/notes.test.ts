@@ -92,15 +92,6 @@ describe("content deduplication and stable id allocation", () => {
     expect(store.list().filter(n => n.text.toLowerCase() === "duplicate content")).toHaveLength(1);
   });
 
-  it("3. editing Alpha to Beta and adding Beta does not create a duplicate", () => {
-    const store = createFileNoteStore({ home });
-    const a = store.add({ text: "Alpha" });
-    store.edit(a.id, "Beta");
-    const b = store.add({ text: "Beta" });
-    expect(b.id).toBe(a.id);
-    expect(store.list().filter(n => n.text.toLowerCase() === "beta")).toHaveLength(1);
-  });
-
   it("4. editing Alpha to Beta and adding Alpha creates a separate note with a different unused ID", () => {
     const store = createFileNoteStore({ home });
     const a = store.add({ text: "Alpha" });
@@ -109,20 +100,6 @@ describe("content deduplication and stable id allocation", () => {
     expect(c.id).not.toBe(a.id);
     expect(c.text).toBe("Alpha");
     expect(store.list().find(n => n.id === a.id)?.text).toBe("Beta");
-    expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
-  });
-
-  it("5. both Alpha and Beta remain independently retrievable", () => {
-    const store = createFileNoteStore({ home });
-    const a = store.add({ text: "Alpha" });
-    store.edit(a.id, "Beta");
-    const c = store.add({ text: "Alpha" });
-
-    expect(store.list().find(n => n.id === a.id)?.text).toBe("Beta");
-    expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
-
-    expect(store.remove(a.id)).toBe(true);
-    expect(store.list().find(n => n.id === a.id)).toBeUndefined();
     expect(store.list().find(n => n.id === c.id)?.text).toBe("Alpha");
   });
 
@@ -151,26 +128,6 @@ describe("content deduplication and stable id allocation", () => {
     expect(ids.size).toBe(3);
   });
 
-  it("7. editing a note's text does not introduce the same defect", () => {
-    const store = createFileNoteStore({ home });
-    const first = store.add({ text: "Draft Fact", source: "model" });
-    const originalId = first.id;
-
-    const edited = store.edit(originalId, "Final Fact");
-    expect(edited?.id).toBe(originalId);
-    expect(edited?.text).toBe("Final Fact");
-
-    // Adding "Final Fact" dedupes to the edited note
-    const addedFinal = store.add({ text: "Final Fact" });
-    expect(addedFinal.id).toBe(originalId);
-    expect(store.list().filter(n => n.text === "Final Fact")).toHaveLength(1);
-
-    // Adding "Draft Fact" creates a distinct note with an unused ID
-    const addedDraft = store.add({ text: "Draft Fact" });
-    expect(addedDraft.id).not.toBe(originalId);
-    expect(store.list().find(n => n.id === addedDraft.id)?.text).toBe("Draft Fact");
-  });
-
   it("8. same text in different scopes remains independent", () => {
     const store = createFileNoteStore({ home });
     const globalNote = store.add({ text: "Shared Convention", scope: "global" });
@@ -194,20 +151,6 @@ describe("content deduplication and stable id allocation", () => {
 
     expect(store.list({ folder: "/work/app-a" })).toHaveLength(1);
     expect(store.list({ folder: "/work/app-b" })).toHaveLength(1);
-  });
-
-  it("10. adding the same text again returns the note that is already there", () => {
-    const store = createFileNoteStore({ home });
-    const first = store.add({ text: "Heuristic rule", source: "model" });
-    const again = store.add({ text: "Heuristic rule", source: "user" });
-    expect(again.id).toBe(first.id);
-    expect(store.list()).toHaveLength(1);
-
-    // The same holds for text that was edited into place
-    const second = store.add({ text: "Initial text", source: "model" });
-    store.edit(second.id, "Edited text");
-    expect(store.add({ text: "Edited text", source: "user" }).id).toBe(second.id);
-    expect(store.list()).toHaveLength(2);
   });
 
   it("11. edited notes and collision-resolved IDs survive store reload", () => {

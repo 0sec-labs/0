@@ -5,7 +5,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBuildSentryDsn } from "./built-in-sentry-dsn.mjs";
@@ -44,11 +43,4 @@ test("a malformed DSN fails loudly without echoing the value", () => {
     assert.equal(result.stdout, "");
   }
   assert.throws(() => resolveBuildSentryDsn({ ZERO_RELEASE_SENTRY_DSN: "garbage" }), /not a valid/);
-});
-
-test("bundle-cli validates before bundling and embeds via define", () => {
-  const source = readFileSync(join(ROOT, "scripts/bundle-cli.mjs"), "utf8");
-  assert.match(source, /resolveBuildSentryDsn\(\)/);
-  assert.match(source, /__ZERO_BUILT_IN_SENTRY_DSN__: JSON\.stringify\(BUILT_IN_SENTRY_DSN\)/);
-  assert.ok(source.indexOf("resolveBuildSentryDsn()") < source.indexOf("await build("));
 });

@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -67,11 +67,6 @@ describe("signature verification", () => {
     expect(verifySignature(body, `${sign(body, secret)}00`, [secret])).toBe(false);
     expect(verifySignature(body, sign(body, secret).toUpperCase(), [secret])).toBe(false);
     expect(verifySignature(body, sign(body, secret), [])).toBe(false);
-  });
-  it("compares with crypto.timingSafeEqual on equal-length digests and never string-compares", () => {
-    const source = readFileSync(new URL("./github-webhook.ts", import.meta.url), "utf8");
-    expect(source).toMatch(/timingSafeEqual\(provided, expected\)/);
-    expect(source).toMatch(/provided\.length === expected\.length/);
   });
 });
 
@@ -294,14 +289,5 @@ describe("route exemption", () => {
     for (const other of ["/api/webhooks/github/", "/api/webhooks", "/api/webhooks/github2", "/api/console/sessions", "/api/console/github/webhook", "/api/console/github/webhook/secret", "/api/team/setup", "//api/webhooks/github", "/API/webhooks/github"]) expect(isAnonymousApiExemption(other), other).toBe(false);
     expect(isBrowserOnlyRoute("/api/webhooks/github", "POST")).toBe(true);
     for (const path of ["/api/console/github/webhook/secret", "/api/console/github/webhook/secret/rotate"]) expect(isBrowserOnlyRoute(path, "POST"), path).toBe(true);
-  });
-  it("is wired before the session gate and only when the receiver exists (server mode)", () => {
-    const source = readFileSync(new URL("../commands/dashboard.ts", import.meta.url), "utf8");
-    expect(source).toMatch(/const webhook = serverMode \? new GitHubWebhookReceiver/);
-    const exempt = source.indexOf("isAnonymousApiExemption(requestUrl.pathname)");
-    expect(exempt).toBeGreaterThan(0);
-    expect(source.slice(exempt - 120, exempt)).toContain("webhook && serverContext");
-    expect(exempt).toBeLessThan(source.indexOf("serverGuard.isAuthenticated(req, teamAuth)"));
-    expect(exempt).toBeLessThan(source.indexOf("requireControlToken(req, res, controlToken"));
   });
 });

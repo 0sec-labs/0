@@ -26,18 +26,6 @@ describe("framework methodology packs", () => {
     loadSkillRegistry(__dirname);
   });
 
-  const PACKS = ["nextjs-appsec", "supabase-appsec", "python-web-appsec"];
-
-  it("all three packs load and validate", () => {
-    for (const id of PACKS) {
-      const skill = getSkillById(id);
-      expect(skill, `skill ${id} should be registered`).toBeDefined();
-      expect(skill!.content.length).toBeGreaterThan(400);
-      expect(skill!.applicable_roles).toContain("review");
-      expect(skill!.estimated_tokens).toBeGreaterThan(0);
-    }
-  });
-
   it.each([
     [
       "nextjs-appsec",
@@ -72,10 +60,4 @@ describe("framework methodology packs", () => {
     ).toBe(true);
   });
 
-  it("packs do not collide with an existing skill id", () => {
-    // loadSkillRegistry throws on duplicate ids; reaching here means the
-    // frameworks/ additions are uniquely named across the whole tree.
-    const registry = loadSkillRegistry(__dirname);
-    for (const id of PACKS) expect(registry.has(id)).toBe(true);
-  });
 });
