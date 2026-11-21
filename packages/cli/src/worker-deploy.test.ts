@@ -1,11 +1,12 @@
 import { homeStateDir } from "@0/engine/shared";
-import { describe, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
-import { explainSshFailure, loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
+import { execFileSync, type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { createRunner, explainSshFailure, loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopManagedTunnel, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
 
 describe("worker deployment assets", () => {
   it("resolves both source and split bundle modules to their package root", () => {
@@ -128,5 +129,199 @@ describe("assertSshClient", () => {
     const { assertSshClient } = await import("./worker-deploy.js");
     expect(() => assertSshClient(command => (command === "ssh" ? { error: Object.assign(new Error("spawn ssh ENOENT"), { code: "ENOENT" }) } : {}))).toThrow(/OpenSSH client.*Docker image/s);
     expect(() => assertSshClient(() => ({}))).not.toThrow();
+  });
+});
+
+describe("Lima worker tunnel configuration and isolation", () => {
+  class MockChildProcess extends EventEmitter {
+    pid = 54321;
+    unref = vi.fn();
+  }
+
+  const cleanupFiles: string[] = [];
+  afterEach(() => {
+    while (cleanupFiles.length) {
+      const file = cleanupFiles.pop();
+      if (file) rmSync(file, { force: true, recursive: true });
+    }
+    vi.restoreAllMocks();
+  });
+
+  it("creates a uniquely named configuration file inside homeStateDir with 0o600 permissions", () => {
+    const vm = "test-lima-vm";
+    const port = 21234;
+    const sshConfigContent = "Host lima-test-lima-vm\n  HostName 127.0.0.1\n  Port 60022\n";
+    let capturedArgs: string[] = [];
+    let capturedOpts: unknown;
+    let capturedCmd = "";
+    const mockChild = new MockChildProcess();
+    const mockSpawn = vi.fn((cmd: string, args: string[], opts: unknown) => {
+      capturedCmd = cmd;
+      capturedArgs = args;
+      capturedOpts = opts;
+      return mockChild as unknown as ChildProcess;
+    });
+    const mockExecFile = vi.fn((_cmd: string, _args: string[]) => sshConfigContent);
+
+    const runner = createRunner({ lima: vm }, { execFileSync: mockExecFile as any, spawn: mockSpawn as any });
+    const pid = runner.tunnel(port);
+
+    expect(pid).toBe(54321);
+    expect(mockChild.unref).toHaveBeenCalled();
+
+    expect(capturedCmd).toBe("ssh");
+    expect(capturedOpts).toEqual({ stdio: "ignore", detached: true });
+
+    const configPath = capturedArgs[1]!;
+    cleanupFiles.push(configPath);
+
+    expect(capturedArgs).toEqual(["-F", configPath, "-N", "-L", `${port}:127.0.0.1:${port}`, `lima-${vm}`]);
+    expect(configPath.startsWith(join(homeStateDir(), "workers"))).toBe(true);
+    expect(configPath).toMatch(new RegExp(`lima-${vm}-${port}-[0-9a-f]{12}\\.conf$`));
+    expect(existsSync("/tmp/zero-worker-ssh.conf")).toBe(false);
+
+    expect(readFileSync(configPath, "utf8")).toBe(sshConfigContent);
+    const stats = statSync(configPath);
+    expect(stats.mode & 0o777).toBe(0o600);
+  });
+
+  it("supports multiple concurrent tunnels using the same VM without file collision", () => {
+    const vm = "shared-vm";
+    const mockExecFile = vi.fn(() => "Host lima-shared-vm\n");
+    const spawnedPaths: string[] = [];
+    const mockSpawn = vi.fn((_cmd: string, args: string[]) => {
+      spawnedPaths.push(args[1]!);
+      return new MockChildProcess() as unknown as ChildProcess;
+    });
+
+    const runner = createRunner({ lima: vm }, { execFileSync: mockExecFile as any, spawn: mockSpawn as any });
+    runner.tunnel(21001);
+    runner.tunnel(21002);
+
+    const [path1, path2] = spawnedPaths;
+    cleanupFiles.push(path1!, path2!);
+
+    expect(path1).not.toBe(path2);
+    expect(existsSync(path1!)).toBe(true);
+    expect(existsSync(path2!)).toBe(true);
+  });
+
+  it("isolates tunnels across different VM instances", () => {
+    const mockExecFile = vi.fn(() => "Host lima-vm\n");
+    const spawnedPaths: string[] = [];
+    const mockSpawn = vi.fn((_cmd: string, args: string[]) => {
+      spawnedPaths.push(args[1]!);
+      return new MockChildProcess() as unknown as ChildProcess;
+    });
+
+    const runnerAlpha = createRunner({ lima: "vm-alpha" }, { execFileSync: mockExecFile as any, spawn: mockSpawn as any });
+    const runnerBeta = createRunner({ lima: "vm-beta" }, { execFileSync: mockExecFile as any, spawn: mockSpawn as any });
+
+    runnerAlpha.tunnel(22001);
+    runnerBeta.tunnel(22002);
+
+    const [pathAlpha, pathBeta] = spawnedPaths;
+    cleanupFiles.push(pathAlpha!, pathBeta!);
+
+    expect(pathAlpha).toContain("lima-vm-alpha-22001-");
+    expect(pathBeta).toContain("lima-vm-beta-22002-");
+    expect(existsSync(pathAlpha!)).toBe(true);
+    expect(existsSync(pathBeta!)).toBe(true);
+  });
+
+  it("cleans up the configuration file when the SSH process exits", () => {
+    let configPath = "";
+    const mockChild = new MockChildProcess();
+    const mockSpawn = vi.fn((_cmd: string, args: string[]) => {
+      configPath = args[1]!;
+      return mockChild as unknown as ChildProcess;
+    });
+    const runner = createRunner({ lima: "exit-vm" }, { execFileSync: vi.fn(() => "config") as any, spawn: mockSpawn as any });
+
+    runner.tunnel(23001);
+    cleanupFiles.push(configPath);
+    expect(existsSync(configPath)).toBe(true);
+
+    mockChild.emit("exit", 0);
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  it("cleans up the configuration file immediately if spawn throws synchronously", () => {
+    const mockExecFile = vi.fn(() => "config");
+    const mockSpawn = vi.fn(() => { throw new Error("spawn failed synchronously"); });
+    const runner = createRunner({ lima: "throw-vm" }, { execFileSync: mockExecFile as any, spawn: mockSpawn as any });
+
+    let thrownError: Error | undefined;
+    try {
+      runner.tunnel(24001);
+    } catch (err) {
+      thrownError = err as Error;
+    }
+    expect(thrownError?.message).toBe("spawn failed synchronously");
+
+    const workersDir = join(homeStateDir(), "workers");
+    const matches = existsSync(workersDir) ? readdirSync(workersDir).filter(name => name.startsWith("lima-throw-vm-24001-")) : [];
+    expect(matches).toEqual([]);
+  });
+
+  it("cleans up configuration on asynchronous spawn error event", () => {
+    let configPath = "";
+    const mockChild = new MockChildProcess();
+    const mockSpawn = vi.fn((_cmd: string, args: string[]) => {
+      configPath = args[1]!;
+      return mockChild as unknown as ChildProcess;
+    });
+    const runner = createRunner({ lima: "async-err-vm" }, { execFileSync: vi.fn(() => "config") as any, spawn: mockSpawn as any });
+
+    runner.tunnel(25001);
+    cleanupFiles.push(configPath);
+    expect(existsSync(configPath)).toBe(true);
+
+    mockChild.emit("error", new Error("spawn ENOENT"));
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  it("stops managed tunnel and cleans up its configuration without affecting another active tunnel", () => {
+    const stateDir = join(homeStateDir(), "workers");
+    mkdirSync(stateDir, { recursive: true });
+
+    const config1 = join(stateDir, "lima-shared-26001-111111111111.conf");
+    const config2 = join(stateDir, "lima-shared-26002-222222222222.conf");
+    writeFileSync(config1, "Host lima-shared\n", { mode: 0o600 });
+    writeFileSync(config2, "Host lima-shared\n", { mode: 0o600 });
+    cleanupFiles.push(config1, config2);
+
+    const worker1 = { schemaVersion: 1 as const, backendId: "b1", lima: "shared", port: 26001, tunnelPid: 60001, remoteDir: "/tmp/zero-engine" };
+
+    const mockKill = vi.fn();
+    const mockInspect = vi.fn((_pid: number) => ({ stdout: `ssh -F ${config1} -N -L 26001:127.0.0.1:26001 lima-shared\n` }));
+
+    const stopped = stopManagedTunnel(worker1, mockInspect, mockKill);
+    expect(stopped).toBe(true);
+    expect(mockKill).toHaveBeenCalledWith(60001, "SIGTERM");
+
+    // Worker 1 configuration must be deleted
+    expect(existsSync(config1)).toBe(false);
+    // Worker 2 configuration must remain intact
+    expect(existsSync(config2)).toBe(true);
+  });
+
+  it("fails exclusively without overwriting or following existing symbolic links or files", () => {
+    const stateDir = join(homeStateDir(), "workers");
+    mkdirSync(stateDir, { recursive: true });
+
+    const canary = join(stateDir, "canary-protected.txt");
+    writeFileSync(canary, "PROTECTED_CANARY_CONTENT", { mode: 0o600 });
+    cleanupFiles.push(canary);
+
+    const existingConf = join(stateDir, "lima-clash-27001-abcdef123456.conf");
+    symlinkSync(canary, existingConf);
+    cleanupFiles.push(existingConf);
+
+    expect(() => {
+      writeFileSync(existingConf, "OVERWRITE_ATTEMPT", { flag: "wx", mode: 0o600 });
+    }).toThrow(/EEXIST/);
+
+    expect(readFileSync(canary, "utf8")).toBe("PROTECTED_CANARY_CONTENT");
   });
 });

@@ -1,4 +1,4 @@
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -36,7 +36,7 @@ export interface WorkerDeployResult {
   tokenEnv: string;
 }
 
-interface WorkerRunner {
+export interface WorkerRunner {
   shell(command: string, timeout?: number): string;
   copy(local: string, remote: string): void;
   tunnel(port: number): number | void;
@@ -139,7 +139,14 @@ export function explainSshFailure(host: string, output: string): string {
   return `Could not run a command on ${host}. ${detail}`;
 }
 
-function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig" | "trustNewHost">): WorkerRunner {
+export interface CreateRunnerDeps {
+  execFileSync?: typeof execFileSync;
+  spawn?: typeof spawn;
+}
+
+export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig" | "trustNewHost">, deps: CreateRunnerDeps = {}): WorkerRunner {
+  const execFile = deps.execFileSync ?? execFileSync;
+  const spawnProcess = deps.spawn ?? spawn;
   if (options.ssh) {
     assertSshClient();
     const host = options.ssh;
@@ -156,10 +163,10 @@ function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshCo
     return {
       label: host,
       shell: (command, timeout = 300_000) => explain(() =>
-        execFileSync("ssh", ["-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] })),
-      copy: (local, remote) => explain(() => { execFileSync("scp", ["-q", "-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, ...configArgs, "--", local, `${host}:${remote}`], { stdio: ["ignore", "inherit", "pipe"], timeout: 600_000 }); }),
+        execFile("ssh", ["-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout, stdio: ["pipe", "pipe", "pipe"] })),
+      copy: (local, remote) => explain(() => { execFile("scp", ["-q", "-o", "BatchMode=yes", "-o", `StrictHostKeyChecking=${hostKeyMode}`, ...configArgs, "--", local, `${host}:${remote}`], { stdio: ["ignore", "inherit", "pipe"], timeout: 600_000 }); }),
       tunnel: (port) => {
-        const child = spawn("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ExitOnForwardFailure=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
+        const child = spawnProcess("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ExitOnForwardFailure=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
         child.unref();
         return child.pid;
       },
@@ -169,12 +176,39 @@ function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshCo
   return {
     label: vm,
     shell: (command, timeout = 300_000) =>
-      execFileSync("limactl", ["shell", vm, "--", "bash", "-s"], { input: command, encoding: "utf8", timeout }),
-    copy: (local, remote) => execFileSync("limactl", ["copy", local, `${vm}:${remote}`], { stdio: "inherit", timeout: 600_000 }),
+      execFile("limactl", ["shell", vm, "--", "bash", "-s"], { input: command, encoding: "utf8", timeout }),
+    copy: (local, remote) => execFile("limactl", ["copy", local, `${vm}:${remote}`], { stdio: "inherit", timeout: 600_000 }),
     tunnel: (port) => {
-      const configPath = "/tmp/zero-worker-ssh.conf";
-      writeFileSync(configPath, execFileSync("limactl", ["show-ssh", "--format", "config", vm], { encoding: "utf8" }), { mode: 0o600 });
-      const child = spawn("ssh", ["-F", configPath, "-N", "-L", `${port}:127.0.0.1:${port}`, `lima-${vm}`], { stdio: "ignore", detached: true });
+      const stateDir = join(homeStateDir(), "workers");
+      mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+      const config = execFile("limactl", ["show-ssh", "--format", "config", vm], { encoding: "utf8" });
+      let configPath = "";
+      let written = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidate = join(stateDir, `lima-${vm}-${port}-${randomBytes(6).toString("hex")}.conf`);
+        try {
+          writeFileSync(candidate, config, { flag: "wx", mode: 0o600 });
+          configPath = candidate;
+          written = true;
+          break;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;
+          throw err;
+        }
+      }
+      if (!written) throw new Error("Could not create exclusive Lima SSH configuration file.");
+      let child: ChildProcess;
+      try {
+        child = spawnProcess("ssh", ["-F", configPath, "-N", "-L", `${port}:127.0.0.1:${port}`, `lima-${vm}`], { stdio: "ignore", detached: true });
+      } catch (error) {
+        try { rmSync(configPath, { force: true }); } catch { /* ignore */ }
+        throw error;
+      }
+      const cleanup = () => {
+        try { rmSync(configPath, { force: true }); } catch { /* ignore */ }
+      };
+      child.once("exit", cleanup);
+      child.once("error", cleanup);
       child.unref();
       return child.pid;
     },
@@ -299,13 +333,27 @@ export function loadManagedWorker(backendId: string): ManagedWorker {
   validateWorkerOptions({ ...worker, enginePort: worker.port });
   return worker;
 }
-export function stopManagedTunnel(worker: ManagedWorker): boolean {
+export function stopManagedTunnel(
+  worker: ManagedWorker,
+  inspect: (pid: number) => { stdout?: string } = pid => spawnSync("ps", ["-p", String(pid), "-o", "comm=", "-o", "args="], { encoding: "utf8" }),
+  kill: (pid: number, signal: string | number) => void = (pid, signal) => process.kill(pid, signal),
+): boolean {
   if (!Number.isSafeInteger(worker.tunnelPid) || worker.tunnelPid! <= 1) return false;
-  const result = spawnSync("ps", ["-p", String(worker.tunnelPid), "-o", "comm=", "-o", "args="], { encoding: "utf8" });
+  const result = inspect(worker.tunnelPid!);
   const command = result.stdout?.trim() ?? "";
   const destination = worker.ssh ?? `lima-${worker.lima}`;
   if (!/^\S*ssh\s/.test(command) || !command.includes(` ${worker.port}:127.0.0.1:${worker.port} `) || !command.endsWith(` ${destination}`)) return false;
-  try { process.kill(worker.tunnelPid!, "SIGTERM"); return true; } catch { return false; }
+  const match = /(?:^|\s)-F\s+(\S+)/.exec(command);
+  const configPath = match?.[1];
+  try {
+    kill(worker.tunnelPid!, "SIGTERM");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ESRCH") return false;
+  }
+  if (configPath && configPath.startsWith(join(homeStateDir(), "workers"))) {
+    try { rmSync(configPath, { force: true }); } catch { /* ignore */ }
+  }
+  return true;
 }
 export async function stopWorker(backendId: string, suppliedRunner?: WorkerRunner): Promise<{ stopped: true; tunnelStopped: boolean; remoteFilesRemoved: false }> {
   const worker = loadManagedWorker(backendId);
