@@ -57,8 +57,15 @@ describe("GitHub is a built-in connector extension", () => {
   const github = BUILTIN_EXTENSIONS.find(b => b.name === "github")!;
   it("declares cli-login, device code and token methods with its read/write list; the token never reaches scripts (no env)", () => {
     expect(github.connector).toMatchObject({ service: "github", auth: "cli-login", methods: ["cli-login", "oauth-device", "token"], env: [], health: { type: "adapter" } });
-    expect(github.connector!.read).toEqual(expect.arrayContaining(["pull requests", "repository contents"]));
+    expect(github.connector!.read).toEqual(expect.arrayContaining([
+      "pull requests",
+      "repository contents",
+      "code scanning alerts",
+      "Dependabot alerts",
+      "secret scanning alerts",
+    ]));
     expect(github.connector!.write).toEqual(["comments on pull requests"]);
+    expect(github.canDo.join("\n")).toContain("reads: pull requests, pull request diffs, repository contents, repository list, code scanning alerts, Dependabot alerts, secret scanning alerts");
     expect(github.canDo.join("\n")).toContain("writes: comments on pull requests");
   });
   it("ships its pull request skill, and the skill exists in the binary", () => {
