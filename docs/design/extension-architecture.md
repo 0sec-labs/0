@@ -37,7 +37,7 @@ Skills are instructions the model loads (no code). Extensions give 0 a connectio
 ```
 
 Dependencies point inward: adapters and services depend on ports and core; core imports nothing
-from the rest of the engine. The engine imports nothing from `cli`, `web` or `bench`. The CLI
+from the rest of the engine. The engine imports nothing from `cli` or `web`. The CLI
 reaches the extension code only through the `@0/engine` barrel.
 
 ## Invariants

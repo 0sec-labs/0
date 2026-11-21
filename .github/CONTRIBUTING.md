@@ -81,14 +81,6 @@ The independent Python project in [`0verse/`](../0verse/README.md) uses its own
 `pyproject.toml`, `uv.lock`, and Makefile; root pnpm checks do not replace
 its checks. Run its commands from `0verse/`, with Python 3.11+ and `uv`.
 
-For test-target work, start the local fixtures in separate terminals:
-
-```bash
-pnpm vulnerable
-pnpm safe
-pnpm --filter @0/bench test:targets
-```
-
 ## Main runs may be superseded
 
 A newer push to `main` cancels the still-running `Main` of the previous commit, so an older main commit can show "cancelled" instead of a verdict.
