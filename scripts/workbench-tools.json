@@ -9,7 +9,7 @@
     "workdir": "/workspace"
   },
   "runtimes": {
-    "node": "24.21.0",
+    "node": "24.22.3",
     "bun": "1.3.14",
     "playwright": "1.60.0",
     "tree-sitter": "0.21.1-node24",
