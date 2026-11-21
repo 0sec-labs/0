@@ -1149,8 +1149,10 @@ Options:
   --passes <n>               Scan this many times and merge the findings (a scan misses some issues
                              that another run finds); the budget is split between them, up to 5
                              (default: "1")
-  --prepass <mode>           auto runs a pattern scanner (FoxGuard) first when it is installed and
-                             gives its hits to the scan as leads; off skips it (default: "auto")
+  --prepass <mode>           auto runs the pattern scanners first when they are installed and gives
+                             their hits to the scan as leads; off skips them (default: "auto")
+  --scanner <id>             Pattern scanner for the pre-pass (foxguard, semgrep, opengrep); repeat
+                             to use several (default: foxguard)
   --skill <id>               Skill that holds the scan method (default: "scan")
   --model <model>            Model for the scan thread (default: gpt-6-luna)
   --timeout <seconds>        Maximum seconds to wait for the scan (default: "3600")

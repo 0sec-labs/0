@@ -143,7 +143,7 @@ Scan a folder or git repository for security bugs and print the findings as a re
 0 scan [options] <target>
 ```
 
-With FoxGuard installed (it ships next to `0`; `ZERO_FOXGUARD_PATH` points elsewhere), the scan first runs it on the folder, which takes seconds and costs nothing, and gives its hits to the thread as leads: the thread checks each one against the code, records only the real ones and says which it rejected. A pattern scanner flags some safe code and cannot see logic bugs such as a missing ownership check, so the thread still reviews the entry points itself. `--prepass off` skips it.
+With FoxGuard installed (it ships next to `0`; `ZERO_FOXGUARD_PATH` points elsewhere), the scan first runs it on the folder, which takes seconds and costs nothing, and gives its hits to the thread as leads: the thread checks each one against the code, records only the real ones and says which it rejected. A pattern scanner flags some safe code and cannot see logic bugs such as a missing ownership check, so the thread still reviews the entry points itself. `--prepass off` skips it. `--scanner` adds or replaces scanners (`foxguard`, `semgrep`, `opengrep`; repeat the flag for several); a scanner that is not installed is skipped. A Semgrep rule pack such as `p/default` is downloaded when it runs.
 
 A scan is a thread that follows the `scan` skill, so it appears in `0 threads` and in the web app. The findings are stored under the thread's id and exported from there, so `0 findings export --scan <thread id>` gives the same report later. `target` is a folder or a git URL. It uses the console that is running, or the engine named by `--engine-url` or `--computer`; with none running it starts a headless console for the scan and stops it afterwards. Exit codes: 0 done, 1 a finding at or above `--fail-on` or the scan failed, 2 usage error, 3 stopped at the budget or the time limit (the report is partial).
 
@@ -158,7 +158,8 @@ A scan is a thread that follows the `scan` skill, so it appears in `0 threads` a
 | `-o, --output <file>` | — | Write the report to a file instead of stdout |
 | `--fail-on <severity>` | — | Exit 1 when a finding is at or above this severity (critical, high, medium, low, info) |
 | `--passes <n>` | `1` | Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to 5 |
-| `--prepass <mode>` | `auto` | auto runs a pattern scanner (FoxGuard) first when it is installed and gives its hits to the scan as leads; off skips it |
+| `--prepass <mode>` | `auto` | auto runs the pattern scanners first when they are installed and gives their hits to the scan as leads; off skips them |
+| `--scanner <id>` | — | Pattern scanner for the pre-pass (foxguard, semgrep, opengrep); repeat to use several (default: foxguard) |
 | `--skill <id>` | `scan` | Skill that holds the scan method |
 | `--model <model>` | — | Model for the scan thread (default: gpt-6-luna) |
 | `--timeout <seconds>` | `3600` | Maximum seconds to wait for the scan |

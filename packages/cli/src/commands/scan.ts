@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 import type { Command } from "commander";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
-import { parseSarif, scanPrompt, type PrePassLeads, type ScanReport } from "@0/engine/shared";
+import { parseSarif, parseScannerList, scanPrompt, scannerArguments, scannerById, SCANNERS, type PrePassLeads, type ScanReport } from "@0/engine/shared";
 import { mergePasses, scanExitCode, scanJson, toScanReport, type ScanOutcome } from "../scan-report.js";
 import { finishWithError, UsageError } from "./output.js";
 import { asJson, finishedThread, lastAssistantText, usageLine, type FinishedThread, type Json } from "./thread-output.js";
@@ -54,8 +54,8 @@ export interface ScanDeps {
   startConsole(dbPath?: string): Promise<() => void>;
   /** What `git status` lists in the folder, or undefined when it is not a git work tree. A scan must leave it as it found it. */
   changedFiles(folder: string): Promise<Set<string> | undefined>;
-  /** Run a fast pattern scanner on the folder for leads, or undefined when none is installed or it fails. Never throws. */
-  prePass(folder: string): Promise<PrePassLeads | undefined>;
+  /** Run the chosen pattern scanners on the folder for leads, or undefined when none is installed or all fail. Never throws. */
+  prePass(folder: string, scanners: string[]): Promise<PrePassLeads | undefined>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
@@ -83,17 +83,24 @@ export const defaultScanDeps: ScanDeps = {
     child.on("error", () => {});
     return () => { child.kill("SIGTERM"); };
   },
-  async prePass(folder) {
-    const binary = [process.env.ZERO_FOXGUARD_PATH, join(homedir(), ".0", "bin", "foxguard"), "foxguard"].filter((value): value is string => !!value).find(candidate => candidate === "foxguard" || existsSync(candidate));
-    if (!binary) return undefined;
-    try {
-      let stdout: string;
-      try { stdout = (await exec(binary, ["--format", "sarif", folder], { timeout: 120_000, maxBuffer: 128 * 1024 * 1024 })).stdout; }
-      // A scanner that exits non-zero because it found something still wrote its report.
-      catch (error) { stdout = (error as { stdout?: string }).stdout ?? ""; if (!stdout.trim().startsWith("{")) return undefined; }
-      const parsed = parseSarif(stdout, { tool: "foxguard", roots: [folder] });
-      return { tool: "foxguard", leads: parsed.findings, total: parsed.findings.length };
-    } catch { return undefined; }
+  async prePass(folder, scanners) {
+    const lists = await Promise.all(scanners.map(async id => {
+      const spec = scannerById(id);
+      if (!spec) return undefined;
+      const binary = [spec.pathEnv ? process.env[spec.pathEnv] : undefined, join(homedir(), ".0", "bin", spec.command), spec.command].filter((value): value is string => !!value).find(candidate => candidate === spec.command || existsSync(candidate));
+      if (!binary) return undefined;
+      try {
+        let stdout: string;
+        try { stdout = (await exec(binary, scannerArguments(spec, folder), { timeout: 120_000, maxBuffer: 128 * 1024 * 1024 })).stdout; }
+        // A scanner that exits non-zero because it found something still wrote its report.
+        catch (error) { stdout = (error as { stdout?: string }).stdout ?? ""; if (!stdout.trim().startsWith("{")) return undefined; }
+        return { tool: spec.id, leads: parseSarif(stdout, { tool: spec.id, roots: [folder] }).findings };
+      } catch { return undefined; }
+    }));
+    const ran = lists.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+    if (!ran.length) return undefined;
+    const leads = ran.flatMap(entry => entry.leads);
+    return { tools: ran.map(entry => entry.tool), leads, total: leads.length };
   },
   async clone(url) {
     const dir = mkdtempSync(join(tmpdir(), "0-scan-"));
@@ -104,7 +111,7 @@ export const defaultScanDeps: ScanDeps = {
 };
 
 interface ScanOptions extends ConsoleTransportOptions {
-  budget: string; prepass?: string; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
+  budget: string; prepass?: string; scanner?: string[]; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
 }
 
 export interface ResolvedTarget {
@@ -154,6 +161,7 @@ function validate(target: string | undefined, options: ScanOptions): void {
   if (!(FORMATS as readonly string[]).includes(options.format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
   if (options.format === "pdf" && !options.output) throw new UsageError("PDF is binary; supply -o <file>.");
   if (options.prepass !== undefined && options.prepass !== "auto" && options.prepass !== "off") throw new UsageError("--prepass must be auto or off.");
+  try { parseScannerList(options.scanner); } catch (error) { throw new UsageError(error instanceof Error ? error.message : String(error)); }
   const budget = Number(options.budget);
   if (!Number.isFinite(budget) || budget <= 0 || budget > 1000) throw new UsageError("--budget must be a positive USD amount up to 1000.");
   const passes = Number(options.passes);
@@ -267,8 +275,9 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     const before = await deps.changedFiles(resolved.folder);
     ({ client, stop: stopConsole } = await connect(options, deps));
     // --budget is the total: each pass gets an equal share, so the cost stays predictable however many passes run.
-    const prePass = options.prepass === "off" ? undefined : await deps.prePass(resolved.folder);
-    if (prePass) deps.err(`${prePass.tool} pre-pass: ${prePass.total} lead${prePass.total === 1 ? "" : "s"} for the scan to check`);
+    const scanners = parseScannerList(options.scanner);
+    const prePass = options.prepass === "off" ? undefined : await deps.prePass(resolved.folder, scanners);
+    if (prePass) deps.err(`${prePass.tools.join(", ")} pre-pass: ${prePass.total} lead${prePass.total === 1 ? "" : "s"} for the scan to check`);
     const ctx: PassContext = { ...(prePass ? { prePass } : {}), client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
 
     const passErrors: string[] = [];
@@ -344,7 +353,8 @@ export function registerScanCommand(program: Command, deps: ScanDeps = defaultSc
     .option("-o, --output <file>", "Write the report to a file instead of stdout")
     .option("--fail-on <severity>", "Exit 1 when a finding is at or above this severity (critical, high, medium, low, info)")
     .option("--passes <n>", `Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to ${MAX_PASSES}`, "1")
-    .option("--prepass <mode>", "auto runs a pattern scanner (FoxGuard) first when it is installed and gives its hits to the scan as leads; off skips it", "auto")
+    .option("--prepass <mode>", "auto runs the pattern scanners first when they are installed and gives their hits to the scan as leads; off skips them", "auto")
+    .option("--scanner <id>", `Pattern scanner for the pre-pass (${SCANNERS.map(scanner => scanner.id).join(", ")}); repeat to use several (default: foxguard)`, (value: string, previous: string[] = []) => [...previous, value])
     .option("--skill <id>", "Skill that holds the scan method", "scan")
     .option("--model <model>", `Model for the scan thread (default: ${DEFAULT_SCAN_MODEL})`)
     .option("--timeout <seconds>", "Maximum seconds to wait for the scan", String(DEFAULT_TIMEOUT_SECONDS)))
