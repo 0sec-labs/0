@@ -39,7 +39,7 @@ export function isSidebarDestinationActive(to: string, currentPath: string): boo
 export interface LegacyRedirect { readonly from: string; readonly routes: readonly string[]; readonly to: string; readonly keep: "path" | "query" | "none" }
 export const LEGACY_REDIRECTS: readonly LegacyRedirect[] = [
   { from: "/onboarding", routes: ["/onboarding", "/setup", "/console/setup", "/console/onboarding"], to: "/chats", keep: "none" },
-  { from: "/learning", routes: ["/learning", "/lessons", "/memory"], to: "/chats", keep: "none" },
+  { from: "/learning", routes: ["/learning", "/lessons", "/memory"], to: "/findings", keep: "none" },
   { from: "/runs", routes: ["/runs", "/runs/:scanId", "/dashboard", "/live", "/operations", "/scans", "/scans/:scanId", "/scope", "/engagements", "/engagements/*"], to: "/findings", keep: "none" },
   { from: "/agents", routes: ["/agents", "/agents/:sentinelId"], to: "/sentinels", keep: "path" },
   { from: "/threads", routes: ["/threads", "/threads/:fingerprint"], to: "/findings", keep: "path" },

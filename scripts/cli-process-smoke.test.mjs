@@ -62,7 +62,7 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   const { cli } = fixture(t);
   const help = cli(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  const visible = ["findings", "threads", "sentinels", "skills", "memory", "models", "computers", "config"];
+  const visible = ["findings", "threads", "sentinels", "skills", "models", "computers", "config"];
   for (const command of visible) assert.match(help.stdout, new RegExp(`^  ${command}\\b`, "m"), `Missing ${command} in help`);
   for (const hidden of ["web", "doctor", "automation", "api"]) assert.doesNotMatch(help.stdout, new RegExp(`^  ${hidden}\\b`, "m"), `${hidden} is not a top-level command in help`);
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);

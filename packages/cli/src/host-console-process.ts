@@ -225,7 +225,9 @@ export class HostConsoleProcess {
     let table: Map<number, ProcessIdentity> | undefined;
     const inspect = async () => {
       try { table = await processTable(); }
-      catch { this.#invalidResource = true; table = undefined; }
+      // A slow or failed `ps` is retried on the next pass. Stopping is only confirmed from a process table read at the end,
+      // so a single failure under load cannot make a stopped execution look healthy, and it no longer makes it permanently invalid.
+      catch { table = undefined; }
     };
     const signalAll = (signal: NodeJS.Signals) => {
       for (const resource of this.#resources) {
