@@ -34,4 +34,4 @@ export * from "./share-safe.js";
 export * from "./removed-runtimes.js";
 export * from "./agent-session.js";
 export { redactSensitiveHeaders, redactAuthHeaders } from "./redact-headers.js";
-export { scanPrompt, prePassBlock, type PrePassLeads } from "./scan-prompt.js";
+export { scanPrompt, prePassBlock, scopeBlock, type PrePassLeads } from "./scan-prompt.js";

@@ -26,7 +26,7 @@ function fakes(snapshot: unknown, findings: unknown[] = [storedFinding]) {
   const client = { request: vi.fn(async (method: string, path: string, body?: unknown) => { requests.push([method, path, body]); return method === "GET" ? { snapshot } : { session: { id: "t1" } }; }), dispose: vi.fn() };
   const deps: ScanDeps = {
     open: async () => client as never, out: bytes => out.push(bytes), err: text => err.push(text), sleep: async () => {}, now: () => new Date("2026-01-01T00:00:00Z"),
-    writeBytes: vi.fn(), loadReport: vi.fn(async () => storedReport(findings) as never), startConsole: vi.fn(async () => () => {}), changedFiles: vi.fn(async () => undefined), prePass: vi.fn(async () => undefined), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
+    writeBytes: vi.fn(), loadReport: vi.fn(async () => storedReport(findings) as never), startConsole: vi.fn(async () => () => {}), changedFiles: vi.fn(async () => undefined), prePass: vi.fn(async () => undefined), diffFiles: vi.fn(async () => []), clone: vi.fn(async () => ({ dir: "/tmp/cloned", dispose: vi.fn() })),
   };
   return { deps, client, requests, out, err };
 }
@@ -284,7 +284,7 @@ describe("runScan with several passes", () => {
     const deps: ScanDeps = {
       open: async () => client as never, out: bytes => out.push(bytes), err: text => err.push(text), sleep: async () => {}, now: () => new Date("2026-01-01T00:00:00Z"),
       writeBytes: vi.fn(), loadReport: vi.fn(async (_client, id: string) => storedReport(perThread[id] ?? []) as never), startConsole: vi.fn(async () => () => {}),
-      changedFiles: vi.fn(async () => undefined), prePass: vi.fn(async () => undefined), clone: vi.fn(),
+      changedFiles: vi.fn(async () => undefined), prePass: vi.fn(async () => undefined), diffFiles: vi.fn(async () => []), clone: vi.fn(),
     };
     return { deps, created, out, err, client };
   }
@@ -413,6 +413,47 @@ describe("the pattern-scanner pre-pass", () => {
     const { deps } = fakes(finished, []);
     await runScan("/tmp", options({ prepass: "maybe" }), deps);
     expect(process.exitCode).toBe(2);
+    process.exitCode = 0;
+  });
+});
+
+describe("--diff", () => {
+  const finished = { session: { status: "ready" }, messages: [{ role: "assistant", content: [{ type: "text", text: "done" }] }], usage: {}, lastOutcome: {} };
+  const lead = (path: string) => ({ tool: "foxguard", ruleId: "r", title: "t", description: "d", severity: "high" as const, category: "other" as const, path, startLine: 1, fingerprint: `sarif:${path}`, cwe: [] });
+
+  it("scopes the scan to the changed files, and keeps only the leads inside them", async () => {
+    const { deps, requests } = fakes(finished, []);
+    (deps.diffFiles as ReturnType<typeof vi.fn>).mockResolvedValue(["src/a.ts", "src/b.ts"]);
+    (deps.prePass as ReturnType<typeof vi.fn>).mockResolvedValue({ tools: ["foxguard"], total: 2, leads: [lead("src/a.ts"), lead("src/unchanged.ts")] });
+    await runScan("/tmp", options({ diff: "origin/main" }), deps);
+    expect(deps.diffFiles).toHaveBeenCalledWith("/tmp", "origin/main");
+    const text = (requests.find(([, path]) => path.endsWith("/messages"))![2] as { text: string }).text;
+    expect(text).toContain("review of a change");
+    expect(text).toContain("<changed-files>\nsrc/a.ts\nsrc/b.ts\n</changed-files>");
+    expect(text).toContain("src/a.ts:1");
+    expect(text).not.toContain("unchanged.ts");
+  });
+
+  it("writes a valid empty report and starts no thread when nothing changed", async () => {
+    const { deps, out, err, client } = fakes(finished, []);
+    await runScan("/tmp", options({ diff: "origin/main" }), deps);
+    expect(client.request).not.toHaveBeenCalled();
+    const report = JSON.parse(String(out.join("")));
+    expect(report.findings).toEqual([]);
+    expect(report.status ?? "completed").not.toBe("failed");
+    expect(err.join("\n")).toContain("nothing to scan");
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it("explains a ref that does not exist, and refuses one that looks like a flag", async () => {
+    const bad = fakes(finished, []);
+    (bad.deps.diffFiles as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("fatal"));
+    await runScan("/tmp", options({ diff: "nope" }), bad.deps);
+    expect(bad.err.join("\n")).toContain("not a git ref");
+    process.exitCode = 0;
+    const flag = fakes(finished, []);
+    await runScan("/tmp", options({ diff: "--output=/etc/x" }), flag.deps);
+    expect(flag.err.join("\n")).toContain("--diff must be a git ref");
     process.exitCode = 0;
   });
 });

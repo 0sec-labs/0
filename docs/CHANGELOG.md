@@ -26,6 +26,8 @@ on the GitHub Release tag.
 
 - `0 scan` runs a fast pattern scanner first when FoxGuard is installed (`--prepass auto`, the default; `--prepass off` skips it) and hands its hits to the scan thread as leads to check. The thread records only the leads that are real, says which it rejected, and still reviews the entry points itself, so bugs a pattern scanner cannot see are not lost.
 
+- `0 scan --diff <ref>` reviews only the files that differ from a git ref (for example `origin/main`) and the code they connect to, and only the pattern-scanner leads inside those files. For a pull request check this costs a fraction of a full scan. When nothing differs it starts no thread and writes a valid empty report, so a pipeline that reads the file keeps working.
+
 ### Changed
 
 - Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.

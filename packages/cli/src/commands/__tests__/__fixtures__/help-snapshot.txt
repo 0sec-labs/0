@@ -1149,6 +1149,8 @@ Options:
   --passes <n>               Scan this many times and merge the findings (a scan misses some issues
                              that another run finds); the budget is split between them, up to 5
                              (default: "1")
+  --diff <ref>               Review only the files that differ from this git ref (for example
+                             origin/main), and what they connect to; an empty diff scans nothing
   --prepass <mode>           auto runs the pattern scanners first when they are installed and gives
                              their hits to the scan as leads; off skips them (default: "auto")
   --scanner <id>             Pattern scanner for the pre-pass (foxguard, semgrep, opengrep); repeat

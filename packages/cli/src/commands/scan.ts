@@ -56,6 +56,8 @@ export interface ScanDeps {
   changedFiles(folder: string): Promise<Set<string> | undefined>;
   /** Run the chosen pattern scanners on the folder for leads, or undefined when none is installed or all fail. Never throws. */
   prePass(folder: string, scanners: string[]): Promise<PrePassLeads | undefined>;
+  /** The files that differ from a git ref (added, copied, modified, renamed), relative to the folder. Throws when the ref is not valid there. */
+  diffFiles(folder: string, ref: string): Promise<string[]>;
   /** Make a folder out of a git URL. Returns the folder and how to remove it. */
   clone(url: string): Promise<{ dir: string; dispose(): void }>;
 }
@@ -102,6 +104,10 @@ export const defaultScanDeps: ScanDeps = {
     const leads = ran.flatMap(entry => entry.leads);
     return { tools: ran.map(entry => entry.tool), leads, total: leads.length };
   },
+  async diffFiles(folder, ref) {
+    const { stdout } = await exec("git", ["-C", folder, "diff", "--name-only", "--relative", "--diff-filter=ACMR", ref, "--"], { maxBuffer: 16 * 1024 * 1024 });
+    return stdout.split("\n").map(line => line.trim()).filter(Boolean);
+  },
   async clone(url) {
     const dir = mkdtempSync(join(tmpdir(), "0-scan-"));
     // An untrusted repository: no hooks, no external transports, shallow, and `--` before the URL.
@@ -111,7 +117,7 @@ export const defaultScanDeps: ScanDeps = {
 };
 
 interface ScanOptions extends ConsoleTransportOptions {
-  budget: string; prepass?: string; scanner?: string[]; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
+  budget: string; diff?: string; prepass?: string; scanner?: string[]; format: string; output?: string; timeout: string; failOn?: string; model?: string; skill: string; passes: string;
 }
 
 export interface ResolvedTarget {
@@ -161,6 +167,7 @@ function validate(target: string | undefined, options: ScanOptions): void {
   if (!(FORMATS as readonly string[]).includes(options.format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
   if (options.format === "pdf" && !options.output) throw new UsageError("PDF is binary; supply -o <file>.");
   if (options.prepass !== undefined && options.prepass !== "auto" && options.prepass !== "off") throw new UsageError("--prepass must be auto or off.");
+  if (options.diff !== undefined && (!/^[A-Za-z0-9][A-Za-z0-9._\/~^@{}:-]{0,199}$/.test(options.diff) || options.diff.includes("..."))) throw new UsageError("--diff must be a git ref such as origin/main or HEAD~1.");
   try { parseScannerList(options.scanner); } catch (error) { throw new UsageError(error instanceof Error ? error.message : String(error)); }
   const budget = Number(options.budget);
   if (!Number.isFinite(budget) || budget <= 0 || budget > 1000) throw new UsageError("--budget must be a positive USD amount up to 1000.");
@@ -188,7 +195,7 @@ export async function connect(options: ConsoleTransportOptions, deps: Pick<ScanD
   throw new Error("Could not start a console within 30s. Start one with `0 --headless` and run the scan again.");
 }
 
-interface PassContext { prePass?: PrePassLeads; client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
+interface PassContext { prePass?: PrePassLeads; scope?: string[]; client: ConsoleClient; deps: ScanDeps; resolved: ResolvedTarget; options: ScanOptions; total: number; budget: number; deadline: number }
 interface PassResult { threadId: string; done: FinishedThread; stored: ScanReport; budgetExhausted: boolean; timedOut: boolean; costUsd?: number }
 
 /** Poll a thread until it finishes, the deadline passes (it is then cancelled) or the console is lost for too long. */
@@ -236,7 +243,7 @@ async function runPass(ctx: PassContext, index: number): Promise<PassResult> {
   const path = `/api/console/sessions/${encodeURIComponent(id)}`;
   try {
     await client.request("PATCH", `${path}/configuration`, { workspacePath: resolved.folder });
-    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill, ctx.prePass) });
+    await client.request("POST", `${path}/messages`, { text: scanPrompt(resolved.label, options.skill, ctx.prePass, ctx.scope) });
   } catch (error) {
     // A thread that never started is no use to anyone; do not leave it in the list.
     const removed = await client.request("POST", `${path}/delete`, {}).then(() => true, () => false);
@@ -262,6 +269,22 @@ async function inPool<T>(count: number, limit: number, task: (index: number) => 
   return results;
 }
 
+/** Format the report and write it to --output or standard output. */
+async function writeReport(outcome: ScanOutcome, merged: ReturnType<typeof mergePasses>, stored: ScanReport, name: string, options: ScanOptions, deps: Pick<ScanDeps, "out" | "err" | "writeBytes">): Promise<void> {
+  let body: Uint8Array | string;
+  if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, merged), null, 2)}\n`;
+  else {
+    const format = options.format === "md" ? "markdown" : options.format;
+    if (!isReportExportFormat(format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
+    body = (await exportReport(toScanReport(outcome, stored), format, name)).body;
+  }
+  if (options.output) {
+    const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
+    deps.writeBytes(options.output, bytes);
+    deps.err(`Wrote ${options.output} (${bytes.byteLength} bytes)`);
+  } else deps.out(body);
+}
+
 export async function runScan(target: string | undefined, options: ScanOptions, deps: ScanDeps = defaultScanDeps): Promise<void> {
   let resolved: ResolvedTarget | undefined;
   let client: ConsoleClient | undefined;
@@ -273,12 +296,30 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
     const total = Number(options.passes);
     const startedAt = deps.now().toISOString();
     const before = await deps.changedFiles(resolved.folder);
+    let scope: string[] | undefined;
+    if (options.diff) {
+      try { scope = await deps.diffFiles(resolved.folder, options.diff); }
+      catch { throw new UsageError(`'${options.diff}' is not a git ref in ${resolved.label}, or the folder is not a git work tree.`); }
+      if (!scope.length) {
+        // Nothing changed: a valid, empty report, so a pipeline that reads the file keeps working.
+        deps.err(`no files differ from ${options.diff}; nothing to scan`);
+        const empty = { target: "", scanDepth: "default", startedAt, completedAt: startedAt, durationMs: 0, summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 }, findings: [], warnings: [] } as unknown as ScanReport;
+        const outcome: ScanOutcome = { target: resolved.reportTarget, roots: resolved.roots, threadId: "none", startedAt, completedAt: startedAt, budgetUsd: budget, budgetExhausted: false, failed: false, summary: `No files differ from ${options.diff}, so nothing was scanned.` };
+        await writeReport(outcome, [], empty, "0-scan-empty", options, deps);
+        return;
+      }
+    }
     ({ client, stop: stopConsole } = await connect(options, deps));
     // --budget is the total: each pass gets an equal share, so the cost stays predictable however many passes run.
     const scanners = parseScannerList(options.scanner);
-    const prePass = options.prepass === "off" ? undefined : await deps.prePass(resolved.folder, scanners);
+    let prePass = options.prepass === "off" ? undefined : await deps.prePass(resolved.folder, scanners);
+    if (prePass && scope) {
+      const inScope = new Set(scope);
+      const leads = prePass.leads.filter(lead => lead.path !== undefined && inScope.has(lead.path));
+      prePass = leads.length ? { ...prePass, leads, total: leads.length } : undefined;
+    }
     if (prePass) deps.err(`${prePass.tools.join(", ")} pre-pass: ${prePass.total} lead${prePass.total === 1 ? "" : "s"} for the scan to check`);
-    const ctx: PassContext = { ...(prePass ? { prePass } : {}), client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
+    const ctx: PassContext = { ...(prePass ? { prePass } : {}), ...(scope ? { scope } : {}), client, deps, resolved, options, total, budget: budget / total, deadline: Date.now() + Number(options.timeout) * 1000 };
 
     const passErrors: string[] = [];
     const results = (await inPool(total, MAX_PARALLEL_PASSES, async (index): Promise<PassResult | undefined> => {
@@ -320,18 +361,7 @@ export async function runScan(target: string | undefined, options: ScanOptions, 
       ...(total > 1 ? { passes: { requested: total, completed: results.length, failed: failedPasses }, threadIds: results.map(result => result.threadId) } : {}),
     };
 
-    let body: Uint8Array | string;
-    if (options.format === "json") body = `${JSON.stringify(scanJson(outcome, merged), null, 2)}\n`;
-    else {
-      const format = options.format === "md" ? "markdown" : options.format;
-      if (!isReportExportFormat(format)) throw new UsageError(`--format must be one of: ${FORMATS.join(", ")}.`);
-      body = (await exportReport(toScanReport(outcome, { ...results[0]!.stored, findings: merged }), format, `0-scan-${results[0]!.threadId}`)).body;
-    }
-    if (options.output) {
-      const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
-      deps.writeBytes(options.output, bytes);
-      deps.err(`Wrote ${options.output} (${bytes.byteLength} bytes)`);
-    } else deps.out(body);
+    await writeReport(outcome, merged, { ...results[0]!.stored, findings: merged }, `0-scan-${results[0]!.threadId}`, options, deps);
     const usage = results.length === 1 ? usageLine(results[0]!.done.usage) : `Usage: ${results.length} passes, cost ${costKnown ? `$${cost.toFixed(4)}` : "unknown"}`;
     deps.err(`${merged.length} finding${merged.length === 1 ? "" : "s"}${total > 1 ? ` from ${results.length} of ${total} passes` : ""}${budgetExhausted ? `, stopped at the $${budget} budget (partial)` : timedOut ? `, stopped at the ${options.timeout}s time limit (partial)` : ""}\n${usage}`);
     const code = scanExitCode(outcome, merged, options.failOn as typeof SEVERITIES[number] | undefined);
@@ -353,6 +383,7 @@ export function registerScanCommand(program: Command, deps: ScanDeps = defaultSc
     .option("-o, --output <file>", "Write the report to a file instead of stdout")
     .option("--fail-on <severity>", "Exit 1 when a finding is at or above this severity (critical, high, medium, low, info)")
     .option("--passes <n>", `Scan this many times and merge the findings (a scan misses some issues that another run finds); the budget is split between them, up to ${MAX_PASSES}`, "1")
+    .option("--diff <ref>", "Review only the files that differ from this git ref (for example origin/main), and what they connect to; an empty diff scans nothing")
     .option("--prepass <mode>", "auto runs the pattern scanners first when they are installed and gives their hits to the scan as leads; off skips them", "auto")
     .option("--scanner <id>", `Pattern scanner for the pre-pass (${SCANNERS.map(scanner => scanner.id).join(", ")}); repeat to use several (default: foxguard)`, (value: string, previous: string[] = []) => [...previous, value])
     .option("--skill <id>", "Skill that holds the scan method", "scan")
