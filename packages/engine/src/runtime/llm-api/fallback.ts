@@ -1,5 +1,5 @@
 import { diag } from "../../diagnostics/channel.js";
-import { togetherBaseUrl, CODEX_API_ENDPOINT, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { BEDROCK_CREDENTIAL_CHAIN_MARKER, bedrockBaseUrl, hasBedrockCredentialSignals, togetherBaseUrl, CODEX_API_ENDPOINT, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { readChatGptCodexAuthFile } from "./codex-auth.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 
@@ -20,7 +20,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true,
-    together: true,
+    together: true, bedrock: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -132,6 +132,13 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.TOGETHER_API_KEY;
       if (!key?.trim()) return undefined;
       return { apiKey: key, baseUrl: togetherBaseUrl(env), wireApi: "chat_completions" };
+    }
+    case "bedrock": {
+      // No API key: the AWS SDK resolves its credential chain per request. An explicit
+      // RuntimeConfig.apiKey is a Bedrock bearer token.
+      const token = apiKey ?? env.AWS_BEARER_TOKEN_BEDROCK?.trim();
+      if (!token && !hasBedrockCredentialSignals(env)) return undefined;
+      return { apiKey: token || BEDROCK_CREDENTIAL_CHAIN_MARKER, baseUrl: bedrockBaseUrl(env), wireApi: "chat_completions" };
     }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;

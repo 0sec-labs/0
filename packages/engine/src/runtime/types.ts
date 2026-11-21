@@ -54,7 +54,7 @@ export interface RuntimeConfig {
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. `google` is honoured by the pi-ai runtime only (Gemini API key). */
-  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "chatgpt-plan" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "together" | "google";
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "chatgpt-plan" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "together" | "bedrock" | "google";
   apiKey?: string;
   /** Called when the subprocess executes a tool (read file, run command, etc.) */
   onToolCall?: (name: string, detail: string) => void;

@@ -47,7 +47,9 @@ export function runtimeMode(env: Readonly<Record<string, string | undefined>> = 
 /** The single implementation decision. Pure over (config, env). */
 export function selectRuntimeKind(config: RuntimeConfig, processEnv: Readonly<NodeJS.ProcessEnv> = process.env): RuntimeKind {
   const mode = runtimeMode(processEnv, config.env);
-  if (mode === "legacy") return "legacy";
+  // Bedrock exists only on the pi-ai layer (AWS SDK credential chain); `legacy` cannot serve it.
+  const bedrock = (config.provider ?? config.env?.["ZERO_SELECTED_PROVIDER"] ?? processEnv["ZERO_SELECTED_PROVIDER"])?.trim() === "bedrock";
+  if (mode === "legacy" && !bedrock) return "legacy";
   // Routes pi-ai does not serve: always legacy, even when pi is forced (the caller gets legacy's own behaviour).
   if (config.providerTransport || config.siwcConnection || config.cyberAccessProgram !== undefined || config.provider === "chatgpt-plan") return "legacy";
   if (mode === "pi-ai") return "pi-ai";

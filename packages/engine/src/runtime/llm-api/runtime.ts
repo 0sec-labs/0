@@ -1116,6 +1116,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
       case "together": return "Together AI";
+      case "bedrock": return "Amazon Bedrock";
     }
   }
 

@@ -15,12 +15,12 @@ import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
 import { detectProvider } from "../llm-api/provider-detect.js";
 import { normalizeModelForProvider, type ApiProvider } from "../llm-api/provider-config.js";
 
-export type PiApi = "anthropic-messages" | "openai-responses" | "openai-completions" | "google-generative-ai";
+export type PiApi = "bedrock-converse-stream" | "anthropic-messages" | "openai-responses" | "openai-completions" | "google-generative-ai";
 
 export interface PiRoute {
   /** Our provider label (from detectProvider / config). */
   zeroProvider: string;
-  /** pi provider id that owns the model: "anthropic" | "openai" | "openrouter" | "google" | "openai-compat". */
+  /** pi provider id that owns the model: "anthropic" | "openai" | "openrouter" | "google" | "openai-compat" | "amazon-bedrock". */
   piProvider: string;
   api: PiApi;
   baseUrl: string;
@@ -99,6 +99,10 @@ function buildRouteInner(provider: ApiProvider | "google", conn: { apiKey: strin
     // Gemini API-key surface only.
     if (!conn.apiKey) throw new PiRouteError("Google (pi-ai) requires an API key");
     return { zeroProvider: "google", piProvider: "google", api: "google-generative-ai", baseUrl: conn.baseUrl, apiKey: conn.apiKey, model, label: LABELS.google! };
+  }
+  if (provider === "bedrock") {
+    // Credentials come from the AWS SDK chain (or a bearer token in apiKey); the SDK dials the regional endpoint itself.
+    return { zeroProvider: provider, piProvider: "amazon-bedrock", api: "bedrock-converse-stream", baseUrl: conn.baseUrl, apiKey: conn.apiKey, model, label: "Amazon Bedrock" };
   }
   if (provider === "anthropic") {
     return { zeroProvider: provider, piProvider: "anthropic", api: "anthropic-messages", baseUrl: stripV1(conn.baseUrl), apiKey: conn.apiKey, model, label: LABELS.anthropic! };
