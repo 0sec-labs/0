@@ -19,7 +19,7 @@ async function initialize() {
 describe("team account provisioning", () => {
   it("creates a private configuration with a usable hash and no credentials in output", async () => {
     const cli = await initialize(); const data = JSON.parse(readFileSync(config, "utf8")) as TeamConfig;
-    expect(statSync(config).mode & 0o777).toBe(0o600); expect(data.workspace.id).toMatch(/^[\da-f-]{36}$/);
+    if (process.platform !== "win32") expect(statSync(config).mode & 0o777).toBe(0o600); expect(data.workspace.id).toMatch(/^[\da-f-]{36}$/);
     expect(data.users[0]).toMatchObject({ id: "alex", name: "Alex", role: "owner" });
     expect(data.users[0]!.passwordHash).toMatch(/^scrypt\$/);
     expect(JSON.stringify(cli.out.mock.calls)).not.toContain("private test password");
@@ -35,7 +35,7 @@ describe("team account provisioning", () => {
   it("adds a role explicitly, lists without hashes, and rejects duplicate accounts", async () => {
     await initialize(); const add = command("viewer test secret");
     await add.run("add-user", "--config", config, "--user", "morgan", "--display-name", "Morgan", "--role", "viewer");
-    expect(statSync(config).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(config).mode & 0o777).toBe(0o600);
     const auth = new TeamAuth({ configPath: config, origin: "http://127.0.0.1:48123" });
     expect((await auth.login({ userId: "morgan", password: "viewer test secret" })).user.role).toBe("viewer");
     const list = command(); await list.run("list", "--config", config);
@@ -49,6 +49,7 @@ describe("team account provisioning", () => {
     await initialize(); const invalid = command();
     await invalid.run("add-user", "--config", config, "--user", "morgan", "--display-name", "Morgan", "--role", "administrator");
     expect(invalid.readPassword).not.toHaveBeenCalled(); expect(invalid.error).toHaveBeenCalledWith("Team setup failed: Invalid team configuration or account fields");
+    if (process.platform === "win32") return; // no POSIX permission bits to loosen on Windows
     chmodSync(config, 0o644); const insecure = command();
     await insecure.run("add-user", "--config", config, "--user", "morgan", "--display-name", "Morgan", "--role", "editor");
     expect(insecure.readPassword).not.toHaveBeenCalled(); expect(insecure.error.mock.calls[0]![0]).toContain("chmod 600");

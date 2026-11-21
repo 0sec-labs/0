@@ -29,8 +29,8 @@ describe("same-server workspace setup", () => {
     expect(result.user).toMatchObject({ userId: "alex", role: "owner", workspaceId: result.workspace.id });
     const cookie = result.setCookie.split(";")[0]!;
     expect(auth().resolveSessionId(getSessionId({ headers: { cookie } }))).toEqual(result.user);
-    const path = defaultTeamConfigPath(workspace, stateRoot); expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(statSync(isolatedTeamPaths(result.workspace.id, stateRoot).stateDir).mode & 0o777).toBe(0o700);
+    const path = defaultTeamConfigPath(workspace, stateRoot); if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(isolatedTeamPaths(result.workspace.id, stateRoot).stateDir).mode & 0o777).toBe(0o700);
     expect(readFileSync(path, "utf8")).not.toContain(input.password);
     expect(readFileSync(personal, "utf8")).toBe("personal retained evidence"); expect(readFileSync(saved, "utf8")).toBe("private transcript");
     expect(service.status().available).toBe(false);
@@ -99,7 +99,7 @@ describe("owner-managed teammate accounts", () => {
     expect(auth().resolveSession(req)).toEqual(signedIn.user);
     const teammate = await auth().login({ userId: "morgan", password: "disposable teammate secret" }); expect(teammate.user.role).toBe("editor");
     const path = defaultTeamConfigPath(workspace, stateRoot);
-    expect(statSync(path).mode & 0o777).toBe(0o600); expect(readFileSync(path, "utf8")).not.toContain("disposable teammate secret");
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600); expect(readFileSync(path, "utf8")).not.toContain("disposable teammate secret");
     const list = await handleTeamSetupRequest({ method: "GET", ...req }, new URL("/api/team/users", origin), service, async () => null);
     expect(list!.data).toEqual({ users: [{ userId: "alex", displayName: "Alex", role: "owner" }, { userId: "morgan", displayName: "Morgan", role: "editor" }] });
     expect(JSON.stringify(list!.data)).not.toContain("Hash");
