@@ -457,3 +457,20 @@ describe("--diff", () => {
     process.exitCode = 0;
   });
 });
+
+describe("a console that cannot start", () => {
+  it("says why as soon as it has stopped, instead of waiting out 30 seconds", async () => {
+    const { deps, err } = fakes({}, []);
+    deps.open = async () => { throw new Error("No console running for this database."); };
+    const stop = Object.assign(vi.fn(), { failure: () => "it exited with code 1: EPIPE writing to stdout" });
+    deps.startConsole = vi.fn(async () => stop);
+    const sleep = vi.fn(async () => {});
+    deps.sleep = sleep;
+    await runScan("/tmp", options(), deps);
+    expect(err.join("\n")).toContain("stopped: it exited with code 1: EPIPE writing to stdout");
+    expect(sleep).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+  });
+});

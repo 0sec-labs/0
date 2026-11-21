@@ -29,6 +29,7 @@ on:
       - "scripts/smoke-extension-runtime.mjs"
       - "scripts/smoke-web-setup.mjs"
       - "scripts/smoke-folder-access.mjs"
+      - "scripts/smoke-scan-autostart.mjs"
       - "scripts/check-host-console-worker-bun.ts"
       - "scripts/bundle-cli.mjs"
   schedule:

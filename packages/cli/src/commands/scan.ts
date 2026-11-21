@@ -6,7 +6,7 @@
  * (docs/design/scan-as-a-thread.md). The thread shows up in `0 threads` like any other.
  */
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -51,7 +51,7 @@ export interface ScanDeps {
   /** The findings stored under a thread id, as the shared report type, from the engine the thread ran on. */
   loadReport(client: ConsoleClient, threadId: string): Promise<ScanReport>;
   /** Start a headless console for this scan; returns how to stop it. Used only when none is running. */
-  startConsole(dbPath?: string): Promise<() => void>;
+  startConsole(dbPath?: string): Promise<(() => void) & { failure?: () => string | undefined }>;
   /** What `git status` lists in the folder, or undefined when it is not a git work tree. A scan must leave it as it found it. */
   changedFiles(folder: string): Promise<Set<string> | undefined>;
   /** Run the chosen pattern scanners on the folder for leads, or undefined when none is installed or all fail. Never throws. */
@@ -81,9 +81,17 @@ export const defaultScanDeps: ScanDeps = {
   },
   async startConsole(dbPath) {
     // Run the same program again as `--headless`: the script when node runs a .js file, else the compiled binary itself.
-    const child = spawn(process.execPath, headlessConsoleArgs(process.argv[1], dbPath), { stdio: "ignore" });
-    child.on("error", () => {});
-    return () => { child.kill("SIGTERM"); };
+    // Its output goes to a file, so when it dies the scan can say why instead of waiting for a console that is not coming.
+    const dir = mkdtempSync(join(tmpdir(), "0-console-"));
+    const logPath = join(dir, "console.log");
+    const log = openSync(logPath, "a");
+    const child = spawn(process.execPath, headlessConsoleArgs(process.argv[1], dbPath), { stdio: ["ignore", log, log] });
+    let failure: string | undefined;
+    const tail = () => { try { return readFileSync(logPath, "utf8").trim().split("\n").slice(-6).join(" | ").slice(0, 600); } catch { return ""; } };
+    child.on("error", error => { failure = `it could not be started (${error.message})`; });
+    child.on("exit", (code, signal) => { failure = `it exited with ${signal ?? `code ${code}`}${tail() ? `: ${tail()}` : ""}`; });
+    const stop = () => { child.kill("SIGTERM"); try { closeSync(log); } catch { /* already closed */ } };
+    return Object.assign(stop, { failure: () => failure });
   },
   async prePass(folder, scanners) {
     const lists = await Promise.all(scanners.map(async id => {
@@ -189,7 +197,11 @@ export async function connect(options: ConsoleTransportOptions, deps: Pick<ScanD
   const stop = await deps.startConsole(options.dbPath);
   for (let attempt = 0; attempt < 60; attempt++) {
     try { return { client: await deps.open(options), stop }; }
-    catch (error) { if (!NO_CONSOLE.test(message(error))) { stop(); throw error; } await deps.sleep(500); }
+    catch (error) { if (!NO_CONSOLE.test(message(error))) { stop(); throw error; } }
+    // A console that already died is not coming; say why now instead of waiting out the clock.
+    const failure = stop.failure?.();
+    if (failure) { stop(); throw new Error(`The console this scan starts for itself stopped: ${failure}. Start one with \`0 --headless\` and run the scan again.`); }
+    await deps.sleep(500);
   }
   stop();
   throw new Error("Could not start a console within 30s. Start one with `0 --headless` and run the scan again.");

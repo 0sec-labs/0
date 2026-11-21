@@ -44,6 +44,7 @@ on the GitHub Release tag.
 
 ### Fixed
 
+- `0 scan` with the released binary could not start its own console on a machine where none was running: it waited 30 seconds and gave up (v0.41.0). The console's output now goes to a file instead of a closed stream, and when it stops the scan says why at once. The release smoke test now runs this case.
 - The repository of a Sentinel pull request trigger can no longer be a path such as `../x`; it must be `owner/name`.
 
 - The console that `0 scan` starts for itself takes a free port, so another console on the default port can no longer stop the scan from finding its own.
