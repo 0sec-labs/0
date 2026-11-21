@@ -829,7 +829,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [update](#findings-update) · [import](#findings-import) · [fix](#findings-fix) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [upload](#findings-upload) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -980,6 +980,29 @@ A thread follows the `fix-finding` skill in a separate work tree of the reposito
 | `--computers-config <path>` | — | Operator computer connection registry JSON file |
 | `--engines-config <path>` | — |  |
 | `--db-path <path>` | — | Control database of the local engine to attach to |
+
+#### findings upload
+
+Upload a SARIF file to GitHub code scanning, so findings show in the Security tab and on pull requests
+
+```text
+0 findings upload [options] <file>
+```
+
+Put the scan in a pull request check: `0 scan . --diff origin/main --format sarif -o scan.sarif`, then `0 findings upload scan.sarif`. The repository, commit and ref come from the clone (`GITHUB_SHA` and `GITHUB_REF` in Actions). The file is compressed, uploaded with `gh`, and checked until GitHub has processed it; a refused file is reported with GitHub's reason. GitHub matches alerts by fingerprint, so an upload for a later commit updates them. `gh` needs permission to write security events (`security-events: write` in Actions).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | SARIF 2.1.0 file, for example from `0 scan --format sarif -o scan.sarif` |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--repo <owner/name>` | — | Repository (default: the current clone's) |
+| `--commit <sha>` | — | Commit the results are for (default: HEAD, or GITHUB_SHA in Actions) |
+| `--ref <ref>` | — | refs/heads/&lt;branch&gt; or refs/pull/&lt;n&gt;/merge (default: the current branch, or GITHUB_REF in Actions) |
+| `--tool <name>` | — | Name the tool shown in GitHub |
+| `--no-wait` | — | Return when GitHub has accepted the upload instead of waiting for it to be processed |
+| `--format <format>` | `text` | Output: text or json |
 
 #### findings export
 

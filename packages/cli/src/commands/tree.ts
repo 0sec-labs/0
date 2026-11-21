@@ -30,6 +30,7 @@ import { registerFindingsExportCommand } from "./findings-export.js";
 import { registerFindingsKeysCommand } from "./findings-keys.js";
 import { registerFindingsImportCommand } from "./findings-import.js";
 import { registerFixCommand } from "./fix.js";
+import { registerFindingsUploadCommand } from "./findings-upload.js";
 import { registerSentinelsCommand } from "./sentinels.js";
 import { registerAutomationManageCommands } from "./automation-manage.js";
 import { registerSkillsCommand } from "./skills.js";
@@ -46,7 +47,7 @@ export function registerCommandTree(program: Command): void {
   // Evidence.
   registerReportsCommand(program);
   registerFindingsCommand(program);
-  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand, registerFindingsImportCommand, (parent) => registerFixCommand(parent)]);
+  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand, registerFindingsImportCommand, (parent) => registerFixCommand(parent), (parent) => registerFindingsUploadCommand(parent)]);
   registerWorkflowCommand(program); // also registers `chats` and `automation`
   registerMissionsCommand(program);
   nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);

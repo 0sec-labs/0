@@ -28,6 +28,8 @@ on the GitHub Release tag.
 
 - `0 scan --diff <ref>` reviews only the files that differ from a git ref (for example `origin/main`) and the code they connect to, and only the pattern-scanner leads inside those files. For a pull request check this costs a fraction of a full scan. When nothing differs it starts no thread and writes a valid empty report, so a pipeline that reads the file keeps working.
 
+- `0 findings upload <sarif>` uploads a SARIF file (for example from `0 scan --format sarif -o scan.sarif`) to GitHub code scanning, so findings appear in the repository's Security tab and as pull request annotations. It takes the repository, commit and ref from the clone (or `GITHUB_SHA` and `GITHUB_REF` in Actions), compresses the file, waits for GitHub to process it and reports why it refused it. Uploading again for a later commit updates the alerts. Needs `gh` signed in with permission to write security events.
+
 ### Changed
 
 - Memory is one list: a note is in it or it is not. Memory holds about 2,000 tokens, all pasted into every thread (it is not search), and a note that would not fit is refused instead of being saved and silently left out, so the "older notes over the limit, not used" notice is gone. There is no Proposed inbox, no Accept, Edit or Reject, no "Suggested by a thread" label and no dot in the sidebar. A thread that has read untrusted content (web pages, repository files, shell output, extension results) cannot add a note, the same as it cannot change or forget one, and it is told so. Notes that were only proposed in older versions were never used and are dropped.
@@ -39,6 +41,8 @@ on the GitHub Release tag.
 - `0 memory proposed list`, `accept` and `reject`, and the `proposed` field of `0 memory list --json` and of the Memory API.
 
 ### Fixed
+
+- The repository of a Sentinel pull request trigger can no longer be a path such as `../x`; it must be `owner/name`.
 
 - The console that `0 scan` starts for itself takes a free port, so another console on the default port can no longer stop the scan from finding its own.
 - The scan skill tells the model not to use the memory tool.
